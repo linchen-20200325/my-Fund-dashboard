@@ -314,19 +314,32 @@ def test_enrich_fund_for_decision_div_signal_live_v19400():
 
     原 line 403 `from fund_fetcher import div_safety_check` 為 broken import
     (fund_fetcher 未 export → ImportError 被 except 吞 → div_info 恆 None,訊號長期 dead)。
-    改指 services.portfolio_service 後,鎖死誠實語意:
-      - 缺 1Y 含息報酬 → grey「無報酬資料」(非假吃本金 red;decision_matrix 僅 red bump)
+    改指 SSOT 後,鎖死誠實語意:
+      - 缺 1Y 含息報酬 → grey(⬜ 資料未備／無法判定;非假吃本金 red;decision_matrix 僅 red bump)
       - 真吃本金(0% 含息 < 配息)→ red
       - 覆蓋充分(含息 > 配息)→ green
+    2026-10-23 裁示 1B(PR1b):本函式改走唯一判定 `check_eating_principal_1y_mk` ——
+    1Y 含息只認本地還原值 `metrics.ret_1y_total`(窗口 ≥ 350 天),**不再**讀 `ret_1y`(純淨值)
+    或 `perf["1Y"]`;年化配息率只認 `metrics.annual_div_rate`(近 12 個月實配 ÷ 最新淨值)。
     若 import 再被改回壞掉 → div_info 恆 None → 本測試三條 assert 全炸,守住不回歸。"""
     from ui.tab1_macro import _enrich_fund_for_decision
+
+    def _m(tr):
+        return {"ret_1y_total": tr, "ret_1y_window_days": 365, "ret_1y_div_count": 12,
+                "annual_div_rate": 5.0, "annual_div_rate_div_count": 12}
+
     miss = _enrich_fund_for_decision({"code": "X", "metrics": {"annual_div_rate": 5.0}})
     assert miss["dividend_info"] is not None, "import 修好後 div_info 不應恆 None"
     assert miss["dividend_info"].get("alert_level") == "grey"
-    eat = _enrich_fund_for_decision({"code": "Y", "metrics": {"ret_1y": 0.0, "annual_div_rate": 5.0}})
+    assert miss["dividend_info"].get("eating_principal") is None, "缺料不得變 False"
+    eat = _enrich_fund_for_decision({"code": "Y", "metrics": _m(0.0)})
     assert eat["dividend_info"].get("alert_level") == "red"
-    ok = _enrich_fund_for_decision({"code": "Z", "metrics": {"ret_1y": 8.0, "annual_div_rate": 5.0}})
+    ok = _enrich_fund_for_decision({"code": "Z", "metrics": _m(8.0)})
     assert ok["dividend_info"].get("alert_level") == "green"
+    # 純淨值 ret_1y 不再被當成 1Y 含息:只給 ret_1y → 無還原值 → grey,不是 red / green
+    nav_only = _enrich_fund_for_decision(
+        {"code": "W", "metrics": {"ret_1y": 0.0, "annual_div_rate": 5.0}})
+    assert nav_only["dividend_info"].get("alert_level") == "grey"
 
 
 def test_enrich_fund_for_decision_unset_is_not_satellite():

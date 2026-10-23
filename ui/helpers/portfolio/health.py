@@ -97,27 +97,39 @@ def compute_health_kpis(portfolio_funds: list | None,
             # （去掉前導「 / 」分隔），不新增文案；百分比照舊不算（沒有已設定的檔）。
             out["ratio_label"] = f"⬜ 未設定 {n_unset} 檔"
 
+    # 2026-10-23 裁示 1B:現金流三格改走唯一吃本金判定 `check_eating_principal_1y_mk`
+    # (1Y 含息 = 本地配息還原淨值法、年化配息率 = 近 12 個月實配 ÷ 最新淨值)。
+    # 本檔原本自己讀 wb05 官方配息率、自己比大小 —— 同一檔基金在這格與健診大表會
+    # 因輸入不同而得到不同結論(§2.1)。
+    #   · 灰色 dict(資料未備／無法判定)→ n_na(缺料不得算成安全,§1)
+    #   · eating_principal=True(含息 < 配息率,含 2pp 黃燈帶,與舊判式同語意)→ n_eat
+    #   · 其餘 dict → n_cash_ok
+    #   · None(非配息基金,吃本金不適用)→ 沿用舊契約:1Y 含息算得出來才算安全,否則 n_na
     try:
-        from ui.helpers.macro_helpers import compute_1y_total_return
+        from services.fund_total_return import compute_1y_total_return
+        from services.health.dividend import check_eating_principal_1y_mk
     except ImportError:
         return out
 
     for _f in _uniq:
-        _mj = _f.get("moneydj_raw", {}) or {}
-        _m = _f.get("metrics", {}) or {}
-        _ret_v, _ = compute_1y_total_return(_f)
-        _is_real = _ret_v is not None
         try:
-            _div = float(
-                _mj.get("moneydj_div_yield")
-                or _m.get("annual_div_rate") or 0
-            )
-        except (TypeError, ValueError):
-            _div = 0.0
-        if not _is_real:
+            _eat = check_eating_principal_1y_mk(_f)
+        except Exception as _e_eat:  # noqa: BLE001 — 單檔判定炸掉 → 當缺料,不冒充安全
+            import sys as _sys_eat
+            print(f"[portfolio/health] {_f.get('code', '?')} 吃本金判定失敗:"
+                  f"{type(_e_eat).__name__}: {_e_eat}", file=_sys_eat.stderr)
+            _eat = {"alert_level": "grey"}
+        if isinstance(_eat, dict):
+            if _eat.get("alert_level") == "grey":
+                out["n_na"] += 1
+            elif _eat.get("eating_principal") is True:
+                out["n_eat"] += 1
+            else:
+                out["n_cash_ok"] += 1
+            continue
+        _ret_v, _ = compute_1y_total_return(_f)
+        if _ret_v is None:
             out["n_na"] += 1
-        elif _div > 0 and _ret_v < _div:
-            out["n_eat"] += 1
         else:
             out["n_cash_ok"] += 1
 

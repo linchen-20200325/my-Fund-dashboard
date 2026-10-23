@@ -717,13 +717,17 @@ def render_t7_section() -> None:
                     return f" ⚠️ Sheets 例外：{str(_e_w)[:60]}"
 
             def _get_dy_t7(_fund: dict) -> float:
-                """取得基金年化配息率 (%)，fallback：moneydj_div_yield → metrics.annual_div_rate → 0。"""
-                _mj = _fund.get("moneydj_raw", {}) or {}
+                """取得基金年化配息率 (%)，只讀 SSOT `_resolve_adr_with_fallback`
+                （近 12 個月實際配息合計 ÷ 最新淨值；2026-10-23 裁示 1B 後不再讀 wb05 官方值當值）。
+
+                ⚠️ 無值 → 回 0.0 是**本區「預估年配息」加總的既有契約**（6 處消費端以
+                `_dy_lookup_t7.get(pk, 0.0)` 乘進金額），語意是「配息率未備的那檔**不計入**估算」，
+                不是「這檔配息率是 0%」；要改成 None 需連動全部消費端，本批不動。
+                """
                 try:
-                    _v = (_mj.get("moneydj_div_yield")
-                          or _fund.get("metrics", {}).get("annual_div_rate", 0)
-                          or 0)
-                    return float(_v)
+                    from services.health.dividend import _resolve_adr_with_fallback
+                    _v, _ = _resolve_adr_with_fallback(_fund)
+                    return float(_v) if (_v is not None and _v > 0) else 0.0
                 except Exception:
                     return 0.0
 

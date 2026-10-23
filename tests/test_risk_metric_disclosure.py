@@ -250,12 +250,22 @@ class TestTab2DisclosureWiring:
         assert 'cC.metric("Sharpe 1Y"' not in src, "Sharpe 欄位標籤不得寫死 1Y"
 
     def test_1y_total_return_card_label_is_window_aware(self):
-        """**修正前必紅**:吃本金 KPI 卡把 42 天的本地含息報酬硬掛「1Y 含息報酬」,
-        正是與 wb07 Sharpe 並列時那個數學上不可能的組合的另一半。"""
+        """舊病:吃本金 KPI 卡把 42 天的本地含息報酬硬掛「1Y 含息報酬」,
+        正是與 wb07 Sharpe 並列時那個數學上不可能的組合的另一半。
+
+        2026-10-23 裁示 1B(PR1b):窗口閘門搬進 SSOT —— `resolve_1y_total_return` 對
+        窗口 < `RET_1Y_RESTORED_MIN_WINDOW_DAYS` 的序列**不給值**(回 ⬜ 資料未備 + 白話原因),
+        UI 端因此**不再**有「N 天含息報酬(非 1Y)」改標邏輯(那段已成死碼、已刪)。
+        本測試改鎖新事實:卡片標籤固定「1Y 含息報酬（還原淨值）」、短窗值不可能出現、
+        結論走唯一判定 `check_eating_principal_1y_mk`。
+        """
         src = _tab2_src()
         assert "_kpi_tr_label" in src
-        assert "ret_1y_window_days" in src, "標籤必須看實際窗長"
-        assert "天含息報酬(非 1Y)" in src
+        assert "1Y 含息報酬（還原淨值）" in src
+        assert "天含息報酬(非 1Y)" not in src, (
+            "SSOT 已不產出短窗值;UI 端若又出現『N 天含息報酬』改標,代表有人繞過 SSOT 自己算短窗")
+        assert "LOCAL_WINDOW_SENSITIVE_HINTS" not in src, "短窗改標字表已退役,不得再 import"
+        assert "check_eating_principal_1y_mk" in src
 
     def test_stale_threshold_copy_removed(self):
         """必修 4 —— **修正前必紅**:UI 對 user 說的門檻是舊值(60 筆 / 1Y fallback)。

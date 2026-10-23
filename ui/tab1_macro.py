@@ -1572,23 +1572,19 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
 
     div_info = None
     try:
-        _mj = _f.get("moneydj_raw", {}) or {}
-        _metrics = _f.get("metrics", {}) or {}
-        # v19.399 §1:缺 1Y 含息報酬保留 None(不 `or 0` 捏造 0% → dividend_safety 假吃本金);
-        # dividend_safety 對 None 有「無報酬資料」grey 誠實分支(portfolio_service.py:341)。
-        _tret = safe_num(_mj.get("perf", {}).get("1Y"))
-        if _tret is None:
-            _tret = safe_num(_metrics.get("ret_1y"))
-        _dyld = float(_mj.get("moneydj_div_yield") or _metrics.get("annual_div_rate") or 0)
-        if _dyld > 0:
-            # v19.400 §1/§8:原 `from fund_fetcher import div_safety_check` 為 broken import
-            # (fund_fetcher 未 export 該名 → ImportError 被下方 except 吞 → tab1 逐檔決策矩陣
-            # 「吃本金」訊號長期 dead,div_info 恆 None)。改指 SSOT services.portfolio_service
-            # (對齊 tab3:67),啟用 tab1 誠實訊號:缺 ret_1y(_tret=None)→ grey「無報酬資料」,
-            # 真吃本金 → red;decision_matrix 僅對 alert=="red" bump 動作,grey/None 不觸發(§1)。
-            from services.portfolio_service import dividend_safety as div_safety_check
-            div_info = div_safety_check(_tret, _dyld)
-    except Exception:
+        # v19.400 §1/§8:原 `from fund_fetcher import div_safety_check` 為 broken import
+        # (ImportError 被 except 吞 → tab1 逐檔決策矩陣「吃本金」訊號長期 dead)。
+        # 2026-10-23 裁示 1B:改走唯一吃本金判定 `check_eating_principal_1y_mk`
+        # (1Y 含息 = 本地配息還原淨值法、年化配息率 = 近 12 個月實配 ÷ 最新淨值),
+        # 本檔不再自己讀 perf["1Y"] / ret_1y(純淨值)/ wb05 官方值餵 dividend_safety。
+        # 回傳契約:None = 非配息基金(不適用)、灰色 dict = 資料未備／無法判定、
+        # red = 真吃本金;decision_matrix 僅對 alert=="red" bump 動作,grey/None 不觸發(§1)。
+        from services.health.dividend import check_eating_principal_1y_mk
+        div_info = check_eating_principal_1y_mk(_f)
+    except Exception as _e_eat:  # noqa: BLE001 — 單檔判定炸掉 → None + 留痕,不冒充綠燈
+        import sys as _sys_eat
+        print(f"[tab1_macro] {code} 吃本金判定失敗:{type(_e_eat).__name__}: {_e_eat}",
+              file=_sys_eat.stderr)
         div_info = None
 
     return {

@@ -37,9 +37,8 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
     _lines = [f"## 組合健檢全章節快照({len(funds)} 檔基金)"]
 
     # 取共享計算結果(避免每段重算)。**與大表同源**:1Y 含息走 fund_total_return SSOT
-    # (非 metrics.ret_1y 純 NAV),吃本金門檻走 dividend_safety(見下方逐檔迴圈註解)。
+    # (非 metrics.ret_1y 純 NAV),吃本金燈號走 check_eating_principal_1y_mk(見下方逐檔迴圈註解)。
     from services.fund_total_return import compute_1y_total_return
-    from services.health.dividend import classify_eating_principal
     try:
         from services.precision_service import calc_hwm_sigma_levels
     except Exception as _e_ps:  # noqa: BLE001
@@ -64,11 +63,16 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
         #       (多一層 12M 歷史推算,與 ①② 表一致);
         #   (b) 報酬:用 `metrics.ret_1y`(**純 NAV,不含息**)去判吃本金 ⇒ 改走
         #       `compute_1y_total_return`(含息),否則配息全被當成虧損;
-        #   (c) 門檻:inline `coverage < 1.2` ⇒ 改走 `dividend_safety` 的 alert_level
-        #       (gap_pct 制,SSOT;`ui/helpers/fund_grp_health/dividend.py` 已先收)。
+        #   (c) 門檻:inline `coverage < 1.2` ⇒ 改走 SSOT 的 alert_level
+        #       (gap_pct 制;`ui/helpers/fund_grp_health/dividend.py` 已先收)。
+        # 2026-10-23 裁示 1B:燈號整個改走唯一吃本金判定 `check_eating_principal_1y_mk`
+        # (內部即用同兩個 SSOT 取輸入),本檔不再自組輸入餵 dividend_safety / 自己分類;
+        # 這裡另外讀兩個 SSOT 只為了把數值印進簡表,值與燈號必然同源。
         # §1:`a or b` 讓合法的 0.0 被當缺值,一律用顯式 is None。
-        from services.health.dividend import _resolve_adr_with_fallback
-        from services.portfolio_service import dividend_safety
+        from services.health.dividend import (
+            _resolve_adr_with_fallback,
+            check_eating_principal_1y_mk,
+        )
         try:
             _adr, _ = _resolve_adr_with_fallback(_f)
         except Exception as _e_adr:  # noqa: BLE001
@@ -85,12 +89,17 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
                   file=_sys_tr.stderr)
             _ret1y = None
         _ret1y = _safe_num(_ret1y)
-        _core_div = classify_eating_principal(_ret1y, _adr)
-        _lvl = dividend_safety(_ret1y, _adr).get("alert_level", "grey")
-        if _core_div.is_data_missing:
-            _div_status = "資料不足"
-        elif _core_div.is_no_dividend:
-            _div_status = "無配息"
+        try:
+            _eat = check_eating_principal_1y_mk(_f)
+        except Exception as _e_eat:  # noqa: BLE001
+            import sys as _sys_eat
+            print(f"[grp_health/ai] {_code} 吃本金判定失敗:{type(_e_eat).__name__}: {_e_eat}",
+                  file=_sys_eat.stderr)
+            _eat = {"alert_level": "grey", "status": "⬜ 判定失敗"}
+        _lvl = _eat.get("alert_level", "grey") if isinstance(_eat, dict) else None
+        _coverage = _eat.get("coverage") if isinstance(_eat, dict) else None
+        if _eat is None:
+            _div_status = "無配息"            # SSOT:非配息基金,吃本金概念不適用
         elif _lvl == "red":
             _div_status = "🔴 吃本金"
             _eating_count += 1
@@ -99,7 +108,8 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
         elif _lvl == "green":
             _div_status = "🟢 健康"
         else:
-            _div_status = "資料不足"
+            # 灰色:印 SSOT 的 status 原文(⬜ 資料未備／無法判定),不自己另編一句
+            _div_status = str(_eat.get("status") or "資料不足")
 
         # σ 位階
         _sigma_label = "—"
@@ -132,7 +142,7 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
         _per_fund.append({
             "code": _code, "name": _name,
             "div_pct": _adr, "ret1y": _ret1y, "div_status": _div_status,
-            "coverage": _core_div.coverage_ratio,
+            "coverage": _coverage,
             "sigma_label": _sigma_label, "sigma_rank": _sigma_rank,
             "sharpe": _sharpe,
         })

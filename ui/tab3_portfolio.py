@@ -68,7 +68,6 @@ from services.policy_advisor_service import (
 )
 from services.portfolio_service import (
     calc_correlation_matrix,
-    dividend_safety as div_safety_check,
 )
 from ui.components.mk_dashboard import render_mk_war_room
 from ui.helpers.session import (
@@ -735,9 +734,12 @@ def render_portfolio_tab() -> None:
                         "代碼": _code_rd,
                         "計價幣別": _mj_rd.get("currency") or _frd.get("currency") or "—",
                         "NAV(原幣)": _m_rd.get("nav") or _mj_rd.get("nav_latest"),
-                        "年化配息率%(wb05)": _mj_rd.get("moneydj_div_yield"),
-                        "年化配息率%(metrics)": _m_rd.get("annual_div_rate"),
-                        "1Y含息%": _m_rd.get("ret_1y_total") or _m_rd.get("ret_1y"),
+                        # Raw dump:wb05 官方值只作對帳(2026-10-23 裁示 1B 後不當配息率的值);
+                        # metrics.annual_div_rate = 近 12 個月實際配息合計 ÷ 最新淨值(SSOT 同源)。
+                        "年化配息率%(wb05 官方・對帳)": _mj_rd.get("moneydj_div_yield"),  # ssot-reconcile-only
+                        "年化配息率%(metrics・12M 實配÷淨值)": _m_rd.get("annual_div_rate"),
+                        # 1Y 含息 = 本地還原淨值原值;缺就留空,不再退回 ret_1y(純淨值,不含息)
+                        "1Y含息%(還原淨值)": _m_rd.get("ret_1y_total"),
                         "Sharpe": _m_rd.get("sharpe"),
                         "年化波動%": _m_rd.get("std_1y"),
                         "最高經理費%": _mj_rd.get("mgmt_fee"),
@@ -892,16 +894,11 @@ def render_portfolio_tab() -> None:
                                     _sig_e = None  # smoke-allow-pass
                             _div_e = None
                             try:
-                                # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
-                                from ui.helpers.macro_helpers import compute_1y_total_return
-                                _tret_v, _ = compute_1y_total_return({
-                                    "metrics": _m, "moneydj_raw": _mj_e,
-                                })
-                                _tret = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
-                                _dyld = float(_mj_e.get("moneydj_div_yield")
-                                              or _m.get("annual_div_rate") or 0)
-                                if _dyld > 0:
-                                    _div_e = div_safety_check(_tret, _dyld)
+                                # 2026-10-23 裁示 1B：吃本金只走唯一判定 SSOT 入口(1Y 含息 = 本地配息
+                                # 還原淨值法、年化配息率 = 近 12 個月實配 ÷ 最新淨值;None = 非配息基金、
+                                # 灰色 dict = 資料未備),不再自己讀 wb05 / 自組輸入餵 dividend_safety。
+                                from services.health.dividend import check_eating_principal_1y_mk
+                                _div_e = check_eating_principal_1y_mk(_f)
                             except Exception:
                                 _div_e = None  # smoke-allow-pass
                             _funds_enriched.append({
@@ -946,20 +943,10 @@ def render_portfolio_tab() -> None:
                         # 配息覆蓋率 / 吃本金
                         _div_info = None
                         try:
-                            # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
-                            from ui.helpers.macro_helpers import compute_1y_total_return
-                            _tret_v, _ = compute_1y_total_return({
-                                "metrics": _metrics, "moneydj_raw": _mj,
-                            })
-                            _tret = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
-                            # v19.272 Phase 2 TOP 1:adr 走 SSOT 3 層 fallback chain(原行內 2 層收斂)
-                            from services.health.dividend import _resolve_adr_with_fallback
-                            _dyld_v, _ = _resolve_adr_with_fallback({
-                                "metrics": _metrics, "moneydj_raw": _mj,
-                            })
-                            _dyld = float(_dyld_v or 0)
-                            if _dyld > 0:
-                                _div_info = div_safety_check(_tret, _dyld)
+                            # 2026-10-23 裁示 1B：只走唯一判定 SSOT 入口(見上方 _funds_enriched 註解),
+                            # 整個 fund dict 原樣餵入,不再自組 tr1y / adr 餵 dividend_safety。
+                            from services.health.dividend import check_eating_principal_1y_mk
+                            _div_info = check_eating_principal_1y_mk(_f)
                         except Exception:
                             _div_info = None  # smoke-allow-pass
 
@@ -1143,16 +1130,21 @@ def render_portfolio_tab() -> None:
                     _cum_ret_pct = sum(_w_returns) / sum(_w_amounts)
             except Exception:
                 _cum_ret_pct = None
-            # 月配息估算：從 moneydj_raw.moneydj_div_yield / metrics.annual_div_rate
+            # 月配息估算：年化配息率只讀 SSOT `_resolve_adr_with_fallback`
+            # (近 12 個月實際配息合計 ÷ 最新淨值;2026-10-23 裁示 1B 後不再讀 wb05 官方值當值)。
             # v18.39 修：原本用 dividend_yield_pct/yield_pct 都不是實際 schema 上的欄位，
-            # 整個欄一直是 0；改用 v18.34 真實收益矩陣同款 fallback chain。
+            # 整個欄一直是 0。配息率未備的那檔**不計入**估算(不是當 0% 配息),缺幾檔寫在卡下。
+            from services.health.dividend import _resolve_adr_with_fallback as _resolve_adr_kpi
             _est_monthly_div = 0.0
+            _est_div_n_na = 0
             for _f in _pf_loaded:
-                _mj_kpi = _f.get("moneydj_raw") or {}
-                _m_kpi  = _f.get("metrics") or {}
-                _yld = (_mj_kpi.get("moneydj_div_yield")
-                        or _m_kpi.get("annual_div_rate")
-                        or 0)
+                try:
+                    _yld, _ = _resolve_adr_kpi(_f)
+                except Exception:  # noqa: BLE001 — 單檔配息率算爆 → 當未備,不冒充 0%
+                    _yld = None
+                if _yld is None:
+                    _est_div_n_na += 1
+                    continue
                 _amt = _f.get("invest_twd", 0) or 0
                 try:
                     _est_monthly_div += (float(_yld) / 100.0) * float(_amt) / 12.0
@@ -1185,7 +1177,9 @@ def render_portfolio_tab() -> None:
                 f"<div style='color:{GRAY_AA};font-size:11px'>💵 預估月配息</div>"
                 f"<div style='color:{MD_ORANGE_300};font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
                 f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
-                f"以<b>本金</b>×配息率粗估</div></div>"
+                f"以<b>本金</b>×配息率粗估"
+                + (f" · ⬜ {_est_div_n_na} 檔配息率未備，未計入" if _est_div_n_na else "")
+                + "</div></div>"
                 "</div>", unsafe_allow_html=True)
             # 原則 4「多做說明」：三個最容易被誤讀的數字，一次講清楚基數是什麼。
             st.caption(
@@ -1692,16 +1686,11 @@ def render_portfolio_tab() -> None:
                             _sigma = {"error": str(_e_s)[:60]}
                     _div = None
                     try:
-                        # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
-                        from ui.helpers.macro_helpers import compute_1y_total_return
-                        _tret_v, _ = compute_1y_total_return({
-                            "metrics": _m_local, "moneydj_raw": _mj_local,
-                        })
-                        _tret_l = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
-                        _dyld_l = float(_mj_local.get("moneydj_div_yield")
-                                         or _m_local.get("annual_div_rate") or 0)
-                        if _dyld_l > 0:
-                            _div = div_safety_check(_tret_l, _dyld_l)
+                        # 2026-10-23 裁示 1B：吃本金只走唯一判定 SSOT 入口(1Y 含息 = 本地配息
+                        # 還原淨值法、年化配息率 = 近 12 個月實配 ÷ 最新淨值),不再自己讀 wb05 /
+                        # 自組輸入餵 dividend_safety;None = 非配息基金、灰色 dict = 資料未備。
+                        from services.health.dividend import check_eating_principal_1y_mk
+                        _div = check_eating_principal_1y_mk(_pf_item)
                     except Exception:
                         _div = None   # smoke-allow-pass
                     _ma = None
@@ -1744,7 +1733,14 @@ def render_portfolio_tab() -> None:
                     role_i = {"core": "🛡️核心", "satellite": "⚡衛星"}.get(
                         _tier_card(pf_item), "⬜未設定")
                     _nav_i  = m_i.get("nav") or (pf_item.get("moneydj_raw") or {}).get("nav_latest","")
-                    _adr_i  = (pf_item.get("moneydj_raw") or {}).get("moneydj_div_yield") or m_i.get("annual_div_rate","")
+                    # 2026-10-23 裁示 1B：配息率只讀 SSOT(近 12 個月實配 ÷ 最新淨值),不讀 wb05 官方值;
+                    # 無值 → 「—」(不是空字串、不是 0)。
+                    from services.health.dividend import _resolve_adr_with_fallback as _resolve_adr_card
+                    try:
+                        _adr_i_v, _ = _resolve_adr_card(pf_item)
+                    except Exception:  # noqa: BLE001 — 單檔配息率算爆 → 顯示「—」
+                        _adr_i_v = None
+                    _adr_i  = f"{_adr_i_v:.2f}" if _adr_i_v is not None else ""
                     _sh_i   = (rt_i.get("一年") or {}).get("Sharpe","")
                     _std_i  = (rt_i.get("一年") or {}).get("標準差","")
                     with st.container():
@@ -1760,7 +1756,7 @@ def render_portfolio_tab() -> None:
                             st.markdown(
                                 f"<div style='padding:8px 12px;background:{GH_BG_CARD};border-radius:8px;margin:3px 0;font-size:11px;color:{TRAFFIC_NEUTRAL}'>"
                                 f"NAV: <b style='color:{GH_FG_PRIMARY}'>{_nav_i}</b>"
-                                f"　配息率: <b style='color:{MATERIAL_ORANGE}'>{_adr_i}{'%' if _adr_i else ''}</b>"
+                                f"　配息率: <b style='color:{MATERIAL_ORANGE}'>{_adr_i or '—'}{'%' if _adr_i else ''}</b>"
                                 f"　Sharpe: <b style='color:{MD_GREEN_A200}'>{_sh_i}</b>"
                                 f"　σ: <b>{_std_i}{'%' if _std_i else ''}</b></div>",
                                 unsafe_allow_html=True)
