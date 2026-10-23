@@ -149,6 +149,9 @@ def build_notification(result: dict, *, portfolio_name: "str | None" = None,
         f"標的 {_n_total} 檔｜"
         f"換股 {_summary.get('n_switch', 0)}｜賣轉現金 {_summary.get('n_sell_cash', 0)}｜"
         f"表現差 {_summary.get('n_underperforming', 0)}｜資料不足 {_n_insuff}"
+        # 2026-10-23 稽核小修(DG-1 同原則):抓不到、未評估的檔另列,不與「資料不足」
+        # (已評估但無法判定)混在同一個數字裡 —— 避免「資料不足 0」與「N 檔資料不足、未評估」並列矛盾。
+        + (f"｜未評估 {skipped}" if skipped and skipped > 0 else "")
     )
     _skip_note = f"\n⬜ 另有 {skipped} 檔資料不足、未評估" if skipped and skipped > 0 else ""
     _caveat = "※ 教學紀律工具,非獲利保證;請自行判斷後再決定。"
@@ -170,9 +173,13 @@ def build_notification(result: dict, *, portfolio_name: "str | None" = None,
         # → ⬜ 檔另列,不併入續抱;全部 ⬜ 時不給 ✅。
         _insuff_note = (f"\n⬜ 資料不足 {_n_insuff} 檔:無法判定,未列入續抱 / 觀察。"
                         if _n_insuff else "")
-        if _n_insuff and _n_insuff >= len(_advices):
+        _n_evaluated_ok = len(_advices) - _n_insuff      # 已評估且可判定的檔數
+        if _n_insuff and _n_evaluated_ok <= 0:
             _body = f"{_header}\n\n⬜ 本週無法評估換股:{_n_insuff} 檔資料不足(無法判定)。{_skip_note}"
-        elif _n_insuff:
+        elif _n_evaluated_ok <= 0 and skipped and skipped > 0:
+            # 2026-10-23 稽核小修:0 檔完成評估、只有抓不到的檔 → ~~「✅ 所有標的續抱」~~,不給 ✅
+            _body = f"{_header}\n\n⬜ 本週無法評估換股:沒有任何標的完成評估。{_skip_note}"
+        elif _n_insuff or (skipped and skipped > 0):
             _body = (f"{_header}\n\n✅ 本週無需換股：其餘標的續抱 / 觀察中。"
                      f"{_insuff_note}{_skip_note}")
         else:

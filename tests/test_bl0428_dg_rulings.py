@@ -172,6 +172,25 @@ def test_dg1_line_counts_insufficient_from_advices_when_summary_lacks_key():
     assert "所有標的續抱" not in msg and "資料不足 1" in msg
 
 
+def test_dg1_line_no_evaluated_but_skipped_gets_no_green_check():
+    """稽核小修:advices=[] 且 skipped>0 → 不給 ✅、不說續抱;摘要另列「未評估 N」。"""
+    from services.switch_notify import build_notification
+    msg = build_notification({"advices": [], "summary": {"n_holdings": 0}}, skipped=3)["message"]
+    assert "✅" not in msg and "續抱" not in msg
+    assert "⬜ 本週無法評估換股:沒有任何標的完成評估。" in msg
+    assert "⬜ 另有 3 檔資料不足、未評估" in msg and "｜未評估 3" in msg
+
+
+def test_dg1_line_some_evaluated_plus_skipped_uses_remaining_wording():
+    from services.switch_advisor import HOLD
+    from services.switch_notify import build_notification
+    res = {"advices": [_adv("A", HOLD)], "summary": {"n_holdings": 1, "n_insufficient": 0}}
+    msg = build_notification(res, skipped=2)["message"]
+    assert "所有標的續抱" not in msg
+    assert "✅ 本週無需換股：其餘標的續抱 / 觀察中。" in msg
+    assert "｜資料不足 0｜未評估 2" in msg
+
+
 def test_dg1_far_from_high_list_partial_unknown_not_success(monkeypatch):
     import ui.helpers.fund_grp_health.risk as R
     fake = _FakeSt()
@@ -403,7 +422,7 @@ def _fake_position(rank):
 
 @pytest.mark.parametrize("rank,disp,num_state,str_state", [
     (-0.503, "-0.50σ", "mid", "high"),     # 盤點 A 組實跑的那組
-    (-1.4996, "-1.50σ", "mid", "low"),     # 低切點附近
+    (-1.496, "-1.50σ", "mid", "low"),      # 低切點附近(SSOT σ rank 為 3 位小數,−1.496 可產生)
     (-0.4996, "-0.50σ", "high", "high"),   # 同字串、兩邊一致的對照
 ])
 def test_s98_numeric_vs_string_boundary(monkeypatch, rank, disp, num_state, str_state):
@@ -450,7 +469,7 @@ def test_s98_rotation_switch_navfx_read_numeric():
     from ui.helpers.fund_grp_health.unified import compute_nav_fx_column
     sell = {"code": "S", "name": "S", "基金類別": "股票", "σ rank": "-0.50σ", "sigma_rank": -0.503}
     assert suggest_rotation_pairs([sell]) == []      # ~~字串判 high → 被列為賣方~~
-    buy = {"code": "B", "name": "B", "基金類別": "債券", "σ rank": "-1.50σ", "sigma_rank": -1.4996,
+    buy = {"code": "B", "name": "B", "基金類別": "債券", "σ rank": "-1.50σ", "sigma_rank": -1.496,
            "4D Grade": "A", "吃本金燈號": "🟢 健康", "操盤評分": 90}
     hi = {"code": "H", "name": "H", "基金類別": "股票", "σ rank": "-0.10σ", "sigma_rank": -0.1}
     pairs = suggest_rotation_pairs([hi, buy])
