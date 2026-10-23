@@ -294,14 +294,18 @@ _GOLDEN_S4_W = {"A": 0.02845622647168056, "B": 0.2824320209462693,
 def test_dg2_backtest_numbers_unchanged_golden():
     res = _bt_run()
     assert res["ok"] and res["ranking"] == ["S3", "S2", "S0", "S1", "S4"] and res["winner"] == "S3"
+    # S4 權重來自 services/portfolio_frontier.max_sharpe_portfolio 的 scipy SLSQP 迭代最佳化
+    # (ftol=1e-9);同一環境結果固定,但跨 scipy／BLAS 版本會有 ~1e-9 的浮點抖動(CI 實測
+    # 相對差約 1.4e-9),故 S4 的 equity／權重用 rel_tol=1e-6;S0～S3 是封閉式計算,維持 1e-12。
     for sid, v in _GOLDEN_EQ_LAST.items():
+        _tol = 1e-6 if sid == "S4" else 1e-12
         assert math.isclose(float(res["results"][sid]["equity_curve"].iloc[-1]), v,
-                            rel_tol=1e-12, abs_tol=1e-12), sid
+                            rel_tol=_tol, abs_tol=1e-12), sid
         assert res["results"][sid]["metrics"]["sharpe"] == _GOLDEN_SHARPE[sid]
     for c, w in _GOLDEN_S3_W.items():
         assert math.isclose(res["results"]["S3"]["final_weights"][c], w, rel_tol=1e-12)
     for c, w in _GOLDEN_S4_W.items():
-        assert math.isclose(res["results"]["S4"]["final_weights"][c], w, rel_tol=1e-9)
+        assert math.isclose(res["results"]["S4"]["final_weights"][c], w, rel_tol=1e-6)  # SLSQP,見上
     assert res["actions"]["target_weights_pct"] == {"A": 16.67, "B": 33.33, "C": 16.67, "U": 33.33}
     # ⬜ 的 tier 仍是 watch(S3)/ na(S1、S2)—— 權重路徑不動
     assert res["results"]["S3"]["final_signals"]["U"]["tier"] == "watch"
