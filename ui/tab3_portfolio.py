@@ -2389,7 +2389,10 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
     for f in loaded[:5]:
         m = f.get("metrics") or {}
         name = f.get("name", "") or f.get("code", "") or "—"
-        ret_1y = m.get("ret_1y_total") or m.get("ret_1y", "—")
+        # 2026-10-23 裁示 1B(稽核 S2):1Y 報酬只認本地還原值;缺 → 「—」。不以純淨值 ret_1y
+        # 補位、也不用 `or`(0.0 是合法值,`or` 會把它當缺)。
+        ret_1y = m.get("ret_1y_total")
+        ret_1y = "—" if ret_1y is None else ret_1y
         sharpe = m.get("sharpe", "—")
         std_1y = m.get("std_1y", "—")
         lines.append(

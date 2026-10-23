@@ -25,6 +25,52 @@ import streamlit as st
 from ui.helpers.render_state import system_error
 
 from shared.converters import safe_num  # v19.396 §1:缺值保留 None,不 `or 0` 捏造
+
+
+def _capital_line_rows(funds: list) -> list:
+    """💰 資本防線的逐檔資料 —— 純函式,只讀三個 SSOT,不自己判(可單元測試)。
+
+    2026-10-23 裁示 1B(稽核 M2):
+      · tr1y  = `compute_1y_total_return(f)`(本地配息還原淨值法;缺 → None,不是純淨值 ret_1y)
+      · adr   = `_resolve_adr_with_fallback(f)`(近 12 個月實配 ÷ 最新淨值;缺 → None,**不得 `or 0`**)
+      · 吃本金 = `check_eating_principal_1y_mk(f)`:eating=True 才 🚨;灰 / None → 中性 + SSOT 標籤
+    回每檔 {"name", "tr1y", "adr", "eating": bool|None, "label": str}:
+      label = "🚨 本金侵蝕" / SSOT ⬜ status(灰) / "— 非配息基金"(None) / ""(綠)
+    """
+    from services.fund_total_return import compute_1y_total_return
+    from services.health.dividend import (
+        _resolve_adr_with_fallback,
+        check_eating_principal_1y_mk,
+    )
+    rows = []
+    for f in funds:
+        _name = f.get("fund_name") or f.get("code", "?")
+        try:
+            _tr, _ = compute_1y_total_return(f)
+        except Exception:  # noqa: BLE001 — 缺 → None,不捏造
+            _tr = None
+        try:
+            _adr, _ = _resolve_adr_with_fallback(f)
+        except Exception:  # noqa: BLE001
+            _adr = None
+        try:
+            _eat = check_eating_principal_1y_mk(f)
+        except Exception as _e:  # noqa: BLE001 — 判定炸掉 → 當灰,不冒充綠
+            import sys as _sys
+            print(f"[tab1_macro_longterm] {f.get('code', '?')} 吃本金判定失敗:"
+                  f"{type(_e).__name__}: {_e}", file=_sys.stderr)
+            _eat = {"alert_level": "grey", "status": "⬜ 吃本金判定失敗"}
+        if not isinstance(_eat, dict):
+            _eating, _label = None, "— 非配息基金"
+        elif _eat.get("alert_level") == "grey":
+            _eating, _label = None, str(_eat.get("status") or "⬜ 資料未備／無法判定")
+        elif _eat.get("eating_principal") is True:
+            _eating, _label = True, "🚨 本金侵蝕"
+        else:
+            _eating, _label = False, ""
+        rows.append({"name": _name, "tr1y": safe_num(_tr), "adr": safe_num(_adr),
+                     "eating": _eating, "label": _label})
+    return rows
 from shared.colors import (
     GH_BG_CARD,
     GH_BG_PRIMARY,
@@ -345,22 +391,27 @@ def render_long_term_section(
         _pf_def = [f for f in st.session_state.get("portfolio_funds", []) if f.get("loaded")]
         if _pf_def:
             st.markdown("#### 💰 資本防線 — 含息報酬 vs 配息率")
-            _def_names = [f.get("fund_name") or f.get("code","?") for f in _pf_def]
-            # v19.396 §1:缺 1Y 含息報酬保留 None(不捏造 0% 假紅柱/假本金侵蝕);
-            # 下方上色 / 標籤 / customdata / stash 皆判 None → 誠實留缺口。
-            _def_tr1y  = [safe_num((f.get("metrics") or f.get("m") or {}).get("ret_1y")) for f in _pf_def]
-            _def_adr   = [float((f.get("metrics") or f.get("m") or {}).get("annual_div_rate") or 0) for f in _pf_def]
-            _def_colors = [TRAFFIC_NEUTRAL if tr is None else (MATERIAL_RED if tr < adr else MATERIAL_GREEN)
-                           for tr, adr in zip(_def_tr1y, _def_adr)]
+            # 2026-10-23 裁示 1B(稽核 M2):柱值 / 配息率 / 本金侵蝕全走 SSOT(`_capital_line_rows`),
+            # 不再讀純淨值 ret_1y 當含息、不再 `annual_div_rate or 0`、不再 UI 自己 `tr < adr`;
+            # 缺 → None 留缺口,灰 / 非配息 → 中性色 + SSOT 標籤。
+            _def_rows  = _capital_line_rows(_pf_def)
+            _def_names = [r["name"] for r in _def_rows]
+            _def_tr1y  = [r["tr1y"] for r in _def_rows]
+            _def_adr   = [r["adr"] for r in _def_rows]
+            _def_colors = [MATERIAL_RED if r["eating"] is True
+                           else (MATERIAL_GREEN if r["eating"] is False else TRAFFIC_NEUTRAL)
+                           for r in _def_rows]
             _def_fig = go.Figure()
             _def_fig.add_trace(go.Bar(
                 x=_def_names, y=_def_tr1y,
                 marker_color=_def_colors,
                 text=["—" if v is None else f"{v:.1f}%" for v in _def_tr1y],
                 textposition="outside",
-                name="含息報酬率 TR1Y",
-                customdata=list(zip(_def_adr, ["⬜ 1Y 資料不足" if tr is None else ("🚨 本金侵蝕" if tr < adr else "") for tr, adr in zip(_def_tr1y, _def_adr)])),
-                hovertemplate="<b>%{x}</b><br>TR1Y: %{y:.1f}%<br>配息率: %{customdata[0]:.1f}%<br>%{customdata[1]}<extra></extra>",
+                name="含息報酬率 TR1Y（還原淨值）",
+                customdata=list(zip(
+                    ["⬜ 未備" if a is None else f"{a:.1f}%" for a in _def_adr],
+                    [r["label"] for r in _def_rows])),
+                hovertemplate="<b>%{x}</b><br>TR1Y: %{y:.1f}%<br>配息率: %{customdata[0]}<br>%{customdata[1]}<extra></extra>",
             ))
             _def_fig.add_trace(go.Scatter(
                 x=_def_names, y=_def_adr,
@@ -379,12 +430,13 @@ def render_long_term_section(
                 yaxis=dict(title="報酬率 (%)", ticksuffix="%"),
             )
             st.plotly_chart(_def_fig, use_container_width=True)
-            st.caption("🟢 綠色 = TR1Y > 配息率（配息有保障）｜🔴 紅色 = TR1Y < 配息率（本金侵蝕警示）｜橙色橫線 = 配息年化率")
-            # v18.255 stash 給 AI 白話總體檢
+            st.caption("🟢 綠色 = TR1Y ≥ 配息率（配息有保障）｜🔴 紅色 = TR1Y < 配息率（本金侵蝕警示）"
+                       "｜⬜ 灰色 = 資料未備／無法判定或非配息基金（不判）｜橙色橫線 = 配息年化率"
+                       "（近 12 個月實際配息 ÷ 最新淨值）")
+            # v18.255 stash 給 AI 白話總體檢 —— 只收 SSOT 判定為吃本金的檔(與柱色同源)
             try:
-                _eroded = [(n, tr, adr) for n, tr, adr
-                           in zip(_def_names, _def_tr1y, _def_adr)
-                           if tr is not None and tr < adr]
+                _eroded = [(r["name"], r["tr1y"], r["adr"]) for r in _def_rows
+                           if r["eating"] is True and r["tr1y"] is not None and r["adr"] is not None]
                 st.session_state["_macro_capital_line"] = {
                     "n_funds": len(_def_names),
                     "n_eroded": len(_eroded),
