@@ -15,6 +15,11 @@
 **表現差 overlay(v19.430)**:與型態分流**獨立**的第二觸發 —— 表現差 = 跑輸大盤(`benchmark_compare`)
 **OR** 絕對虧損(`switch_strategy` 紅燈)。表現差且型態分流未給換股(且非「賣轉現金」)→ 疊加選股池
 替代標的建議(重用 `_best_candidate`)。池空 / 無合格 → 誠實「無合適替代標的」,不硬湊(§1)。
+~~適用於 HOLD / WARN / 資料不足(INSUFFICIENT)三種列~~ → **DG-6(2026-10-24 客戶裁示 DEC-2026-10-24-12,
+有意識的政策變更,不是漏刪)**:必要資料不足(INSUFFICIENT,含基金位置無法判定、型態無法判定)時,
+**不得**由「表現差」這個單軸訊號重新產生換入／換出建議 —— 不挑候選(`underperf_candidate` 維持 None)、
+標 `underperf_suppressed=True`、動作維持「⬜ 資料不足」,表現差 block 只當證據保留(計數不變)。
+HOLD / WARN 的 overlay 行為不在本次裁示範圍,未改。
 
 ⚠️ 匯率誠實範圍:USDTWD 單一值 → 同幣別 A→B 換股 FX 近中性;匯率真正影響「成長型賣出轉台幣現金」
 與「從現金新進場」等跨台幣動作。FX 位階以資訊呈現,不假裝決定每筆同幣別換股。
@@ -229,6 +234,8 @@ def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
             "type_method": _tinfo["method"], "er": _tinfo["er"],
             "action": HOLD, "action_zh": _ACTION_ZH[HOLD], "reason": "",
             "switch_to": None, "underperformance": _under, "underperf_candidate": None,
+            # DG-6(DEC-2026-10-24-12):資料不足列的表現差換股建議被抑制時為 True(預設 False)
+            "underperf_suppressed": False,
             "signals": {"nav_level": None, "sigma_rank": None, "fx_label": fx_label,
                         "macro_composite": macro_composite, "breakdown": None}}
 
@@ -288,8 +295,17 @@ def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
             _out["reason"] = f"⚠️ 表現差({_rz})。{_out['reason']}"            # 型態已給換入標的
         elif _out["action"] == SELL_CASH:
             _out["reason"] = f"⚠️ 表現差({_rz});已建議轉現金避開下行,先不新進場。{_out['reason']}"
+        elif _out["action"] == INSUFFICIENT:
+            # DG-6(2026-10-24 客戶裁示 DEC-2026-10-24-12):Missing／Unknown／INSUFFICIENT 不得經另一
+            # 單軸訊號(表現差)重新產生投資行動 → 不挑候選、不寫「建議換入」,也不寫「選股池無合適
+            # 替代標的」(那句暗示已搜尋過)。動作維持 ⬜ 資料不足;表現差 block 只當證據保留。
+            _out["underperf_suppressed"] = True
+            _orig = (_out["reason"] or "必要資料不足").rstrip()
+            _sep = "" if _orig.endswith(("。", "）", ")")) else "。"
+            _out["reason"] = (f"{_orig}{_sep}另有表現差訊號（{_rz}），但必要資料不足／無法判定"
+                              f" → 暫不提供換入／換出建議（DG-6）。")
         else:
-            _uc = _best_candidate(_code, pool_rows, held_ccy=_held_ccy)      # HOLD/WARN/資料不足 → 補選股池建議
+            _uc = _best_candidate(_code, pool_rows, held_ccy=_held_ccy)      # HOLD/WARN → 補選股池建議
             _out["underperf_candidate"] = _uc
             if _uc and _uc["code"]:
                 _xccy = f" {_CROSS_CCY_NOTE}" if _uc.get("cross_ccy") else ""

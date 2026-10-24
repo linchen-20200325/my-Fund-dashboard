@@ -136,8 +136,11 @@ class TestDividendSummaryRow:
 
     def test_replacement_verdict_threaded(self):
         """換標的建議欄位應透過 SSOT 串接,不直接寫死。"""
+        # DG-6（DEC-2026-10-24-12）：分類未判定 → ⬜ 不給換／留；本測試守的是「SSOT 串接」，
+        # 故補一個可對應的基金類別讓分類可判定（分類未判定的行為見 test_dg6_missing_no_action.py）。
         fd = {
             "moneydj_raw": {
+                "category": "全球股票型",
                 "perf": {"1Y": 2.0},
                 "moneydj_div_yield": 10.0,
             },

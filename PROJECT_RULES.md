@@ -72,7 +72,7 @@
 | 新裁示同批 GitHub 落盤 | 第 12 節 12.1（`DEC-2026-10-24-05`） |
 | Stateless AI Handoff／GitHub = Project Memory | 第 6 節 6.1.1（`DEC-2026-10-24-07`） |
 | 資料層 ≠ AI 推理層 | 第 13 節第 1 條；資料先行順序第 13 節 13.1（`DEC-2026-10-24-02`） |
-| 資料／證據 ≠ 投資行動；Missing／Unknown 不得經單軸訊號重新產生行動 | 第 13 節 13.1 末尾指標（`DEC-2026-10-24-10`） |
+| 資料／證據 ≠ 投資行動；Missing／Unknown 不得經單軸訊號重新產生行動 | 第 13 節 13.1 末尾指標（`DEC-2026-10-24-10`；擴及 `switch_advisor` 表現差 overlay＋LINE 週報與 `check_replacement_recommendation` 兩條路徑，其餘平行引擎未核准：`DEC-2026-10-24-12`） |
 | Data-first 順序；Missing ≠ 0／False／中性／HOLD／安全；deterministic calculation 單一 SSOT；AI 不補不存在的資料 | 第 13 節 13.1「正式順序」與「禁止」（`DEC-2026-10-24-02`） |
 | 不因形式（如投資專案）預設升 High | 第 5 節 5.1 第 9 點（`DEC-2026-10-23-04`）；第 9 節 9.1 第 8 點（`DEC-2026-10-24-04`） |
 | Minimum Sufficient Test Scope | 第 9 節 9.1 第 2～4 點（`DEC-2026-10-24-04`） |

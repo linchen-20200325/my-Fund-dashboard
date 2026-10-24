@@ -18,7 +18,10 @@ def test_row_exposes_verdict_key():
 
 def test_bad_fund_verdict_is_replace():
     """規則 (d):Sharpe<0 且 max_dd<-30% → replace(該進淘汰候選紅區)。"""
-    fd = {"metrics": {"sharpe": -0.8, "max_drawdown": -42.0}, "moneydj_raw": {}}
+    # DG-6（DEC-2026-10-24-12）：分類未判定 → ⬜ 不給換／留（不進紅區）；本測試守規則 (d) → 紅區，
+    # 故補可對應的基金類別。分類未判定不進紅區的反向案例見 test_dg6_missing_no_action.py。
+    fd = {"category": "全球股票型",
+          "metrics": {"sharpe": -0.8, "max_drawdown": -42.0}, "moneydj_raw": {}}
     row = build_dividend_summary_row(fd, "TESTBAD", holding_years=2.0)
     assert row["_verdict"] == "replace", row["_verdict"]
     assert "🔴" in row["換標的建議"]

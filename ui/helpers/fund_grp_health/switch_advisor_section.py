@@ -681,6 +681,9 @@ def _render_advice(res: dict, macro, fxlbl) -> None:
         return f"⚠️ {_lbl}" + (f"(vs 大盤 {_ex:+.1f}pp)" if _ex is not None else "")
 
     def _cand_zh(a):
+        if a.get("underperf_suppressed"):
+            # DG-6(DEC-2026-10-24-12):資料不足列不由表現差產生換入建議 → 明示不提供,不用「—」
+            return "⬜ 資料不足，不提供"
         _c = a.get("switch_to") or a.get("underperf_candidate")
         if not _c:
             return "—"
@@ -718,11 +721,13 @@ def _render_advice(res: dict, macro, fxlbl) -> None:
             "表現差": _cc.TextColumn("表現差", width="medium",
                 help="這檔是不是表現差(兩訊號任一成立):**跑輸大盤** = 近一年落後對應大盤逾 5 個百分點;"
                      "**絕對虧損** = 近一年含息報酬與 Sharpe 同時為負(實際在虧)。"
-                     "表現差時,右邊「換入標的」會從你的選股池挑替代標的。「—」= 沒有表現差 / 資料不足。"),
+                     "表現差時,右邊「換入標的」會從你的選股池挑替代標的;"
+                     "但該檔必要資料不足(建議為 ⬜ 資料不足)時不提供換入建議。「—」= 沒有表現差 / 資料不足。"),
             "換入標的": _cc.TextColumn("換入標的", width="medium",
                 help="從你的選股池裡挑出的替換標的,括號裡是它現在離高點多遠(愈負 = 跌愈深)。"
                      "標「⚠️跨幣別」= 它與被換出的持倉計價幣別不同,換股會被動吃到匯差(仍保留,由你決定)。"
-                     "「—」= 池子裡沒有合適的,不硬湊。"),
+                     "「—」= 池子裡沒有合適的,不硬湊。"
+                     "「⬜ 資料不足，不提供」= 這檔必要資料不足、無法判定,不由表現差產生換入建議。"),
             "理由": _cc.TextColumn("理由", width="large",
                 help="這個建議是依據哪幾個條件推出來的 —— 不同意就別照做,這欄的用途是讓你能反駁它。"),
         },

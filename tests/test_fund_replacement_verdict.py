@@ -13,6 +13,12 @@ from __future__ import annotations
 
 from services.health.replacement import check_replacement_recommendation
 
+# DG-6（DEC-2026-10-24-12）：分類未判定（is_core_bucket(category) is None）→ ⬜ 不給換／留結論。
+# 本檔各規則測試原本的 fixture 都沒有基金類別 —— 那正是現在被禁止的「分類未判定仍給換／留」。
+# 為保留各規則測試原本要守的語意，fixture 一律補上一個可對應的非 Core 類別（_CAT）；
+# 分類未判定本身的行為另由 tests/test_dg6_missing_no_action.py 守。
+_CAT = "全球股票型"   # services.regime_fit.asset_bucket → 「股票」（非 Core）
+
 
 class TestEmptyFd:
     """空 fd / 全 None input — 應回 unknown,不假綠燈。"""
@@ -31,25 +37,49 @@ class TestKeepVerdict:
     """無任何規則中 + 至少 1 個 signal → keep(🟢)。"""
 
     def test_all_healthy_returns_keep(self):
-        fd = {"metrics": {
+        # DG-6（DEC-2026-10-24-12）：「判不動時不得 🟢 保留」—— 原 fixture 只有 sharpe / max_dd /
+        # 純淨值 3Y，規則 (a)(b)(c) 都判不動（無吃本金訊號、無 4D 等第、無含息 3Y → 3-3-3 ⬜），
+        # 舊行為卻給 🟢。現改為：原 fixture → ⬜ 無法判定；補齊 4 規則所需資料 → 🟢 保留。
+        thin = {"category": _CAT, "metrics": {
             "sharpe": 1.5,
             "max_drawdown": -10.0,
             "ret_3y_ann": 9.0,
         }}
+        r_thin = check_replacement_recommendation(thin, holding_years=4)
+        assert r_thin["verdict"] == "unknown" and r_thin["emoji"] == "⬜"
+        assert r_thin["status"] == "rules_incomplete"
+        assert "🟢" not in r_thin["message"] and "保留 —" not in r_thin["message"]
+
+        fd = {
+            "category": _CAT,
+            "moneydj_raw": {"perf": {"1Y": 12.0}, "moneydj_div_yield": 5.0},
+            "metrics": {
+                "sharpe": 1.5, "std_1y": 8.0, "max_drawdown": -10.0,
+                "ret_3y_ann": 9.0, "ret_3y_ann_tr": 9.0,
+                "ret_1y_total": 12.0, "ret_1y_window_days": 365,
+                "ret_1y_div_count": 12, "annual_div_rate": 5.0,
+            },
+        }
         r = check_replacement_recommendation(fd, holding_years=4)
         assert r["verdict"] == "keep"
         assert r["emoji"] == "🟢"
+        assert r["status"] == "ok"
         assert not r["triggered_rules"]
 
     def test_sharpe_positive_short_dd_keep(self):
         # 給足 4D 4 維資料,避免 Grade D 觸發 observe(b*)
+        # DG-6（DEC-2026-10-24-12）：補基金類別（分類需可判定）＋ 12M 實際配息與含息 1Y
+        # （原 fixture 有配息跡象卻無 12M 配息紀錄 → 吃本金 ⬜ → 規則 (a) 判不動 → 不得 🟢）。
         fd = {
+            "category": _CAT,
             "moneydj_raw": {"perf": {"1Y": 12.0}, "moneydj_div_yield": 5.0},
             "metrics": {
                 "sharpe": 1.0,
                 "std_1y": 8.0,
                 "max_drawdown": -15.0,
                 "ret_3y_ann": 9.0,
+                "ret_1y_total": 12.0, "ret_1y_window_days": 365,
+                "ret_1y_div_count": 12, "annual_div_rate": 5.0,
             },
         }
         r = check_replacement_recommendation(fd, holding_years=2)
@@ -64,6 +94,7 @@ class TestRuleA_EatPrincipal:
         # adr 高(10%)、tr1y 低(2%)
         # 2026-10-23 裁示 1B:判定讀本地還原值 + 近 12 個月實際配息率(官方值只對帳)
         fd = {
+            "category": _CAT,  # DG-6（DEC-2026-10-24-12）：分類需可判定，否則 ⬜ 不給換／留
             "moneydj_raw": {
                 "perf": {"1Y": 2.0},
                 "moneydj_div_yield": 10.0,
@@ -77,6 +108,7 @@ class TestRuleA_EatPrincipal:
 
     def test_eat_principal_short_hold_observes_only(self):
         fd = {
+            "category": _CAT,  # DG-6（DEC-2026-10-24-12）：分類需可判定，否則 ⬜ 不給換／留
             "moneydj_raw": {
                 "perf": {"1Y": 2.0},
                 "moneydj_div_yield": 10.0,
@@ -95,7 +127,8 @@ class TestRuleD_ExtremelyBadRiskAdjusted:
     """規則 (d):Sharpe < 0 AND max_dd < -30% → hard trigger。"""
 
     def test_sharpe_negative_dd_severe_triggers(self):
-        fd = {"metrics": {
+        # DG-6（DEC-2026-10-24-12）：補基金類別（分類未判定時不給換／留結論）
+        fd = {"category": _CAT, "metrics": {
             "sharpe": -0.5,
             "max_drawdown": -35.0,
         }}
@@ -107,6 +140,7 @@ class TestRuleD_ExtremelyBadRiskAdjusted:
         # Sharpe < 0 但 dd 還可接受 → 計觀察(d*)
         # 補完整 4D 維度避免 Grade F 誤觸 (b)
         fd = {
+            "category": _CAT,  # DG-6（DEC-2026-10-24-12）：分類需可判定，否則 ⬜ 不給換／留
             "moneydj_raw": {"perf": {"1Y": 8.0}, "moneydj_div_yield": 5.0},
             "metrics": {
                 "sharpe": -0.2,
@@ -120,7 +154,8 @@ class TestRuleD_ExtremelyBadRiskAdjusted:
 
     def test_sharpe_positive_dd_severe_no_d_trigger(self):
         # Sharpe 0.5 不滿足 < 0 → 不該 (d) trigger
-        fd = {"metrics": {
+        # DG-6（DEC-2026-10-24-12）：補基金類別（分類未判定時不給換／留結論）
+        fd = {"category": _CAT, "metrics": {
             "sharpe": 0.5,
             "max_drawdown": -35.0,
         }}
@@ -137,7 +172,8 @@ class TestRuleC_333:
         # 不再退純淨值 `ret_3y_ann` —— 本 fixture 原本只給 `ret_3y_ann` 3.0,3A 後那條會是 ⬜
         # (無法判定,不觸發 (c)),故改餵 SSOT 的輸入鍵;規則 (c) 本身的語意未改。
         # 純淨值-only 不再觸發 (c) 的反向案例見 test_nav_only_3y_no_longer_triggers_c。
-        fd = {"metrics": {
+        # DG-6（DEC-2026-10-24-12）：補基金類別（分類未判定時不給換／留結論）
+        fd = {"category": _CAT, "metrics": {
             "ret_3y_ann_tr": 3.0,
             "sharpe": 0.5,  # 避免 unknown
         }}
@@ -147,18 +183,22 @@ class TestRuleC_333:
 
     def test_nav_only_3y_no_longer_triggers_c(self):
         """3A:只有純淨值 `ret_3y_ann`(無含息 `ret_3y_ann_tr`)→ 3-3-3 ⬜ → 不得觸發 (c)(§1 缺 ≠ 不通過)。"""
-        fd = {"metrics": {"ret_3y_ann": 3.0, "sharpe": 0.5}}
+        # DG-6（DEC-2026-10-24-12）：補基金類別（分類未判定時不給換／留結論）
+        fd = {"category": _CAT, "metrics": {"ret_3y_ann": 3.0, "sharpe": 0.5}}
         r = check_replacement_recommendation(fd, holding_years=4)
         assert not any(t.startswith("(c)") for t in r["triggered_rules"])
 
     def test_low_3y_short_hold_observes_only(self):
-        fd = {"metrics": {
+        # DG-6（DEC-2026-10-24-12）：補基金類別（分類未判定時不給換／留結論）
+        fd = {"category": _CAT, "metrics": {
             "ret_3y_ann": 3.0,
             "sharpe": 0.5,
         }}
         r = check_replacement_recommendation(fd, holding_years=2)
         # 持有 < 3 年 → 不下 hard trigger
-        assert r["verdict"] in ("observe", "keep")
+        # DG-6（DEC-2026-10-24-12）：本 fixture 無 4D 等第 → 規則 (b) 判不動 → 不得 🟢，回 ⬜ 無法判定
+        assert r["verdict"] in ("observe", "keep", "unknown")
+        assert r["verdict"] != "replace"
         assert not any("(c) " in t for t in r["triggered_rules"]
                        if not t.startswith("(c*)"))
 
@@ -170,6 +210,7 @@ class TestObserveAggregation:
         # Sharpe < 0 但 dd 沒到 → 觀察(d*) only
         # 補完整 4D 維度避免 Grade F 誤觸 (b)
         fd = {
+            "category": _CAT,  # DG-6（DEC-2026-10-24-12）：分類需可判定，否則 ⬜ 不給換／留
             "moneydj_raw": {"perf": {"1Y": 6.0}, "moneydj_div_yield": 5.0},
             "metrics": {
                 "sharpe": -0.2,

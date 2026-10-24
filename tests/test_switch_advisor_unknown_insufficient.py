@@ -159,6 +159,11 @@ _BASE_OUTPUTS = json.loads(r"""{
 def test_high_low_mid_unchanged_vs_f2539a7d(name):
     h, pool, fx = _CASES[name]
     got = advise_holding(h, pool, fx_label=fx, macro_composite=0.0)
+    # DG-6（DEC-2026-10-24-12）：advise_holding 新增 `underperf_suppressed` 鍵（預設 False，
+    # 只有資料不足列的表現差換股建議被抑制時才為 True）。本快照的 high/low/mid 列都不是資料不足、
+    # 也沒有表現差 → 必為 False；把新鍵拿掉後，其餘輸出仍須與 f2539a7d 快照逐鍵相同。
+    got = dict(got)
+    assert got.pop("underperf_suppressed") is False
     assert json.loads(json.dumps(got, ensure_ascii=False, sort_keys=True, default=str)) \
         == _BASE_OUTPUTS[name]
 

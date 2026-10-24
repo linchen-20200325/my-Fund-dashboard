@@ -9,7 +9,18 @@
 Verdict 三色:
   - 任一 hard trigger 中  → 🔴 建議換(replace)
   - 1-2 觀察分(Grade D 等較弱訊號) → 🟡 觀察(observe)
-  - 全部未中             → 🟢 保留(keep)
+  - ~~全部未中             → 🟢 保留(keep)~~
+  - 4 條規則**都實際判得動**且全部未中 → 🟢 保留(keep)
+
+DG-6(2026-10-24 客戶裁示 DEC-2026-10-24-12;有意識的政策變更,不是漏刪):
+  - **分類未判定**(`services.zscore_engine.is_core_bucket(category) is None`:類別空白／無法對應／
+    分類例外)→ ⬜「分類未判定」(verdict="unknown"、status="core_unknown"),**不給換／留結論**,
+    覆蓋 replace / observe / keep;已評估的規則只當「證據」列出(公式與門檻未改)。
+  - **判不動時不得 🟢 保留**:無觸發、無觀察分,但任一規則資料不足無法判定 → ⬜「無法判定」
+    (verdict="unknown"、status="rules_incomplete")。「判得動」的定義是總管讀法(可被客戶推翻),
+    見 docs/DECISIONS.md DEC-2026-10-24-12 實作說明。
+  - 回傳 dict 新增 `status`:"ok"(正常 replace／observe／keep)/ "core_unknown" / "rules_incomplete" /
+    "no_signal"(既有「所有關鍵指標都拿不到」的 ⬜ 資料不足)。
 
 設計
 ----
@@ -46,6 +57,13 @@ _VERDICT_LABEL = {
     "unknown": "資料不足",
 }
 
+# DG-6(DEC-2026-10-24-12):unknown 的細分標籤(依 status)。
+_UNKNOWN_LABEL_BY_STATUS = {
+    "core_unknown": "分類未判定",
+    "rules_incomplete": "無法判定",
+    "no_signal": "資料不足",
+}
+
 
 # v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
 from shared.converters import safe_float as _safe_float  # noqa: E402
@@ -75,6 +93,7 @@ def check_replacement_recommendation(
             "triggered_rules": [str, ...],  # 中的 hard trigger 規則名
             "observe_signals": [str, ...],  # 較弱訊號(觀察分)
             "message": str,                  # 給 UI 顯示的人類可讀說明
+            "status": str,                   # DG-6:"ok" / "core_unknown" / "rules_incomplete" / "no_signal"
         }
     """
     # 規則延遲 import 避免循環依賴
@@ -107,12 +126,14 @@ def check_replacement_recommendation(
                        and holding_y >= REPLACE_RULE_A_MIN_HOLD_YEARS)
     # v19.184 F-MED:silent except 加 stderr log(§3.3 反捏造)
     import sys as _sys
+    _eat_err = False   # DG-6:區分「例外 → None(判不動)」與「非配息基金 → None(規則不適用)」
     try:
         eat_result = check_eating_principal_1y_mk(fd)
     except Exception as e:
         print(f'[fund_replacement_verdict] check_eating_principal_1y_mk fail: '
               f'{type(e).__name__}: {e}', file=_sys.stderr)
         eat_result = None
+        _eat_err = True
     eat_status = (eat_result or {}).get("status", "")
     if rule_a_eligible and "吃本金" in str(eat_status):
         triggered.append(f"(a) 持有 {holding_y:.1f} 年 + 吃本金 1Y·")
@@ -192,17 +213,71 @@ def check_replacement_recommendation(
         or sharpe_v is not None or max_dd_v is not None
         or _ret_3y_ann is not None
     )
-    if triggered:
+    # ─── DG-6(DEC-2026-10-24-12)① 分類未判定 → 不給換／留結論 ─────────
+    # 分類 SSOT:`services.zscore_engine.is_core_bucket`(三態;None = 未判定)。
+    # 類別取法對齊 `services/health/report.py::build_health_analysis_row`。
+    _mj_raw = fd.get("moneydj_raw")
+    _category = ((_mj_raw.get("category") if isinstance(_mj_raw, dict) else None)
+                 or fd.get("category"))
+    try:
+        from services.zscore_engine import is_core_bucket
+        _core = is_core_bucket(_category)
+    except Exception as e:  # noqa: BLE001 — 分類例外 → 未判定,不冒充可判定(§1)
+        print(f'[fund_replacement_verdict] is_core_bucket fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
+        _core = None
+    _core_unknown = _core is None
+
+    # ─── DG-6 ② 判不動時不得 🟢 保留:逐條確認 4 規則是否「實際判得動」──────
+    # 定義為總管讀法(可被客戶推翻,見 DECISIONS DEC-2026-10-24-12 實作說明);不改任何公式／門檻。
+    _rule_evaluable = {
+        # (a) 吃本金是真訊號,或持有期已知且未達門檻(hard rule (a) 不可能觸發),
+        #     或非配息基金(`check_eating_principal_1y_mk` 依既有契約回 None、且非例外 →
+        #     吃本金概念不適用,規則 (a) 確定不會觸發;實作組補充,見 DECISIONS 實作說明)
+        "a": bool(_eat_signal
+                  or (eat_result is None and not _eat_err)
+                  or (holding_y is not None
+                      and holding_y < REPLACE_RULE_A_MIN_HOLD_YEARS)),
+        # (b) 4D Grade 有實際等第
+        "b": grade not in (None, "—"),
+        # (c) 持有期已知,且(未達門檻 或 3-3-3 有通過／未通過結論)
+        "c": bool(holding_y is not None
+                  and (holding_y < REPLACE_RULE_C_MIN_HOLD_YEARS
+                       or _333.get("passed") is not None)),
+        # (d) Sharpe 已知,且(Sharpe 不為負 或 max_dd 已知)
+        "d": bool(sharpe_v is not None
+                  and (sharpe_v >= REPLACE_RULE_D_SHARPE_MAX or max_dd_v is not None)),
+    }
+    _not_evaluable = [k for k in ("a", "b", "c", "d") if not _rule_evaluable[k]]
+
+    status = "ok"
+    if _core_unknown:
+        verdict = "unknown"
+        status = "core_unknown"
+    elif triggered:
         verdict = "replace"
     elif observe:
         verdict = "observe"
     elif not _has_any_signal:
         verdict = "unknown"
+        status = "no_signal"
+    elif _not_evaluable:
+        verdict = "unknown"
+        status = "rules_incomplete"
     else:
         verdict = "keep"
 
     # ─── 人類可讀訊息 ──────────────────────────────────────────
-    if verdict == "replace":
+    if status == "core_unknown":
+        msg = "⬜ 分類未判定（分類資料未取得或無法對應），暫不提供換／留建議"
+        if triggered or observe:
+            # 只列證據,不帶「先觀察」這類結論字(DG-6:分類未判定不給換／留／觀察結論)
+            _ev = [t.replace(",先觀察", "") for t in (triggered + observe)]
+            msg += "；證據：" + " / ".join(_ev)
+    elif status == "rules_incomplete":
+        msg = ("⬜ 無法判定 — 規則 " + "".join(f"({k})" for k in _not_evaluable)
+               + " 資料不足，不提供保留結論")
+    elif verdict == "replace":
         msg = f"🔴 建議換 — 中 {len(triggered)} 條 hard trigger:" + " / ".join(triggered)
     elif verdict == "observe":
         msg = f"🟡 觀察 — {len(observe)} 個警示訊號:" + " / ".join(observe)
@@ -211,11 +286,14 @@ def check_replacement_recommendation(
     else:
         msg = "⬜ 資料不足 — 無法判定(持有期或關鍵指標缺)"
 
+    _label = (_UNKNOWN_LABEL_BY_STATUS.get(status, _VERDICT_LABEL["unknown"])
+              if verdict == "unknown" else _VERDICT_LABEL[verdict])
     return {
         "verdict": verdict,
         "emoji": _VERDICT_EMOJI[verdict],
-        "label": _VERDICT_LABEL[verdict],
+        "label": _label,
         "triggered_rules": triggered,
         "observe_signals": observe,
         "message": msg,
+        "status": status,
     }
