@@ -886,8 +886,21 @@
 | evidence／source | 客戶 2026-10-24 指示，經總管轉達；repo 內無逐字存檔 |
 | 影響範圍 | BL-0441 實作範圍；**不構成** DG-1～DG-3 的核准 |
 | 是否可逆 | 可逆（客戶可另行裁示） |
-| supersedes／superseded by | supersedes：無。superseded by：無 |
+| supersedes／superseded by | supersedes：無。superseded by：~~無~~ → 部分：Stop Gate「資料不足時能否給加碼／賣出」中「Core 分類失敗／類別缺值」一項已由 `DEC-2026-10-24-09` 裁示（狀態更新，不是漏刪；2026-10-24；決策者：客戶）；其餘範圍、禁止事項與 Stop Gate 不變 |
 | provenance | **客戶指示**，經總管轉達（決策者：客戶 2026-10-24；文件組未見客戶對話本身）。由文件組單組寫成，未經第二組驗證 |
+
+### DEC-2026-10-24-09｜客戶正式裁示：分類未判定／類別缺值不得當非 Core、不提供行動（BL-0441 Stop Gate 結論）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-24 |
+| 決策內容摘要 | **正式裁示**（回答 `DEC-2026-10-24-08` Stop Gate「資料不足時能否給加碼／賣出」中的 Core 分類一項）。**原則**：Missing／Error ≠ 非 Core ≠ 可行動。(1) 分類失敗／分類例外時，不得再把基金當成非 Core 繼續產生 Z-score、235 燈號或任何加碼／賣出等投資行動；顯示「⬜ 分類未判定，暫不提供行動」（可依現有 UI 用字最小一致化）；不新增任何買賣規則、門檻、權重。(2) 基金類別欄位本身空白／缺值（含 `asset_bucket` 回 None、無法對應）同樣不得默認為非 Core，視為 Unknown／未判定，套用第 (1) 點同樣處置；不得自行推估 Core／非 Core。(3) Tab2 健康總覽卡 `fund_ccy` 未傳造成匯率維恆缺：若現有已驗證資料流本來就有幣別，只做 wiring（不改 schema、不新增來源）＋targeted tests；若需新增資料來源、schema、fallback 或推估幣別 → Stop Gate、該項不做。(4) `docs/HANDOFF.md` 修正到 #1042（`d266bcf6`）已合併後實況，下一個 handoff point 只能有一個，已完成步驟不得留作 current state。(5) 本裁示寫入本檔、`docs/BACKLOG.md` BL-0441 與 `docs/HANDOFF.md` 同步。**範圍**：只改 `services/zscore_engine.py::rebalance_signal`（Z）與 `services/ladder235.py::ladder_signal` 兩條路徑及其直接消費端呈現。**禁止**：擴張到其他平行買賣引擎（`calc_metrics` pos_label、`mk_dashboard`、`switch_advisor`、`switch_strategy`、`allocation_backtest`、`recommend_policy`、satellite stop-gain 等；發現同型問題只登記 BACKLOG）；DG-1～DG-3；`combine_action` 3×3 表；raw NAV／TR；門檻值；新 UI 元件 |
+| 理由／背景 | （實作組背景說明，不是客戶原話）#1042（`d266bcf6`）把 `is_core_bucket` 分類例外改成 None 並揭露，但依 `DEC-2026-10-24-08` Stop Gate 未改行為（仍照非 Core 給 Z 行動與 235 燈）；本裁示把該 Stop Gate 結論定為「未判定 → 不提供行動」，並把空白／無法對應的類別一併納入。落地見 `docs/BACKLOG.md` BL-0441 列尾 |
+| evidence／source | 客戶 2026-10-24 正式裁示，經總管派工單轉達；repo 內無逐字存檔 |
+| 影響範圍 | Z-Score 位階卡（Tab2）、「🎯 建議動作」的位階桶輸入、健診寬表「加碼水位」欄；**不構成** DG-1～DG-3 核准、新公式、新門檻、新資料來源或其他引擎的動工授權 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：`DEC-2026-10-24-08` Stop Gate 中「Core 分類失敗時是否仍給 Z／235 行動」一項（#1042 的「照非 Core 計算、只揭露」作法）。superseded by：無 |
+| provenance | **客戶正式裁示（非 AI 推論）**，經總管派工單轉達（決策者：客戶 2026-10-24；實作組未見客戶對話本身）。由實作組單組寫成，未經第二組驗證 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
@@ -1015,3 +1028,4 @@
 - 第四節 `DEC-2026-10-24-03`：客戶裁示經總管轉達，repo 內無逐字存檔；範圍限制為總管轉達要點；由文件組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-24-04`：客戶裁示經總管轉達，repo 內無逐字存檔；九項為總管轉達要點，照寫不增刪；與 `CLAUDE.md` §-2 的併讀指標為實作組讀法；由實作組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-24-05`、`-06`：客戶裁示經總管轉達，repo 內無逐字存檔；內容為總管轉達要點；快速索引各列落點為文件組 grep 查找；由文件組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-24-09`：客戶裁示經總管派工單轉達，repo 內無逐字存檔，實作組未見客戶對話本身；五點為總管轉達要點，照寫不增刪；`-08` supersedes 欄的部分取代註記為實作組讀法；由實作組單組寫成，未經第二組驗證。

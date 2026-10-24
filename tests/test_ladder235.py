@@ -10,6 +10,9 @@ import pandas as pd
 
 from services.ladder235 import _classify, ladder_signal
 
+# BL-0441(DEC-2026-10-24-09):類別缺值 → 未判定不給燈;純燈號數學測試一律明示非 Core 類別
+_NON_CORE = "科技股票型"
+
 
 # ── _classify:精準三取一 Max ─────────────────────────────────
 def test_stop_gain_force_over_3sigma():
@@ -76,46 +79,46 @@ def _rising(n: int, base: float = 100.0, step: float = 0.1) -> pd.Series:
 
 
 def test_insufficient_lt_20_weeks():
-    r = ladder_signal(_rising(10), vix=15)
+    r = ladder_signal(_rising(10), vix=15, category=_NON_CORE)
     assert r["lamp"] is None and r["status"] == "insufficient"
 
 
 def test_degenerate_zero_sigma():
-    r = ladder_signal(_wk([100] * 30), vix=15)            # 全同值 → σ=0
+    r = ladder_signal(_wk([100] * 30), vix=15, category=_NON_CORE)            # 全同值 → σ=0
     assert r["lamp"] is None and r["status"] == "degenerate"
 
 
 def test_cruise_end_to_end():
-    r = ladder_signal(_rising(60), vix=15)
+    r = ladder_signal(_rising(60), vix=15, category=_NON_CORE)
     assert r["status"] == "ok" and r["lamp"] == "巡航" and r["deploy_pct"] == 0.0
 
 
 def test_vix_driven_lamp2_and_deploy():
-    r = ladder_signal(_rising(60), vix=27, reserve_twd=100_000)
+    r = ladder_signal(_rising(60), vix=27, reserve_twd=100_000, category=_NON_CORE)
     assert r["lamp"] == "燈二" and r["deploy_pct"] == 0.30
     assert r["deploy_twd"] == 30_000                      # reserve × 30%
 
 
 def test_vix_none_notes_reason():
-    r = ladder_signal(_rising(60), vix=None)
+    r = ladder_signal(_rising(60), vix=None, category=_NON_CORE)
     assert r["status"] == "ok" and any("無 VIX" in x for x in r["reasons"])
 
 
 def test_daily_input_resamples_to_weekly():
     idx = pd.date_range("2023-01-01", periods=220, freq="D")
     s = pd.Series(100 + 0.05 * np.arange(220), index=idx)
-    r = ladder_signal(s, vix=15)
+    r = ladder_signal(s, vix=15, category=_NON_CORE)
     assert r["status"] == "ok" and r["weeks"] >= 20       # 日序自動 resample 成週
 
 
 def test_yearline_omitted_note_under_52_weeks():
-    r = ladder_signal(_rising(30), vix=15)                # 20≤週<52 → 年線暫略
+    r = ladder_signal(_rising(30), vix=15, category=_NON_CORE)                # 20≤週<52 → 年線暫略
     assert r["status"] == "ok" and "年線條件暫略" in r["note"]
 
 
 def test_stop_gain_end_to_end():
     # 前 19 週平盤 + 末週跳高 → 20 週布林 z 遠大於 +3 → 強制停利
-    r = ladder_signal(_wk([100] * 40 + [130]), vix=15)
+    r = ladder_signal(_wk([100] * 40 + [130]), vix=15, category=_NON_CORE)
     assert r["lamp"] == "強制停利" and r["z_bb"] > 3
 
 
@@ -129,8 +132,8 @@ def test_vix_exact_boundaries():
 
 
 def test_reserve_non_positive_no_deploy_twd():
-    assert ladder_signal(_rising(60), vix=27, reserve_twd=0)["deploy_twd"] is None
-    assert ladder_signal(_rising(60), vix=27, reserve_twd=-5000)["deploy_twd"] is None
+    assert ladder_signal(_rising(60), vix=27, reserve_twd=0, category=_NON_CORE)["deploy_twd"] is None
+    assert ladder_signal(_rising(60), vix=27, reserve_twd=-5000, category=_NON_CORE)["deploy_twd"] is None
 
 
 def test_core_bucket_not_applicable():
@@ -144,5 +147,5 @@ def test_core_bucket_not_applicable():
 def test_low_vol_not_judged():
     # 近平盤(週 σ/均值 極小)→ 布林雜訊大 → 不判燈,即使末週小跳動
     flat = _wk([100.0 + 0.0001 * i for i in range(60)])
-    r = ladder_signal(flat, vix=15)
+    r = ladder_signal(flat, vix=15, category=_NON_CORE)
     assert r["lamp"] is None and r["status"] == "lowvol" and "低波" in r["note"]

@@ -63,17 +63,26 @@ def nav_zscore(nav_series, window: int = ZSCORE_WINDOW_DAYS,
             "last_nav": round(_last, 6), "n": len(_win), "status": "ok"}
 
 
-def is_core_bucket(category) -> Optional[bool]:
-    """資產類別 → 是否為 Core(平衡多重 / 貨幣市場)→ 不做 Z-Score 擇時。無法對應 → False。
+# BL-0441 客戶裁示(DEC-2026-10-24-09):分類未判定 → 不提供行動(全站同一句,UI 直接顯示)
+CORE_UNKNOWN_TEXT = "⬜ 分類未判定，暫不提供行動"
 
-    BL-0441(DEC-2026-10-24-08):分類**例外**→ None(未判定),與真的非 Core(False)分開。
-    呼叫端一律用 `is True` 判 Core;None 時下游照舊計算但必須揭露「是否 Core 未判定」。
-    (分類失敗時是否仍給 Z 行動屬 Stop Gate,未改行為,見 BACKLOG BL-0441。)
+
+def is_core_bucket(category) -> Optional[bool]:
+    """資產類別 → 是否為 Core(平衡多重 / 貨幣市場)→ 不做 Z-Score 擇時。
+
+    三態(BL-0441,DEC-2026-10-24-08 / -09):
+      - True  → Core;
+      - False → **確實**對應到非 Core 資產類別;
+      - None  → **未判定**:類別空白/缺值、無法對應(`asset_bucket` 回 None)、或分類例外。
+    None 不得被當成非 Core(客戶 2026-10-24 裁示:Missing／Error ≠ 非 Core ≠ 可行動);
+    呼叫端一律用 `is True` / `is False` 判,None 時不給任何位階/加碼/賣出行動。
     """
     try:
         from services.regime_fit import asset_bucket
         _bucket, _ = asset_bucket(category)
     except Exception:  # noqa: BLE001 — 分類失敗 → None(未判定),不冒充非 Core
+        return None
+    if _bucket is None:                       # 類別空白/缺值/無法對應 → 未判定,不推估
         return None
     return _bucket in ZSCORE_CORE_BUCKETS
 
@@ -82,8 +91,10 @@ def rebalance_signal(nav_series, category=None, ndc_score: Optional[float] = Non
                      override: Optional[str] = None) -> dict:
     """Z-Score 動態再平衡訊號。
 
-    回 {applies, action, z, stop_gain_z, add_z, light, fund_type, reason}。
+    回 {applies, action, z, stop_gain_z, add_z, light, fund_type, reason, core_status}。
     - Core(平衡/貨幣)→ applies=False(內建配置,不擇時,§1)。
+    - **分類未判定**(類別空白/無法對應/分類例外)→ applies=None、action=None、z=None、
+      core_status='unknown'、status='core_unknown':不算 Z、不給任何行動(DEC-2026-10-24-09)。
     - 位階不可算 → action=None + reason。
     - z ≥ stop_gain_z → 停利/減碼;z ≤ add_z → 加碼/逢低;之間 → 持有。門檻依景氣燈號動態。
     """
@@ -91,8 +102,14 @@ def rebalance_signal(nav_series, category=None, ndc_score: Optional[float] = Non
 
     _core = is_core_bucket(category)
     if _core is True:
-        return {"applies": False, "action": None, "z": None,
+        return {"applies": False, "action": None, "z": None, "core_status": "core",
                 "reason": "Core(平衡多重 / 貨幣市場)內建股債配置,不做 Z-Score 擇時。"}
+    if _core is not False:
+        # BL-0441(DEC-2026-10-24-09):未判定 ≠ 非 Core → 不算 Z、不給行動(不是持有/中性)。
+        return {"applies": None, "action": None, "z": None,
+                "core_status": "unknown", "status": "core_unknown",
+                "reason": f"{CORE_UNKNOWN_TEXT}(資產類別缺值、無法對應或分類失敗;"
+                          "不以非 Core 計算 Z-Score)。"}
 
     _zi = nav_zscore(nav_series)
     _gates = dynamic_zscore_gates(ndc_score)
@@ -105,12 +122,10 @@ def rebalance_signal(nav_series, category=None, ndc_score: Optional[float] = Non
 
     _base = {"applies": True, "stop_gain_z": _gates["stop_gain_z"], "add_z": _gates["add_z"],
              "light": _gates["light"], "fund_type": _ft, "z": _zi["z"],
-             "core_status": ("unknown" if _core is None else "non_core")}
-    _core_note = ("⬜ 資產類別分類失敗,是否 Core 未判定(以下照非 Core 計算)。"
-                  if _core is None else "")
+             "core_status": "non_core"}
     if _zi["z"] is None:
         return {**_base, "action": None,
-                "reason": f"位階不可算({_zi['status']};有效點 {_zi['n']})—— 不硬判(§1)。{_core_note}"}
+                "reason": f"位階不可算({_zi['status']};有效點 {_zi['n']})—— 不硬判(§1)。"}
     _z = _zi["z"]
     if _z >= _gates["stop_gain_z"]:
         _action, _why = "停利/減碼", f"Z={_z:+.2f} ≥ 停利門檻 {_gates['stop_gain_z']:+.2f}(位階偏高)"
@@ -119,7 +134,7 @@ def rebalance_signal(nav_series, category=None, ndc_score: Optional[float] = Non
     else:
         _action, _why = "持有", f"Z={_z:+.2f} 落 [{_gates['add_z']:+.2f}, {_gates['stop_gain_z']:+.2f}] 中性"
     _lt = f"(景氣{_gates['light']}燈)" if _gates["light"] else "(無景氣燈號,用預設門檻)"
-    return {**_base, "action": _action, "reason": f"{_why} {_lt}。{_core_note}"}
+    return {**_base, "action": _action, "reason": f"{_why} {_lt}。"}
 
 
-__all__ = ["nav_zscore", "is_core_bucket", "rebalance_signal"]
+__all__ = ["nav_zscore", "is_core_bucket", "rebalance_signal", "CORE_UNKNOWN_TEXT"]

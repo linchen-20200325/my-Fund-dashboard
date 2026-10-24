@@ -61,25 +61,81 @@ def test_is_core_bucket_valid_and_false():
     assert is_core_bucket("科技股票型") is False
 
 
+_UNKNOWN_CATS = [None, "", "   ", "任何", "無法對應的類別XYZ"]
+
+
+@pytest.mark.parametrize("cat", _UNKNOWN_CATS)
+def test_is_core_bucket_blank_or_unmapped_is_none(cat):
+    """DEC-2026-10-24-09 第 2 點:類別空白／缺值／無法對應 → 未判定(None),不默認非 Core。"""
+    from services.zscore_engine import is_core_bucket
+    assert is_core_bucket(cat) is None
+
+
+def _boom(_c):
+    raise RuntimeError("x")
+
+
 def test_is_core_bucket_exception_is_none(monkeypatch):
     import services.regime_fit as rf
-    from services.zscore_engine import is_core_bucket, rebalance_signal
-
-    def _boom(_c):
-        raise RuntimeError("x")
+    from services.zscore_engine import is_core_bucket
     monkeypatch.setattr(rf, "asset_bucket", _boom)
-    assert is_core_bucket("任何") is None
-    nav = pd.Series(range(100, 900), dtype=float)
-    r = rebalance_signal(nav, "任何", None)
-    assert r["core_status"] == "unknown"
-    assert "是否 Core 未判定" in r["reason"]
+    assert is_core_bucket("科技股票型") is None
 
 
-def test_rebalance_signal_non_core_marked():
+def _nav_hi():
+    """非 Core 時會給「停利/減碼」的序列(末點拉高),用來證明未判定時**不再**產生該行動。"""
+    return pd.Series([10.0] * 299 + [11.0], index=pd.bdate_range("2023-01-02", periods=300))
+
+
+def _assert_rebalance_unknown(r):
+    from services.zscore_engine import CORE_UNKNOWN_TEXT
+    assert r["core_status"] == "unknown" and r["status"] == "core_unknown"
+    assert r["applies"] is None                 # 不是 False(Core)也不是 True(可擇時)
+    assert r["action"] is None and r["z"] is None
+    assert CORE_UNKNOWN_TEXT in r["reason"]
+    assert "stop_gain_z" not in r and "add_z" not in r   # 沒有拿非 Core 門檻去算
+
+
+@pytest.mark.parametrize("cat", _UNKNOWN_CATS)
+def test_rebalance_signal_unknown_category_no_action(cat):
     from services.zscore_engine import rebalance_signal
-    nav = pd.Series(range(100, 900), dtype=float)
-    r = rebalance_signal(nav, "科技股票型", None)
-    assert r["core_status"] == "non_core" and "未判定" not in r["reason"]
+    _assert_rebalance_unknown(rebalance_signal(_nav_hi(), cat, None))
+
+
+def test_rebalance_signal_classification_exception_no_action(monkeypatch):
+    import services.regime_fit as rf
+    from services.zscore_engine import rebalance_signal
+    monkeypatch.setattr(rf, "asset_bucket", _boom)
+    _assert_rebalance_unknown(rebalance_signal(_nav_hi(), "科技股票型", None))
+
+
+def test_rebalance_signal_real_non_core_and_core_unchanged():
+    """真非 Core 照舊給行動;真 Core 照舊 applies=False(與 d266bcf6 基線同值,見回報基線比對)。"""
+    from services.zscore_engine import rebalance_signal
+    r = rebalance_signal(_nav_hi(), "科技股票型", None)
+    assert r["core_status"] == "non_core" and r["applies"] is True
+    assert r["action"] == "停利/減碼" and r["z"] is not None and "未判定" not in r["reason"]
+    lo = rebalance_signal(pd.Series([11.0] * 299 + [10.0],
+                                    index=pd.bdate_range("2023-01-02", periods=300)), "科技股票型")
+    assert lo["action"] == "加碼/逢低"
+    c = rebalance_signal(_nav_hi(), "平衡型", None)
+    assert c["applies"] is False and c["action"] is None and c["core_status"] == "core"
+
+
+@pytest.mark.parametrize("cat", [None, "", "任何"])
+def test_combine_action_unknown_never_hold_or_matrix_action(cat):
+    """未判定 → combine_action 走既有「Z 不可用」分支(timing 'unknown'),不落 3×3 任一格、不是持有。"""
+    from services.health.action import _MATRIX
+    from services.zscore_engine import rebalance_signal
+    h = compute_4d_health(tr1y_pct=10, adr_pct=4, sharpe=1.0, sigma_pct=8, fund_ccy="TWD")
+    a = combine_action(h, rebalance_signal(_nav_hi(), cat, None))
+    assert a["timing"] == "unknown" and a["timing"] not in ("na", "low", "mid", "high")
+    assert a["action"] not in {v[0] for v in _MATRIX.values()}
+    assert "分類未判定" in a["action"] and "NAV 有效點不足" not in a["action"]
+    assert "持有" not in a["action"] and "加碼" not in a["action"] and "減碼" not in a["action"]
+    # 對照:真 Core 仍是「內建配置」那一支(既有行為不變)
+    core = combine_action(h, rebalance_signal(_nav_hi(), "平衡型", None))
+    assert core["timing"] == "na" and "內建配置" in core["action"]
 
 
 # ── 4. NDC 三態 ───────────────────────────────────────────────────
@@ -115,28 +171,118 @@ def test_ndc_status_text_distinct(status):
     assert len({NDC_STATUS_TEXT[k] for k in ("fetch_error", "unavailable", "no_data")}) == 3
 
 
-# ── 3b. ladder235 分類失敗揭露(燈號與非 Core 相同)───────────────
+# ── 3b. ladder235 分類未判定 → 不給燈、不給加碼比例(DEC-2026-10-24-09)───────
 def _ladder_nav():
     import numpy as np
     idx = pd.date_range("2022-01-03", periods=900, freq="B")
     return pd.Series(100 + np.sin(np.arange(900) / 20) * 8 + np.arange(900) * 0.01, index=idx)
 
 
-@pytest.mark.parametrize("mode", ["none", "raise"])
-def test_ladder235_core_unknown_disclosed_lamp_unchanged(monkeypatch, mode):
+def _ladder_nav_deep():
+    """非 Core 時會亮加碼燈(燈三)的序列:末段急跌。"""
+    import numpy as np
+    idx = pd.date_range("2022-01-03", periods=600, freq="B")
+    v = np.r_[np.linspace(100, 110, 560), np.linspace(110, 80, 40)]
+    return pd.Series(v, index=idx)
+
+
+def _assert_ladder_unknown(r):
+    from services.zscore_engine import CORE_UNKNOWN_TEXT
+    assert r["core_status"] == "unknown" and r["status"] == "core_unknown"
+    assert r["lamp"] is None and r["emoji"] == "⬜"
+    assert r["deploy_pct"] is None and r["deploy_pct"] != 0.0   # 未判定 ≠ 0% ≠ 巡航
+    assert r["deploy_twd"] is None and r["z_bb"] is None and r["reasons"] == []
+    assert CORE_UNKNOWN_TEXT in r["note"]
+
+
+@pytest.mark.parametrize("cat", _UNKNOWN_CATS)
+def test_ladder235_unknown_category_no_lamp(cat):
+    from services.ladder235 import ladder_signal
+    nav = _ladder_nav_deep()
+    base = ladder_signal(nav, vix=32, reserve_twd=100_000, category="科技股票型")
+    assert base["lamp"] == "燈三" and base["deploy_pct"] > 0 and base["deploy_twd"] > 0
+    _assert_ladder_unknown(ladder_signal(nav, vix=32, reserve_twd=100_000, category=cat))
+
+
+@pytest.mark.parametrize("mode", ["none", "raise", "bucket_raise"])
+def test_ladder235_classification_failure_no_lamp(monkeypatch, mode):
+    import services.regime_fit as rf
     import services.zscore_engine as ze
     from services.ladder235 import ladder_signal
-    nav = _ladder_nav()
-    base = ladder_signal(nav, vix=20, category="科技股票型")
-    assert base["core_status"] == "non_core"
+    if mode == "bucket_raise":
+        monkeypatch.setattr(rf, "asset_bucket", _boom)
+    else:
+        monkeypatch.setattr(ze, "is_core_bucket", (lambda _c: None) if mode == "none" else _boom)
+    _assert_ladder_unknown(ladder_signal(_ladder_nav_deep(), vix=32, reserve_twd=100_000,
+                                         category="科技股票型"))
 
-    def _fake(_c):
-        if mode == "raise":
-            raise RuntimeError("x")
-        return None
-    monkeypatch.setattr(ze, "is_core_bucket", _fake)
+
+def test_ladder235_real_non_core_and_core_unchanged():
+    from services.ladder235 import ladder_signal
+    nav = _ladder_nav()
     r = ladder_signal(nav, vix=20, category="科技股票型")
-    assert r["core_status"] == "unknown"
-    assert "是否 Core 未判定" in r["note"]
-    for k in ("lamp", "status", "deploy_pct"):
-        assert r.get(k) == base.get(k)
+    assert r["core_status"] == "non_core" and r["status"] == "ok" and r["lamp"] is not None
+    assert "未判定" not in (r.get("note") or "")
+    c = ladder_signal(nav, vix=20, category="貨幣市場基金")
+    assert c["status"] == "core" and c["core_status"] == "core" and c["lamp"] is None
+
+
+def _grp_health_label_fn():
+    import ast
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "ui/tab_fund_grp_health.py").read_text(encoding="utf-8")
+    hits = [n for n in ast.walk(ast.parse(src))
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "get" and isinstance(n.func.value, ast.Dict)
+            and "lowvol" in [ast.literal_eval(k) for k in n.func.value.keys]]
+    assert len(hits) == 1
+    mapping = ast.literal_eval(hits[0].func.value)
+    fallback = ast.literal_eval(hits[0].args[1])
+    return lambda status: mapping.get(status, fallback)
+
+
+def test_grp_health_column_shows_unknown_not_insufficient():
+    from services.ladder235 import ladder_signal
+    from services.zscore_engine import CORE_UNKNOWN_TEXT
+    label = _grp_health_label_fn()
+    r = ladder_signal(_ladder_nav_deep(), vix=32, category="")
+    assert label(r["status"]) == CORE_UNKNOWN_TEXT
+    assert label(r["status"]) not in (label("insufficient"), label("core"))
+
+
+# ── 5. Tab2 健康總覽卡匯率維 wiring(DEC-2026-10-24-09 第 3 點)───────────────
+def _tab2_src():
+    from pathlib import Path
+    return (Path(__file__).resolve().parents[1] / "ui/tab2_single_fund.py").read_text(encoding="utf-8")
+
+
+def test_tab2_card_passes_fund_ccy_and_fx_cv():
+    import ast
+    tree = ast.parse(_tab2_src())
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and getattr(n.func, "id", None) == "compute_4d_health"]
+    assert len(calls) == 1
+    kws = {k.arg for k in calls[0].keywords}
+    assert {"fund_ccy", "fx_cv_pct"} <= kws
+    src = _tab2_src()
+    # 幣別來源 = 同頁進階指標的既有資料流(moneydj_raw currency);不推估、不另設預設幣別
+    assert '_g_ccy = str(mj_raw.get("currency") or "").strip()' in src
+    assert "fx_regime_by_ccy as _fxr_card" in src
+
+
+def test_tab2_card_fx_dimension_with_and_without_ccy():
+    """有幣別(TWD)→ 匯率維 n/a 不進缺口;無幣別 → 誠實列為缺口(不推估);外幣+CV → 計分。"""
+    kw = dict(tr1y_pct=8, adr_pct=5, sharpe=1.0, sigma_pct=8, ma_dir=None)
+    twd = compute_4d_health(**kw, fund_ccy="TWD", fx_cv_pct=None)
+    none_ccy = compute_4d_health(**kw, fund_ccy="", fx_cv_pct=None)
+    usd = compute_4d_health(**kw, fund_ccy="USD", fx_cv_pct=1.0)
+    assert twd["fx_risk_status"] == "n/a" and "fx_risk" not in twd["coverage"]["missing"]
+    assert none_ccy["fx_risk_status"] == "missing" and "fx_risk" in none_ccy["coverage"]["missing"]
+    assert usd["fx_risk_status"] == "scored" and usd["factors"]["fx_risk"] is not None
+
+
+def test_tab2_unknown_branch_before_core_branch():
+    src = _tab2_src()
+    i_unk = src.index('if _rb.get("core_status") == "unknown":')
+    i_core = src.index('elif not _rb.get("applies", True):')
+    assert i_unk < i_core

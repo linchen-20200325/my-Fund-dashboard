@@ -1254,9 +1254,20 @@ def render_single_fund_tab() -> None:
                     # 並多餵 risk_table Sharpe/σ → 走勢分 85 vs SSOT 70 → 同一檔顯示 A vs B(稽核 Bug2)。
                     _g_sharpe = m.get("sharpe")
                     _g_sigma = m.get("std_1y")
+                    # BL-0441 旁支 (b)(DEC-2026-10-24-09 第 3 點):補傳匯率維輸入,對齊同頁
+                    # 「📊 進階指標」build_health_analysis_row 的既有資料流(幣別同讀 moneydj_raw
+                    # currency;CV 同讀 fx_regime_by_ccy 快取)。只 wiring,不推估幣別、不新增來源:
+                    # 幣別空白 → score_fx_risk 照舊回 missing(誠實揭露缺口)。
+                    _g_ccy = str(mj_raw.get("currency") or "").strip()
+                    _g_fxcv = None
+                    if _g_ccy:
+                        from services.fx_regime_service import fx_regime_by_ccy as _fxr_card
+                        from services.health.report import fx_cv_pct_from_regime as _fxcv_card
+                        _g_fxcv = _fxcv_card((_fxr_card() or {}).get(_g_ccy.upper()))
                     _4d = compute_4d_health(
                         tr1y_pct=_g_tr1y, adr_pct=_g_dy,
                         sharpe=_g_sharpe, sigma_pct=_g_sigma, ma_dir=None,
+                        fund_ccy=_g_ccy, fx_cv_pct=_g_fxcv,
                     )
                     _d1_cov = _4d["factors"]["coverage"]
                     _d2_sh = _4d["factors"]["sharpe"]
@@ -1618,7 +1629,10 @@ def render_single_fund_tab() -> None:
                             # BL-0441:退預設門檻的原因可見(取數失敗 / 來源不可用 / 無資料)
                             _rb = {**_rb, "reason": (f"{_rb.get('reason', '')}"
                                                      f"(⬜ {NDC_STATUS_TEXT.get(_ndc_st.get('status'), '景氣燈號未取得')},退預設門檻)")}
-                        if not _rb.get("applies", True):
+                        if _rb.get("core_status") == "unknown":
+                            # BL-0441(DEC-2026-10-24-09):分類未判定 → 不算 Z、不秀 Z 數字、不給行動
+                            st.caption(f"📐 Z-Score 位階:{_rb.get('reason')}")
+                        elif not _rb.get("applies", True):
                             # 稽核 polish:Core(平衡/貨幣)先攔 → 乾淨顯示「不做 Z-Score」,不秀多餘 Z 數字
                             st.caption(f"📐 Z-Score:{_rb.get('reason')}")
                         elif _zi.get("z") is not None:

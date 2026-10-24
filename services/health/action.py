@@ -48,6 +48,7 @@ def _timing_bucket(z_signal: dict) -> str:
 
     - Core(applies=False)→ 'na'(內建配置,不擇時)。
     - z 不可算(action None)→ 'unknown'。
+    - 分類未判定(applies=None、core_status='unknown',BL-0441)→ 'unknown'(不得當 Core 或持有)。
     - 加碼/逢低 → 'low';持有 → 'mid';停利/減碼 → 'high'。
     """
     if not isinstance(z_signal, dict):
@@ -146,6 +147,10 @@ def combine_action(health: dict, z_signal: dict) -> dict:
         _lbl, _col = _QUALITY_ONLY[q]
         if t == "na":
             _tail = "·內建配置(平衡/貨幣,不做位階擇時)"
+        elif z_signal.get("core_status") == "unknown":
+            # BL-0441(DEC-2026-10-24-09):分類未判定 → 位階不給任何行動;原「NAV 有效點不足」用字
+            # 對這種情形不實,只換 tail 文字(3×3 表、_QUALITY_ONLY、分支條件皆未動)
+            _tail = "·⬜ 分類未判定，暫不提供位階行動"
         else:
             _tail = "·位階未知(NAV 有效點不足,不硬判時機 §1)"
         return {
