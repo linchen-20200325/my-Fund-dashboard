@@ -69,6 +69,29 @@ _UNKNOWN_LABEL_BY_STATUS = {
 from shared.converters import safe_float as _safe_float  # noqa: E402
 
 
+# BL-0447(2026-10-24):配息取數總結的鍵與值。字面值與 L1
+# `repositories.fund.fund_orchestration` 的 `DIVIDENDS_OUTCOME_KEY` / `DIV_OUTCOME_NONE` 同步
+# (本模組自陳 zero-IO 純函式,刻意不 import L1 模組;漂移由
+# `tests/test_bl0447_dividend_missing.py::test_outcome_literals_match_l1` 鎖住)。
+_DIVIDENDS_OUTCOME_KEY = "dividends_fetch_outcome"
+_DIV_OUTCOME_NONE = "none_confirmed"
+
+
+def _dividend_none_confirmed(fd: dict) -> bool:
+    """BL-0447:本次配息取數是否「確定不配息」—— 與 v2 B 線
+    (`services/v2_tables/nav_dividend.py`)同一標準:`outcome == none_confirmed`
+    **且** `none_evidenced is True`。先看 fd 頂層,再看 `fd["moneydj_raw"]`
+    (健診 row 的 `_fund_raw` 被平坦 wrap 後在 moneydj_raw;Tab2 本來就放在 moneydj_raw)。
+    鍵缺、failed、undetermined、none_confirmed 但無證據 → False(不得當成非配息基金,§1)。"""
+    _mj = fd.get("moneydj_raw")
+    for _src in (fd, _mj if isinstance(_mj, dict) else {}):
+        _o = _src.get(_DIVIDENDS_OUTCOME_KEY)
+        if isinstance(_o, dict):
+            return bool(_o.get("outcome") == _DIV_OUTCOME_NONE
+                        and _o.get("none_evidenced") is True)
+    return False
+
+
 
 def check_replacement_recommendation(
     fd: dict,
@@ -232,11 +255,16 @@ def check_replacement_recommendation(
     # 定義為總管讀法(可被客戶推翻,見 DECISIONS DEC-2026-10-24-12 實作說明);不改任何公式／門檻。
     _rule_evaluable = {
         # (a) 吃本金是真訊號,或持有期已知且未達門檻(hard rule (a) 不可能觸發),
-        #     或非配息基金(`check_eating_principal_1y_mk` 依既有契約回 None、且非例外 →
+        #     ~~或非配息基金(`check_eating_principal_1y_mk` 依既有契約回 None、且非例外 →
         #     依既有契約視為吃本金不適用;⚠️ 配息資料全缺的配息基金亦會落此、無法區分
-        #     (BL-0447,Missing→保留殘餘風險);實作組補充,見 DECISIONS 實作說明)
+        #     (BL-0447,Missing→保留殘餘風險);實作組補充,見 DECISIONS 實作說明)~~
+        #     → BL-0447(2026-10-24 有意識的更正,不是漏刪;決策者:AI 總管,依 DEC-2026-10-24-12
+        #     「Missing ≠ 不適用」收窄):回 None(非例外)**只有**在配息取數總結為「確定不配息」
+        #     (none_confirmed + none_evidenced,同 v2 B 線標準)時才算規則 (a) 不適用;
+        #     鍵缺／failed／undetermined／無證據的 none_confirmed → 判不動 → 既有 ⬜ 無法判定。
         "a": bool(_eat_signal
-                  or (eat_result is None and not _eat_err)
+                  or (eat_result is None and not _eat_err
+                      and _dividend_none_confirmed(fd))
                   or (holding_y is not None
                       and holding_y < REPLACE_RULE_A_MIN_HOLD_YEARS)),
         # (b) 4D Grade 有實際等第

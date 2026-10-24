@@ -34,7 +34,20 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-24（第二十二次）現況 —— DG-6 裁示批（以本框為準；下方第二十一次框起皆為歷史快照）**（客戶裁示 `DEC-2026-10-24-12`；狀態更新，不是漏刪：第二十一次框整段保留於下方）
+> **⭐ 2026-10-24（第二十三次）現況 —— BL-0447 實作批（以本框為準；下方第二十二次框起皆為歷史快照）**（`DEC-2026-10-24-12` 原則範圍內的安全修，非新客戶裁示；狀態更新，不是漏刪：第二十二次框整段保留於下方）
+> - **main 實況**：本框隨 BL-0447 PR 合併；該 PR 前 main 為 `6ce4567b`（#1046）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
+> - **Open PR**：本 PR（BL-0447，分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。
+> - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；本框撰寫時尚未開 PR、無 CI 結果。
+> - **Phase**：BL-0447 實作批；合併後無進行中任務。
+> - **本批內容**：`services/health/replacement.py` 規則 (a) 判得動收窄 —— 吃本金回 None（非例外）只在既有 `dividends_fetch_outcome` 為 `none_confirmed`＋`none_evidenced` 時算「非配息、不適用」（同 v2 B 線）；配息資料缺（鍵缺／failed／undetermined／無證據）→ ⬜ 無法判定，不再 🟢 保留。未改公式、門檻、schema、其他消費端。測試 `tests/test_bl0447_dividend_missing.py`。BL-0447 改 closed（結果 B）。
+> - **未完成（`docs/BACKLOG.md`）**：同第二十二次框，去掉 BL-0447（BL-0438 DG-1～DG-3、BL-0440、BL-0442、BL-0443、BL-0445、BL-0446 等）。
+> - **Blocker**：無（無已授權工作）。
+> - **唯一下一步**：停手等客戶指示（無已授權工作）。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。候選（**皆未授權**，不得自行開工）：DG-1～DG-3（BL-0438）、BL-0443 安全修、BL-0445 retirement gate、BL-0446、BL-0442 其餘平行引擎（須新 Decision Gate）。
+> - **下一批建議 Model／Effort**：同第二十二次框。
+> - **尚未授權動工**：DG-1、DG-2、DG-3、BL-0443、BL-0445 retirement、BL-0446、BL-0442 其他引擎任何修改（`CLAUDE.md` §-1）。
+> - **接手入口**：同第二十二次框（含 scratchpad venv 跑完整測試的補充）。
+
+> **⭐ 2026-10-24（第二十二次）現況 —— DG-6 裁示批（~~以本框為準；下方第二十一次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第二十三次框；#1046 已合併，main `6ce4567b`；本框所列 BL-0447 已由 BL-0447 實作批結案；狀態更新，不是漏刪）**（客戶裁示 `DEC-2026-10-24-12`；狀態更新，不是漏刪：第二十一次框整段保留於下方）
 > - **main 實況**：本框隨 DG-6 實作 PR 合併；該 PR 前 main 為 `74e556de`（#1045）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
 > - **Open PR**：本 PR（DG-6 批，分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。
 > - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；本框撰寫時尚未開 PR、無 CI 結果。

@@ -341,6 +341,8 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 研究為單組 grep 範圍（main `11b28f8d`），不宣稱窮舉；未啟動 App、未呼叫 Gemini。
 
 > ✅ **DG-6 已裁示（2026-10-24，`docs/DECISIONS.md` `DEC-2026-10-24-12`；決策者：客戶）**：`DEC-2026-10-24-10` 永久原則（Missing／Unknown／INSUFFICIENT 不得經另一單軸訊號重新產生投資行動）擴及下表 **#1、#5 兩條**，隨該裁示實作 PR 落地（測試 `tests/test_dg6_missing_no_action.py`）；其餘 #2～#4、#6～#20 **仍未核准**，照舊只是盤點結果。下表證據欄為盤點當時（main `11b28f8d`）的快照，未改寫。
+>
+> 📌 **2026-10-24 BL-0447 補記（狀態更新，不是漏刪；決策者：AI 總管，依 `DEC-2026-10-24-12` 原則收窄，非新裁示）**：#5 規則 (a)「無配息資料 ⇒ 吃本金不適用」改為只在 `dividends_fetch_outcome` 為 `none_confirmed`＋`none_evidenced` 時成立（同 v2 B 線），其餘判不動 → ⬜ 無法判定；測試 `tests/test_bl0447_dividend_missing.py`（`docs/BACKLOG.md` BL-0447）。
 
 #### §10.7.1 總表（production 可達的行動路徑）
 
