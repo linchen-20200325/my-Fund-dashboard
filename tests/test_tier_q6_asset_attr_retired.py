@@ -148,8 +148,11 @@ def test_grp_health_tables_show_dash_when_phase_is_wired(phase):
         assert out[code]["操作訊號"] == "—", (code, out[code])
         assert "資產屬性" not in out[code], "舊欄名不得殘留"
     # 價位與位階與景氣／名稱無關，照常計算（確認沒有把整列一併停掉）
-    assert out["C1"]["買 1 (小跌)"] == "95.00" and "買1" in out["C1"]["現價位階"]
-    assert "賣3" in out["S1"]["現價位階"]
+    # BL-0440:原為子字串 `"買1" in` / `"賣3" in` —— 新用字「⬜ 無法判定（買1／賣1未取得）」
+    # 也含「買1」,子字串斷言分不出可判定與 Missing。改精確值。
+    assert out["C1"]["買 1 (小跌)"] == "95.00" and out["C1"]["現價位階"] == "🟢 ≤買1(小跌)"
+    assert out["S1"]["現價位階"] == "🔴 ≥賣3(大漲)"
+    assert out["N1"]["現價位階"] == "—"
 
 
 def test_unified_column_name_and_help_are_renamed():

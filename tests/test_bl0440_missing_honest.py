@@ -41,7 +41,7 @@ _LEVELS = dict(buy1=95.0, buy3=85.0, sell1=105.0, sell3=115.0)
 
 def test_a_all_levels_missing_with_nav_is_undecidable_not_in_range():
     z = _zone({"nav": 100.0})
-    assert z.startswith("⬜ 無法判定")
+    assert z == "⬜ 無法判定（買1／賣1未取得）"
     assert not any(w in z for w in DECIDABLE_ZONE_WORDS)
 
 
@@ -50,7 +50,7 @@ def test_a_missing_b1_or_s1_cannot_claim_in_range(drop):
     m = {"nav": 100.0, **_LEVELS}
     m.pop(drop)
     z = _zone(m)
-    assert z.startswith("⬜ 無法判定"), z
+    assert z == "⬜ 無法判定（買1／賣1未取得）", z
 
 
 def test_a_normal_value_in_range_and_outer_bands_still_decidable():
@@ -77,7 +77,7 @@ def test_a_ui_wrapper_same_output():
     """UI 入口(注入 mk_fund_signal)與 L2 版位階輸出一致。"""
     from ui.helpers.fund_grp_health.signals import mk_signal_by_code as ui_fn
     out = ui_fn([{"code": "X", "metrics": {"nav": 100.0}, "moneydj_raw": {}}], "", None)
-    assert out["X"]["現價位階"].startswith("⬜ 無法判定")
+    assert out["X"]["現價位階"] == "⬜ 無法判定（買1／賣1未取得）"
 
 
 # ════════════════════════════════════════════════════════════
@@ -113,7 +113,8 @@ def test_b_verdict_na_zone_does_not_claim_hold():
     from ui.components.mk_dashboard import _verdict_text
     for cls in ("Core", "Satellite"):
         v = _verdict_text(cls, "Healthy", "OK", "N/A")
-        assert "無法判定" in v
+        assert v == {"Core": "✅ 核心健康（⬜ 價位區間無法判定）",
+                     "Satellite": "✅ 衛星健康（⬜ 價位區間無法判定）"}[cls]
         assert "續抱" not in v and "等待訊號" not in v
     # 既有語意不變
     assert _verdict_text("Core", "Healthy", "OK", "Hold") == "✅ 核心健康，續抱領息"
@@ -197,7 +198,7 @@ def test_d_hold_and_na_distinguishable():
     from ui.helpers.fund.checkup import _zone_cell, _ZONE_LABEL
     na = _zone_cell({"metrics": {"nav": 100.0}})
     hold = _zone_cell({"metrics": {"nav": 100.0, "buy1": 95.0, "bb_upper": 110.0}})
-    assert na.startswith("⬜ 無法判定")
+    assert na == "⬜ 無法判定"
     assert hold == "⚪ 未觸發"
     assert na != hold
     assert _ZONE_LABEL["Hold"] != _ZONE_LABEL["N/A"]
@@ -376,4 +377,4 @@ def test_n4_verdict_red_health_and_missing_zone_get_no_fallback_note(monkeypatch
     monkeypatch.setattr(M, "tag_health_check", lambda f: "Healthy")
     v2 = M.build_mk_dataframe([{"code": "X", "loaded": True,
                                 "metrics": {"nav": 100.0, "buy_mode": FB}}])["體檢結論"].iloc[0]
-    assert "無法判定" in v2 and "區間σ" not in v2
+    assert v2 == "✅ 核心健康（⬜ 價位區間無法判定）"

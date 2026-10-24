@@ -299,6 +299,7 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 - **fallback 品質揭露沿用既有 `buy_mode`**：`calc_metrics` n<20 的 fallback 以既有欄位 `buy_mode` 揭露，字串取自常數 `shared/data_quality.BUY_MODE_RANGE_FALLBACK`（「區間σ(資料不足)」），**未新增 contract key**；健診大表、PK 表、戰情室結論、Tab3 迷你卡、Tab2、AI prompt 統一加註。
 - `compute_health_kpis` 新增 `n_zone_na`／`tags_unavailable`／`zone_all_na` 三個鍵，屬 L3 內部回傳鍵、非 `shared/schemas` 契約（總管認定）。
 - 本節不改任何公式、門檻或投資語意；BL-0440 其餘未收斂項（UI BB／MA20／MA60 圖線重算、tab3 兩處 MA60 白算、`ladder235` σ=0 誤標等）見 `docs/BACKLOG.md` BL-0440 列尾。
+- **第二批（2026-10-24，base main `994b50c2`，PR #1038 已合併；狀態更新，不是漏刪）**：`ladder235` σ=0 改讀既有 `status="degenerate"` 顯示「⬜ 波動為 0，無法判定」，不再誤標「週資料不足」；Tab3 迷你卡雙確認徽章 bb 缺時明示「⬜ 雙確認無法判定（布林資料未取得）」；子字串測試改精確值。未改任何公式、門檻、燈號或 SSOT 欄位；UI BB／MA 圖線重算與 tab3 MA60 白算仍未收斂。
 
 ## §11 資料先行順序與新設計流程（2026-10-24，`DEC-2026-10-24-02`）
 
