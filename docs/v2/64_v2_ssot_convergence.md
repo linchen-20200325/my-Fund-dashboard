@@ -325,6 +325,81 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 - **後續**：三項未揭露 Missing 登記 BL-0441（未開始）；DG-2 仍待客戶裁示（BL-0438）。（→ **2026-10-24 補記（狀態更新，不是漏刪）**：BL-0441 實作於分支 `ccr-464564b4-9qluki`：三項 Missing 改為可見（覆蓋缺口 flag、`eat_warn` 三態、`is_core_bucket` 例外 → None；`rebalance_signal`／`ladder235` 揭露 `core_status=unknown`，Stop Gate 仍待裁示），行動與矩陣不變；證據 `tests/test_bl0441_missing_semantics.py`。）
 - **行動語意收斂（`DEC-2026-10-24-10`，base `6d3baa19`）**：分類未判定（`core_status='unknown'`）時 `combine_action` 不再輸出品質單軸行動，改「⬜ 既有品質標籤；分類未判定，暫不提供換／留建議」＋中性灰（資料／證據 ≠ 投資行動）；真 Core、真非 Core、NAV 不足與 `6d3baa19` 逐鍵相同（`tests/test_dec10_unknown_no_quality_action.py`）；其他平行引擎見 BL-0442。
 
+- **延伸**：§10.6 為 base `3b167c49` 的 `combine_action` 快照；全 repo 平行行動路徑的延伸盤點與 DG-6 候選見 §10.7（已驗證／推論分級見 §10.7 開頭證據等級與 §10.7.4）。
+
+### §10.7 BL-0442 平行投資行動路徑唯讀盤點（2026-10-24，main `11b28f8d`）
+
+> ⛔ **狀態：唯讀盤點結果，不是實作規格、不授權 production 修改。** 授權出處：`docs/DECISIONS.md` `DEC-2026-10-24-10` Batch B 授權段（決策者：客戶；禁改 production、禁改投資語意）。盤點依 `DEC-2026-10-24-10` 永久原則（(1) 資料／證據 ≠ 投資行動；(2) Missing／Unknown 不得被另一個單軸訊號繞過後重新產生行動）。本節不新增公式、門檻、資料來源或語意。程式位置以 main `11b28f8d` 為準，行號會漂移，標「~」者為約略位置。
+>
+> **DG 編號說明**：本節表中「DG-1／DG-2／DG-3」指 BL-0438 的三題（§10；客戶傾向見 `DEC-2026-10-24-01`，未核准實作）：DG-1＝位置類改讀配息還原序列（TR）、DG-2＝單一行動出口（其餘降為證據）、DG-3＝`to_twd_total_return_series` 改名。不是 §9.7 BL-0428 的同號題。「§10.6 ③」指 §10.6「命中 Decision Gate」第 ③ 項。本節新提的 Gate 編為 **DG-6**：§9.7 已用掉 DG-4（BL-0428 原始 NAV 買賣訊號）與 DG-5（BL-0428 低波動數值門檻），兩題皆已裁示（`DEC-2026-10-23-11`）；研究彙整原稿暫稱「DG-5」，為免與 §9.7 撞號順延為 DG-6。
+
+**出處與證據等級**：兩組研究組範圍分工、重疊路徑互證，由總管彙整、經總管轉述；文件組未重讀原始碼、未重跑測試，原始報告不在 repo。證據等級三類，**不得混讀**：
+- 【實跑】以合成輸入直呼 production 函式（打樁 streamlit，**未跑 schema 驗證**）；只證程式路徑存在，**不代表真實發生率**。
+- 【讀碼】讀原始碼判讀。
+- 【推論・未驗】未實跑、未逐行證實。
+
+研究為單組 grep 範圍（main `11b28f8d`），不宣稱窮舉；未啟動 App、未呼叫 Gemini。
+
+#### §10.7.1 總表（production 可達的行動路徑）
+
+類別代號：A＝已誠實降級；B＝Missing 已揭露但仍給行動（或 DEC-10 原則 2 被繞過）；C＝Missing → 中性／Hold／預設；D＝口徑或用字落差；E＝dead／未證實（見 §10.7.2）。
+
+| # | 路徑 | 可達 | 行動 | Missing 現況 | 類 | 風險 | 需 DG | 建議 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `services/switch_advisor.py` 表現差 overlay（~:283-298）→ `services/switch_notify.py` → LINE 週報 | 是（④ 按鈕、⑤ 預覽、cron `weekly_switch_notify.yml`） | 換入標的 | INSUFFICIENT「⬜ 資料不足」仍附「→ 建議換入『X』」，LINE 判 actionable 推播【實跑】 | B（DEC-10 原則 2 被繞過） | 高（LINE） | 是（DG-2） | 優先 DG |
+| 2 | `switch_advisor` 成長型分支 macro=None | 是（App 讀的 session key 無 production 寫入者；cron 未帶 `--with-macro`） | 賣出轉現金／續抱 | 恆 HOLD「➖ 續抱」並計入「本週無需換股」【讀碼＋實跑】；UI caption「先跑總經分頁→成長型判斷才啟用」不實【推論・未驗】 | C（Missing→Hold） | 中高 | 是（接上 macro 會新生 SELL_CASH） | caption 屬揭露，可安全修；接線交客戶 |
+| 3 | `services/fund_type_classifier.py` 灰帶 `asset_bucket` None → 震盪（~:74-80） | 是（經 `switch_advisor` → LINE） | 換股 | 未知類別判「震盪」可給 SWITCH【實跑】 | C（Missing→預設類別） | 中高 | 是（與 DEC-09／-10 同型的分類規則） | 交客戶 |
+| 4 | `assess_underperformance` 紅燈 None→False；`scripts/weekly_switch_notify.py`（~:192-197）except 無 log | 是 | 表現差觸發 | Error→False【實跑】；例外被吞 | C | 低中 | 否 | 明確 bug，可安全修（保留 None＋揭露、補 log）；仍需動工授權 |
+| 5 | `services/health/replacement.py::check_replacement_recommendation`（Tab2「💰 換標的建議」、健診大表欄、健診頁頂「🔴 淘汰候選」） | 是 | 建議換／保留 | 不讀分類：F →「🔴 建議換」，與同頁 🎯「暫不提供換／留建議」矛盾【實跑，兩組互證】；判不動時回「🟢 保留 — 4 規則全未中,持續持有」（Missing→keep）【實跑】；重算 4D 未傳 `fund_ccy`，等第可能與卡片不同 | C＋B＋D | 高 | 是（DG-2，A3 精神） | 優先 DG |
+| 6 | `services/fund_service.py::calc_metrics` `pos_label` 投／出 %（~:357-588） | 是（Tab2、Tab3 迷你卡、健診「倉位」欄） | 加碼／停利 % | 5～19 筆走區間σ fallback 照給 %；Tab2／Tab3 有揭露、健診「倉位」欄未揭露；不讀分類【實跑】 | B（倉位欄為 C） | 高 | DG-1＋DG-2 | 倉位欄補 fallback 標註屬安全揭露；拿掉行動須 DG |
+| 7 | Tab2 −2σ 卡「小量試單」 | 是 | 買進／停損 | `bb_lower` 缺 → ⬜（A）；但布林窗 min(20, len)，5～19 筆仍觸發、無揭露；不讀分類【實跑】 | B／C | 中高 | DG-1／DG-2 | 補窗口不足揭露屬安全；壓行動須 DG |
+| 8 | 戰情室 `ui/components/mk_dashboard.py` `_verdict_text`／`tag_health_check` | 是（④ 戰情室、Tab3 hero 撿便宜雷達） | 加大進場／分批進場／部分減碼／續抱領息 | `tag_health_check` 遇 sharpe 或 ma20 缺回 Healthy（違反自身 docstring「缺欄→N/A」）【實跑】；健康度 N/A 或級別 Unset 時價位單軸照給行動【實跑，兩組互證】 | C＋B | 高 | DG-2（N/A／Unset 是否擋行動） | Healthy 缺值屬明確 bug；擋行動交客戶 |
+| 9 | `switch_strategy.switch_signal`／`execution_advice`（② 策略燈號、🔀 換標決策） | 是 | 賣出／平轉／停加碼／停損／加碼 | 吃本金缺或不配息 → 🟡「暫停定期定額加碼…停損」；全灰時寫「沒有急需換掉的標的」【實跑】；`replacement_candidate` Sortino 缺以 0 排、regime Sharpe 缺則 systemic=False | C | 中 | 是（DG-2） | 交客戶 |
+| 10 | `recommend_policy`（④ 保單卡 🎯） | 是 | 核心／衛星調整、汰弱換強 | 吃本金全灰或 None → 綠燈「配置健康」【實跑】；`invest_twd` `or 0`；Unset 不進比例（卡頭有揭露、建議文未揭露） | C／B | 中高 | 是（DG-2） | 交客戶 |
+| 11 | AI `analyze_portfolio_mk_advisor`（④ T7「🤖 策略3深度建議」） | 是（按鈕） | AI 減碼／補進／配置 % | 位階來源 production 恆缺（`phase_info_global` 無寫入者）；缺指標直接省略；prompt 強制給行動，無「資料未取得不得給行動」【實跑 prompt】 | B／C（AI 行動合成） | 高 | 是（v1.0 Gate：改變投資判斷的 AI 行為） | 交客戶 |
+| 12 | AI `build_structured_summary_prompt`（Tab2／Tab3／②／①） | 是（按鈕） | AI「下一步」如「可以考慮換掉」 | 有「資料缺就說沒資料」；Tab2 績效／風險缺鍵仍省略；不帶 `core_status` 與 🎯 結果 → 分類未判定時 AI 可能重新產生換／留【推論・未驗】 | B | 中 | 是（AI 行為） | 交客戶 |
+| 13 | `satellite_stop_gain`（④ T7「衛星停利」） | 是 | 強制／分批停利／續抱 | `_cost<=0` → pl 0.0 →「續抱」（`ui/tab3_t7_ledger.py` ~:3127）；匯率 fallback 用帳本平均買入匯率，未揭露；無報價誤標「未填成本」【讀碼】 | C＋B | 中 | 否（取數與誠實呈現 bug） | 單一安全修法＋揭露；需動工授權 |
+| 14 | `ladder235`（健診「加碼水位」） | 是 | 加碼 % | 分類未判定／Core／資料不足／σ=0 → ⬜（DEC-09 確認）；`_blank` `deploy_pct=0.0`（唯一 consumer 不顯示）；VIX 或 52 週線缺仍給燈（展開說明有揭露） | A（潛在 C） | 低中 | DG-1 | `deploy_pct` 0.0→None 屬安全修 |
+| 15 | Z `rebalance_signal`／`combine_action` | 是 | Z 行動、建議動作 | 分類未判定已 fail-closed（DEC-09／-10）；分類已知但 Z 不可算仍「品質弱 → 考慮換」（DEC-10 明訂照舊）；覆蓋 2/5 矩陣仍出「加碼好時機」（§10.6 ③） | A（Unknown）／B | 中 | DG-2 | 不動 |
+| 16 | `allocation_backtest`（② ⑥ 配置回測） | 是 | 進場／轉出、目標權重 | ⬜ 另列、權重維持基準（`DEC-2026-10-23-11` 的 BL-0428 DG-2 A 已裁示）；幣別未知排除（A） | B（已裁示） | 中 | 已裁示；DG-3 改名待核 | 不再出題 |
+| 17 | `mk_signal_by_code` 現價位階（健診大表） | 是 | 位階 | 買1／賣1 缺 → ⬜；可能跨來源混用 nav 與買賣點【實跑可混用】 | A（混源 D） | 低 | DG-1 | 登記 |
+| 18 | `rotation.suggest_rotation_pairs` | 是 | 賣高基期 → 買別類 | 賣方類別空白時，任何有類別的買方都算「別類」 | C（輕微） | 低中 | BL-0428 (4) 既有 | 登記 |
+| 19 | `policy_fee_optimizer`（④ 費用扣款） | 是 | 停利扣款候選 | 成本缺推定 1.0 仍進推薦序（有揭露） | B | 低 | 隨 DG-2 | 登記 |
+| 20 | macro `action_light`／① 建議資產水位 | 是（首頁 ①） | 股債現金 % | 首頁不印 action、證據不足不給水位（A）；composite 內部缺值當 0（docstring 自陳）；action 字串僅 MCP 用（是否上線屬 E） | A | 低 | 否 | 保持 |
+
+**證據／低行動旁項**：4D 評語 C 級「🟡 中性,持續觀察」用字近「持有」（D，低）；`peer_rank` 預設標籤「無同類可比(未分類)」也套用於因缺序列被排除的已分類基金（用字，可安全修）；`fund_position._is_money_market` 類別空白判為非貨幣型（間接 evidence，潛在 C）。
+
+#### §10.7.2 Dead／未證實（E，可走 retirement gate）
+
+- `services/decision_matrix.py::verdict_to_actions`：唯一鏈為 `realtime_signal` ← `ui/tab1_macro.py::render_macro_tab`，後者無非測試 caller（`app.py` 走 `page_01_macro`）【讀碼】。
+- `services/risk_radar.py::synthesize_dual_verdict`（0 caller）。
+- `services/macro/tw_local.py` 的 `classify_long_term_regime`／`classify_short_term_regime`、`services/portfolio_service.py::risk_alert`（字面 grep 無 caller，main `11b28f8d`）。
+- `precision_service` 的 `risk_score_strategy`、`calc_macro_phase` 的 advice／strategy／allocation 欄是否別處顯示：未查（E 未證實）。
+- `switch_advisor` 的 `_nav_zh["unknown"]` 不可達。
+
+⚠️ 「無 caller／不可達」為單組字面 grep 結論（main `11b28f8d`），不宣稱窮舉；退役前須依 `CLAUDE.md` §-1.5.1c 判定 3 另行實測 caller。
+
+#### §10.7.3 十問答
+
+1. **明確 bug、可在既有原則下安全修**（仍需動工授權；Batch B 唯讀未動）：#4 紅燈 None→False 與 except 補 log；#8 `tag_health_check` 缺值回 Healthy → N/A；#13 `_cost<=0` → None＋匯率 fallback 揭露；#14 `deploy_pct` 0.0 → None；#6 健診倉位欄 fallback 標註；#7 −2σ 窗口不足揭露；#2 不實 caption；`peer_rank` 用字。
+2. **會改投資語意、須客戶裁示**：#1、#3、#5、#8（N/A／Unset 擋行動）、#9、#10、#11、#12、#6／#7 拿掉行動、#2 macro 接線、#15 Z 缺時品質單軸與覆蓋不足矩陣、4D 用字。
+3. **DG-1（位置類改讀 TR）**：#6 `calc_metrics`、#7 −2σ、#8 價位區間、#14 `ladder235`、#17、`switch_advisor` `_breakdown_below_sma` 讀 raw NAV。
+4. **DG-2（單一行動出口，其餘降為證據）**：#1、#5、#8、#9、#10、#15、#16（BL-0428 DG-2 已裁 A）、#19；#11／#12 AI 亦屬行動合成路徑。
+5. **DG-3**：#16 `allocation_backtest` `to_twd_total_return_series` 名不符實（raw NAV × FX，未含息）。
+6. **是否存在「Missing 已揭露、但從另一路徑仍給行動」**：是 —— #1（同一列 ⬜ 資料不足＋建議換入，且進 LINE）；Tab2 同頁 Z／🎯 已不給行動，但 σ 投／出 %、−2σ 試單、💰 換標的仍給。
+7. **是否存在第二／第三套行動引擎**：是 —— 至少 `switch_advisor`、`switch_strategy`、`replacement`、`mk_dashboard` verdict、`recommend_policy`、satellite、`calc_metrics` `pos_label`、AI mk_advisor 各自獨立產生行動，與 `combine_action` 並列（§10.6 盤點的延伸）。
+8. **可走 retirement gate 的 dead code**：見 §10.7.2。
+9. **高曝光 consumer**：LINE 週報＝#1、#2、#3（經 `switch_advisor`）；AI prompt＝#11、#12；④ 持股頁＝#8、#10、#11、#13、#19；② 健診＝#5（頁頂淘汰候選）、#6、#9、#14；Tab2＝#5、#6、#7、#15。
+10. **建議下一個唯一 Decision Gate（總管推薦，未經客戶裁示）**：**DG-6「`DEC-2026-10-24-10` 永久原則（Missing／Unknown 不得經另一單軸訊號重新產生行動）是否擴及 BL-0442 平行引擎」**。總管推薦先只收斂兩條最高曝光、且直接違反原則者：(a) `switch_advisor` INSUFFICIENT 時抑制「表現差 → 建議換入」overlay（含 LINE）；(b) 換標的建議（`check_replacement_recommendation`）在分類未判定時比照 🎯 不給換／留，且判不動時不給「🟢 保留」。其餘留待 DG-1／DG-2。推薦理由：兩者皆已實跑證實 Missing → 行動，與 DEC-10 同頁或同列矛盾，曝光最高（LINE、Tab2、健診頁頂），且收斂方式不需新增規則、門檻或資料源。
+
+#### §10.7.4 出處與未驗
+
+- 研究由兩組研究組（範圍分工、重疊路徑互證）產出，總管彙整、經總管轉述；文件組未重讀原始碼、未重跑測試；原始報告不在 repo。
+- 【實跑】項為合成輸入，打樁 streamlit、**schema 驗證未執行**；只證路徑存在，不是真實基金的發生率。
+- #2 caption 不實、#12 AI 可能重新產生換／留為【推論・未驗】，未實跑 App、未呼叫 Gemini。
+- 本節建議欄與第 10 問的 DG-6 推薦是總管推薦方案，**不是客戶裁示**，不得當已核准引用；裁示前一律照舊（`CLAUDE.md` §-1）。
+- 安全修 bug 清單、DG-6 候選、dead code retirement gate 候選另登記於 `docs/BACKLOG.md`（BL-0442 列尾與其後子項）；登記不構成動工授權。
+
 ## §11 資料先行順序與新設計流程（2026-10-24，`DEC-2026-10-24-02`）
 
 客戶永久原則：「先把『看得清楚資料』做好，再決定『資料能不能進模型』；『資料 ≠ 投資推理』。」
