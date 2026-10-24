@@ -301,6 +301,29 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 - 本節不改任何公式、門檻或投資語意；BL-0440 其餘未收斂項（UI BB／MA20／MA60 圖線重算、tab3 兩處 MA60 白算、`ladder235` σ=0 誤標等）見 `docs/BACKLOG.md` BL-0440 列尾。
 - **第二批（2026-10-24，base main `994b50c2`，PR #1038 已合併；狀態更新，不是漏刪）**：`ladder235` σ=0 改讀既有 `status="degenerate"` 顯示「⬜ 波動為 0，無法判定」，不再誤標「週資料不足」；Tab3 迷你卡雙確認徽章 bb 缺時明示「⬜ 雙確認無法判定（布林資料未取得）」；子字串測試改精確值。未改任何公式、門檻、燈號或 SSOT 欄位；UI BB／MA 圖線重算與 tab3 MA60 白算仍未收斂。
 
+### §10.6 DG-2 前置：combine_action 唯讀盤點（2026-10-24，main `3b167c49`）
+
+> 證據標籤：**[code-read confirmed]** 讀碼確認／**[test confirmed]** 測試執行確認／**[inferred]** 推論未驗。內容由研究組單組產出、總管抽查（唯一 caller 由總管另以 `git grep` 確認），經總管轉述；文件組未重讀原始碼、未重跑測試。本節不改任何公式、門檻或投資語意，不構成動工授權。
+
+- **結論**：`services/health/action.py::combine_action`（約 :88；純函式，品質桶 × Z 時機桶 3×3 矩陣 `_MATRIX` ＋ `_QUALITY_ONLY`；本身無數值門檻，上游門檻在 `shared/signal_thresholds` `ZSCORE_*`、`services/health/grade.py` `GRADE_CUTOFFS_4D`、`services/allocation_ladder` NDC 燈號帶）**不是現行單一行動 SSOT**，是 6 條以上行動路徑之一。production 唯一呼叫點 `ui/tab2_single_fund.py`（約 :1630，只在 `_4d` 為 dict 時）；輸出只畫「🎯 建議動作」卡，不進 AI prompt、LINE、portfolio、`ui/views`。[code-read confirmed] `tests/test_health_action.py` 17 條直接 import 執行通過。[test confirmed]
+- **輸入與缺值**（[code-read confirmed]）：
+
+  | 輸入 | 缺值時 | 揭露 |
+  |---|---|---|
+  | Z（`rebalance_signal`，原始 NAV） | 位階未知 | 有 |
+  | `is_core_bucket` 分類例外 | 當非 Core 照常算 Z | **未揭露** |
+  | NDC 分數失敗 | None → 預設門檻；抓失敗與真無資料不可分 | 部分 |
+  | `_4d` 品質缺 | na「資料不足」 | 有 |
+  | 品質覆蓋率 | 2/5 與 5/5 同為 good（`combine_action` 不讀 coverage） | **未揭露** |
+  | `eat_warn` 配息覆蓋算不出 | False（Missing 當安全） | **未揭露** |
+  | `_4d` 整體失敗 | 🎯 卡不出現、無說明 | 部分 |
+
+- **平行行動引擎**（皆 [code-read confirmed]）：`calc_metrics` `pos_label`（投／出 %）；`mk_dashboard` `_verdict_text`／`build_mk_dataframe`（加大進場／分批進場／部分減碼／續抱領息／檢視換股）；`ladder235`（燈號＋`deploy_pct`）；`switch_advisor`（SWITCH／SELL_CASH／WARN／HOLD，LINE 週報可達）；`switch_strategy`（賣出平轉／觀望停加碼／續抱加碼，健診大表＋LINE）；`allocation_backtest.current_actions_from_signals`（buy／sell／switch／watch、目標權重）；Tab2 −2σ 卡（小量試單 ≤20%、停損 3%）；`recommend_policy`（核心／衛星比例 P1／P2／P4）；`satellite.satellite_stop_gain`（T7 帳本停利）；`decision_matrix.verdict_to_actions`（只經 tab1，推論 dead [inferred]）；`advise_fund` 已於 DG-3 C 降為位置證據。
+- **若 DG-2 選 C 的影響**：無任何 consumer 可「純重接」（同輸入同語意）。最接近者 Tab2 −2σ 卡，但那是刪除行動文字而非重接，且 `combine_action` 不吃布林。其餘（`pos_label` %、`deploy_pct`、satellite 停利、`switch_advisor`、`switch_strategy`、`allocation_backtest`、`recommend_policy`、mk verdict、`decision_matrix`）輸入／語意／時間尺度不同，不能重接。把其他訊號餵進 `combine_action` ＝ 改矩陣／新增輸入維度 ＝ 新投資語意。[code-read confirmed；「不能重接」的判斷為 inferred]
+- **命中 Decision Gate**：① 降級或下架已上線行動文字（投／出 %、`deploy_pct`、SELL_CASH、停利 %）；② `combine_action` 矩陣本身，以及 Z 用 raw 或 TR（屬 DG-1）；③ 覆蓋率不足的 grade 能否出「加碼」；④ `eat_warn` 缺值顯示；⑤ LINE 週報行動來源。
+- **未查證**：「唯一 caller／無其他引擎」為單組 grep（唯一 caller 總管另以 `git grep` 確認；「無其他引擎」不宣稱窮舉）；`mk_signal_by_code`、`switch_strategy`、`rotation` 內部未逐行讀；未全 repo 掃行動字串。
+- **後續**：三項未揭露 Missing 登記 BL-0441（未開始）；DG-2 仍待客戶裁示（BL-0438）。
+
 ## §11 資料先行順序與新設計流程（2026-10-24，`DEC-2026-10-24-02`）
 
 客戶永久原則：「先把『看得清楚資料』做好，再決定『資料能不能進模型』；『資料 ≠ 投資推理』。」
