@@ -31,6 +31,11 @@ from __future__ import annotations
 QUALITY_OK: str = "ok"
 QUALITY_WINDOW_SHORTFALL: str = "window_shortfall"
 
+# BL-0440 j:`services/fund_service.py::calc_metrics` 在近 1 年 NAV < 20 筆時,買賣點改走
+# 「區間中點 ± (高−低)/6」fallback,並把既有 `buy_mode` key 設成這個字串。值原本就存在,
+# 這裡只把它收成具名常數,讓下游讀同一份字串揭露品質(不新增 key、不改公式)。
+BUY_MODE_RANGE_FALLBACK: str = "區間σ(資料不足)"
+
 
 def _fmt_years(days: float) -> str:
     """把日曆天數轉成人看的年數標籤(1 位小數;不足 1 年改用天)。"""

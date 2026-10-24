@@ -48,6 +48,7 @@ from ui.helpers.settings_diag.merge_context import (
 
 from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 from shared.converters import safe_float as _safe_float  # v19.331 review:占位字串防護
+from shared.data_quality import BUY_MODE_RANGE_FALLBACK as _BUY_MODE_FALLBACK_T2  # BL-0440 j
 # §3.3 反捏造:接近警戒門檻走 shared SSOT,不在本檔另寫一份同義 literal
 from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _NEAR_PCT_SSOT
 
@@ -1052,7 +1053,8 @@ def render_single_fund_tab() -> None:
                 _m_mode = m.get("buy_mode","")  # v19.313: 買賣 band σ 改區間基準,不再標 wb07
                 # v19.331 review:safe_float 防占位字串(數值輸入行為不變;字串 → 0 走
                 # _proximity_chip 既有 nav_v<=0 → "—" 路徑,不炸不造假)
-                _m_nav_v = _safe_float(m.get("nav")) or 0
+                _m_nav_raw = _safe_float(m.get("nav"))   # BL-0440:缺 → None(顯示用,不當 0)
+                _m_nav_v = _m_nav_raw or 0
                 # §3.3:fallback 值改吃 shared SSOT(與 fund_service 產出 metrics
                 # 時用的是同一個常數),不在 UI 端另刻一份同義 literal。
                 _NEAR = _safe_float(m.get("near_threshold_pct")) or _NEAR_PCT_SSOT
@@ -1088,24 +1090,41 @@ def render_single_fund_tab() -> None:
                                   f"<span style='color:{_chip_color};font-size:11px;min-width:74px;text-align:right;font-weight:600'>{_chip_lbl}</span>"
                                   f"<span style='color:{GRAY_66};font-size:10px;min-width:96px;text-align:right'>{_chip_dist}</span>"
                                   f"</div>")
+                    # BL-0440 j:n<20 筆走區間σ fallback 時,σ 不是「近1年淨值標準差」——
+                    # 照 calc_metrics 實際算法寫,不讓 header 冒充正常 σ 通道。
+                    _m_sigma_txt = ("⚠️ 資料不足 20 筆：σ=(高點−低點)/6、中樞=區間中點"
+                                    if _m_mode == _BUY_MODE_FALLBACK_T2 else "σ=近1年淨值標準差")
                     # v19.273 Phase 2 TOP 2.2:σ 買賣點卡外框走 gh_card chrome SSOT(byte-identical)
                     from ui.components.cards import gh_card
                     st.markdown(gh_card(
                         f"<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"
-                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>📍 策略3 標準差買賣點 v3.2（{_m_mode} ｜ σ=近1年淨值標準差 ｜ 中樞±kσ）</span>"
+                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>📍 策略3 標準差買賣點 v3.2（{_m_mode} ｜ {_m_sigma_txt} ｜ 中樞±kσ）</span>"
                         f"<span style='background:{CHIP_BG_NEAR_BLACK};color:{_m_pc};border:1px solid {_m_pc};padding:2px 10px;"
                         f"border-radius:12px;font-size:12px;font-weight:700'>{_m_pl}</span>"
                         f"</div>"
                         + _rows
                         + f"<div style='color:{GRAY_66};font-size:10px;margin-top:6px'>"
-                          f"現值 {_m_nav_v:.4f}{_ccy_sfx} ｜ 接近閾值 ±{_NEAR:.1f}%"
+                          f"現值 {(f'{_m_nav_raw:.4f}' if _m_nav_raw is not None else '⬜ 資料未取得')}{_ccy_sfx} ｜ 接近閾值 ±{_NEAR:.1f}%"
                           f" ｜ 上表買賣點皆為原幣{_ccy_sfx or ''}計價，非新台幣</div>",
                         radius=10, padding="12px 16px", margin="10px 0",
                     ), unsafe_allow_html=True)
 
+                else:
+                    # BL-0440:原本 buy1 缺 → 整張卡靜默不畫,看不出是「沒訊號」還是「沒算出來」。
+                    st.caption("📍 策略3 標準差買賣點：⬜ 無法判定（買賣點未取得）")
+
                 # ── V3-3: -2σ 超跌機會卡（布林下軌突破警報）────────────
-                _boll_latest_low = float(_bb_dn.iloc[-1]) if len(_bb_dn) > 0 else None
-                if _boll_latest_low is not None and _m_nav_v > 0 and _m_nav_v <= _boll_latest_low:
+                # BL-0440:改讀 SSOT `metrics["bb_lower"]`(calc_metrics 同一條 s、同窗 min(20,len(s))、
+                # rolling mean/std(ddof=1)、−2σ —— 與上方圖用的 `_bb_dn` 公式逐項相同),不再讀 UI 重算值。
+                # 行為差異:SSOT 四捨五入到 4 位小數,nav 與下軌相差 < 0.00005 時觸發結果可能翻轉。
+                # 圖上的通道線(`_bb_dn` 整條序列)不動(SSOT 的 MA20 線沒有 series,見 BL-0440 k)。
+                _boll_latest_low = _safe_float(m.get("bb_lower"))
+                if _boll_latest_low is not None and pd.isna(_boll_latest_low):  # NaN
+                    _boll_latest_low = None
+                if _boll_latest_low is None or _m_nav_raw is None or _m_nav_raw <= 0:
+                    # 缺值 ≠ 未觸發:未觸發時本卡不出現;缺值時明講無法判定。
+                    st.caption("⚡ -2σ 超跌機會卡：⬜ 無法判定（布林下軌或淨值未取得）")
+                elif _m_nav_v <= _boll_latest_low:
                     st.markdown(
                         f"<div style='background:linear-gradient(135deg,{BG_DARK_GREEN_2},#0d2a0d);"
                         f"border:2px solid {MD_GREEN_A400};border-radius:12px;padding:14px 18px;margin:10px 0'>"
@@ -2666,12 +2685,20 @@ def render_single_fund_tab() -> None:
                             f"- 配息：有 {len(divs)} 筆配息記錄，但年化配息率三層來源皆無值"
                             "→ 吃本金無法判定（不得推測）"
                         )
-                    _bs = [f"{_k}={m.get(_k)}" for _k in
-                           ("buy1", "buy2", "buy3", "sell1", "sell2", "sell3",
-                            "bb_upper", "bb_lower", "ma60")
-                           if m.get(_k) not in (None, "")]
+                    _bs_keys = ("buy1", "buy2", "buy3", "sell1", "sell2", "sell3",
+                                "bb_upper", "bb_lower", "ma60")
+
+                    def _bs_missing(v) -> bool:   # BL-0440:None / "" / NaN 皆為缺
+                        return v is None or v == "" or (isinstance(v, float) and pd.isna(v))
+                    _bs = [f"{_k}={m.get(_k)}" for _k in _bs_keys if not _bs_missing(m.get(_k))]
+                    _bs_na = [_k for _k in _bs_keys if _bs_missing(m.get(_k))]
                     if _bs:
-                        _snap.append("- 買賣點/技術：" + "｜".join(_bs))
+                        _snap.append("- 買賣點/技術：" + "｜".join(_bs)
+                                     + (f"（買賣點模式：{m.get('buy_mode')}，近1年淨值不足 20 筆，品質較低）"
+                                        if m.get("buy_mode") == _BUY_MODE_FALLBACK_T2 else ""))
+                    # BL-0440:缺鍵原本直接省略 —— AI 看不出「沒給」與「沒有」的差別。
+                    if _bs_na:
+                        _snap.append("- 買賣點/技術資料未取得（不得推測）：" + "、".join(_bs_na))
                     # σ 絕對位階（HWM）— 經 SSOT（配息還原序列），AI 才知「現價 vs 歷史高點」
                     if s is not None:
                         try:

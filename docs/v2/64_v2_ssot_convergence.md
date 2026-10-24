@@ -292,6 +292,14 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 - 研究由單組讀碼與合成測試產出、總管抽查，經總管轉述；文件組未重跑測試、未重讀原始碼。原始報告不在 repo。
 - 後續：DG-1～DG-3 傾向見 `DEC-2026-10-24-01`；Missing／UI 重算修補登記 BL-0440（客戶指示尚未開始）。
 
+### §10.5 BL-0440 實作結果（2026-10-24 補記；SSOT 收斂證據）
+
+- 出處：PR #1038（commit `d63ef20b`＋`8cd068c2`，base main `122dc274`；撰寫時尚未合併，合併後 SHA 待回填）。內容為總管轉述，文件組未重讀原始碼、未重跑該 PR 測試。
+- **Tab2 −2σ 卡改讀 SSOT**：由 UI 重算的 `_bb_dn` 改讀 `services/fund_service.py::calc_metrics` 回傳的 `bb_lower`。公式相同（20 期、2σ），差別只在 SSOT 值經 4 位小數四捨五入，顯示可能與舊 UI 重算值在第 5 位以後不同；`bb_lower` 缺值時明示「資料未取得」，不再與「未觸發」混用。
+- **fallback 品質揭露沿用既有 `buy_mode`**：`calc_metrics` n<20 的 fallback 以既有欄位 `buy_mode` 揭露，字串取自常數 `shared/data_quality.BUY_MODE_RANGE_FALLBACK`（「區間σ(資料不足)」），**未新增 contract key**；健診大表、PK 表、戰情室結論、Tab3 迷你卡、Tab2、AI prompt 統一加註。
+- `compute_health_kpis` 新增 `n_zone_na`／`tags_unavailable`／`zone_all_na` 三個鍵，屬 L3 內部回傳鍵、非 `shared/schemas` 契約（總管認定）。
+- 本節不改任何公式、門檻或投資語意；BL-0440 其餘未收斂項（UI BB／MA20／MA60 圖線重算、tab3 兩處 MA60 白算、`ladder235` σ=0 誤標等）見 `docs/BACKLOG.md` BL-0440 列尾。
+
 ## §11 資料先行順序與新設計流程（2026-10-24，`DEC-2026-10-24-02`）
 
 客戶永久原則：「先把『看得清楚資料』做好，再決定『資料能不能進模型』；『資料 ≠ 投資推理』。」

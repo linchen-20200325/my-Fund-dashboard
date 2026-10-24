@@ -28,6 +28,7 @@ from ui.helpers.render_state import system_error
 
 from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.policy_tier import fund_tier_sheet_value as _fund_tier_sheet_value
+from shared.data_quality import BUY_MODE_RANGE_FALLBACK as _BUY_MODE_FALLBACK_T3  # BL-0440 j
 from shared.colors import BG_DARK_GREEN_3, BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, BG_DARK_RED_3, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL, WARN_AMBER, WHITE
 
 from infra.oauth import (
@@ -370,7 +371,12 @@ def render_portfolio_tab() -> None:
                 _loaded_hero = [f for f in _pf_for_warroom
                                  if f.get("loaded") and not f.get("load_error")]
                 _mk_df_hero = _build_mk(_loaded_hero, bench_series=None)
-            except Exception:
+            except Exception as _e_mk_hero:  # noqa: BLE001
+                # BL-0440:建表失敗 → compute_health_kpis 收到 None 會把三個標籤格標成
+                # 「⬜ 無法判定」(不再顯示 0 檔);這裡補留痕,不再靜默。
+                import sys as _sys_mk_hero
+                print(f"[tab3/hero] build_mk_dataframe 失敗:"
+                      f"{type(_e_mk_hero).__name__}: {_e_mk_hero}", file=_sys_mk_hero.stderr)
                 _mk_df_hero = None   # smoke-allow-pass — KPI 不影響後續功能
             _kpis_hero = compute_health_kpis(_pf_for_warroom, _mk_df_hero)
             # （原本這裡把 _kpis_hero 塞進 session_state 說「供下方 expander summary 用」，
@@ -1814,10 +1820,20 @@ def render_portfolio_tab() -> None:
                                 _mi_b1 = m_i.get("buy1");  _mi_b2 = m_i.get("buy2");  _mi_b3 = m_i.get("buy3")
                                 _mi_s1 = m_i.get("sell1"); _mi_s2 = m_i.get("sell2"); _mi_s3 = m_i.get("sell3")
                                 _mi_nav = float(m_i.get("nav") or 0)
-                                _mi_pl  = m_i.get("pos_label","正常")
-                                _mi_pc  = m_i.get("pos_color",TRAFFIC_NEUTRAL)
+                                # BL-0440(§1 Missing ≠ 正常):pos_label 缺 → 原本預設「正常」,
+                                # 把沒算出來的倉位說成正常。改既有用字「⬜ 無法判定」+ 灰色。
+                                _mi_pl  = m_i.get("pos_label") or "⬜ 無法判定"
+                                _mi_pc  = (m_i.get("pos_color", TRAFFIC_NEUTRAL)
+                                           if m_i.get("pos_label") else GRAY_66)
+                                # BL-0440 j:n<20 區間σ fallback(既有 `buy_mode`)→ 揭露品質
+                                if m_i.get("buy_mode") == _BUY_MODE_FALLBACK_T3:
+                                    _mi_pl = f"{_mi_pl}（⚠️ 區間σ·資料不足）"
                                 _mi_bbd = m_i.get("bb_lower"); _mi_bbu = m_i.get("bb_upper")
                                 _mi_NEAR = float(m_i.get("near_threshold_pct") or 2.0)
+                                if not (_mi_b1 and _mi_nav > 0):
+                                    # BL-0440:原本整張迷你卡靜默不畫 —— 看不出是「沒有訊號」
+                                    # 還是「買1／淨值根本沒取到」。只補一行說明,不改卡片版面。
+                                    st.caption("📍 策略3 訊號：⬜ 無法判定（買1 或淨值未取得）")
                                 if _mi_b1 and _mi_nav > 0:
                                     def _mini_chip(target, is_buy):
                                         if not target: return ("—", GRAY_66)
@@ -1848,7 +1864,7 @@ def render_portfolio_tab() -> None:
                                         _cells += (f"<div style='flex:1;text-align:center;padding:4px 2px;"
                                                    f"background:{GH_BG_PRIMARY};border-radius:6px;margin:0 2px'>"
                                                    f"<div style='font-size:9px;color:{TRAFFIC_NEUTRAL}'>{_lbl}</div>"
-                                                   f"<div style='font-size:11px;font-weight:700;color:{GRAY_CC}'>{_v:.3f}</div>"
+                                                   f"<div style='font-size:11px;font-weight:700;color:{GRAY_CC}'>{(f'{_v:.3f}' if _v is not None else '⬜ 未取得')}</div>"
                                                    f"<div style='font-size:13px;color:{_cc}'>{_ch}</div></div>")
                                     st.markdown(
                                         f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BG_HOVER};border-radius:8px;padding:8px 12px;margin:2px 0 8px 0'>"
@@ -2436,11 +2452,19 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
         _mk_df = _build_mk(loaded, bench_series=None)
         _kpis = _kpis_fn(loaded, _mk_df)
         _safe_tot = max(_kpis["n_funds"] - _kpis["n_na"], 0)
+
+        # BL-0440:None = 標籤表無法建立 → 明講無法判定(不得讓 AI 讀成 0 檔)。
+        def _ai_cnt(v) -> str:
+            return "無法判定（資料未取得，不得推測）" if v is None else f"{v} 檔"
+        _zna_ai = int(_kpis.get("n_zone_na") or 0)
         lines.append(
             "- **🩺 組合健康度**："
             f"現金流安全 {_kpis['n_cash_ok']}/{_safe_tot} 檔｜吃本金 {_kpis['n_eat']} 檔"
-            f"｜撿便宜 {_kpis['n_buy']} 檔｜留校查看 {_kpis['n_warn']} 檔"
-            f"｜停利提醒 {_kpis['n_take']} 檔")
+            f"｜1Y 資料不足 {_kpis['n_na']} 檔"
+            f"｜撿便宜 {_ai_cnt(_kpis['n_buy'])}｜留校查看 {_ai_cnt(_kpis['n_warn'])}"
+            f"｜停利提醒 {_ai_cnt(_kpis['n_take'])}"
+            + (f"｜價位區間無法判定 {_zna_ai} 檔（未納入撿便宜／停利計數，不得推測）"
+               if _zna_ai else ""))
         if _mk_df is not None and not _mk_df.empty and "體檢結論" in _mk_df.columns:
             lines.append("- **各檔 體檢結論（前5）**：")
             for _, _r in _mk_df.head(5).iterrows():
@@ -2456,8 +2480,13 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
                 f"- **🏆 同類 PK 體檢**：優等生 {len(_good)} 檔"
                 f"（{'、'.join(_good[:5]) or '—'}）｜汰弱候選 {len(_lag)} 檔"
                 f"（{'、'.join(_lag[:5]) or '—'}）｜同類資料不足 {_na_n} 檔")
-    except Exception:
-        pass   # smoke-allow-pass — AI 快照加料失敗不阻斷主流程
+    except Exception as _e_kpi_ai:  # noqa: BLE001
+        # BL-0440:原本 `except: pass` —— 健康度／體檢段整段消失,AI 會把「沒給」當「沒問題」。
+        # 改為留痕 + 明講無法判定(仍不阻斷主流程)。
+        import sys as _sys_kpi_ai
+        print(f"[tab3_ai] health/checkup snapshot fail: "
+              f"{type(_e_kpi_ai).__name__}: {_e_kpi_ai}", file=_sys_kpi_ai.stderr)
+        lines.append("- **🩺 組合健康度／同類 PK 體檢**：⬜ 計算失敗，未列出的項目無法判定（資料未取得，不得推測）")
 
     # v19.183 Bug5：組合加權回撤 + 歷年漲跌幅 + 相關性摘要 → 餵 AI 判斷組合回撤風險
     #   權重來自 sidebar invest_twd(缺則等權);全部走 services.portfolio_service 純函式。
