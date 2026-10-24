@@ -39,12 +39,12 @@
 > - **Open PR**：本 PR（BL-0443，分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。
 > - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；本框撰寫時尚未開 PR、無 CI 結果。
 > - **Phase**：BL-0443 安全修批；合併後無進行中任務。
-> - **本批內容**：BL-0443 八項逐項存在性檢查 —— 7 項 A 已修（#4 紅燈 None 不再被重算成 False＋週報 except 補 log、#13 T7 衛星停利成本 ≤0 → ⬜／缺值原因分開標／帳本平均匯率 fallback 揭露、#14 `ladder235` `deploy_pct` 0.0 → None、#6 健診倉位欄區間σ 標註、#7 Tab2 −2σ 卡窗口不足揭露、#2 不實 caption 改文字、`peer_rank` 用字）；第 (2) 項 `tag_health_check` 判 C（改 N/A 會改變行動字樣，屬 DG-2）移至 BL-0448。只改呈現／揭露／log，未改判法、公式、門檻、資料源、schema、行動語意。測試 `tests/test_bl0443_safe_fixes.py`。BL-0443 改 closed；BL-0448、BL-0449 新增。
-> - **未完成（`docs/BACKLOG.md`）**：同第二十三次框，去掉 BL-0443、加 BL-0448（待客戶裁示）、BL-0449（open）。
+> - **本批內容**：BL-0443 八項逐項存在性檢查 —— 7 項 A 已修（#4 紅燈 None 不再被 `assess_underperformance` 重算成 False＋週報 except 補 log —— 本項為部分處置：呼叫端資料缺（GRAY）仍記 False，另登 BL-0450；#13 T7 衛星停利成本 ≤0 → ⬜／缺值原因分開標／帳本平均匯率 fallback 揭露、#14 `ladder235` `deploy_pct` 0.0 → None、#6 健診倉位欄區間σ 標註、#7 Tab2 −2σ 卡窗口不足揭露、#2 不實 caption 改文字、`peer_rank` 用字）；第 (2) 項 `tag_health_check` 判 C（改 N/A 會改變行動字樣，屬 DG-2）移至 BL-0448。只改呈現／揭露／log，未改判法、公式、門檻、資料源、schema、行動語意。測試 `tests/test_bl0443_safe_fixes.py`。BL-0443 改 closed；BL-0448、BL-0449、BL-0450、BL-0451 新增（後兩列依獨立稽核）。
+> - **未完成（`docs/BACKLOG.md`）**：同第二十三次框，去掉 BL-0443、加 BL-0448（待客戶裁示）、BL-0449～BL-0451（open）。
 > - **Blocker**：無（無已授權工作）。
-> - **唯一下一步**：停手等客戶指示（無已授權工作）。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。候選（**皆未授權**，不得自行開工）：DG-1～DG-3（BL-0438）、BL-0448（併 DG-2）、BL-0449 補 log、BL-0445 retirement gate、BL-0446、BL-0442 其餘平行引擎（須新 Decision Gate）。
+> - **唯一下一步**：停手等客戶指示（無已授權工作）。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。候選（**皆未授權**，不得自行開工）：DG-1～DG-3（BL-0438）、BL-0448（併 DG-2）、BL-0449 補 log、BL-0450、BL-0451、BL-0445 retirement gate、BL-0446、BL-0442 其餘平行引擎（須新 Decision Gate）。
 > - **下一批建議 Model／Effort**：同第二十二次框。
-> - **尚未授權動工**：DG-1、DG-2、DG-3、BL-0445 retirement、BL-0446、BL-0448、BL-0449、BL-0440、BL-0442 其他引擎任何修改（`CLAUDE.md` §-1）。
+> - **尚未授權動工**：DG-1、DG-2、DG-3、BL-0445 retirement、BL-0446、BL-0448～BL-0451、BL-0440、BL-0442 其他引擎任何修改（`CLAUDE.md` §-1）。
 > - **接手入口**：同第二十二次框（含 scratchpad venv 跑完整測試的補充）。
 
 > **⭐ 2026-10-24（第二十三次）現況 —— BL-0447 實作批（~~以本框為準；下方第二十二次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第二十四次框；#1047 已合併，main `1c777667`；狀態更新，不是漏刪）**（`DEC-2026-10-24-12` 原則範圍內的安全修，非新客戶裁示；狀態更新，不是漏刪：第二十二次框整段保留於下方）
