@@ -38,7 +38,7 @@
 > - **最新 main**：`98bd6e2d`（#1040 合併）。**Open PR**：本分支 `ccr-464564b4-9qluki`（docs only：`DEC-2026-10-24-07`）。CI 以 GitHub 實況為準（第 2 節）。
 > - **治理**：交接完成條件＝只讀 GitHub 可答 7 項，見 `PROJECT_RULES.md` 第 6 節 6.1.1（`DEC-2026-10-24-07`）。
 > - **Blocker／Decision Gate**：DG-1～DG-3 仍待客戶裁示（`DEC-2026-10-24-01` 為傾向、未核准；DG-2 選項見 `docs/v2/64_v2_ssot_convergence.md` §10.6）—— 是 blocker，不是下一步。
-> - **下一個交接點（唯一）**：Batch B：BL-0441 Missing 語意誠實化（客戶已指示，Batch A 合併後開始；Opus 5.5 Medium）。（「Batch A」的範圍與合併狀態為總管轉述，repo 內未定義，接手時以 GitHub 實況查證）
+> - **下一個交接點（唯一）**：Batch B：BL-0441 Missing 語意誠實化（客戶已指示，Batch A 合併後開始；Opus 5.5 Medium）。定義：Batch A ＝ 本 docs PR（`DEC-2026-10-24-07` 落盤）；Batch B ＝ BL-0441（授權與範圍見 `DEC-2026-10-24-08`），Batch A 合併且 Verification Gate（第 2 節）重新通過後開始。
 
 > **⭐ 2026-10-24（第十六次）現況（~~以本框為準；下方第十五次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第十七次框；狀態更新，不是漏刪）**（DG-2 前置盤點＋治理落盤；狀態更新，不是漏刪：第十五次框整段保留於下方）
 > - **最新 main**：`3b167c49`（#1039 合併）。
