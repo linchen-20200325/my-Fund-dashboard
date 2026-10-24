@@ -323,6 +323,7 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 - **命中 Decision Gate**：① 降級或下架已上線行動文字（投／出 %、`deploy_pct`、SELL_CASH、停利 %）；② `combine_action` 矩陣本身，以及 Z 用 raw 或 TR（屬 DG-1）；③ 覆蓋率不足的 grade 能否出「加碼」；④ `eat_warn` 缺值顯示；⑤ LINE 週報行動來源。
 - **未查證**：「唯一 caller／無其他引擎」為單組 grep（唯一 caller 總管另以 `git grep` 確認；「無其他引擎」不宣稱窮舉）；`mk_signal_by_code`、`switch_strategy`、`rotation` 內部未逐行讀；未全 repo 掃行動字串。
 - **後續**：三項未揭露 Missing 登記 BL-0441（未開始）；DG-2 仍待客戶裁示（BL-0438）。（→ **2026-10-24 補記（狀態更新，不是漏刪）**：BL-0441 實作於分支 `ccr-464564b4-9qluki`：三項 Missing 改為可見（覆蓋缺口 flag、`eat_warn` 三態、`is_core_bucket` 例外 → None；`rebalance_signal`／`ladder235` 揭露 `core_status=unknown`，Stop Gate 仍待裁示），行動與矩陣不變；證據 `tests/test_bl0441_missing_semantics.py`。）
+- **行動語意收斂（`DEC-2026-10-24-10`，base `6d3baa19`）**：分類未判定（`core_status='unknown'`）時 `combine_action` 不再輸出品質單軸行動，改「⬜ 既有品質標籤；分類未判定，暫不提供換／留建議」＋中性灰（資料／證據 ≠ 投資行動）；真 Core、真非 Core、NAV 不足與 `6d3baa19` 逐鍵相同（`tests/test_dec10_unknown_no_quality_action.py`）；其他平行引擎見 BL-0442。
 
 ## §11 資料先行順序與新設計流程（2026-10-24，`DEC-2026-10-24-02`）
 
