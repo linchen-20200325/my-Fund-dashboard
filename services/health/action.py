@@ -15,6 +15,8 @@
 - 品質「資料不足(—/score None)」→ **不給行動建議**(先補歷史淨值再評),最高優先。
 - 位階不可算(z=None)或 Core 不擇時(applies=False)→ 誠實退回「依品質」建議,不硬湊時機。
 - 吃本金(eat_warn)→ 另出旗標浮到最上層,不被時機蓋掉。
+- 分類未判定(core_status='unknown')→ 品質只當證據顯示,不給換/留/加碼等任何行動、顏色中性灰
+  (DEC-2026-10-24-10:Missing/Unknown 不得被另一個單軸訊號繞過後重新產生行動)。
 """
 from __future__ import annotations
 
@@ -85,6 +87,10 @@ _QUALITY_ONLY: dict = {
     "weak": ("🔴 品質弱 → 考慮換", TRAFFIC_RED),
 }
 
+# 分類未判定(DEC-2026-10-24-10 A3):既有品質標籤去掉燈號與行動尾 + 固定後綴(資料/證據 ≠ 投資行動)。
+_QUALITY_EVIDENCE: dict = {"good": "品質佳", "mid": "品質中等", "weak": "品質偏弱"}
+CORE_UNKNOWN_QUALITY_SUFFIX = "；分類未判定，暫不提供換／留建議"
+
 
 # BL-0441:4D 維度鍵 → 顯示名(與 tab2 健康總覽卡標籤同義)
 _DIM_LABEL = {"coverage": "配息健康", "sharpe": "風險調整報酬", "trend": "走勢",
@@ -142,15 +148,22 @@ def combine_action(health: dict, z_signal: dict) -> dict:
             "reason": "健診維度不足以評等(grade —)—— 先在管理室補歷史淨值,不在薄資料上硬給行動建議(§1)。",
         }
 
+    # ①b 分類未判定(DEC-2026-10-24-10 A3,客戶裁示):品質只當資料/證據,不把品質單軸轉成
+    # 換/留/加碼等任何行動;顏色中性灰(不給綠=安全、紅=行動)。只此情形;真 Core(t='na')、
+    # NAV 不足(分類已知、Z 不可用)照舊走 ②。不改 3×3 表、_QUALITY_ONLY、品質公式與門檻。
+    if z_signal.get("core_status") == "unknown":
+        return {
+            "action": f"⬜ {_QUALITY_EVIDENCE[q]}{CORE_UNKNOWN_QUALITY_SUFFIX}",
+            "color": TRAFFIC_NEUTRAL, "quality": q, "timing": "unknown",
+            "grade": grade, "z": z, "flags": flags,
+            "reason": f"品質桶={q};{z_signal.get('reason') or '分類未判定'}",
+        }
+
     # ② 位階不可算 / Core 不擇時 → 只依品質(誠實退場)
     if t in ("na", "unknown"):
         _lbl, _col = _QUALITY_ONLY[q]
         if t == "na":
             _tail = "·內建配置(平衡/貨幣,不做位階擇時)"
-        elif z_signal.get("core_status") == "unknown":
-            # BL-0441(DEC-2026-10-24-09):分類未判定 → 位階不給任何行動;原「NAV 有效點不足」用字
-            # 對這種情形不實,只換 tail 文字(3×3 表、_QUALITY_ONLY、分支條件皆未動)
-            _tail = "·⬜ 分類未判定，暫不提供位階行動"
         else:
             _tail = "·位階未知(NAV 有效點不足,不硬判時機 §1)"
         return {
