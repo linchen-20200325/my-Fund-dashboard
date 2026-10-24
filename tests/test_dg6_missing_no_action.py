@@ -241,8 +241,16 @@ def test_known_classification_hard_trigger_still_replace():
 
 
 def test_non_dividend_fund_rule_a_not_applicable_keep():
-    """非配息基金(吃本金依既有契約不判)→ 規則 (a) 確定不會觸發 → 其餘判得動即可 🟢。"""
-    fd = {"category": _NONCORE, "moneydj_raw": {"perf": {"1Y": 12.0}},
+    """非配息基金(吃本金依既有契約不判)→ 規則 (a) 確定不會觸發 → 其餘判得動即可 🟢。
+
+    BL-0447:「非配息」須由配息取數總結證實(none_confirmed + none_evidenced,同 v2 B 線);
+    本 fixture 原本只靠「沒有配息資料」推定非配息 —— 那與「配息取數失敗」無法區分。
+    改為帶上確定不配息的總結;缺總結的同一 fixture 見 tests/test_bl0447_dividend_missing.py(⬜)。"""
+    fd = {"category": _NONCORE,
+          "moneydj_raw": {"perf": {"1Y": 12.0},
+                          # BL-0447:確定不配息的取數總結(原本沒有 → 規則 (a) 被當不適用)
+                          "dividends_fetch_outcome": {"outcome": "none_confirmed",
+                                                      "none_evidenced": True}},
           "metrics": {"sharpe": 1.0, "std_1y": 8.0, "max_drawdown": -15.0,
                       "ret_3y_ann_tr": 9.0, "ret_1y_total": 12.0, "ret_1y_window_days": 365}}
     r = check_replacement_recommendation(fd, holding_years=4)
