@@ -30,6 +30,9 @@ def compute_health_kpis(portfolio_funds: list | None,
       n_buy:            🟢 撿便宜雷達（Buy_Zone / Buy_Zone_Deep）
       n_warn:           🔴 留校查看（Sharpe_Warning / Warning / Weak + Core 吃本金）
       n_take:           💰 停利提醒（衛星 Take_Profit）
+                        ⚠️ BL-0440：有已載入基金但 mk_df 為 None／空 → 以上三格為 **None**
+                        （無法判定，不是 0 檔），並帶 `tags_unavailable=True`
+      n_zone_na:        Price_Zone == "N/A"（價位區間無法判定）的檔數，供揭露
 
       # 現金流維度（來自 portfolio_funds.metrics / moneydj_raw）
       n_funds:          組合基金總數（去重）
@@ -59,7 +62,21 @@ def compute_health_kpis(portfolio_funds: list | None,
 
     out["n_funds"] = len(_uniq)
 
+    # BL-0440(§1 Missing ≠ 0):有已載入基金、但標籤表拿不到(呼叫端建表失敗傳 None /
+    # 建出空表)→ 三個標籤格**不是 0 檔,是無法判定**。原本留在預設 0,hero 顯示
+    # 「🟢 撿便宜雷達 0 檔」把「沒算」說成「算過、沒有」。改 None,由 render 端顯示 ⬜。
+    # (本 dict 是 L3 內部回傳值,不是 shared/schemas 契約;consumer 已同批更新。)
+    out["n_zone_na"] = 0
+    if _uniq and (mk_df is None or mk_df.empty):
+        out["n_buy"] = None
+        out["n_warn"] = None
+        out["n_take"] = None
+        out["tags_unavailable"] = True
+
     if mk_df is not None and not mk_df.empty:
+        # BL-0440:價位區間無法判定(Price_Zone == "N/A")的檔數 —— 這些檔**沒有**被
+        # 算進撿便宜／停利,畫面要揭露,不能讓 0 檔看起來像「全部確認沒有」。
+        out["n_zone_na"] = int((mk_df["Price_Zone"] == "N/A").sum())
         out["n_buy"] = int(
             mk_df["Price_Zone"].isin(["Buy_Zone", "Buy_Zone_Deep"]).sum()
         )
@@ -166,12 +183,24 @@ def render_hero_kpi_cards(kpis: dict) -> None:
               help=("含息報酬 ≥ 配息率 = 安全；< 配息率 = 吃本金警示。"
                     f"⬜ {kpis['n_na']} 檔 1Y 資料不足，未納入判定。"))
 
+    # BL-0440:None = 標籤表無法建立 → 「⬜ 無法判定」,不顯示 0 檔;
+    # Price_Zone 無法判定的檔數寫進 help(那幾檔不在 0 / N 的分子分母裡)。
+    _UNK = "⬜ 無法判定"
+    _zone_na = int(kpis.get("n_zone_na") or 0)
+    _zone_na_note = (f"\n\n⬜ {_zone_na} 檔便宜價／布林上軌未取得，價位區間無法判定，未納入計數。"
+                     if _zone_na else "")
+    _tags_na_note = ("\n\n⬜ 本次標籤表建立失敗，三格皆無法判定（不是 0 檔）。"
+                     if kpis.get("tags_unavailable") else "")
+
+    def _cnt(v) -> str:
+        return _UNK if v is None else f"{v} 檔"
+
     c4, c5, c6 = st.columns(3)
-    c4.metric("🟢 撿便宜雷達", f"{kpis['n_buy']} 檔",
-              help="股價跌至 -1σ / -2σ 以下，符合分批進場條件")
-    c5.metric("🔴 留校查看", f"{kpis['n_warn']} 檔",
+    c4.metric("🟢 撿便宜雷達", _cnt(kpis["n_buy"]),
+              help="股價跌至 -1σ / -2σ 以下，符合分批進場條件" + _zone_na_note + _tags_na_note)
+    c5.metric("🔴 留校查看", _cnt(kpis["n_warn"]),
               delta=(f"-{kpis['n_warn']}" if kpis["n_warn"] else None),
               delta_color="inverse",
-              help="夏普<0 / 賺息賠本 / 跌破季線 三類紅黃燈合計（含 Core 吃本金）")
-    c6.metric("💰 停利提醒", f"{kpis['n_take']} 檔",
-              help="衛星標的突破布林上軌，建議部分減碼鎖利")
+              help="夏普<0 / 賺息賠本 / 跌破季線 三類紅黃燈合計（含 Core 吃本金）" + _tags_na_note)
+    c6.metric("💰 停利提醒", _cnt(kpis["n_take"]),
+              help="衛星標的突破布林上軌，建議部分減碼鎖利" + _zone_na_note + _tags_na_note)

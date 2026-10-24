@@ -21,6 +21,7 @@ from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_RED_1, GH_BG
 # 內動態 import);2026-10-23 裁示 1B 後 1Y 含息 / 年化配息率亦各只讀一個 SSOT
 # (`compute_1y_total_return` / `_resolve_adr_with_fallback`),本檔不再自選來源。
 from ui.components.mk_dashboard import tag_price_zone
+from shared.data_quality import BUY_MODE_RANGE_FALLBACK  # BL-0440 j
 
 # TER 對照表已移除（原為 11 筆「類別 → 費率」寫死表，自稱台灣基金市場常見估值）。
 # 它沒有來源、沒有抓取時間、沒有樣本數、也沒有定義，卻與真的抓回來的經理費並排
@@ -47,8 +48,10 @@ _ZONE_LABEL = {
     "Buy_Zone_Deep": "🟢🟢 超跌(-2σ)",
     "Buy_Zone": "🟢 便宜(-1σ)",
     "Take_Profit": "🟠 停利(+2σ)",
-    "Hold": "—",
-    "N/A": "—",
+    # BL-0440:原本 Hold 與 N/A 同為「—」—— 「算過、沒觸發」與「缺料、算不出來」不可分。
+    # 文字承載狀態(顏色不是唯一載體);用字沿用 repo 既有「⬜ 無法判定」。
+    "Hold": "⚪ 未觸發",
+    "N/A": "⬜ 無法判定",
 }
 
 # 超額報酬（pp）分級門檻：打敗同類 ≥ +2 為優等生、落後 ≤ −2 為汰弱候選。
@@ -369,10 +372,21 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
             "原幣本金🧮(本金)": _r2(_amt_local_inv),
             "月配息🧮(本金TWD)": _r2(_mon_div_inv),
             "年配息🧮(本金TWD)": _r2(_ann_div_inv),
-            "買點": _ZONE_LABEL.get(tag_price_zone(f), "—"),
+            "買點": _zone_cell(f),
             "體檢判定": verdict,
         })
     return pd.DataFrame(rows, columns=_DISPLAY_COLS)
+
+
+def _zone_cell(f: dict) -> str:
+    """BL-0440:體檢 PK 表「買點」格。未知 token 一律「⬜ 無法判定」(不說成「—」);
+    便宜/超跌價來自 n<20 區間σ fallback(既有 `buy_mode`)時揭露品質。"""
+    _z = tag_price_zone(f)
+    _lbl = _ZONE_LABEL.get(_z, _ZONE_LABEL["N/A"])
+    _m = f.get("metrics") or {}
+    if _z in ("Buy_Zone", "Buy_Zone_Deep") and _m.get("buy_mode") == BUY_MODE_RANGE_FALLBACK:
+        _lbl += "（⚠️ 區間σ·資料不足）"
+    return _lbl
 
 
 def _style_checkup(df: pd.DataFrame):
@@ -445,7 +459,8 @@ _CHECKUP_COL_CONFIG = {
         help="按 sidebar 實際本金推估的年配息（TWD）；"
              "公式：invest_twd × 年化配息率 / 100"),
     "買點": st.column_config.TextColumn(
-        "買點", help="標準差買點燈號：跌破 -1σ 便宜 / -2σ 超跌 / 破布林上軌停利"),
+        "買點", help="標準差買點燈號：跌破 -1σ 便宜 / -2σ 超跌 / 破布林上軌停利；"
+                    "⚪ 未觸發 = 已判定、不在上述區間；⬜ 無法判定 = 便宜價或布林上軌未取得"),
     "體檢判定": st.column_config.TextColumn(
         "體檢判定", help="與同類型 1Y 含息 PK：🏆優等生 / 🟡普通生 / ⚠️汰弱 / ⬜不評"),
 }

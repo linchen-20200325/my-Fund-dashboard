@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from services.fund_grp_health._utils import _safe_num
+from shared.data_quality import BUY_MODE_RANGE_FALLBACK as _FALLBACK_BUY_MODE
 
 
 def _first_num(*vals):
@@ -79,8 +80,18 @@ def mk_signal_by_code(funds: list, phase: str, score, *,
             _zone = "🔴 ≥賣3(大漲)"
         elif _s1 is not None and _nav >= _s1:
             _zone = "🟡 ≥賣1(小漲)"
-        else:
+        elif _b1 is not None and _s1 is not None:
             _zone = "⚪ 區間內"
+        else:
+            # BL-0440(§1 Missing ≠ 中性):「區間內」是「高於買1 且低於賣1」的宣稱,
+            # 買1 或賣1 任一缺就**證不出來**(買3／賣3 只界定更外側)。原本落 else →
+            # 「⚪ 區間內」,把缺料說成「價位正常」。改走 repo 既有用字「⬜ 無法判定」。
+            _zone = "⬜ 無法判定（買1／賣1未取得）"
+        # BL-0440 j:`calc_metrics` n<20 筆時買賣點改用「區間σ(資料不足)」fallback
+        # (既有 `buy_mode` key);位階照判,但必須揭露品質,不能和正常 σ 通道同樣呈現。
+        if (_m.get("buy_mode") == _FALLBACK_BUY_MODE
+                and _zone != "—" and not _zone.startswith("⬜")):
+            _zone += "（⚠️ 區間σ·資料不足）"
 
         out[_code] = {
             "基金屬性": _asset_class,

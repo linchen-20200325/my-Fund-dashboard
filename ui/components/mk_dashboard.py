@@ -252,9 +252,24 @@ def tag_price_zone(fund: dict) -> str:
             return "Buy_Zone"
         if bb_upper is not None and nav_f > float(bb_upper):
             return "Take_Profit"
+        # BL-0440(§1 Missing ≠ HOLD):"Hold" 是「高於便宜價(-1σ) 且未破布林上軌」的宣稱。
+        # buy1 或 bb_upper 任一缺(None / NaN)就證不出來 —— 原本落 "Hold",下游體檢結論
+        # 會寫「✅ 核心健康，續抱領息」。改回既有 token "N/A"(排序 4、診斷 expander 已解釋
+        # 「N/A → metrics 缺欄」),不新增狀態。buy2 缺不影響:buy2 ≤ buy1,nav > buy1 已涵蓋。
+        if not _is_num(buy1) or not _is_num(bb_upper):
+            return "N/A"
         return "Hold"
     except (TypeError, ValueError):
         return "N/A"
+
+
+def _is_num(v) -> bool:
+    """BL-0440:可比較的有限數值(None / NaN / 非數值 → False)。"""
+    try:
+        _f = float(v)
+    except (TypeError, ValueError):
+        return False
+    return not pd.isna(_f)
 
 
 def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame:
@@ -283,6 +298,13 @@ def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame
         zone = tag_price_zone(f)
         principal = tag_principal_erosion(f)
         bench_lag = tag_benchmark_lag(f, bench_series) if bench_series is not None else "N/A"
+        _verdict = _verdict_text(mk_class, health, momentum, zone,
+                                 principal=principal, bench_lag=bench_lag)
+        # BL-0440 j:便宜價/超跌價(buy1/buy2)來自 n<20 的區間σ fallback 時(既有 `buy_mode`),
+        # 落在 Buy_Zone 系列的結論必須揭露品質,不能和正常 σ 通道同樣呈現。
+        if (zone in ("Buy_Zone", "Buy_Zone_Deep") and _verdict.startswith("🟢")
+                and m.get("buy_mode") == BUY_MODE_RANGE_FALLBACK):
+            _verdict += "（⚠️ 區間σ·資料不足）"
         rows.append({
             "代碼": f.get("code", "—"),
             "標的名稱": f.get("name") or f.get("code") or "—",
@@ -304,8 +326,7 @@ def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame
             "Price_Zone": zone,
             "Principal_Erosion": principal,
             "Benchmark_Lag": bench_lag,
-            "體檢結論": _verdict_text(mk_class, health, momentum, zone,
-                                       principal=principal, bench_lag=bench_lag),
+            "體檢結論": _verdict,
             # 隱藏欄（給篩選用）
             "_std_1y": _safe_float(m.get("std_1y")),
             "_ret_3y": _safe_float(m.get("ret_3y")),
@@ -342,6 +363,7 @@ def _series_tail(series, n: int) -> Optional[list]:
 
 # v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
 from shared.converters import safe_float as _safe_float  # noqa: E402
+from shared.data_quality import BUY_MODE_RANGE_FALLBACK  # noqa: E402  # BL-0440 j
 from shared.colors import GH_BG_PRIMARY, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT  # noqa: E402
 from services.fund_total_return import compute_1y_total_return  # noqa: E402  # v19.345 SSOT 1Y 含息 fallback
 
@@ -373,6 +395,12 @@ def _verdict_text(mk_class: str, health: str, momentum: str, zone: str,
         return "🟢 進入便宜價，可分批進場"
     if zone == "Take_Profit":
         return "🟡 觸及停利區，部分減碼"
+    # BL-0440:價位區間無法判定(buy1 / bb_upper 缺)時,下面兩句「續抱領息」「等待訊號」
+    # 會隱含「已確認不在便宜區／停利區」—— 證不出來。只留健康度本身 + 明講價位未判定。
+    if zone == "N/A" and health == "Healthy" and mk_class == "Core":
+        return "✅ 核心健康（⬜ 價位區間無法判定）"
+    if zone == "N/A" and health == "Healthy" and mk_class == "Satellite":
+        return "✅ 衛星健康（⬜ 價位區間無法判定）"
     if health == "Healthy" and mk_class == "Core":
         return "✅ 核心健康，續抱領息"
     if health == "Healthy" and mk_class == "Satellite":

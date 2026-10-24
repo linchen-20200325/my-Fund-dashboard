@@ -142,7 +142,11 @@ def test_compute_health_kpis_cashflow_na_when_no_1y_data():
 
 
 def test_compute_health_kpis_no_mk_df_only_cashflow():
-    """沒 mk_df 時 標籤全 0、配置 ratio 全 0，但現金流計算仍正常。"""
+    """沒 mk_df 時 標籤**無法判定（None）**、配置 ratio 全 0，但現金流計算仍正常。
+
+    BL-0440（有意識的更正，不是漏刪）：本條原斷言 `n_buy == 0` 等 —— 那正是要修的 bug
+    （標籤表拿不到 → 首頁顯示「0 檔」，把「沒算」說成「算過、沒有」）。改斷言 None。
+    """
     funds = [
         {"code": "F1", "loaded": True,
          "moneydj_raw": {"moneydj_div_yield": 5.0, "perf": {"1Y": 10.0}},
@@ -154,7 +158,8 @@ def test_compute_health_kpis_no_mk_df_only_cashflow():
     out = compute_health_kpis(funds, None)
     assert out["n_funds"] == 1
     assert out["n_cash_ok"] == 1
-    assert out["n_buy"] == 0
-    assert out["n_warn"] == 0
-    assert out["n_take"] == 0
+    assert out["n_buy"] is None
+    assert out["n_warn"] is None
+    assert out["n_take"] is None
+    assert out["tags_unavailable"] is True
     assert out["ratio_label"] == "—"

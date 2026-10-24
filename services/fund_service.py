@@ -22,7 +22,7 @@ import pandas as pd
 import numpy as np
 
 from shared.colors import GRAY_55, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, TRAFFIC_NEUTRAL, WARN_AMBER
-from shared.data_quality import assess_window_coverage  # §1 疑義標註 SSOT
+from shared.data_quality import BUY_MODE_RANGE_FALLBACK, assess_window_coverage  # §1 疑義標註 SSOT
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     TRADING_DAYS_PER_YEAR,
     NEAR_DIVIDEND_WARNING_PCT,
@@ -551,7 +551,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         # 資料不足(<20 筆)→ 退回區間中點 + (年高-年低)/6(仍對稱不重疊),旗標待更新
         sigma_center = round((ref_high + ref_low) / 2, 4)
         sigma_abs    = round((ref_high - ref_low) / 6, 4)
-        buy_mode     = "區間σ(資料不足)"
+        buy_mode     = BUY_MODE_RANGE_FALLBACK   # BL-0440:值不變(="區間σ(資料不足)"),收成具名常數
         print(f"[calc_metrics] 買點模式=區間σ fallback(n<20) 中樞={sigma_center} σ={sigma_abs}")
 
     std_amt = max(sigma_abs, 0.0001)   # 防呆:σ 不可為 0(全平序列)
