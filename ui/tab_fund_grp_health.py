@@ -304,7 +304,10 @@ def render_fund_grp_health_tab() -> None:
         _peer_labels = peer_quartile_labels(rows, window_years=3.0)
         for _pr in rows:
             if _pr.get("ok"):
-                _pr["同類四分位"] = _peer_labels.get(_pr["code"], "無同類可比(未分類)")
+                # BL-0443(8):peer_quartile_labels 對「未分類」與「已分類但無淨值序列」都不回 label;
+                # ~~"無同類可比(未分類)"~~ → 兩種原因並列(有意識的更正,不是漏刪;2026-10-24,
+                # 決策者:客戶授權 BL-0443 安全修)。只改用字,分桶與排名不變。
+                _pr["同類四分位"] = _peer_labels.get(_pr["code"], "無同類可比(未分類或無淨值序列)")
     except Exception as _e_peer:  # noqa: BLE001 — 四分位為加值欄,失敗不擋健診表
         import sys as _sys_peer
         print(f"[grp_health] 同類四分位計算略過:{type(_e_peer).__name__}: {_e_peer}",

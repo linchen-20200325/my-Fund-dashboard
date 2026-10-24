@@ -53,14 +53,16 @@ def test_ladder_constant_series_is_degenerate_not_insufficient():
     from services.ladder235 import ladder_signal
     r = ladder_signal(_daily([10.0] * 300), category=_NON_CORE)
     assert r["status"] == "degenerate"
-    assert r["lamp"] is None and r["deploy_pct"] == 0.0 and r["weeks"] >= 20
+    # BL-0443(4):未給燈的 deploy_pct 由 0.0 改 None(未判定 ≠ 0% 加碼)
+    assert r["lamp"] is None and r["deploy_pct"] is None and r["weeks"] >= 20
 
 
 def test_ladder_short_series_is_insufficient():
     from services.ladder235 import ladder_signal
     r = ladder_signal(_daily([10.0 + 0.1 * i for i in range(30)]), category=_NON_CORE)   # 約 6 週
     assert r["status"] == "insufficient"
-    assert r["lamp"] is None and r["deploy_pct"] == 0.0
+    # BL-0443(4):未給燈的 deploy_pct 由 0.0 改 None(未判定 ≠ 0% 加碼)
+    assert r["lamp"] is None and r["deploy_pct"] is None
 
 
 def test_ladder_none_series_is_insufficient():

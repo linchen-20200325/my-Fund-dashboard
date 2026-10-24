@@ -90,7 +90,10 @@ def _blank(status: str, wk_n: int, vix) -> dict:
     return {"lamp": None, "emoji": "⬜", "color": TRAFFIC_NEUTRAL, "status": status,
             "z_bb": None, "c": None, "ma4": None, "ma13": None, "ma52": None,
             "mu": None, "sigma": None, "vix": vix, "weeks": wk_n,
-            "deploy_pct": 0.0, "deploy_twd": None, "reasons": [], "note": "",
+            # BL-0443(4):~~`"deploy_pct": 0.0`~~ → None(有意識的更正,不是漏刪;2026-10-24,
+            # 決策者:客戶授權 BL-0443 安全修)。未給燈 ≠ 0% 加碼(0.0 是「巡航」燈的正式比例);
+            # 與 core_unknown 分支(BL-0441)一致。唯一 consumer 只在 lamp 非 None 時讀它,顯示不變。
+            "deploy_pct": None, "deploy_twd": None, "reasons": [], "note": "",
             # 只有通過分類閘門(確定非 Core)才會走到 core/unknown 以外的 blank;兩者由呼叫處覆寫
             "core_status": "non_core"}
 

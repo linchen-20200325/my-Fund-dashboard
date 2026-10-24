@@ -1125,6 +1125,13 @@ def render_single_fund_tab() -> None:
                     # 缺值 ≠ 未觸發:未觸發時本卡不出現;缺值時明講無法判定。
                     st.caption("⚡ -2σ 超跌機會卡：⬜ 無法判定（布林下軌或淨值未取得）")
                 elif _m_nav_v <= _boll_latest_low:
+                    # BL-0443(6):布林窗 = min(20, len(s))(同 calc_metrics),5～19 筆時下軌只用這幾筆算,
+                    # 原本卡上未揭露。只補一行品質標註;觸發條件與「小量試單」文字不變(壓行動屬 DG)。
+                    _bb_win_n = min(20, len(s)) if s is not None else None
+                    _bb_win_note = (
+                        f"<div style='color:{WARN_AMBER};font-size:11px;margin-bottom:6px'>"
+                        f"⚠️ 布林窗口僅 {_bb_win_n} 筆淨值(標準為 20 筆)→ 下軌品質較低,僅供參考。</div>"
+                        if isinstance(_bb_win_n, int) and _bb_win_n < 20 else "")
                     st.markdown(
                         f"<div style='background:linear-gradient(135deg,{BG_DARK_GREEN_2},#0d2a0d);"
                         f"border:2px solid {MD_GREEN_A400};border-radius:12px;padding:14px 18px;margin:10px 0'>"
@@ -1139,6 +1146,7 @@ def render_single_fund_tab() -> None:
                         f"<div style='color:{MD_GREEN_A200};font-weight:700;font-size:16px'>"
                         f"{(_boll_latest_low - _m_nav_v) / _boll_latest_low * 100:.2f}%</div></div>"
                         f"</div>"
+                        f"{_bb_win_note}"
                         f"<div style='color:{GRAY_AA};font-size:11px;border-top:1px solid #1a3a1a;padding-top:8px'>"
                         f"策略2：布林下軌突破 = 短期非理性超跌，適合左側交易分批承接。"
                         f"建議：小量試單（部位 ≤20%），並設停損於下軌下方 3%。</div>"

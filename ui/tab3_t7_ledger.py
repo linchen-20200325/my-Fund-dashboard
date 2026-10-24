@@ -202,7 +202,8 @@ _T7_SNAP_COL_CONFIG: dict = {
         help="老師 80/20：衛星部位「未實現損益 %」達門檻自動停利。🔴 強制停利 ≥20%（轉回核心）／"
              "💰 分批停利 ≥15%／續抱 <15%。核心部位長期領息不判（—）；配置級別未設定 → "
              "「⬜ 未設定」（不當衛星、不判）；衛星但未填平均成本 → "
-             "「⬜ 未填成本」（誠實不當 0%）"),
+             "「⬜ 未填成本」（誠實不當 0%）；無法算報酬率時同樣留白並寫原因："
+             "「⬜ 無持倉」／「⬜ 無今日報價」／「⬜ 成本基礎 ≤0,無法算報酬率」（BL-0443）"),
 }
 
 
@@ -321,6 +322,8 @@ def render_t7_section() -> None:
     # 不清會累積上一輪的殘留 —— 使用者把匯率補好之後警告還掛著,
     # 就會學會忽略它,那個警告等於白做(§1 旗標必須反映當下真實狀態)。
     st.session_state["_t7_fx_fabricated"] = {}
+    # BL-0443(3):同理,每輪重設「本次用了帳本平均買入匯率冒充今日匯率」的檔
+    st.session_state["_t7_fx_ledger_avg"] = {}
 
     # v18.140 同 render_portfolio_tab — helper 改正規 import，徹底脫離 sys.modules['__main__'] hack
     from ui.helpers.oauth_state import (
@@ -534,14 +537,25 @@ def render_t7_section() -> None:
                     _fx = float(_fund.get("fx_rate", 0) or 0) or 0.0
                 # v18.26: 最後一道 FX fallback — 用 ledger 的平均買入匯率
                 #         （否則最新 FX 抓不到時市值整個歸 0 → -100% 報酬假象）
+                # BL-0443(3):這也是「填補」(拿當初買入匯率冒充今天匯率),原本既無 log 也無旗標,
+                #   畫面「最新 FX」欄與真實抓到的匯率同形。比照下方 D3 保底匯率:行為不變,
+                #   補 log ＋ 記進 `_t7_fx_ledger_avg`,由帳本面板列出(§1 填補須帶旗標)。
                 if _fx <= 0:
                     try:
                         _pk_f = fund_pk_str(_fund)
                         _l_fb = st.session_state.t7_ledgers.get(_pk_f)
                         if _l_fb is not None:
                             _fx = float(getattr(_l_fb.position, "fx_avg", 0) or 0)
-                    except Exception:
-                        pass   # smoke-allow-pass — fallback 靜默：留 _fx=0 給上層 if 守
+                            if _fx > 0:
+                                st.session_state.setdefault("_t7_fx_ledger_avg", {})[
+                                    f"{_code or '?'}／{_ccy}"] = _fx
+                                import sys as _sys_fxavg
+                                print(f"[t7/fx] {_code or '?'} {_ccy}TWD 即時匯率與 fund.fx_rate 皆無 → "
+                                      f"改用帳本平均買入匯率 {_fx}(非今日匯率)", file=_sys_fxavg.stderr)
+                    except Exception as _e_fxavg:  # noqa: BLE001 — 留 _fx=0 給上層 if 守
+                        import sys as _sys_fxavg2
+                        print(f"[t7/fx] {_code or '?'} 讀帳本平均匯率失敗:"
+                              f"{type(_e_fxavg).__name__}: {_e_fxavg}", file=_sys_fxavg2.stderr)
                 # v18.76: 幣別保底匯率（YF 被擋 + 無 ledger 歷史時的最終救援）
                 #         讓自動估算「不再因 FX 抓不到全部 skip」；
                 #         準確匯率使用者可手動改 fx_at_buy。
@@ -2902,6 +2916,19 @@ def render_t7_section() -> None:
                             lst="、".join(f"`{_k}` ≈ {_v}" for _k, _v in _fx_fab.items()),
                         )
                     )
+                # BL-0443(3):帳本平均買入匯率 fallback 也要講出來(與上一則保底匯率分開:
+                # 這是你自己當初的成交匯率,不是寫死的數字,但仍**不是今天的匯率**)。
+                _fx_avg_fb = st.session_state.get("_t7_fx_ledger_avg") or {}
+                if _fx_avg_fb:
+                    st.warning(
+                        "⚠️ **下面有 {n} 檔的台幣金額是用「當初的平均買入匯率」算的，不是今天的匯率**：{lst}\n\n"
+                        "這幾檔今天的匯率抓不到，系統改用帳本裡的平均買入匯率頂著 —— "
+                        "表上「最新 FX」欄顯示的就是這個值；**市值、未實現損益、報酬率、衛星停利燈"
+                        "都不含這段期間的匯差**。".format(
+                            n=len(_fx_avg_fb),
+                            lst="、".join(f"`{_k}` ≈ {_v}" for _k, _v in _fx_avg_fb.items()),
+                        )
+                    )
                 # ── 方案比較區（v18.4 新增，僅在有 scenarios 時顯示）─────────
                 if st.session_state.t7_scenarios:
                     # 原 `expanded=True` expander → 拿掉殼（原則 1：永遠開著的摺疊層
@@ -3044,7 +3071,10 @@ def render_t7_section() -> None:
                     # 二態把「未設定」當衛星，未設定的部位會亮停利燈。只有明確衛星才判燈；
                     # 未設定印「⬜ 未設定」。
 
-                    def _sat_stop_label(fund, pct):
+                    # BL-0443(3):pct=None 的原因不只「未填成本」—— 無持倉、無今日報價、成本基礎 ≤0
+                    # 都會走到 no_cost。~~一律印「⬜ 未填成本」~~ → 由呼叫端帶實際原因(有意識的更正,
+                    # 不是漏刪;2026-10-24,決策者:客戶授權 BL-0443 安全修)。判燈邏輯不變。
+                    def _sat_stop_label(fund, pct, missing_why="未填成本"):
                         if _resolve_tier(fund) is None:
                             return "⬜ 未設定"
                         _r = _sat_sg(pct, is_satellite=(_resolve_tier(fund) == "satellite"))
@@ -3052,7 +3082,7 @@ def render_t7_section() -> None:
                         if _stt in ("force", "batch"):
                             return f"{_r['emoji']} {_r['lamp']}"
                         if _stt == "no_cost":
-                            return "⬜ 未填成本"
+                            return f"⬜ {missing_why}"
                         if _stt == "hold":
                             return "續抱"
                         return "—"   # core:核心長期領息不停利
@@ -3085,7 +3115,7 @@ def render_t7_section() -> None:
                                 "預估月配息 (TWD)": "—",
                                 # v18.172：與 normal branch 對齊欄位
                                 "預估月配股 (TWD)": "—",
-                                "衛星停利": _sat_stop_label(_f, None),
+                                "衛星停利": _sat_stop_label(_f, None, "無持倉"),
                             })
                             continue
                         # ── 稽核 A8（2026-08-14）：抓不到報價 ≠ 市值 0 ──────────────
@@ -3119,13 +3149,16 @@ def render_t7_section() -> None:
                                 "配息率": f"{_dy:.2f}%" if _dy else "—",
                                 "預估月配息 (TWD)": "—",
                                 "預估月配股 (TWD)": "—",
-                                "衛星停利": _sat_stop_label(_f, None),
+                                "衛星停利": _sat_stop_label(_f, None, "無今日報價"),
                             })
                             continue
                         _v = _l.position.value_twd(_nav, _fx)
                         _cost = _l.position.net_investment_twd
                         _pl_twd = _v - _cost
-                        _pl_pct = (_pl_twd / _cost * 100.0) if _cost > 0 else 0.0
+                        # BL-0443(3):~~`if _cost > 0 else 0.0`~~ → None(有意識的更正,不是漏刪;
+                        # 2026-10-24,決策者:客戶授權 BL-0443 安全修)。成本基礎 ≤0 時報酬率算不出來,
+                        # 舊碼寫 0.0 → 衛星停利燈判成「續抱」(Missing ≠ HOLD)。改 None → 「—」＋ ⬜。
+                        _pl_pct = (_pl_twd / _cost * 100.0) if _cost > 0 else None
                         _v_total_twd += _v
                         _cost_total_twd += _cost
                         _ann = _v * _dy / 100.0
@@ -3137,7 +3170,7 @@ def render_t7_section() -> None:
                         _cash_total_twd += _ann_cash
                         _reinvest_total_twd += _ann_reinv
                         _pl_str = fmt_twd(_pl_twd, sign=True)
-                        _pl_pct_str = f"{_pl_pct:+.2f}%"
+                        _pl_pct_str = f"{_pl_pct:+.2f}%" if _pl_pct is not None else "—"
                         # v18.184：累積已配息率 = (平均買入淨值 − 含息成本)/平均買入淨值，
                         # 代表成本已透過配息回收幾%（含息成本 < 淨值成本時才有意義）。
                         _cu0 = _l.position.cost_unit
@@ -3170,7 +3203,7 @@ def render_t7_section() -> None:
                                 if (_ann_reinv > 0 and _nav and _fx) else
                                 fmt_twd(_ann_reinv / 12)
                             ),
-                            "衛星停利": _sat_stop_label(_f, _pl_pct),
+                            "衛星停利": _sat_stop_label(_f, _pl_pct, "成本基礎 ≤0,無法算報酬率"),
                         })
                     if _snap_rows:
                         # 紅虧綠賺：用 pandas Styler 著色（純 CSS 不依賴 matplotlib）

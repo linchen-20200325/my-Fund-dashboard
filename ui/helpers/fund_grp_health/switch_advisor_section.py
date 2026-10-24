@@ -669,12 +669,21 @@ def _render_advice(res: dict, macro, fxlbl) -> None:
     import pandas as pd
     st.warning(res["caveat"])                       # §1 caveat 先於建議
     _fx_zh = {"strong_twd": "台幣強", "neutral": "匯率中性", "weak_twd": "台幣弱", None: "未知"}
-    st.caption(f"總經 composite:{macro if macro is not None else '未取得(先跑總經分頁→成長型判斷才啟用)'}"
+    # BL-0443(7):~~「未取得(先跑總經分頁→成長型判斷才啟用)」~~ → 不實(有意識的更正,不是漏刪;
+    # 2026-10-24,決策者:客戶授權 BL-0443 安全修)。`_macro_composite()` 讀的
+    # `session_state["composite_score"]` 唯一寫入點在 `ui/tab1_macro.py::render_macro_tab`,
+    # 該函式無 production 呼叫點(App 總經頁走 page_01_macro)→ 跑總經分頁也不會啟用。只改文字,不接線(屬 DG)。
+    st.caption(f"總經 composite:{macro if macro is not None else '未取得(本頁目前沒有總經 composite 來源 → 成長型賣出判斷未啟用)'}"
                f"　·　匯率位階:{_fx_zh.get(fxlbl, '未知')}")
 
     def _under_zh(a):
         u = a.get("underperformance") or {}
         if not u.get("is_underperforming"):
+            # BL-0443(1):紅燈判不出來(redlight=None)≠ 確認沒有絕對虧損 → 揭露,不寫成「—」。
+            # 只改顯示;表現差判法與換入建議不變。
+            if u and u.get("redlight") is None:
+                _ex0 = u.get("excess_pct")
+                return "⬜ 絕對虧損未判定" + (f"(vs 大盤 {_ex0:+.1f}pp)" if _ex0 is not None else "")
             return "—"
         _lbl = "・".join(u.get("reasons") or []) or "表現差"
         _ex = u.get("excess_pct")
@@ -722,7 +731,9 @@ def _render_advice(res: dict, macro, fxlbl) -> None:
                 help="這檔是不是表現差(兩訊號任一成立):**跑輸大盤** = 近一年落後對應大盤逾 5 個百分點;"
                      "**絕對虧損** = 近一年含息報酬與 Sharpe 同時為負(實際在虧)。"
                      "表現差時,右邊「換入標的」會從你的選股池挑替代標的;"
-                     "但該檔必要資料不足(建議為 ⬜ 資料不足)時不提供換入建議。「—」= 沒有表現差 / 資料不足。"),
+                     "但該檔必要資料不足(建議為 ⬜ 資料不足)時不提供換入建議。「—」= 沒有表現差 / 資料不足。"
+                     "「⬜ 絕對虧損未判定」= 紅燈(絕對虧損)這一半的計算失敗或未評估,"
+                     "不代表確認沒有虧損;此時只剩跑輸大盤那一半能觸發。"),
             "換入標的": _cc.TextColumn("換入標的", width="medium",
                 help="從你的選股池裡挑出的替換標的,括號裡是它現在離高點多遠(愈負 = 跌愈深)。"
                      "標「⚠️跨幣別」= 它與被換出的持倉計價幣別不同,換股會被動吃到匯差(仍保留,由你決定)。"

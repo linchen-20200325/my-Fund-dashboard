@@ -343,6 +343,8 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 > ✅ **DG-6 已裁示（2026-10-24，`docs/DECISIONS.md` `DEC-2026-10-24-12`；決策者：客戶）**：`DEC-2026-10-24-10` 永久原則（Missing／Unknown／INSUFFICIENT 不得經另一單軸訊號重新產生投資行動）擴及下表 **#1、#5 兩條**，隨該裁示實作 PR 落地（測試 `tests/test_dg6_missing_no_action.py`）；其餘 #2～#4、#6～#20 **仍未核准**，照舊只是盤點結果。下表證據欄為盤點當時（main `11b28f8d`）的快照，未改寫。
 >
 > 📌 **2026-10-24 BL-0447 補記（狀態更新，不是漏刪；決策者：AI 總管，依 `DEC-2026-10-24-12` 原則收窄，非新裁示）**：#5 規則 (a)「無配息資料 ⇒ 吃本金不適用」改為只在 `dividends_fetch_outcome` 為 `none_confirmed`＋`none_evidenced` 時成立（同 v2 B 線），其餘判不動 → ⬜ 無法判定；測試 `tests/test_bl0447_dividend_missing.py`（`docs/BACKLOG.md` BL-0447）。
+>
+> 📌 **2026-10-24 BL-0443 補記（狀態更新，不是漏刪；決策者：客戶授權執行 BL-0443 安全修）**：§10.7.3 第 1 問清單已處置 —— #4（部分處置：`assess_underperformance` 不再把 None 重算成 False、週報 except 補 log；呼叫端資料缺 GRAY→False 未處置，另登 BL-0450）、#13（成本 ≤0 → ⬜ 不再「續抱」、缺值原因分開標、帳本平均匯率 fallback 揭露）、#14（`deploy_pct` 0.0 → None）、#6（健診倉位欄區間σ 標註）、#7（−2σ 卡窗口不足揭露）、#2 caption（讀碼確認原 caption 不實：`composite_score` 唯一寫入點 `render_macro_tab` 無 production 呼叫點；只改文字，未接線）、`peer_rank` 用字，皆只改呈現／揭露，行動與判法未動；**#8 `tag_health_check` 未修**（改 N/A 會改變 `_verdict_text` 行動字樣，屬 DG-2，移至 `docs/BACKLOG.md` BL-0448）。測試 `tests/test_bl0443_safe_fixes.py`。下表證據欄照舊為盤點快照。
 
 #### §10.7.1 總表（production 可達的行動路徑）
 

@@ -149,6 +149,13 @@ def process_one_fund(
         # v19.148:老師 1Y SSOT 吃本金檢查(跨表 verdict 一致)。
         _metrics = fd.get("metrics") or {}
         _mk_pos = (_metrics.get("pos_label") or "—").strip() or "—"
+        # BL-0443(5):`calc_metrics` 近 1 年淨值 <20 筆時買賣點走「區間σ(資料不足)」fallback
+        # (既有 `buy_mode` key)—— Tab2／Tab3 已揭露,健診「倉位」欄原本未揭露。只補標註,
+        # 倉位文字與投／出 % 不變(拿掉行動屬 DG-1／DG-2)。標註字樣同 fund_grp_health/signals.py。
+        from shared.data_quality import BUY_MODE_RANGE_FALLBACK as _BUY_MODE_FB  # noqa: PLC0415
+        if (_metrics.get("buy_mode") == _BUY_MODE_FB
+                and _mk_pos != "—" and not _mk_pos.startswith("⬜")):
+            _mk_pos += "（⚠️ 區間σ·資料不足）"
         _mk_safety = None
         _mk_safety_err = ""
         try:
