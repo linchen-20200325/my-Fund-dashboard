@@ -196,7 +196,7 @@ def render_hero_kpi_cards(kpis: dict) -> None:
     # Price_Zone 無法判定的檔數寫進 help(那幾檔不在 0 / N 的分子分母裡)。
     _UNK = "⬜ 無法判定"
     _zone_na = int(kpis.get("n_zone_na") or 0)
-    _zone_na_note = (f"\n\n⬜ {_zone_na} 檔便宜價／布林上軌未取得，價位區間無法判定，未納入計數。"
+    _zone_na_note = (f"\n\n⬜ {_zone_na} 檔淨值／便宜價／布林上軌未取得，價位區間無法判定，未納入計數。"
                      if _zone_na else "")
     _tags_na_note = ("\n\n⬜ 本次標籤表建立失敗，三格皆無法判定（不是 0 檔）。"
                      if kpis.get("tags_unavailable") else "")

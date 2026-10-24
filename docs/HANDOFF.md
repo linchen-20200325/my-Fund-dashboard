@@ -36,7 +36,7 @@
 
 > **⭐ 2026-10-24（第十四次）現況（以本框為準；下方第十三次框起皆為歷史快照）**（BL-0440 部分完成；狀態更新，不是漏刪：第十三次框整段保留於下方）
 > - **最新 main**：`122dc274`（#1037 合併）。
-> - **Open PR**：#1038（分支 `ccr-464564b4-9qluki`；`d63ef20b`＋`8cd068c2`＋本 docs commit；BL-0440 Missing 誠實揭露、Tab2 −2σ 卡改讀 SSOT、fallback 品質揭露）。撰寫時待合併，**合併後 SHA 待回填**。
+> - **Open PR**：#1038（分支 `ccr-464564b4-9qluki`；`d63ef20b`＋`8cd068c2`＋本 docs commit；BL-0440 Missing 誠實揭露、Tab2 −2σ 卡改讀 SSOT、fallback 品質揭露）。授權出處：客戶 2026-10-24 裁示「選 (a) BL-0440」，經總管轉達（`DEC-2026-10-24-03`；範圍限 Missing 誠實呈現／UI 平行計算收斂／fallback 品質揭露，依 `DEC-2026-10-24-02`）。撰寫時待合併，**合併後 SHA 待回填**。
 > - **BL-0440 剩餘未修**（`docs/BACKLOG.md` BL-0440 列尾）：Tab1 紅綠燈 dead code；UI BB／MA20／MA60 圖線重算；tab3 兩處 MA60 白算；`ladder235` σ=0 誤標「週資料不足」；Tab3 迷你卡雙確認徽章 bb 缺時靜默；既有測試 `"買1" in` 斷言變弱。
 > - **下一個交接點**：**等客戶裁示**。推薦下一步：DG-2 `combine_action` 唯讀確認（Opus 5.5 Medium）；DG-1～DG-3 實作待正式核准（Opus 5.5 High）。
 
