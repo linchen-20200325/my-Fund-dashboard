@@ -384,7 +384,8 @@ def _zone_cell(f: dict) -> str:
     _z = tag_price_zone(f)
     _lbl = _ZONE_LABEL.get(_z, _ZONE_LABEL["N/A"])
     _m = f.get("metrics") or {}
-    if _z in ("Buy_Zone", "Buy_Zone_Deep") and _m.get("buy_mode") == BUY_MODE_RANGE_FALLBACK:
+    # BL-0440 N4:任何可判定區間(含 ⚪ 未觸發／停利)由 fallback 判出 → 一律加註
+    if _z != "N/A" and _z in _ZONE_LABEL and _m.get("buy_mode") == BUY_MODE_RANGE_FALLBACK:
         _lbl += "（⚠️ 區間σ·資料不足）"
     return _lbl
 

@@ -287,3 +287,93 @@ def test_fallback_constant_is_the_value_calc_metrics_writes():
     assert FB == "區間σ(資料不足)"
     t = _src("services/fund_service.py")
     assert "buy_mode     = BUY_MODE_RANGE_FALLBACK" in t
+
+
+# ════════════════════════════════════════════════════════════
+# 稽核回修 N1 / N2 / N4
+# ════════════════════════════════════════════════════════════
+def test_n1_nav_nan_is_na_not_hold():
+    base = {"buy1": 95.0, "buy2": 90.0, "bb_upper": 110.0}
+    assert _pz({**base, "nav": float("nan")}) == "N/A"
+    assert _pz({**base, "nav": None}) == "N/A"
+    assert _pz({**base, "nav": 100.0}) == "Hold"          # 正常值不受影響
+
+
+def _mk(zones, cls="Satellite"):
+    return pd.DataFrame([{"MK_Class": cls, "Price_Zone": z, "Health_Check": "Healthy",
+                          "Principal_Erosion": "OK"} for z in zones])
+
+
+def test_n2_all_zone_na_is_undecidable_not_zero(monkeypatch):
+    from ui.helpers.portfolio.health import compute_health_kpis
+    k = compute_health_kpis(_funds(), _mk(["N/A", "N/A"]))
+    assert k["n_buy"] is None and k["n_take"] is None and k["zone_all_na"] is True
+    assert k["n_warn"] == 0          # 留校查看不由價位區間推得
+    rows = _render(k, monkeypatch)
+    assert rows["🟢 撿便宜雷達"][1] == "⬜ 無法判定"
+    assert rows["💰 停利提醒"][1] == "⬜ 無法判定"
+    assert "2 檔" in rows["🟢 撿便宜雷達"][2]          # help 保留 N/A 檔數
+
+
+def test_n2_partial_zone_na_keeps_counts_with_disclosure(monkeypatch):
+    from ui.helpers.portfolio.health import compute_health_kpis
+    k = compute_health_kpis(_funds(), _mk(["N/A", "Take_Profit"]))
+    assert k["n_buy"] == 0 and k["n_take"] == 1 and not k.get("zone_all_na")
+    rows = _render(k, monkeypatch)
+    assert rows["🟢 撿便宜雷達"][1] == "0 檔" and "1 檔" in rows["🟢 撿便宜雷達"][2]
+
+
+@pytest.mark.parametrize("nav,expect", [
+    (100.0, "⚪ 未觸發"), (111.0, "🟠 停利(+2σ)"), (94.0, "🟢 便宜(-1σ)")])
+def test_n4_checkup_fallback_note_on_every_decidable_zone(nav, expect):
+    from ui.helpers.fund.checkup import _zone_cell
+    m = {"nav": nav, "buy1": 95.0, "buy2": 90.0, "bb_upper": 110.0}
+    assert _zone_cell({"metrics": m}) == expect                     # 正常模式不加註
+    fb = _zone_cell({"metrics": {**m, "buy_mode": FB}})
+    assert fb.startswith(expect) and "區間σ·資料不足" in fb
+    # Missing 不加 fallback 註、維持無法判定
+    na = _zone_cell({"metrics": {"nav": nav, "buy_mode": FB}})
+    assert na == "⬜ 無法判定"
+
+
+@pytest.mark.parametrize("nav,cls,prefix", [
+    (100.0, "Core", "✅ 核心健康，續抱領息"),          # Hold
+    (100.0, "Satellite", "✅ 衛星健康，等待訊號"),      # Hold
+    (111.0, "Satellite", "🟡 觸及停利區"),               # Take_Profit
+    (94.0, "Core", "🟢 進入便宜價"),                      # Buy_Zone
+])
+def test_n4_verdict_fallback_note_uniform(monkeypatch, nav, cls, prefix):
+    import ui.components.mk_dashboard as M
+    monkeypatch.setattr(M, "tag_mk_class", lambda f: cls)
+    monkeypatch.setattr(M, "tag_health_check", lambda f: "Healthy")
+    monkeypatch.setattr(M, "tag_momentum", lambda f: "OK")
+    monkeypatch.setattr(M, "tag_principal_erosion", lambda f: "OK")
+    monkeypatch.setattr(M, "compute_1y_total_return", lambda f: (None, None))
+    import services.fund_screening as FS
+    monkeypatch.setattr(FS, "evaluate_333_for_fund", lambda f: {
+        k: None for k in ("years", "ann_pct", "basis", "years_ok", "return_ok", "passed")})
+    m = {"nav": nav, "buy1": 95.0, "buy2": 90.0, "bb_upper": 110.0}
+    normal = M.build_mk_dataframe([{"code": "X", "loaded": True, "metrics": m}])["體檢結論"].iloc[0]
+    assert normal.startswith(prefix) and "資料不足" not in normal
+    fb = M.build_mk_dataframe([{"code": "X", "loaded": True,
+                                "metrics": {**m, "buy_mode": FB}}])["體檢結論"].iloc[0]
+    assert fb.startswith(prefix) and fb.endswith("（⚠️ 區間σ·資料不足）")
+
+
+def test_n4_verdict_red_health_and_missing_zone_get_no_fallback_note(monkeypatch):
+    import ui.components.mk_dashboard as M
+    monkeypatch.setattr(M, "tag_mk_class", lambda f: "Core")
+    monkeypatch.setattr(M, "tag_momentum", lambda f: "OK")
+    monkeypatch.setattr(M, "tag_principal_erosion", lambda f: "OK")
+    monkeypatch.setattr(M, "compute_1y_total_return", lambda f: (None, None))
+    import services.fund_screening as FS
+    monkeypatch.setattr(FS, "evaluate_333_for_fund", lambda f: {
+        k: None for k in ("years", "ann_pct", "basis", "years_ok", "return_ok", "passed")})
+    monkeypatch.setattr(M, "tag_health_check", lambda f: "Sharpe_Warning")
+    m = {"nav": 100.0, "buy1": 95.0, "bb_upper": 110.0, "buy_mode": FB}
+    v = M.build_mk_dataframe([{"code": "X", "loaded": True, "metrics": m}])["體檢結論"].iloc[0]
+    assert v.startswith("🔴") and "資料不足" not in v
+    monkeypatch.setattr(M, "tag_health_check", lambda f: "Healthy")
+    v2 = M.build_mk_dataframe([{"code": "X", "loaded": True,
+                                "metrics": {"nav": 100.0, "buy_mode": FB}}])["體檢結論"].iloc[0]
+    assert "無法判定" in v2 and "區間σ" not in v2

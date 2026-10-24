@@ -242,7 +242,7 @@ def tag_price_zone(fund: dict) -> str:
     buy2 = m.get("buy2")
     bb_upper = m.get("bb_upper")
 
-    if nav is None:
+    if not _is_num(nav):   # BL-0440 N1:None 與 NaN 都是缺(NaN 比較恆 False 會落 Hold)
         return "N/A"
     try:
         nav_f = float(nav)
@@ -302,7 +302,10 @@ def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame
                                  principal=principal, bench_lag=bench_lag)
         # BL-0440 j:便宜價/超跌價(buy1/buy2)來自 n<20 的區間σ fallback 時(既有 `buy_mode`),
         # 落在 Buy_Zone 系列的結論必須揭露品質,不能和正常 σ 通道同樣呈現。
-        if (zone in ("Buy_Zone", "Buy_Zone_Deep") and _verdict.startswith("🟢")
+        # BL-0440 N4:統一規則 —— 凡是由 fallback 買賣點判出的可判定區間(含 Hold／Take_Profit)
+        # 推得的結論(🟢 買區、🟡 停利、✅ 健康隱含 Hold)一律加註;紅黃燈健康度結論不是由區間推得,不加。
+        if (zone in _DECIDABLE_ZONES
+                and (_verdict.startswith(("🟢", "✅")) or _verdict == _VERDICT_TAKE_PROFIT)
                 and m.get("buy_mode") == BUY_MODE_RANGE_FALLBACK):
             _verdict += "（⚠️ 區間σ·資料不足）"
         rows.append({
@@ -369,6 +372,11 @@ from services.fund_total_return import compute_1y_total_return  # noqa: E402  # 
 
 
 
+_VERDICT_TAKE_PROFIT = "🟡 觸及停利區，部分減碼"
+#: BL-0440 N4:可判定的 Price_Zone(N/A 以外)
+_DECIDABLE_ZONES = ("Buy_Zone_Deep", "Buy_Zone", "Take_Profit", "Hold")
+
+
 def _verdict_text(mk_class: str, health: str, momentum: str, zone: str,
                   principal: str = "N/A", bench_lag: str = "N/A") -> str:
     """白話文系統建議（僅一句，避免雜訊）。優先序：紅燈 > 黃燈 > 綠燈 > 健康。
@@ -394,7 +402,7 @@ def _verdict_text(mk_class: str, health: str, momentum: str, zone: str,
     if zone == "Buy_Zone":
         return "🟢 進入便宜價，可分批進場"
     if zone == "Take_Profit":
-        return "🟡 觸及停利區，部分減碼"
+        return _VERDICT_TAKE_PROFIT
     # BL-0440:價位區間無法判定(buy1 / bb_upper 缺)時,下面兩句「續抱領息」「等待訊號」
     # 會隱含「已確認不在便宜區／停利區」—— 證不出來。只留健康度本身 + 明講價位未判定。
     if zone == "N/A" and health == "Healthy" and mk_class == "Core":

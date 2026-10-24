@@ -33,6 +33,8 @@ def compute_health_kpis(portfolio_funds: list | None,
                         ⚠️ BL-0440：有已載入基金但 mk_df 為 None／空 → 以上三格為 **None**
                         （無法判定，不是 0 檔），並帶 `tags_unavailable=True`
       n_zone_na:        Price_Zone == "N/A"（價位區間無法判定）的檔數，供揭露
+                        ⚠️ BL-0440 N2：mk_df 每一列都是 N/A → n_buy / n_take 為 None
+                        （`zone_all_na=True`）；部分 N/A 仍給計數、help 揭露
 
       # 現金流維度（來自 portfolio_funds.metrics / moneydj_raw）
       n_funds:          組合基金總數（去重）
@@ -93,6 +95,13 @@ def compute_health_kpis(portfolio_funds: list | None,
             ((mk_df["Price_Zone"] == "Take_Profit") &
              (mk_df["MK_Class"] == "Satellite")).sum()
         )
+        # BL-0440 N2:**每一檔**價位區間都無法判定 → 撿便宜／停利兩格沒有任何一檔被判過,
+        # 「0 檔」是假的確認 → None(⬜ 無法判定)。部分 N/A 仍給計數 + help 揭露。
+        # (留校查看看 Health_Check,不由價位區間推得,不受影響。)
+        if out["n_zone_na"] == len(mk_df):
+            out["n_buy"] = None
+            out["n_take"] = None
+            out["zone_all_na"] = True
         n_core = int((mk_df["MK_Class"] == "Core").sum())
         n_sat = int((mk_df["MK_Class"] == "Satellite").sum())
         n_classed = n_core + n_sat
