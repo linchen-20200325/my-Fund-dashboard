@@ -1849,11 +1849,17 @@ def render_portfolio_tab() -> None:
                                     # 雙確認：σ 觸發 + 布林同向
                                     _double_buy  = (_mi_b1 and _mi_nav <= _mi_b1) and (_mi_bbd and _mi_nav <= _mi_bbd)
                                     _double_sell = (_mi_s1 and _mi_nav >= _mi_s1) and (_mi_bbu and _mi_nav >= _mi_bbu)
+                                    _mi_bb_missing = any(pd.isna(_bbv) for _bbv in (_mi_bbd, _mi_bbu))
                                     _badge = ""
                                     if _double_buy:
                                         _badge = f"<span style='background:{BG_DARK_GREEN_3};color:{MD_GREEN_A400};border:1px solid {MD_GREEN_A400};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🟢🟢 σ+布林 雙確認買</span>"
                                     elif _double_sell:
                                         _badge = f"<span style='background:{BG_DARK_RED_3};color:{MATERIAL_RED};border:1px solid {MATERIAL_RED};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🔔🔔 σ+布林 雙確認賣</span>"
+                                    elif _mi_bb_missing:
+                                        # BL-0440(§1 Missing ≠ 未觸發):布林上/下軌缺(None/NaN)時,
+                                        # 原本徽章與「未觸發」同樣靜默不顯示。改既有 ⬜ 用字明示;
+                                        # 觸發條件與已觸發徽章不變,不新增規則。
+                                        _badge = f"<span style='background:{CHIP_BG_NEAR_BLACK};color:{GRAY_66};border:1px solid {GRAY_66};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>⬜ 雙確認無法判定（布林資料未取得）</span>"
                                     # 6 個訊號方塊（從深買到深賣）
                                     _cells = ""
                                     for _v, _lbl, _is_buy in [

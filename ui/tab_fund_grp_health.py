@@ -325,8 +325,12 @@ def render_fund_grp_health_tab() -> None:
             _cat235 = (_fr235.get("moneydj_raw") or {}).get("category") or _fr235.get("category")
             _lad = ladder_signal(_ser235, vix=_vix_now, category=_cat235)
             if _lad.get("lamp") is None:
+                # BL-0440(§1):status="degenerate"(週資料足夠但 20 週 σ=0)原本落到 fallback
+                # 「⬜ 週資料不足」,把「波動為 0」誤說成「資料不夠」。改讀既有 status 分開標示;
+                # 不改 σ 判斷式、門檻、燈號或 deploy_pct。
                 _pr["加碼水位"] = {"core": "⚪ 不適用(內建配置)",
-                                   "lowvol": "⬜ 低波不判"}.get(_lad.get("status"), "⬜ 週資料不足")
+                                   "lowvol": "⬜ 低波不判",
+                                   "degenerate": "⬜ 波動為 0，無法判定"}.get(_lad.get("status"), "⬜ 週資料不足")
             else:
                 _pct = int(round(_lad["deploy_pct"] * 100))
                 _pct_txt = f"(+{_pct}%)" if _pct > 0 else ""

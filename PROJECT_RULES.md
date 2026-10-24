@@ -331,6 +331,26 @@
 
 **既有錨點**：`CLAUDE.md` v2 內部自決原則「最小改動」（§-1.5.1a 對照表第 9 列，約 :907 起）、§8.4 步驟 4「禁止自作主張大重構」（約 :2779）；交接本 2026-10-08〈四、防程式碼膨脹〉六條 Gate（約 :4431-4443）、〈客戶 2026-10-15 指示〉第 7 點（約 :4580）；`PROCESS.md` §6「一次一單元」（約 :205）。
 
+### 9.1 長期規則：Minimum Sufficient Work（避免工作越做越長）（客戶 2026-10-24 裁示，`DEC-2026-10-24-04`，永久）
+
+> **出處**：客戶 2026-10-24 對話指示，經總管轉達；repo 內無逐字存檔。以下為總管轉達要點，照寫不增刪規則。
+> **位階**：同第 3 節 3.1（受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄，第 0.1 節）；牴觸時以 `CLAUDE.md` 為準。
+
+**目的**：避免專案進行越久，每個小修改都變成 High Effort、全庫測試、多人稽核、重複讀檔與長篇回報。
+
+1. 每批只處理已指定範圍；旁支問題只登記 `docs/BACKLOG.md`，不順手擴做。
+2. Low／Medium 小批次優先 affected／targeted tests；只有公式、投資語意、資料契約、跨模組 SSOT、L3 data layer 等高風險改動才做完整 regression／full QA。
+3. 純文件／機械性／小型低風險工作不強制完整獨立稽核；Medium 做必要的 delta audit；High 才做完整獨立稽核。
+4. 已經驗證且未改動的區域，不重複全文讀取、重跑或重驗。
+5. GitHub Verification Gate（第 2 節）維持，但只查本批必要證據，不每次重掃所有歷史。
+6. 不回報「還在等 CI／agent 還在跑／沒有新資訊」；重複狀態不再回報。
+7. 若 Medium Batch 開始擴成跨模組、多個新問題或需要完整 QA，停止擴張，把新增工作登記 `docs/BACKLOG.md`，另開下一批。
+8. Effort 每批重新評估，不因上一批用 High 就延續 High；回到文件／機械性階段應主動降級。
+9. Batch 完成回報只保留：結果、證據、剩餘、下一步。
+
+**與既有規則的關係**：細化第 8 節稽核風險分級（`DEC-2026-10-16-05`；`CLAUDE.md` §-2 規則 4 下方指標）、第 3 節 3.1 回報節流與第 5 節 5.1 推理強度管理；不推翻其中任何一條，也不構成動工授權。
+⚠️ **併讀指標（文件組讀法，未經第二組驗證）**：第 3 點「Medium 做必要的 delta audit」不降低第 8 節分級 —— 治理規則、data semantics、investment meaning、formula、identity、freshness、provenance、migration、destructive cleanup 仍至少 1 組真正獨立稽核（可以是只看本批 delta 的獨立稽核），資安／重大合規仍 2 組。第 4 點「不重驗未改動區域」不豁免 `CLAUDE.md` §-2 規則 3（本批 subagent 回報的關鍵宣稱仍須複驗）與規則 6（全稱句要嘛獨立驗、要嘛標未驗）。
+
 ## 第 10 節｜Branch／PR Lifecycle
 
 **生命週期**：active → merged／superseded → preservation check → cleanup eligible → deleted。
