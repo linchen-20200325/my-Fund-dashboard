@@ -28,24 +28,61 @@ def ndc_score_from_result(res) -> Optional[int]:
     return _s if 9 <= _s <= 45 else None
 
 
+def ndc_status_from_result(res) -> dict:
+    """BL-0441:fetch_ndc_signal_history 結果 → {score, status, detail}。純函式,離線可測。
+
+    status 三態(皆不改門檻,只揭露為何退預設):
+    - 'ok'          :拿到 9~45 分數。
+    - 'unavailable' :來源不可用(fetcher 回報 API 失敗 / 回傳非 dict)。
+    - 'no_data'     :來源有回應但真的沒有可用分數(筆數不足 / 無資料 / 超域)。
+    ('fetch_error' 由 get_ndc_status 在本層例外時給。)
+    """
+    if not isinstance(res, dict):
+        return {"score": None, "status": "unavailable", "detail": "景氣來源回傳格式異常"}
+    _sc = ndc_score_from_result(res)
+    if _sc is not None:
+        return {"score": _sc, "status": "ok", "detail": res.get("source") or ""}
+    _err = str(res.get("error") or "")
+    if "失敗" in _err:
+        return {"score": None, "status": "unavailable", "detail": _err}
+    return {"score": None, "status": "no_data", "detail": _err or "景氣來源無可用分數"}
+
+
+NDC_STATUS_TEXT = {
+    "ok": "景氣燈號取得",
+    "fetch_error": "景氣燈號取數失敗",
+    "unavailable": "景氣來源不可用",
+    "no_data": "景氣來源無資料",
+}
+
+
+def get_ndc_status() -> dict:
+    """BL-0441:{score, status, detail};status ∈ ok / fetch_error / unavailable / no_data。
+
+    無 streamlit(headless)→ unavailable;本層抓取/快取例外 → fetch_error。
+    """
+    try:
+        import streamlit as st  # noqa: PLC0415,F401
+    except ImportError:
+        return {"score": None, "status": "unavailable", "detail": "無 streamlit 執行環境"}
+    try:
+        _r = _cached_ndc_score()
+    except Exception as _e:  # noqa: BLE001 — 取數失敗要可見,不冒充「無資料」
+        return {"score": None, "status": "fetch_error", "detail": type(_e).__name__}
+    return _r if isinstance(_r, dict) else {"score": None, "status": "unavailable",
+                                            "detail": "景氣狀態格式異常"}
+
+
 def get_ndc_score() -> Optional[int]:
     """台灣景氣對策信號最新分數(9~45)。抓不到 / 無 streamlit → None(退預設門檻)。
 
-    快取由內層 `_cached_ndc_score`(@st.cache_data TTL_15MIN)承載;本層負責 streamlit 缺席時
-    的降級(測試 / headless)。
+    BL-0441:為何是 None 請改用 get_ndc_status() 取得(三態可見);本函式保留舊介面。
     """
-    try:
-        import streamlit as st  # noqa: PLC0415
-    except ImportError:
-        return None
-    try:
-        return _cached_ndc_score()
-    except Exception:  # noqa: BLE001 — 抓取/快取任何失敗 → None,呼叫端退預設門檻(不阻斷 UI)
-        return None
+    return get_ndc_status().get("score")
 
 
-def _fetch_ndc_score() -> Optional[int]:
-    """實際抓取(未快取):讀 FINMIND_TOKEN → fetch_ndc_signal_history → score_latest。"""
+def _fetch_ndc_score() -> dict:
+    """實際抓取(未快取):讀 FINMIND_TOKEN → fetch_ndc_signal_history → 狀態 dict(BL-0441;名稱沿用以免牽動快取登記)。"""
     from repositories.macro_tw_local_repository import fetch_ndc_signal_history  # noqa: PLC0415
 
     # 2026-09-04 稽核 F3:改走 `infra.config.get_secret`(§2.1 SSOT)。
@@ -63,7 +100,8 @@ def _fetch_ndc_score() -> Optional[int]:
     #       **不留但書,守衛才守得住。**
     from infra.config import get_secret as _ndc_get_secret  # noqa: PLC0415
     _tok = str(_ndc_get_secret("FINMIND_TOKEN", "") or "")   # 空 → FinMind 匿名額度
-    return ndc_score_from_result(fetch_ndc_signal_history(token=_tok))
+    # BL-0441:回 {score, status, detail}(保留失敗原因三態),不再只回 score。
+    return ndc_status_from_result(fetch_ndc_signal_history(token=_tok))
 
 
 try:
@@ -72,11 +110,12 @@ try:
     from shared.ttls import TTL_15MIN as _TTL
 
     @_st_mod.cache_data(ttl=_TTL, show_spinner=False)
-    def _cached_ndc_score() -> Optional[int]:
+    def _cached_ndc_score() -> dict:
         return _fetch_ndc_score()
 except Exception:  # noqa: BLE001 — 無 streamlit(headless/測試)→ 提供無快取版,get_ndc_score 已擋
-    def _cached_ndc_score() -> Optional[int]:
+    def _cached_ndc_score() -> dict:
         return _fetch_ndc_score()
 
 
-__all__ = ["ndc_score_from_result", "get_ndc_score"]
+__all__ = ["ndc_score_from_result", "ndc_status_from_result", "NDC_STATUS_TEXT",
+           "get_ndc_status", "get_ndc_score"]

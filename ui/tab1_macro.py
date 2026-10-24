@@ -2340,8 +2340,9 @@ def render_macro_tab() -> None:
             # v19.459 ①:資產水位連動(composite → 股/債/貨幣 配置水位 + 動態 Z 門檻)。
             # NDC 景氣對策信號(9~45)接回 → 綠燈放寬停利 / 紅燈收緊加碼;抓不到 → 退預設門檻(誠實)。
             from services.allocation_ladder import allocation_from_composite  # noqa: PLC0415
-            from ui.helpers.macro.ndc import get_ndc_score  # noqa: PLC0415
-            _ndc = get_ndc_score()
+            from ui.helpers.macro.ndc import NDC_STATUS_TEXT, get_ndc_status  # noqa: PLC0415
+            _ndc_st = get_ndc_status()
+            _ndc = _ndc_st.get("score")
             _al = allocation_from_composite(_comp_score, _ndc)
             if _al.get("status") == "ok":
                 _a = _al["allocation"]
@@ -2349,7 +2350,9 @@ def render_macro_tab() -> None:
                     f"**{_al['icon']} 建議資產水位（{_al['level']}）**："
                     f"股票 **{_a['equity']}%** ・債券 **{_a['bond']}%** ・貨幣/現金 **{_a['cash']}%**"
                     f"　｜　停利 Z ≥ {_al['stop_gain_z']:+.2f} ・加碼 Z ≤ {_al['add_z']:+.2f}"
-                    f"（{'景氣' + _al['light'] + '燈動態' if _al.get('light') else '預設門檻'}）")
+                    f"（{'景氣' + _al['light'] + '燈動態' if _al.get('light') else '預設門檻'}）"
+                    + ("" if _ndc_st.get("status") == "ok" else
+                       f"　⬜ {NDC_STATUS_TEXT.get(_ndc_st.get('status'), '景氣燈號未取得')}"))
                 st.caption("↑ 依總經健康度總分的 DESIGN 配置建議(非投資指示);"
                            "Z 門檻供個基體檢的再平衡訊號使用。")
             # v19.367 6/8:F-RECON-1 健康度雙演算法對帳 chip

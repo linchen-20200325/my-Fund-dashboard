@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+import logging
+
 import pandas as pd
 
 from shared.colors import (
@@ -54,6 +56,9 @@ _LAMP_META = {
     "分批停利": ("💰", MATERIAL_ORANGE),
     "強制停利": ("🔴", TRAFFIC_RED),
 }
+
+
+_log = logging.getLogger(__name__)
 
 
 def _weekly_close(nav) -> "pd.Series | None":
@@ -142,9 +147,9 @@ def _defense_note(wk: pd.Series, c, ma13, ma52, z_bb) -> str:
     return ""
 
 
-def ladder_signal(nav, vix: Optional[float] = None,
+def _ladder_signal_core(nav, vix: Optional[float] = None,
                   reserve_twd: Optional[float] = None,
-                  category=None) -> dict:
+                  category=None, *, _ctx=None) -> dict:
     """235 加碼水位燈。純函式,離線可驗。
 
     Args:
@@ -158,16 +163,21 @@ def ladder_signal(nav, vix: Optional[float] = None,
              deploy_pct/deploy_twd/reasons/note/status)。
     """
     _vix = float(vix) if isinstance(vix, (int, float)) else None
+    _core_unknown = _ctx
     # Core(平衡/貨幣)→ 不適用加碼擇時(內建配置;同 zscore_engine.is_core_bucket)
     if category is not None:
         try:
             from services.zscore_engine import is_core_bucket  # noqa: PLC0415 — L2 同層
-            if is_core_bucket(category):
+            _core = is_core_bucket(category)
+            if _core is True:
                 _b = _blank("core", 0, _vix)
                 _b["note"] = "Core(平衡多重/貨幣市場)內建股債配置,不做加碼水位擇時"
                 return _b
-        except Exception:  # noqa: BLE001 — 分類失敗 → 當非 Core 續判(較保守不漏)
-            pass
+            if _core is None:
+                _core_unknown[0] = True
+        except Exception as _e:  # noqa: BLE001 — 分類失敗 → 照非 Core 續判,但必須揭露(BL-0441)
+            _log.warning("[ladder235] Core 分類失敗,照非 Core 續判: %s", type(_e).__name__)
+            _core_unknown[0] = True
 
     wk = _weekly_close(nav)
     if wk is None or len(wk) < LADDER235_MIN_WEEKS:
@@ -209,6 +219,27 @@ def ladder_signal(nav, vix: Optional[float] = None,
         "deploy_pct": deploy_pct, "deploy_twd": deploy_twd,
         "reasons": reasons, "note": note,
     }
+
+
+_CORE_UNKNOWN_NOTE = "⬜ 資產類別分類失敗,是否 Core 未判定(以下照非 Core 計算)"
+
+
+def ladder_signal(nav, vix: Optional[float] = None,
+                  reserve_twd: Optional[float] = None,
+                  category=None) -> dict:
+    """235 加碼水位燈(見 _ladder_signal_core)。BL-0441:Core 分類失敗(None/例外)時
+    燈號與行動照非 Core 不變(Stop Gate 待客戶裁示),只在 note 揭露並帶 core_status。"""
+    _ctx = [False]
+    out = _ladder_signal_core(nav, vix, reserve_twd, category, _ctx=_ctx)
+    if out.get("status") == "core":
+        out["core_status"] = "core"
+    elif _ctx[0]:
+        out["core_status"] = "unknown"
+        _n = out.get("note") or ""
+        out["note"] = f"{_n}　{_CORE_UNKNOWN_NOTE}" if _n else _CORE_UNKNOWN_NOTE
+    else:
+        out["core_status"] = "non_core" if category is not None else "not_checked"
+    return out
 
 
 __all__ = ["ladder_signal"]

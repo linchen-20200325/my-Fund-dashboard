@@ -34,7 +34,14 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-24（第十七次）現況（以本框為準；下方第十六次框起皆為歷史快照）**（治理落盤；狀態更新，不是漏刪：第十六次框整段保留於下方）
+> **⭐ 2026-10-24（第十八次）現況（以本框為準；下方第十七次框起皆為歷史快照）**（BL-0441 Batch B；狀態更新，不是漏刪：第十七次框整段保留於下方）
+> - **本分支** `ccr-464564b4-9qluki`（自 `origin/main` `a6379afe` 重建）：BL-0441 Missing 語意誠實化實作，未開 PR。CI 以 GitHub 實況為準（第 2 節）。
+> - **完成**：(1) 4D 覆蓋缺口可見（Tab2 健康總覽卡＋`combine_action` flags「⬜ 評分覆蓋 n/m（缺：…）」）；(2) `eat_warn` 三態（`None`＋`eat_warn_status`='unknown' →「⬜ 吃本金：資料未取得／無法判定」）；(3) `is_core_bucket` 分類例外 → `None`，`rebalance_signal` 與 `ladder235.ladder_signal` 加 `core_status` 與揭露（燈號／行動不變）；(4) NDC `get_ndc_status()` 三態（取數失敗／來源不可用／無資料）於 Tab1 水位列與 Tab2 Z 位階說明可見。不改門檻、矩陣、品質桶、行動。測試 `tests/test_bl0441_missing_semantics.py`。
+> - **Stop Gate（未改行為）**：分類失敗時 Z-Score 仍照非 Core 給行動（是否改為不給＝「資料不足時能否給加碼／賣出」，須客戶裁示），見 BL-0441 列尾。
+> - **Blocker／Decision Gate**：DG-1～DG-3 仍待客戶裁示（不變）。
+> - **下一個交接點（唯一）**：總管複驗本分支 → 依風險分級安排獨立稽核（data semantics 級，至少 1 組）→ 開 PR。
+
+> **⭐ 2026-10-24（第十七次）現況（~~以本框為準；下方第十六次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第十八次框；狀態更新，不是漏刪）**（治理落盤；狀態更新，不是漏刪：第十六次框整段保留於下方）
 > - **最新 main**：`98bd6e2d`（#1040 合併）。**Open PR**：本分支 `ccr-464564b4-9qluki`（docs only：`DEC-2026-10-24-07`）。CI 以 GitHub 實況為準（第 2 節）。
 > - **治理**：交接完成條件＝只讀 GitHub 可答 7 項，見 `PROJECT_RULES.md` 第 6 節 6.1.1（`DEC-2026-10-24-07`）。
 > - **Blocker／Decision Gate**：DG-1～DG-3 仍待客戶裁示（`DEC-2026-10-24-01` 為傾向、未核准；DG-2 選項見 `docs/v2/64_v2_ssot_convergence.md` §10.6）—— 是 blocker，不是下一步。

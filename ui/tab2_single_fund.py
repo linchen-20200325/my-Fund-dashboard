@@ -1265,7 +1265,14 @@ def render_single_fund_tab() -> None:
                     _g_overall = _4d["score"]
                     _gr, _gr_c, _verd = _4d["grade"], _4d["grade_color"], _4d["verdict"]
                     _eat_call = (f" ⚠️ <b style='color:{MATERIAL_RED}'>吃本金風險</b>"
-                                 if _4d["eat_warn"] else "")
+                                 if _4d["eat_warn"] is True else
+                                 f" <span style='color:{GRAY_AA};font-size:12px'>⬜ 吃本金：資料未取得／無法判定</span>"
+                                 if _4d.get("eat_warn_status") == "unknown" else "")
+                    # BL-0441:評分覆蓋缺口可見(n_scored/n_applicable;不改評等、不加門檻)
+                    _cv4 = _4d.get("coverage") or {}
+                    if _cv4.get("missing"):
+                        _eat_call += (f" <span style='color:{GRAY_AA};font-size:12px'>"
+                                      f"⬜ 評分覆蓋 {_cv4.get('n_scored')}/{_cv4.get('n_applicable')}</span>")
 
                     def _g_block(label, score):
                         if score is None:
@@ -1602,10 +1609,15 @@ def render_single_fund_tab() -> None:
                         from services.zscore_engine import (  # noqa: PLC0415
                             nav_zscore, rebalance_signal,
                         )
-                        from ui.helpers.macro.ndc import get_ndc_score  # noqa: PLC0415
+                        from ui.helpers.macro.ndc import NDC_STATUS_TEXT, get_ndc_status  # noqa: PLC0415
                         _zi = nav_zscore(s)
                         # NDC 景氣分數接回 → 門檻動態(cache 與市場定調共用同一份,不重複抓)
-                        _rb = rebalance_signal(s, mj_raw.get("category", ""), get_ndc_score())
+                        _ndc_st = get_ndc_status()
+                        _rb = rebalance_signal(s, mj_raw.get("category", ""), _ndc_st.get("score"))
+                        if _ndc_st.get("status") != "ok" and _rb.get("applies", True):
+                            # BL-0441:退預設門檻的原因可見(取數失敗 / 來源不可用 / 無資料)
+                            _rb = {**_rb, "reason": (f"{_rb.get('reason', '')}"
+                                                     f"(⬜ {NDC_STATUS_TEXT.get(_ndc_st.get('status'), '景氣燈號未取得')},退預設門檻)")}
                         if not _rb.get("applies", True):
                             # 稽核 polish:Core(平衡/貨幣)先攔 → 乾淨顯示「不做 Z-Score」,不秀多餘 Z 數字
                             st.caption(f"📐 Z-Score:{_rb.get('reason')}")
