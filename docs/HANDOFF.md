@@ -34,7 +34,16 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-23（第十次）現況（以本框為準；下方第九次框起皆為歷史快照）**（BL-0428 DG 合併回填；合併 SHA、head、CI、稽核結論為總管回報，main 位置為本組 `git fetch` 確認；狀態更新，不是漏刪：第九次框整段保留於下方）
+> **⭐ 2026-10-23（第十一次）現況（以本框為準；下方第十次框起皆為歷史快照）**（Final Save 第二次；狀態更新，不是漏刪：第十次框整段保留於下方）
+> - **最新 main**：`e4cc1af8`（#1034 docs 合併，接在 #1033 `ea06b130` 之後）；CI 在 `e4cc1af8` 三條 check 皆 success（總管回報）。
+> - **Open PR**：無。**未推送工作**：無（本 docs commit 待總管推送）。
+> - **分支**：遠端 `ccr-504fafce-fky1it` ＝ main。其他遠端分支（`pr1028`、`pr1b-ui-ssot-audited`、`pr2-333-ssot-wip`、`probe/*`、`data`）較舊，不是本 session 的 WIP（只列出，不刪）。
+> - **永久方向與作業規則**：`DEC-2026-10-23-12`。
+> - **下一個唯一工作點**：**等客戶指示**。新對話先讀 `CLAUDE.md` → `PROJECT_RULES.md` → 本檔 → `docs/BACKLOG.md` → `docs/DECISIONS.md`（`DEC-2026-10-23-12`）。
+> - **未裁示、禁止自行實作**：BL-0428 剩餘子題、BL-0438、BL-0427、BL-0435、`rows_from_batch_df` 殘留（見 `docs/BACKLOG.md` §6 2026-10-23 Final Save 第二次批）。
+> - **建議 Model／Effort**：BL-0438 → 目前模型 **Medium**；BL-0435 → 高能力模型 **High**。
+
+> **2026-10-23（第十次）現況（~~以本框為準；下方第九次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第十一次框；狀態更新，不是漏刪）**（BL-0428 DG 合併回填；合併 SHA、head、CI、稽核結論為總管回報，main 位置為本組 `git fetch` 確認；狀態更新，不是漏刪：第九次框整段保留於下方）
 > - **最新 main**：`ea06b130`（PR #1033 已合併；head `3cd30731`，CI Fast checks／Schema gate／Slow tests 三條皆 success；獨立稽核 `6df4e9c5` 有條件通過 → `c9ef3af9` delta 通過；`3cd30731` 只放寬 S4 golden 測試容差（SLSQP 跨環境浮點抖動約 1e-9 → `rel_tol=1e-6`），總管自驗）。
 > - **Open PR**：本項工作沒有 open PR（本 docs 回填 commit 待總管推送）。
 > - **已完成**：BL-0428 的 DG-1～DG-5 落地合併（`DEC-2026-10-23-11`）；BL-0428 狀態仍為待客戶裁示。
