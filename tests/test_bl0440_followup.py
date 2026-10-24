@@ -17,6 +17,8 @@ import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+# BL-0441(DEC-2026-10-24-09):類別缺值 → 未判定不給燈;本檔 ladder 測試一律明示非 Core 類別
+_NON_CORE = "科技股票型"
 
 
 def _src(rel: str) -> str:
@@ -49,21 +51,21 @@ def _ladder_label_fn():
 
 def test_ladder_constant_series_is_degenerate_not_insufficient():
     from services.ladder235 import ladder_signal
-    r = ladder_signal(_daily([10.0] * 300))
+    r = ladder_signal(_daily([10.0] * 300), category=_NON_CORE)
     assert r["status"] == "degenerate"
     assert r["lamp"] is None and r["deploy_pct"] == 0.0 and r["weeks"] >= 20
 
 
 def test_ladder_short_series_is_insufficient():
     from services.ladder235 import ladder_signal
-    r = ladder_signal(_daily([10.0 + 0.1 * i for i in range(30)]))   # 約 6 週
+    r = ladder_signal(_daily([10.0 + 0.1 * i for i in range(30)]), category=_NON_CORE)   # 約 6 週
     assert r["status"] == "insufficient"
     assert r["lamp"] is None and r["deploy_pct"] == 0.0
 
 
 def test_ladder_none_series_is_insufficient():
     from services.ladder235 import ladder_signal
-    r = ladder_signal(None)
+    r = ladder_signal(None, category=_NON_CORE)
     assert r["status"] == "insufficient" and r["weeks"] == 0
 
 
@@ -80,8 +82,8 @@ def test_ui_label_degenerate_vs_insufficient_distinguishable():
 def test_ui_label_end_to_end_constant_and_short_series():
     from services.ladder235 import ladder_signal
     label = _ladder_label_fn()
-    assert label(ladder_signal(_daily([10.0] * 300))["status"]) == "⬜ 波動為 0，無法判定"
-    assert label(ladder_signal(_daily([10.0 + 0.1 * i for i in range(30)]))["status"]) == "⬜ 週資料不足"
+    assert label(ladder_signal(_daily([10.0] * 300), category=_NON_CORE)["status"]) == "⬜ 波動為 0，無法判定"
+    assert label(ladder_signal(_daily([10.0 + 0.1 * i for i in range(30)]), category=_NON_CORE)["status"]) == "⬜ 週資料不足"
 
 
 def test_ladder_normal_series_still_lamps_and_unchanged_zero_tolerance():
@@ -89,7 +91,7 @@ def test_ladder_normal_series_still_lamps_and_unchanged_zero_tolerance():
     from services.ladder235 import ladder_signal
     rng = np.random.default_rng(7)
     s = _daily(list(100 * np.exp(np.cumsum(rng.normal(0, 0.01, 400)))))
-    r = ladder_signal(s)
+    r = ladder_signal(s, category=_NON_CORE)
     assert r["status"] == "ok" and r["lamp"] is not None
     assert "if not (sigma > 0):" in _src("services/ladder235.py")
 

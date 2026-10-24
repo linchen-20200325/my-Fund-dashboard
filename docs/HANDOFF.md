@@ -34,7 +34,13 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-24（第十八次）現況（以本框為準；下方第十七次框起皆為歷史快照）**（BL-0441 Batch B；狀態更新，不是漏刪：第十七次框整段保留於下方）
+> **⭐ 2026-10-24（第十九次）現況（以本框為準；下方第十八次框起皆為歷史快照）**（BL-0441 Stop Gate 裁示批；狀態更新，不是漏刪：第十八次框整段保留於下方）
+> - **main 實況**：本框隨 `DEC-2026-10-24-09` 實作 PR 一併合併；該 PR 之前的 main 為 `d266bcf6`（#1042，BL-0441 第一批）。接手時以 `git log origin/main` 與 GitHub 為準（第 2 節）。
+> - **本框對應的完成內容**：客戶裁示 `DEC-2026-10-24-09` —— 類別空白／缺值／無法對應／分類例外 → 未判定，Z（`rebalance_signal`）與 235（`ladder_signal`）不照非 Core 給位階／燈號／加碼比例，顯示「⬜ 分類未判定，暫不提供行動」；Tab2 健康卡補傳既有幣別與匯率 CV（只 wiring）。未完成工作與各列狀態見 `docs/BACKLOG.md`（BL-0441、BL-0442）。
+> - **Blocker／Decision Gate**：DG-1～DG-3 仍待客戶裁示（不變）。
+> - **下一個交接點（唯一）**：無已授權工作，停手等客戶指示（候選：是否推翻 `DEC-2026-10-24-09` 第 (2) 點「無法對應＝未判定」的總管讀法；品質單軸建議是否也暫停；DG-1～DG-3；是否授權 BL-0442 盤點）。接手時若 `origin/main` 尚未含 `DEC-2026-10-24-09` 實作 commit，該 PR 即 active work，先完成合併前檢查。
+
+> **⭐ 2026-10-24（第十八次）現況（~~以本框為準；下方第十七次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第十九次框；#1042 已合併，main `d266bcf6`；本框「下一個交接點」所列步驟已完成；本框 Stop Gate 已由 `DEC-2026-10-24-09` 裁示；狀態更新，不是漏刪）**（BL-0441 Batch B；狀態更新，不是漏刪：第十七次框整段保留於下方）
 > - **本分支** `ccr-464564b4-9qluki`（自 `origin/main` `a6379afe` 重建）：BL-0441 Missing 語意誠實化實作，未開 PR。CI 以 GitHub 實況為準（第 2 節）。
 > - **完成**：(1) 4D 覆蓋缺口可見（Tab2 健康總覽卡＋`combine_action` flags「⬜ 評分覆蓋 n/m（缺：…）」）；(2) `eat_warn` 三態（`None`＋`eat_warn_status`='unknown' →「⬜ 吃本金：資料未取得／無法判定」）；(3) `is_core_bucket` 分類例外 → `None`，`rebalance_signal` 與 `ladder235.ladder_signal` 加 `core_status` 與揭露（燈號／行動不變）；(4) NDC `get_ndc_status()` 三態（取數失敗／來源不可用／無資料）於 Tab1 水位列與 Tab2 Z 位階說明可見。不改門檻、矩陣、品質桶、行動。測試 `tests/test_bl0441_missing_semantics.py`。
 > - **Stop Gate（未改行為）**：分類失敗時 Z-Score 仍照非 Core 給行動（是否改為不給＝「資料不足時能否給加碼／賣出」，須客戶裁示），見 BL-0441 列尾。
@@ -356,3 +362,4 @@
 - 2026-10-23 BL-0424 結案批：第 2 節第三次框的 main SHA 與 merge commit 為本組以 `git log origin/main` 確認；CI 三條 `conclusion`、review threads 0、「Open PR：無」、合併前 delta 驗證為總管實查、本組轉述，未重跑；「Tab2 ③ 晨星／同儕整列是否屬版面變更」仍待判定，本組未判。本檔本批由架構與文件組單組產出，未經第二組驗證。
 - 2026-10-23 BL-0425 結案批：第 2 節第五次框的 main SHA 為總管合併後回傳、本組 `git fetch origin main` 確認（`875b80be`，parent `2c11a2b6`、`37ca157a`）；CI 三條結果、兩輪稽核結論、使用者可見行為變化為總管回報、本組轉述，未重跑測試或 CI；本組以 `git fetch` 實查 PR head `37ca157a`（單一 commit，parent `2c11a2b6`）與 head 分支名，並在該 head 上以 grep／讀碼確認所引符號存在。客戶的 BL-0425 續做指示（解除 `DEC-2026-10-23-04` 的暫停）與 Blueprint 主工作項指示經總管轉達，同批登記為 `docs/DECISIONS.md` `DEC-2026-10-23-05`（repo 內無逐字存檔）。BL-0435 與 BL-0426 的排序讀法為文件組讀法。本檔本批由文件組單組產出，未經第二組驗證。
 - 2026-10-23 BL-0426 Final Save 批：第 2 節第六次框的 main `f2539a7d`、#1030 open、CI 未完成為總管 2026-10-23 15:07Z GitHub 實查、本組轉述；`pr3-hwm-ssot` 未推送、WIP 全在 #1030 為總管回報；兩輪稽核結論、突變數、UI 四項為總管回報、本組轉述，未重跑測試或 CI；本組以 `git fetch`／`git ls-remote` 實查 PR head `7569e663`（單一 commit，parent `f2539a7d`）與 head 分支，並在該 head 讀 diff 確認所引符號與畫面字串；「使用者看得到的變化」摘自 PR #1030 commit message 與 diff，未實跑 UI。「方向 → 出處」表為本組以 grep 查找，不宣稱窮舉。客戶裁示與指示經總管轉達，repo 內無逐字存檔，本組未見客戶對話本身。本檔本批由文件組單組產出，未經第二組驗證。
+- 2026-10-24 第十九次框（`DEC-2026-10-24-09` 批）：main `d266bcf6` 為實作組開工時 `git log` 實查（本分支與 `origin/main` 同點起算）；#1042 的 CI 結果本組未重查；客戶裁示經總管派工單轉達，本組未見客戶對話本身；由實作組單組寫成，未經第二組驗證。

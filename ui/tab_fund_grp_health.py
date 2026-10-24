@@ -328,7 +328,9 @@ def render_fund_grp_health_tab() -> None:
                 # BL-0440(§1):status="degenerate"(週資料足夠但 20 週 σ=0)原本落到 fallback
                 # 「⬜ 週資料不足」,把「波動為 0」誤說成「資料不夠」。改讀既有 status 分開標示;
                 # 不改 σ 判斷式、門檻、燈號或 deploy_pct。
+                # BL-0441(DEC-2026-10-24-09):core_unknown＝分類未判定 → 不給燈、不給加碼比例
                 _pr["加碼水位"] = {"core": "⚪ 不適用(內建配置)",
+                                   "core_unknown": "⬜ 分類未判定，暫不提供行動",
                                    "lowvol": "⬜ 低波不判",
                                    "degenerate": "⬜ 波動為 0，無法判定"}.get(_lad.get("status"), "⬜ 週資料不足")
             else:
