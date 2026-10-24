@@ -181,8 +181,13 @@ def assess_underperformance(*, fund_nav=None, benchmark_nav=None, benchmark_labe
         _lags = True
         _reasons.append("跑輸大盤")
 
+    # BL-0443(1):~~`eat_status is not None`~~ → `bool(eat_status)`(有意識的更正,不是漏刪;
+    # 2026-10-24,決策者:客戶授權 BL-0443 安全修)。呼叫端在紅燈判定失敗(redlight=None)時
+    # 仍會帶 eat_status="",舊條件因此改用全 None 輸入重算 → 回傳 `redlight=False`(Error→False,
+    # 把「判不出來」寫成「確認不是紅燈」)。空字串吃本金燈號不是判定依據 → 不重算,`redlight`
+    # 維持 None。`is_underperforming` 判法不變(None 與 False 都不觸發絕對虧損)。
     if redlight is None and (
-        eat_status is not None
+        bool(eat_status)
         or (tr1y_pct is not None and sharpe is not None and switch_score is not None)
     ):
         from services.switch_strategy import RED, switch_signal

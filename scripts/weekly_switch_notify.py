@@ -189,11 +189,15 @@ def _assemble_rows(funds: list, pool_by_code: dict) -> list:
             from services.fx_regime_service import fx_regime_by_ccy as _fxr_wk
             _h = build_health_analysis_row(_fd, _code,
                                            fx_cv_by_ccy=(_fxr_wk() or {}))
-        except Exception:  # noqa: BLE001
+        except Exception as _e_h:  # noqa: BLE001
+            # BL-0443(1):原本靜默吞掉 → 補 log(§1);退空 dict 的行為不變(類別/4D 走既有缺值路徑)
+            _log(f"{_code} 健診列計算失敗(類別/4D 視為缺):{type(_e_h).__name__}: {_e_h}")
             _h = {}
         try:
             _eat = (check_eating_principal_1y_mk(_fd) or {}).get("status", "")
-        except Exception:  # noqa: BLE001
+        except Exception as _e_eat:  # noqa: BLE001
+            # BL-0443(1):原本靜默吞掉 → 補 log(§1);退 "" 的行為不變
+            _log(f"{_code} 吃本金判定失敗(燈號視為缺):{type(_e_eat).__name__}: {_e_eat}")
             _eat = ""
         _e = _extra.get(_code, {})
         _pe = pool_by_code.get(_code)
