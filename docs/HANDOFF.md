@@ -34,11 +34,18 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-24（第二十一次）現況（以本框為準；下方第二十次框起皆為歷史快照）**（BL-0442 唯讀盤點文件批；狀態更新，不是漏刪：第二十次框整段保留於下方）
-> - **main 實況**：本框隨 BL-0442 盤點文件 PR 合併；該 PR 之前的 main 為 `11b28f8d`（#1044，`DEC-2026-10-24-10` 批）。接手時以 `git log origin/main` 與 GitHub 為準（第 2 節）。
-> - **本框對應的完成內容**：Batch B「BL-0442 全 repo 平行投資行動路徑唯讀盤點」已完成（唯讀，production 未動；`DEC-2026-10-24-10` Batch B 授權），結果記於 `docs/v2/64_v2_ssot_convergence.md` §10.7；新增 `docs/BACKLOG.md` BL-0443（安全修 bug 清單）、BL-0444（DG-6 候選）、BL-0445（dead code retirement gate 候選），BL-0442 維持 open。
-> - **Blocker／Decision Gate**：DG-6（新，見 64 §10.7.3 第 10 問）待客戶裁示；BL-0438 DG-1～DG-3 仍待客戶裁示（不變）。
-> - **下一個交接點（唯一）**：停手等客戶裁示新 Decision Gate（DG-6：DEC-10 永久原則是否擴及 BL-0442 平行引擎；總管推薦先收斂 `switch_advisor` INSUFFICIENT overlay（含 LINE）與換標的建議兩條），見 64 §10.7。接手時若 `origin/main` 尚未含本盤點文件 commit，該 PR 即 active work，先完成合併前檢查。
+> **⭐ 2026-10-24（第二十一次）現況 —— Final Save／Handoff Gate（以本框為準；下方第二十次框起皆為歷史快照）**（客戶 2026-10-24 Final Save／Handoff Gate 指示，`DEC-2026-10-24-11`；本框由 BL-0442 盤點框改寫為完整 Final Save 現況，狀態更新，不是漏刪：第二十次框整段保留於下方）
+> - **main 實況**：本框隨 PR #1045 合併；該 PR 前 main 為 `11b28f8d`（#1044）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
+> - **Open PR**：#1045（本身；分支 `ccr-464564b4-9qluki`，docs-only）。撰寫時 GitHub 上無其他 open PR（REST 實查）。
+> - **CI**：#1045 head `e569e7a8` 之 Fast checks、Schema gate 為 success；Slow tests（informational）撰寫時進行中。本框之後的 commit 與最終結論以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）。
+> - **Phase**：Final Save；無進行中任務。
+> - **本輪已完成**：#1041（`DEC-2026-10-24-07`／`-08` 落盤）；#1042 BL-0441（`d266bcf6`）；#1043 `DEC-2026-10-24-09`（`6d3baa19`）；#1044 `DEC-2026-10-24-10`（`11b28f8d`）；#1045 BL-0442 唯讀盤點（64 §10.7）＋本 Final Save。
+> - **未完成（`docs/BACKLOG.md`）**：BL-0438 DG-1～DG-3（`DEC-2026-10-24-01` 暫定 B／C／C，**未核准實作**）；BL-0440（部分完成，open）；BL-0442（盤點完成，後續未授權）；BL-0443（安全修清單，未指派）；BL-0444（DG-6，待客戶裁示）；BL-0445（retirement gate 候選）。其他仍「待客戶裁示」的 Gate：BL-0102、0121、0123、0127、0223、0224、0247、0250、0253、0263、0268、0269、0271、0277、0280、0311、0312、0377、0392、0397～0400、0402～0408、0413～0416、0420、0427、0428（逐列見 BACKLOG；列法：`awk -F'|' '/^\| BL-/ && $3 ~ /待客戶裁示/' docs/BACKLOG.md`）。
+> - **Blocker**：待客戶裁示 DG-6（BL-0444）。
+> - **唯一下一步**：停手等客戶裁示 DG-6。總管推薦（不是客戶裁示）：先收斂 `switch_advisor` INSUFFICIENT overlay（含 LINE 週報）與 `check_replacement_recommendation` 換標的建議兩條（64 §10.7.3 第 10 問、BL-0444）。若接手時 `origin/main` 尚未含 #1045，先完成該 PR 合併前檢查。
+> - **下一批建議 Model／Effort**：DG-6 裁示後若實作改投資語意 → Opus 5.5 High；若只做 BL-0443 安全修（須另授權）→ Medium；純文件 → Low（`PROJECT_RULES.md` 第 5 節 5.1 第 9 點）。
+> - **尚未授權動工**：DG-1、DG-2、DG-3、DG-6、BL-0443、BL-0445 retirement、BL-0442 其他引擎任何修改（`CLAUDE.md` §-1；`DEC-2026-10-24-10` 禁擴張）。
+> - **接手入口**：(1) 開工必讀順序 `CLAUDE.md` → `PROJECT_RULES.md`（先看 0.5 快速索引）→ 本檔 → `docs/BACKLOG.md` → `docs/DECISIONS.md` → `docs/v2/64_v2_ssot_convergence.md`（§10.6／§10.7）。(2) Verification Gate（`PROJECT_RULES.md` 第 2 節）：`git fetch` 後查 `origin/main` SHA、GitHub open PR、check-run 逐條 `conclusion`，與本框不一致時以 GitHub 為準、先改文件。(3) 測試：CI 三條 check-run（Fast checks、Schema gate、Slow tests informational）；本地 pytest 用 `/root/.local/bin/pytest`（`python3 -m pytest` 無此模組），文件守衛需 `--noconftest`（`CLAUDE.md` §-2.A 2026-09-23 更正段），例：`/root/.local/bin/pytest tests/test_retired_exception_ids.py tests/test_constitution_file_refs.py tests/test_amendment_8_integrity.py tests/test_doc_counters.py -q --noconftest -p no:cacheprovider`。
 
 > **⭐ 2026-10-24（第二十次）現況（~~以本框為準；下方第十九次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第二十一次框；#1044 已合併，main `11b28f8d`；本框「下一個交接點」Batch B 盤點已完成；狀態更新，不是漏刪）**（`DEC-2026-10-24-10` 補充批；狀態更新，不是漏刪：第十九次框整段保留於下方）
 > - **main 實況**：本框隨 `DEC-2026-10-24-10` 實作 PR 合併；該 PR 之前的 main 為 `6d3baa19`（#1043，`DEC-2026-10-24-09` 批）。接手時以 `git log origin/main` 與 GitHub 為準（第 2 節）。
@@ -377,3 +384,4 @@
 - 2026-10-24 第十九次框（`DEC-2026-10-24-09` 批）：main `d266bcf6` 為實作組開工時 `git log` 實查（本分支與 `origin/main` 同點起算）；#1042 的 CI 結果本組未重查；客戶裁示經總管派工單轉達，本組未見客戶對話本身；由實作組單組寫成，未經第二組驗證。
 - 2026-10-24 第二十次框（`DEC-2026-10-24-10` 補充批）：main `6d3baa19` 為實作組開工時 `git log` 實查（本分支與 `origin/main` 同點起算）；#1043 的 CI 結果本組未重查；客戶補充裁示與 Batch B 授權（`DEC-2026-10-24-10`，決策者：客戶）本組未見客戶對話本身；由實作組單組寫成，未經第二組驗證。
 - 2026-10-24 第二十一次框（BL-0442 唯讀盤點文件批）：main `11b28f8d` 為文件組開工時 `git log` 實查（本分支與 `origin/main` 同點起算）；#1044 的 CI 結果本組未重查；盤點內容為兩組研究組產出、總管彙整轉述，文件組未重讀原始碼、未重跑研究測試；DG-6 推薦為總管推薦方案、不是客戶裁示；由文件組單組寫成，未經第二組驗證。
+- 2026-10-24 第二十一次框改寫為 Final Save：#1045 head `e569e7a8` 三條 check-run 與 open PR 清單為文件組以 GitHub REST 實查（Slow tests 當時 in_progress）；「待客戶裁示」ID 清單為文件組以 awk 依狀態欄機械列出，未逐列判讀內容，不宣稱窮舉；由文件組單組寫成，未經第二組驗證。

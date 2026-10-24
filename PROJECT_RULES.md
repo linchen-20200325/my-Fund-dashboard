@@ -68,11 +68,14 @@
 | Stop／Decision Gate | 第 4 節「現行」段（`DEC-2026-10-16-03`） |
 | Model／Minimum Sufficient Effort | 第 5 節 5.1（`DEC-2026-10-17-05`） |
 | Minimum Sufficient Work | 第 9 節 9.1（`DEC-2026-10-24-04`） |
-| Save／Handoff Gate | 第 6 節 6.1（`DEC-2026-10-22-03`；補強 `DEC-2026-10-23-04` F／G） |
+| Save／Handoff Gate | 第 6 節 6.1（`DEC-2026-10-22-03`；補強 `DEC-2026-10-23-04` F／G；Final Save 禁止事項與零記憶接手測試 `DEC-2026-10-24-11`，6.1 第 7 點） |
 | 新裁示同批 GitHub 落盤 | 第 12 節 12.1（`DEC-2026-10-24-05`） |
 | Stateless AI Handoff／GitHub = Project Memory | 第 6 節 6.1.1（`DEC-2026-10-24-07`） |
 | 資料層 ≠ AI 推理層 | 第 13 節第 1 條；資料先行順序第 13 節 13.1（`DEC-2026-10-24-02`） |
 | 資料／證據 ≠ 投資行動；Missing／Unknown 不得經單軸訊號重新產生行動 | 第 13 節 13.1 末尾指標（`DEC-2026-10-24-10`） |
+| Data-first 順序；Missing ≠ 0／False／中性／HOLD／安全；deterministic calculation 單一 SSOT；AI 不補不存在的資料 | 第 13 節 13.1「正式順序」與「禁止」（`DEC-2026-10-24-02`） |
+| 不因形式（如投資專案）預設升 High | 第 5 節 5.1 第 9 點（`DEC-2026-10-23-04`）；第 9 節 9.1 第 8 點（`DEC-2026-10-24-04`） |
+| Minimum Sufficient Test Scope | 第 9 節 9.1 第 2～4 點（`DEC-2026-10-24-04`） |
 
 **Supersession hygiene（同裁示）**：(1) 舊內容保留歷史，不刪；(2) 被新裁示取代時，在舊內容就地標示「superseded by <DEC-ID>」；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只能指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（現行四份見 0.4）。
 
@@ -312,6 +315,7 @@
 4. **不得寫入任何 secret**：token、私鑰、OAuth 憑證、試算表 ID 等實際值一律不寫，只寫「已設定／未設定」。
 5. **不得另建第二套**：不得建立第二套 backlog、handoff 或 memory 文件（例：PROJECT_STATE 類新檔）；一律寫進上列四份。
 6. **2026-10-23 補強（客戶裁示，`DEC-2026-10-23-04` F／G）**：觸發時機加上「額度快滿」「完成重要 Batch」「需跨 session」（與第 1 點併讀）。存檔時至少確認並寫入：main SHA、Open PR、已完成、未完成、Decision Gate、Stop Gate、下一個唯一工作點、下一批建議模型、下一批 Minimum Sufficient Effort。GitHub 正式文件才是 durable state，不得以聊天記憶為唯一交接來源。第 2 節 GitHub-first verification 維持不變：完成度判斷、下一工作點、PR merge／close、branch deletion、CI／QA、HANDOFF／BACKLOG／DECISIONS、新 Phase／Batch、架構／資料／cleanup 建議，一律重新查 GitHub 實況；HANDOFF 與聊天記憶只作輔助。
+7. **2026-10-24 Final Save（客戶指示，`DEC-2026-10-24-11`）**：額度接近約 90% 時，禁止開新 Batch、禁止新增 production 功能、禁止擴張 scope；只做安全收尾並完成 GitHub 交接（第 2 點四份文件；SSOT／研究寫 `docs/v2/64_v2_ssot_convergence.md`），並做零聊天記憶接手測試（只讀 repo 檔能答出第 6 點各項）。本文以 `docs/DECISIONS.md` 該筆為準。
 
 #### 6.1.1 長期規則：Stateless AI Handoff／GitHub = Project Memory（客戶 2026-10-24 正式永久裁示，`DEC-2026-10-24-07`）
 

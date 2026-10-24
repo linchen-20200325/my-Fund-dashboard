@@ -325,6 +325,8 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 - **後續**：三項未揭露 Missing 登記 BL-0441（未開始）；DG-2 仍待客戶裁示（BL-0438）。（→ **2026-10-24 補記（狀態更新，不是漏刪）**：BL-0441 實作於分支 `ccr-464564b4-9qluki`：三項 Missing 改為可見（覆蓋缺口 flag、`eat_warn` 三態、`is_core_bucket` 例外 → None；`rebalance_signal`／`ladder235` 揭露 `core_status=unknown`，Stop Gate 仍待裁示），行動與矩陣不變；證據 `tests/test_bl0441_missing_semantics.py`。）
 - **行動語意收斂（`DEC-2026-10-24-10`，base `6d3baa19`）**：分類未判定（`core_status='unknown'`）時 `combine_action` 不再輸出品質單軸行動，改「⬜ 既有品質標籤；分類未判定，暫不提供換／留建議」＋中性灰（資料／證據 ≠ 投資行動）；真 Core、真非 Core、NAV 不足與 `6d3baa19` 逐鍵相同（`tests/test_dec10_unknown_no_quality_action.py`）；其他平行引擎見 BL-0442。
 
+- **延伸**：§10.6 為 base `3b167c49` 的 `combine_action` 快照；全 repo 平行行動路徑的延伸盤點與 DG-6 候選見 §10.7（已驗證／推論分級見 §10.7 開頭證據等級與 §10.7.4）。
+
 ### §10.7 BL-0442 平行投資行動路徑唯讀盤點（2026-10-24，main `11b28f8d`）
 
 > ⛔ **狀態：唯讀盤點結果，不是實作規格、不授權 production 修改。** 授權出處：`docs/DECISIONS.md` `DEC-2026-10-24-10` Batch B 授權段（決策者：客戶；禁改 production、禁改投資語意）。盤點依 `DEC-2026-10-24-10` 永久原則（(1) 資料／證據 ≠ 投資行動；(2) Missing／Unknown 不得被另一個單軸訊號繞過後重新產生行動）。本節不新增公式、門檻、資料來源或語意。程式位置以 main `11b28f8d` 為準，行號會漂移，標「~」者為約略位置。
