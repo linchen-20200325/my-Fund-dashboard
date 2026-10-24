@@ -30,13 +30,15 @@ _NAVS = {
     "short": pd.Series([10.0] * 20, index=pd.bdate_range("2023-01-02", periods=20)),  # NAV 不足
 }
 _HEALTH_ARGS = {
-    "good": dict(tr1y_pct=10, adr_pct=4, sharpe=1.0, sigma_pct=8, fund_ccy="TWD"),     # A
-    "mid": dict(tr1y_pct=3, adr_pct=4, sharpe=0.5, sigma_pct=10, fund_ccy="TWD"),      # C
-    "weak": dict(tr1y_pct=-15, adr_pct=9, sharpe=-0.8, sigma_pct=25, fund_ccy="TWD"),  # F + 吃本金
+    "good": {"tr1y_pct": 10, "adr_pct": 4, "sharpe": 1.0, "sigma_pct": 8, "fund_ccy": "TWD"},     # A
+    "mid": {"tr1y_pct": 3, "adr_pct": 4, "sharpe": 0.5, "sigma_pct": 10, "fund_ccy": "TWD"},      # C
+    "weak": {"tr1y_pct": -15, "adr_pct": 9, "sharpe": -0.8, "sigma_pct": 25, "fund_ccy": "TWD"},  # F + 吃本金
     "na": {},
 }
 
-# 行動詞黑名單(DEC-10 A3)。固定後綴「暫不提供換／留建議」是否定句,比對前先移除。
+# 客戶建議語的固定後綴(DEC-10 A3)——以字面值釘死,不引用產品常數,避免常數被改成行動句時一起跟著過。
+_SUFFIX_LITERAL = "；分類未判定，暫不提供換／留建議"
+# 行動詞黑名單(DEC-10 A3)。對**完整** action／reason 字串檢查,只排除上面這個否定句字面值。
 _ACTION_WORDS = ("考慮換", "換", "留", "加碼", "減碼", "買", "賣", "停利", "續抱", "持有",
                  "安全", "逢低", "追")
 _ACTION_EMOJI = ("🟢", "🟡", "🟠", "🔴")
@@ -47,20 +49,27 @@ def _h(k):
     return compute_4d_health(**_HEALTH_ARGS[k])
 
 
+def test_suffix_constant_pinned_to_client_wording():
+    assert CORE_UNKNOWN_QUALITY_SUFFIX == "；分類未判定，暫不提供換／留建議"
+
+
+def _assert_no_action_words(text):
+    stripped = text.replace(_SUFFIX_LITERAL, "")
+    for w in _ACTION_WORDS:
+        assert w not in stripped, (w, text)
+    for e in _ACTION_EMOJI:
+        assert e not in stripped, (e, text)
+
+
 def _assert_no_action(a):
     """結構欄位＋文字黑名單雙重斷言:分類未判定 → 無任何投資行動語意。"""
     assert a["timing"] == "unknown"
     assert a["color"] == TRAFFIC_NEUTRAL
     assert a["color"] not in (TRAFFIC_GREEN, TRAFFIC_RED, MATERIAL_ORANGE, TRAFFIC_YELLOW)
     assert a["z"] is None
-    act = a["action"]
-    assert act.endswith(CORE_UNKNOWN_QUALITY_SUFFIX)
-    body = act[: -len(CORE_UNKNOWN_QUALITY_SUFFIX)]
-    for w in _ACTION_WORDS:
-        assert w not in body, (w, act)
-        assert w not in a["reason"], (w, a["reason"])
-    for e in _ACTION_EMOJI:
-        assert e not in act, (e, act)
+    assert a["action"].endswith(_SUFFIX_LITERAL)
+    _assert_no_action_words(a["action"])
+    _assert_no_action_words(a["reason"])
 
 
 def _unknown_signal(cat="其他"):
@@ -130,10 +139,8 @@ def test_unknown_with_stray_action_value_does_not_fallback(bad_action):
     z = {**_unknown_signal(), "action": bad_action, "applies": True, "z": -3.0}
     a = combine_action(_h("good"), z)
     assert a["color"] == TRAFFIC_NEUTRAL and a["timing"] == "unknown"
-    body = a["action"][: -len(CORE_UNKNOWN_QUALITY_SUFFIX)]
-    assert a["action"].endswith(CORE_UNKNOWN_QUALITY_SUFFIX)
-    for w in _ACTION_WORDS:
-        assert w not in body
+    assert a["action"].endswith(_SUFFIX_LITERAL)
+    _assert_no_action_words(a["action"])
 
 
 def test_unknown_with_insufficient_quality_still_data_insufficient_branch():
