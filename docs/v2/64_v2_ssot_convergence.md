@@ -230,3 +230,64 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 - 兩組皆未跑 pytest、未啟動 App；可達性有一部分靠字面搜尋推得（R3、R9、R13、R17～R19 等）；`ladder235` 判燈邏輯 B 未逐行讀；A 未查 prompt 文字中是否另有 σ 行動語意；B 未查批次 checkpoint 是否保存 2C 之前的 σ rank 字串。
 - 兩份原始報告存於總管 scratchpad（不在 repo）；本節由文件組合併落盤，**文件組未重跑兩組的實跑、未重讀原始碼**（只以字面搜尋確認 `calc_hwm_sigma_levels` 的 hwm 取 `s.max()`、`services/rotation.py` 的 σ 字串解析存在，與總管讀碼結論一致）。
 - 兩組各自為單組產出；本節「兩組」標記只代表兩組結論一致，不代表任何一列經過第三方逐條複驗。
+
+## §10 BL-0438 唯讀研究（2026-10-24，main `36dd93c6`）
+
+> ⛔ **狀態：唯讀研究結果，不是實作規格、不授權 production 修改。** 客戶 2026-10-24 對 DG-1～DG-3 的傾向見 `docs/DECISIONS.md` `DEC-2026-10-24-01`（**傾向、未核准實作**）。`DEC-2026-10-23-02` 2C（HWM σ）裁示不變。本節不新增公式、門檻、資料來源或語意。程式位置以 main `36dd93c6` 為準，行號會漂移，標「~」者為約略位置。
+
+證據分三類，**不得混讀**：(A) production code 讀碼證實；(B) 合成測試證實；(C) 理論風險／未經真實基金驗證。
+
+### §10.1 (A) production code 讀碼證實（單組讀碼＋總管抽查）
+
+**仍讀原始 NAV 的位置類指標**（目前只有 HWM σ（`services/fund_position.py`）與 `calc_metrics` 的風險指標用配息還原序列）：
+- `services/fund_service.py::calc_metrics` 的 σ 通道 buy1-3／sell1-3、`pos_label`、`bb_*`、`ma20`／`ma60`、高低點（同檔註解 ~:420-423 自承只有風險指標用 `s_tr`）。
+- `services/zscore_engine.py::nav_zscore`／`rebalance_signal`：唯一 caller `ui/tab2_single_fund.py` 傳原始 `s`，結果進 `services/health/action.py::combine_action`。
+- `services/ladder235.py::ladder_signal`：唯一 caller `ui/tab_fund_grp_health.py`。
+- `services/switch_advisor.py::_breakdown_below_sma`：120 日均線 → `SELL_CASH`，LINE 週報可達。
+- 鄰接項：`fund_type_classifier` 的效率比、`compute_max_drawdown`。
+
+**名稱與內容不符**：`services/allocation_backtest.py::to_twd_total_return_series` ＝ 原始 NAV × FX、無任何配息處理，但 UI caption／assumption 寫「台幣總報酬」；consumer：配置回測權重／進場轉出、`portfolio_performance`。
+
+**Missing → 中性／HOLD／安全／0**（內部 bug，登記 BL-0440）：
+- `mk_signal_by_code` 買賣價全缺 →「⚪ 區間內」。
+- `tag_price_zone` buy／bb 缺 → `"Hold"`。
+- Tab3 hero KPI 建表失敗 → 顯示 0 檔、N/A 不揭露。
+- checkup PK 表 Hold 與 N/A 同顯示「—」。
+- `ui/tab3_portfolio.py` ~:1817 `pos_label` 預設「正常」。
+- `tab1_macro_inflection` 紅綠燈 `x or 0` → 🟢（推論為 dead，`app.py` 未掛）。
+- Tab2 −2σ 卡／策略 3 卡：缺值與未觸發不可分。
+- Tab2／Tab3 AI prompt：缺鍵直接省略、不標示。
+
+**UI 平行計算**（內部 bug，登記 BL-0440）：
+- 布林 20／2σ 至少 3 份：`services/fund_service.py`、`ui/tab2_single_fund.py` ~:774、`ui/helpers/fund_grp_health/signals.py` ~:141。
+- Tab2 −2σ 超跌卡讀 UI 重算、未四捨五入的 `_bb_dn`，不是 `metrics.bb_lower`。
+- MA60 有 5 處計算。
+- 買賣價 → 區間標籤有 6 套用字：`pos_label`、`tag_price_zone`、`mk_signal_by_code`（跳過 b2／s2）、tab1、tab3 迷你卡、tab2 chip。
+- Tab3 兩處把 MA60 趨勢傳入 `advise_fund`，但其 docstring 稱不使用（未逐行驗）。
+
+**資料不足 fallback**：`calc_metrics` 在 n<20 時改「區間σ(資料不足)」＝（年高−年低）/6，下游除 Tab2 顯示 `buy_mode` 外不揭露品質；`ladder235` 在 σ=0 時誤標「週資料不足」。
+
+**誠實降級（已正確）**：zscore 不可算時顯示位階未知；ladder 資料不足／低波／Core 有 ⬜⚪。
+
+### §10.2 (B) 合成測試證實
+
+直接呼叫 production 函式（streamlit 與 `shared.schemas` validator 打樁，**schema 驗證未執行**）：
+- 不配息序列 200 seeds：原始 vs 還原 0 差異。
+- 配息基金：原始 NAV 一律讀得較低／較像「該買」。
+- 月配 0.5%、含息持平情境 200 seeds：Z-Score 訊號翻轉 110、`calc_metrics` 位置 124、235 燈 34。
+- 配息率越高、期間越長，偏差越大。
+
+⚠️ **參數為自訂，只示方向與量級；上列翻轉次數是合成情境的計數，不是真實基金的發生率。**
+
+### §10.3 (C) 理論風險／未經真實基金驗證
+
+- 真實配息基金未測（repo 內無基金 NAV＋配息快取）。
+- `tag_price_zone` 在 nav 存在而 buy 缺的路徑屬罕見，未實測。
+- 是否有來源回傳的已是還原 NAV，未逐源驗。
+- NDC／VIX 動態門檻維度未測。
+- 「dead／無其他 caller」為字面 grep、單組結論，不宣稱窮舉。
+
+### §10.4 出處與未驗
+
+- 研究由單組讀碼與合成測試產出、總管抽查，經總管轉述；文件組未重跑測試、未重讀原始碼。原始報告不在 repo。
+- 後續：DG-1～DG-3 傾向見 `DEC-2026-10-24-01`；Missing／UI 重算修補登記 BL-0440（客戶指示尚未開始）。
