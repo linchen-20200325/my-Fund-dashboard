@@ -322,7 +322,7 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 - **若 DG-2 選 C 的影響**：無任何 consumer 可「純重接」（同輸入同語意）。最接近者 Tab2 −2σ 卡，但那是刪除行動文字而非重接，且 `combine_action` 不吃布林。其餘（`pos_label` %、`deploy_pct`、satellite 停利、`switch_advisor`、`switch_strategy`、`allocation_backtest`、`recommend_policy`、mk verdict、`decision_matrix`）輸入／語意／時間尺度不同，不能重接。把其他訊號餵進 `combine_action` ＝ 改矩陣／新增輸入維度 ＝ 新投資語意。[code-read confirmed；「不能重接」的判斷為 inferred]
 - **命中 Decision Gate**：① 降級或下架已上線行動文字（投／出 %、`deploy_pct`、SELL_CASH、停利 %）；② `combine_action` 矩陣本身，以及 Z 用 raw 或 TR（屬 DG-1）；③ 覆蓋率不足的 grade 能否出「加碼」；④ `eat_warn` 缺值顯示；⑤ LINE 週報行動來源。
 - **未查證**：「唯一 caller／無其他引擎」為單組 grep（唯一 caller 總管另以 `git grep` 確認；「無其他引擎」不宣稱窮舉）；`mk_signal_by_code`、`switch_strategy`、`rotation` 內部未逐行讀；未全 repo 掃行動字串。
-- **後續**：三項未揭露 Missing 登記 BL-0441（未開始）；DG-2 仍待客戶裁示（BL-0438）。（→ **2026-10-24 補記（狀態更新，不是漏刪）**：BL-0441 實作於分支 `ccr-464564b4-9qluki`：三項 Missing 改為可見（覆蓋缺口 flag、`eat_warn` 三態、`is_core_bucket` 例外 → None），行動與矩陣不變；證據 `tests/test_bl0441_missing_semantics.py`。）
+- **後續**：三項未揭露 Missing 登記 BL-0441（未開始）；DG-2 仍待客戶裁示（BL-0438）。（→ **2026-10-24 補記（狀態更新，不是漏刪）**：BL-0441 實作於分支 `ccr-464564b4-9qluki`：三項 Missing 改為可見（覆蓋缺口 flag、`eat_warn` 三態、`is_core_bucket` 例外 → None；`rebalance_signal`／`ladder235` 揭露 `core_status=unknown`，Stop Gate 仍待裁示），行動與矩陣不變；證據 `tests/test_bl0441_missing_semantics.py`。）
 
 ## §11 資料先行順序與新設計流程（2026-10-24，`DEC-2026-10-24-02`）
 

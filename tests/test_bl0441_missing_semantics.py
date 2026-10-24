@@ -113,3 +113,30 @@ def test_ndc_status_text_distinct(status):
     from ui.helpers.macro.ndc import NDC_STATUS_TEXT
     assert NDC_STATUS_TEXT[status] and NDC_STATUS_TEXT[status] != NDC_STATUS_TEXT["ok"]
     assert len({NDC_STATUS_TEXT[k] for k in ("fetch_error", "unavailable", "no_data")}) == 3
+
+
+# ── 3b. ladder235 分類失敗揭露(燈號與非 Core 相同)───────────────
+def _ladder_nav():
+    import numpy as np
+    idx = pd.date_range("2022-01-03", periods=900, freq="B")
+    return pd.Series(100 + np.sin(np.arange(900) / 20) * 8 + np.arange(900) * 0.01, index=idx)
+
+
+@pytest.mark.parametrize("mode", ["none", "raise"])
+def test_ladder235_core_unknown_disclosed_lamp_unchanged(monkeypatch, mode):
+    import services.zscore_engine as ze
+    from services.ladder235 import ladder_signal
+    nav = _ladder_nav()
+    base = ladder_signal(nav, vix=20, category="科技股票型")
+    assert base["core_status"] == "non_core"
+
+    def _fake(_c):
+        if mode == "raise":
+            raise RuntimeError("x")
+        return None
+    monkeypatch.setattr(ze, "is_core_bucket", _fake)
+    r = ladder_signal(nav, vix=20, category="科技股票型")
+    assert r["core_status"] == "unknown"
+    assert "是否 Core 未判定" in r["note"]
+    for k in ("lamp", "status", "deploy_pct"):
+        assert r.get(k) == base.get(k)
