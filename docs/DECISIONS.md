@@ -863,6 +863,32 @@
 | supersedes／superseded by | supersedes：無。superseded by：無 |
 | provenance | **總管轉達要點**（決策者：客戶 2026-10-24；文件組未見客戶對話本身）。由文件組單組寫成，未經第二組驗證 |
 
+### DEC-2026-10-24-07｜客戶永久治理裁示：Stateless AI Handoff／GitHub = Project Memory
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-24 |
+| 決策內容摘要 | **永久**裁示。換 AI、換對話、聊天紀錄不完整或完全不可用也可以；只要 GitHub repository 與正式紀錄仍在，新 AI 必須能重建專案現況並安全接手。GitHub 是 Project Memory／SSOT；聊天與模型記憶不是正式專案記憶。工作階段結束時，若下一個 AI 只讀 GitHub 仍無法判斷 (1) main／PR／CI 狀態 (2) 已完成 (3) 未完成 (4) 客戶正式裁示 (5) 現行 SSOT／資料口徑／架構 (6) blocker／Decision Gate (7) 下一個唯一 handoff point，該工作階段不得視為完成交接。正式條文見 `PROJECT_RULES.md` 第 6 節 6.1.1 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）把 6.1 Handoff／Save Gate 與 `DEC-2026-10-23-04` G「GitHub 正式文件才是 durable state」明定為可檢驗的交接完成條件；不推翻任何既有規則 |
+| evidence／source | 客戶 2026-10-24 正式裁示，經總管轉達；repo 內無逐字存檔 |
+| 影響範圍 | 交接完成判定；**不構成**新公式、新門檻、新資料來源、投資語意或動工授權；不新增治理檔 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。superseded by：無 |
+| provenance | **客戶正式裁示（非 AI 推論）**，經總管轉達（決策者：客戶 2026-10-24；文件組未見客戶對話本身）。由文件組單組寫成，未經第二組驗證 |
+
+### DEC-2026-10-24-08｜客戶授權開始 BL-0441（Missing 語意誠實化）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-24 |
+| 決策內容摘要 | 客戶指示開始 BL-0441（經總管轉達），模型 Opus 5.5 Medium，不新增投資規則。**範圍**：修 BL-0441 Missing 語意 —— 4D 健康維度不足要可見；`eat_warn` Missing ≠ False；`is_core_bucket` 分類失敗 ≠ 非 Core；景氣資料「抓取失敗／來源不可用／真無資料」分開。**禁止**：DG-1～DG-3；raw NAV／TR 口徑；`combine_action` 3×3 表；新買賣規則；公式、門檻、權重；新資料源；layout；BL-0441 以外的平行行動路徑。**Stop Gate**（遇到即停、請客戶裁示）：資料不足時能否給加碼／賣出；新覆蓋率門檻；新 Core 判定規則；行動降級／下架；schema 重大變更；新來源 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）BL-0441 由 64 §10.6 的唯讀盤點發現；本裁示只授權把 Missing 誠實揭露，不改投資語意 |
+| evidence／source | 客戶 2026-10-24 指示，經總管轉達；repo 內無逐字存檔 |
+| 影響範圍 | BL-0441 實作範圍；**不構成** DG-1～DG-3 的核准 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。superseded by：無 |
+| provenance | **客戶指示**，經總管轉達（決策者：客戶 2026-10-24；文件組未見客戶對話本身）。由文件組單組寫成，未經第二組驗證 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。

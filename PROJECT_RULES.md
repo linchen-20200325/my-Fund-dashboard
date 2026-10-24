@@ -70,6 +70,7 @@
 | Minimum Sufficient Work | 第 9 節 9.1（`DEC-2026-10-24-04`） |
 | Save／Handoff Gate | 第 6 節 6.1（`DEC-2026-10-22-03`；補強 `DEC-2026-10-23-04` F／G） |
 | 新裁示同批 GitHub 落盤 | 第 12 節 12.1（`DEC-2026-10-24-05`） |
+| Stateless AI Handoff／GitHub = Project Memory | 第 6 節 6.1.1（`DEC-2026-10-24-07`） |
 | 資料層 ≠ AI 推理層 | 第 13 節第 1 條；資料先行順序第 13 節 13.1（`DEC-2026-10-24-02`） |
 
 **Supersession hygiene（同裁示）**：(1) 舊內容保留歷史，不刪；(2) 被新裁示取代時，在舊內容就地標示「superseded by <DEC-ID>」；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只能指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（現行四份見 0.4）。
@@ -310,6 +311,14 @@
 4. **不得寫入任何 secret**：token、私鑰、OAuth 憑證、試算表 ID 等實際值一律不寫，只寫「已設定／未設定」。
 5. **不得另建第二套**：不得建立第二套 backlog、handoff 或 memory 文件（例：PROJECT_STATE 類新檔）；一律寫進上列四份。
 6. **2026-10-23 補強（客戶裁示，`DEC-2026-10-23-04` F／G）**：觸發時機加上「額度快滿」「完成重要 Batch」「需跨 session」（與第 1 點併讀）。存檔時至少確認並寫入：main SHA、Open PR、已完成、未完成、Decision Gate、Stop Gate、下一個唯一工作點、下一批建議模型、下一批 Minimum Sufficient Effort。GitHub 正式文件才是 durable state，不得以聊天記憶為唯一交接來源。第 2 節 GitHub-first verification 維持不變：完成度判斷、下一工作點、PR merge／close、branch deletion、CI／QA、HANDOFF／BACKLOG／DECISIONS、新 Phase／Batch、架構／資料／cleanup 建議，一律重新查 GitHub 實況；HANDOFF 與聊天記憶只作輔助。
+
+#### 6.1.1 長期規則：Stateless AI Handoff／GitHub = Project Memory（客戶 2026-10-24 正式永久裁示，`DEC-2026-10-24-07`）
+
+> **出處**：客戶正式裁示，經總管轉達（明示不是 AI 推論）；repo 內無逐字存檔。本小節是 6.1 的完成條件，不是平行規則。
+
+1. **GitHub 是 Project Memory／SSOT**；聊天與模型記憶不是正式專案記憶。換 AI、換對話、聊天紀錄不完整或完全不可用，只要 repository 與正式紀錄仍在，新 AI 必須能重建現況並安全接手。
+2. **交接完成條件**：工作階段結束時，下一個 AI 只讀 GitHub（不看本次聊天）必須能判斷以下 7 項；任一無法判斷 → 該工作階段**不得視為完成交接**：(1) main／PR／CI 狀態；(2) 已完成什麼；(3) 未完成什麼；(4) 客戶正式裁示；(5) 現行 SSOT／資料口徑／架構；(6) blocker／Decision Gate；(7) 下一個唯一 handoff point。
+3. **併讀**：寫入位置依 6.1 第 2 點（四份既有文件，不另建新檔）；新裁示同批落盤依第 12 節 12.1；7 項的實況核對依第 2 節 GitHub-first verification（文件與 GitHub 實況不一致時以實況為準）。
 
 ## 第 7 節｜Definition of Done
 
