@@ -215,7 +215,8 @@ def compute_4d_health(
             "trend": int | None,               # 📊 走勢健康
             "volatility": int | None,          # 🛡️ 低波動性
         },
-        "eat_warn": bool,                      # 🔴 吃本金警示(coverage < 50)
+        "eat_warn": bool | None,               # 🔴 吃本金警示(coverage < 50);配息覆蓋缺 → None(無法判定,BL-0441)
+        "eat_warn_status": str,                # 'warn' | 'ok' | 'unknown'(BL-0441 三態)
     }
     """
     f_cov = _score_coverage(_safe_float(tr1y_pct), _safe_float(adr_pct))
@@ -269,7 +270,10 @@ def compute_4d_health(
             "volatility": f_vol,
             "fx_risk": f_fx,
         },
-        "eat_warn": (f_cov is not None and f_cov < 50),
+        # BL-0441(DEC-2026-10-24-08):配息覆蓋算不出 ≠ 沒吃本金。缺值 → None + status 'unknown',
+        # 消費端顯示「⬜ 資料未取得／無法判定」;門檻 50 原值不動。
+        "eat_warn": (None if f_cov is None else (f_cov < 50)),
+        "eat_warn_status": ("unknown" if f_cov is None else ("warn" if f_cov < 50 else "ok")),
         # 匯率維的三態(scored / n/a / missing)—— 消費端要分得開才不會把
         # 「台幣基金沒有匯率風險」講成「匯率資料抓不到」
         "fx_risk_status": fx_status,

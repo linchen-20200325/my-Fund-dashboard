@@ -85,6 +85,11 @@ _QUALITY_ONLY: dict = {
 }
 
 
+# BL-0441:4D 維度鍵 → 顯示名(與 tab2 健康總覽卡標籤同義)
+_DIM_LABEL = {"coverage": "配息健康", "sharpe": "風險調整報酬", "trend": "走勢",
+              "volatility": "波動", "fx_risk": "匯率風險"}
+
+
 def combine_action(health: dict, z_signal: dict) -> dict:
     """品質(health)× 位階(z_signal)→ 行動建議 dict。純函式,離線可驗。
 
@@ -116,8 +121,16 @@ def combine_action(health: dict, z_signal: dict) -> dict:
     z = z_signal.get("z")
 
     flags: list[str] = []
-    if health.get("eat_warn"):
+    if health.get("eat_warn") is True:
         flags.append("🔴 吃本金")
+    elif health.get("eat_warn_status") == "unknown":
+        # BL-0441:配息覆蓋缺 ≠ 沒吃本金 → 揭露,不給新動作
+        flags.append("⬜ 吃本金:資料未取得／無法判定")
+    # BL-0441:4D 評分覆蓋缺口揭露(不改品質桶、不新增門檻)
+    _cv = health.get("coverage") if isinstance(health.get("coverage"), dict) else None
+    if _cv and _cv.get("missing"):
+        flags.append(f"⬜ 評分覆蓋 {_cv.get('n_scored')}/{_cv.get('n_applicable')}"
+                     f"(缺:{'、'.join(_DIM_LABEL.get(k, k) for k in _cv['missing'])})")
 
     # ① 品質資料不足 → 不建議(§1,最高優先:別在薄資料上給行動)
     if q == "na":
