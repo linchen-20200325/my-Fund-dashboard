@@ -42,8 +42,16 @@ def test_grey_eating_dict_is_not_a_signal_verdict_stays_unknown():
 
 def test_real_eating_verdict_still_counts_as_signal():
     """對照:真的判得出來(綠燈)→ 有訊號 → keep,不被上一條誤殺成 unknown。"""
-    fd = {"metrics": {"ret_1y_total": 9.0, "ret_1y_window_days": 365, "ret_1y_div_count": 12,
+    # DG-6（DEC-2026-10-24-12）：(1) 分類未判定 → ⬜ 不給換／留，故補可對應的基金類別；
+    # (2) 「判不動時不得 🟢 保留」—— 原 fixture 無 Sharpe → 規則 (d) 判不動 → 不得 keep。
+    # 本測試原本守的「真吃本金燈號算訊號（不走 no_signal 的 ⬜ 資料不足）」改由 status 斷言守住；
+    # 補 Sharpe 後 4 規則都判得動 → 仍為 keep。
+    fd = {"category": "全球股票型",
+          "metrics": {"ret_1y_total": 9.0, "ret_1y_window_days": 365, "ret_1y_div_count": 12,
                       "annual_div_rate": 3.0}, "moneydj_raw": {}}
+    r0 = check_replacement_recommendation(fd, holding_years=2)
+    assert r0["verdict"] == "unknown" and r0["status"] == "rules_incomplete", r0
+    fd["metrics"]["sharpe"] = 1.0
     r = check_replacement_recommendation(fd, holding_years=2)
     assert r["verdict"] == "keep", r
 

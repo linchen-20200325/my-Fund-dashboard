@@ -7,6 +7,10 @@
 - action ∈ {SWITCH(換股), SELL_CASH(賣轉現金)},或
 - 表現差(underperformance.is_underperforming;跑輸大盤或絕對虧損)。
 單純 WARN(成長看衰未跌破)/ HOLD / 資料不足 **不觸發通知**(避免每週噪音)。§1:誠實,不硬報。
+~~表現差(任一列)即可觸發~~ → **DG-6(2026-10-24 客戶裁示 DEC-2026-10-24-12,有意識的政策變更,不是漏刪)**:
+action == INSUFFICIENT(必要資料不足／無法判定)的列**永不 actionable**,即使它有表現差訊號 ——
+Missing／Unknown／INSUFFICIENT 不得經另一單軸訊號重新產生投資行動。這類列不列入「需留意」明細,
+改以一行「⬜ 其中 N 檔有表現差訊號,但必要資料不足(無法判定),不提供換股建議」揭露(不靜默隱藏)。
 
 ⚠️ **legacy 行動語意,待 BL-0428 重新裁示**(2026-10-23 裁示 2C ＋ Stop Gate「選項 1」,BL-0426):
 本模組讀到的 σ rank 一律來自唯一 SSOT `services/fund_position.compute_fund_position`
@@ -25,7 +29,12 @@ _MAX_DETAIL_ROWS = 12          # 明細最多列幾檔(其餘收斂成「…還�
 
 
 def _is_actionable(a: dict) -> bool:
-    """單筆建議是否值得通知:型態觸發換股/賣出,或表現差。"""
+    """單筆建議是否值得通知:型態觸發換股/賣出,或表現差。
+
+    DG-6(DEC-2026-10-24-12):action == INSUFFICIENT 一律不 actionable(即使表現差)。
+    """
+    if a.get("action") == INSUFFICIENT:
+        return False
     if a.get("action") in (SWITCH, SELL_CASH):
         return True
     return bool((a.get("underperformance") or {}).get("is_underperforming"))
@@ -46,6 +55,10 @@ def _holding_line(a: dict, source: str = "") -> str:
         _rz = "・".join(_u.get("reasons") or []) or "表現差"
         _ex = _u.get("excess_pct")
         _bits.append(f"  ⚠️ {_rz}" + (f"(vs 大盤 {_ex:+.1f}pp)" if isinstance(_ex, (int, float)) else ""))
+    if a.get("underperf_suppressed"):
+        # DG-6(DEC-2026-10-24-12):資料不足列 → 不印「建議換入」也不印「選股池無合適替代標的」
+        _bits.append("  → ⬜ 資料不足，不提供換股建議")
+        return "\n".join(_bits)
     _c = _cand_of(a)
     if _c and _c.get("code"):
         _bs = _c.get("buy_sigma")
@@ -155,6 +168,13 @@ def build_notification(result: dict, *, portfolio_name: "str | None" = None,
     )
     _skip_note = f"\n⬜ 另有 {skipped} 檔資料不足、未評估" if skipped and skipped > 0 else ""
     _caveat = "※ 教學紀律工具,非獲利保證;請自行判斷後再決定。"
+    # DG-6(DEC-2026-10-24-12):資料不足但有表現差訊號的列 → 不給換股建議,但一行揭露、不靜默隱藏。
+    _n_supp = sum(1 for a in _advices
+                  if a.get("action") == INSUFFICIENT
+                  and (a.get("underperf_suppressed")
+                       or (a.get("underperformance") or {}).get("is_underperforming")))
+    _supp_note = (f"\n⬜ 其中 {_n_supp} 檔有表現差訊號，但必要資料不足（無法判定），不提供換股建議。"
+                  if _n_supp else "")
     _tailblock = f"\n\n{_tail}\n{_caveat}"
 
     def _assemble(body: str) -> str:
@@ -175,13 +195,14 @@ def build_notification(result: dict, *, portfolio_name: "str | None" = None,
                         if _n_insuff else "")
         _n_evaluated_ok = len(_advices) - _n_insuff      # 已評估且可判定的檔數
         if _n_insuff and _n_evaluated_ok <= 0:
-            _body = f"{_header}\n\n⬜ 本週無法評估換股:{_n_insuff} 檔資料不足(無法判定)。{_skip_note}"
+            _body = (f"{_header}\n\n⬜ 本週無法評估換股:{_n_insuff} 檔資料不足(無法判定)。"
+                     f"{_supp_note}{_skip_note}")
         elif _n_evaluated_ok <= 0 and skipped and skipped > 0:
             # 2026-10-23 稽核小修:0 檔完成評估、只有抓不到的檔 → ~~「✅ 所有標的續抱」~~,不給 ✅
             _body = f"{_header}\n\n⬜ 本週無法評估換股:沒有任何標的完成評估。{_skip_note}"
         elif _n_insuff or (skipped and skipped > 0):
             _body = (f"{_header}\n\n✅ 本週無需換股：其餘標的續抱 / 觀察中。"
-                     f"{_insuff_note}{_skip_note}")
+                     f"{_insuff_note}{_supp_note}{_skip_note}")
         else:
             _body = f"{_header}\n\n✅ 本週無需換股：所有標的續抱 / 觀察中。{_skip_note}"
         return {"should_notify": False, "message": _assemble(_body),
@@ -194,7 +215,7 @@ def build_notification(result: dict, *, portfolio_name: "str | None" = None,
     if len(_actionable) > _MAX_DETAIL_ROWS:
         _lines.append(f"\n…另有 {len(_actionable) - _MAX_DETAIL_ROWS} 檔(開 App 看完整)")
 
-    _body = f"{_header}\n\n" + "\n".join(_lines) + _skip_note
+    _body = f"{_header}\n\n" + "\n".join(_lines) + _supp_note + _skip_note
     return {"should_notify": True, "message": _assemble(_body), "n_actionable": len(_actionable),
             "actionable_codes": [str(a.get("code") or "") for a in _actionable]}
 

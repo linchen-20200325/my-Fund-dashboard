@@ -899,7 +899,7 @@
 | evidence／source | 客戶 2026-10-24 正式裁示，經總管派工單轉達；repo 內無逐字存檔 |
 | 影響範圍 | Z-Score 位階卡（Tab2）、「🎯 建議動作」的位階桶輸入、健診寬表「加碼水位」欄；**不構成** DG-1～DG-3 核准、新公式、新門檻、新資料來源或其他引擎的動工授權。**揭露**：(a) Tab2 健康卡補傳 `fund_ccy`／匯率 CV 後，外幣基金分數可能改變、可能跨等第，並連帶改變 `combine_action` 品質桶與建議 —— 屬對齊同頁「📊 進階指標」與健診大表的同一口徑，不是新規則；(b) 分類未判定時「🎯 建議動作」仍顯示品質單軸建議（如「🔴 品質弱 → 考慮換」），因其不依賴 Core 分類（真 Core 亦同一支）—— ~~**總管讀法**判為不違反第 (1) 點字面；若要移除須改 `_QUALITY_ONLY`，屬新裁示，可被客戶推翻~~ → **superseded by `DEC-2026-10-24-10` A3**（客戶裁示：分類未判定時不得顯示「品質弱 → 考慮換」或任何換／留／加碼等行動；改顯示「品質偏弱；分類未判定，暫不提供換／留建議」等；有意識的政策變更，不是漏刪；2026-10-24；決策者：客戶）|
 | 是否可逆 | 可逆（客戶可另行裁示） |
-| supersedes／superseded by | supersedes：`DEC-2026-10-24-08` Stop Gate 中「Core 分類失敗時是否仍給 Z／235 行動」一項（#1042 的「照非 Core 計算、只揭露」作法）。superseded by：~~無~~ → 部分：影響範圍 (b)（分類未判定時仍顯示品質單軸建議）由 `DEC-2026-10-24-10` A3 取代；第 (2) 點〔〕內原標總管讀法者與第 (3) 點作法由 `-10` A1／A2 客戶確認維持（狀態更新，不是漏刪；2026-10-24；決策者：客戶）|
+| supersedes／superseded by | supersedes：`DEC-2026-10-24-08` Stop Gate 中「Core 分類失敗時是否仍給 Z／235 行動」一項（#1042 的「照非 Core 計算、只揭露」作法）。superseded by：~~無~~ → 部分：影響範圍 (b)（分類未判定時仍顯示品質單軸建議）由 `DEC-2026-10-24-10` A3 取代；第 (2) 點〔〕內原標總管讀法者與第 (3) 點作法由 `-10` A1／A2 客戶確認維持（狀態更新，不是漏刪；2026-10-24；決策者：客戶）；禁止清單中的 `switch_advisor` 一項，僅就表現差 overlay 路徑由 `DEC-2026-10-24-12` 解除（狀態更新，不是漏刪；2026-10-24；決策者：客戶）|
 | provenance | **客戶正式裁示（非 AI 推論）**，經總管派工單轉達（決策者：客戶 2026-10-24；實作組未見客戶對話本身）。由實作組單組寫成，未經第二組驗證 |
 
 ### DEC-2026-10-24-10｜客戶正式裁示：DEC-09 補充 —— 分類未判定不得以品質單軸產生換／留行動；資料／證據 ≠ 投資行動
@@ -913,7 +913,7 @@
 | evidence／source | 客戶 2026-10-24 正式裁示，經總管派工單轉達；repo 內無逐字存檔 |
 | 影響範圍 | Tab2「🎯 建議動作」在分類未判定時的文字與顏色（改中性灰、無行動詞、無燈號 emoji）；**不構成** DG-1～DG-3 核准、新公式、新門檻、新資料來源或其他引擎（BL-0442）的動工授權。落地見 `docs/BACKLOG.md` BL-0441 列尾 |
 | 是否可逆 | 可逆（客戶可另行裁示） |
-| supersedes／superseded by | supersedes：`DEC-2026-10-24-09` 影響範圍 (b)（分類未判定時仍顯示品質單軸建議的總管讀法）。superseded by：無 |
+| supersedes／superseded by | supersedes：`DEC-2026-10-24-09` 影響範圍 (b)（分類未判定時仍顯示品質單軸建議的總管讀法）。superseded by：無（→ **2026-10-24 補記（狀態更新，不是漏刪）**：永久原則 (2) 由 `DEC-2026-10-24-12` 擴及 `switch_advisor` 表現差 overlay 與 `check_replacement_recommendation` 兩條路徑；禁止清單「擴張到 BL-0442 其他引擎」僅就該兩條解除，其餘照舊；決策者：客戶）|
 | provenance | **客戶正式裁示（非 AI 推論）**，含 Batch B 授權（決策者：客戶 2026-10-24；實作組未見客戶對話本身，內容依總管轉來的客戶訊息要點）。由實作組單組寫成，未經第二組驗證 |
 
 ### DEC-2026-10-24-11｜客戶治理裁示：Final Save／Handoff Gate（額度近滿時只安全收尾）
@@ -928,6 +928,20 @@
 | 是否可逆 | 可逆（客戶可另行裁示） |
 | supersedes／superseded by | supersedes：無（補強 `DEC-2026-10-22-03`、`DEC-2026-10-23-04` F／G）。superseded by：無 |
 | provenance | **客戶指示**，經總管轉達（決策者：客戶 2026-10-24；文件組未見客戶對話本身）。由文件組單組寫成，未經第二組驗證 |
+
+### DEC-2026-10-24-12｜客戶裁示 DG-6：DEC-10 永久原則擴及 `switch_advisor` 表現差 overlay 與 `check_replacement_recommendation` 兩條路徑
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-24 |
+| 決策內容摘要 | **正式裁示**（回答 `docs/BACKLOG.md` BL-0444／`docs/v2/64_v2_ssot_convergence.md` §10.7.3 第 10 問的 DG-6）。**原則**（客戶原話要點）：「`DEC-2026-10-24-10` 的永久原則擴及這兩條路徑：Missing／Unknown／INSUFFICIENT 不得經另一單軸訊號重新產生投資行動。」**只核准兩條**：(a) `services/switch_advisor.py` —— 必要資料狀態為 INSUFFICIENT／Unknown 時，不得由「表現差」或任何其他單軸訊號重新產生「建議換入／換出」；LINE 週報同樣適用；Missing 須呈現「⬜ 資料不足／無法判定」類語意，不得偽裝成 HOLD／安全／正常／未觸發。(b) `services/health/replacement.py::check_replacement_recommendation` —— 基金分類未判定／Unknown 時，不得給「換標的／保留」結論；判不動時不得顯示「🟢 保留」，改「⬜ 無法判定／分類資料未取得」類語意。**禁止**（客戶原列要點）：擴及 BL-0442 其他平行引擎（`switch_strategy`、`mk_dashboard`、`recommend_policy`、`calc_metrics` pos_label、成長型 macro=None 續抱分支（§10.7.1 #2）、`fund_type_classifier` 灰帶（#3）、`assess_underperformance` None→False（#4）等）；DG-1／DG-2／DG-3；改任何公式／門檻／權重；新資料來源；新的投資行動 SSOT 模組；重構其他路徑；新 UI layout。其他發現只登記 `docs/BACKLOG.md` |
+| 實作說明（總管／實作組，不是客戶裁示） | **(a)**：`advise_holding` 表現差 overlay 在 `action == INSUFFICIENT` 時不呼叫 `_best_candidate`、`underperf_candidate` 維持 None、新鍵 `underperf_suppressed=True`（其餘列預設 False）；`action`／`action_zh` 維持 INSUFFICIENT／「⬜ 資料不足」；理由保留原資料不足理由，後接「另有表現差訊號（…），但必要資料不足／無法判定 → 暫不提供換入／換出建議（DG-6）。」，不寫「選股池無合適替代標的」（暗示已搜尋）；表現差 block 與 `n_underperforming` 計數照舊當證據。HOLD／WARN overlay、SWITCH、SELL_CASH 未改。`services/switch_notify.py`：INSUFFICIENT 列永不 actionable；週報以「⬜ 其中 N 檔有表現差訊號，但必要資料不足（無法判定），不提供換股建議。」一行揭露（有／無 actionable 兩分支都附，不靜默隱藏）；`_holding_line` 防禦性改印「→ ⬜ 資料不足，不提供換股建議」。④ 換股顧問表「換入標的」欄改顯示「⬜ 資料不足，不提供」，兩欄 help 文字最小補一句（純文字，無 layout 變更）。`scripts/weekly_switch_notify.py` 只呼叫 `advise_switches`＋`build_notification`，無自有 actionable 邏輯，未改即繼承。**(b)**：分類以既有 SSOT `services.zscore_engine.is_core_bucket` 判（類別取 `moneydj_raw.category` 或頂層 `category`，同 `services/health/report.py`）；回 None 或呼叫例外 → verdict `unknown`、⬜、label「分類未判定」、`status="core_unknown"`，訊息「⬜ 分類未判定（分類資料未取得或無法對應），暫不提供換／留建議」，有觸發／觀察規則時後接「；證據：…」（只列證據，不帶結論字）；覆蓋 replace／observe／keep，規則仍照算、`triggered_rules`／`observe_signals` 照回傳。分類可判定時 replace／observe 未改。**「判得動」定義＝總管讀法，可被客戶推翻**：(a) 吃本金是真訊號（非灰色、`eating_principal` 非 None），或持有年數已知且 < 規則 (a) 門檻；(b) 4D 等第不是 None／「—」；(c) 持有年數已知且（< 規則 (c) 門檻，或 3-3-3 有通過／未通過結論）；(d) Sharpe 已知且（≥ 規則 (d) 門檻，或 max_dd 已知）。無觸發、無觀察且任一規則判不動 → `unknown`、⬜、label「無法判定」、`status="rules_incomplete"`，訊息「⬜ 無法判定 — 規則 (x)(y) 資料不足，不提供保留結論」。既有「所有關鍵指標都拿不到」維持 ⬜ 資料不足（`status="no_signal"`）；正常 replace／observe／keep 為 `status="ok"`。**實作組補充（不在總管原定義內，須總管確認）**：規則 (a) 另把「非配息基金」（`check_eating_principal_1y_mk` 依既有契約回 None、且非例外）算判得動 —— ~~吃本金概念不適用、規則 (a) 確定不會觸發~~ → 依既有契約視為吃本金不適用；配息資料全缺的配息基金亦會落此、無法區分（`docs/BACKLOG.md` BL-0447，Missing→保留殘餘風險）（措辭更正，有意識的更正，不是漏刪；2026-10-24；依獨立稽核 non-blocking 意見；決策者：總管）。稽核實例：高收益債配息基金、MoneyDJ 配息資料整批取數失敗、持有 4 年、其餘指標齊全 → 🟢 保留（與本批前 HEAD 行為相同，本批未新增此風險、也未消除）。若不加，累積型基金持有 ≥ 1 年永遠無法 🟢 且訊息會誤寫「規則 (a) 資料不足」。**已知殘餘（總管讀法，低嚴重度）**：吃本金結果為例外或灰色、且持有 < 1 年時，規則 (a) 算判得動（hard rule 不可能觸發），但 (a*) 觀察分無法評估 → 可能出現 🟢、而實際應為 🟡 的情形；觀察不是行動。label 用字（「分類未判定」「無法判定」）為最小一致化。Tab2「💰 換標的建議」caption 補一句說明（純文字）。門檻常數（`shared/signal_thresholds.py`）未動 |
+| 理由／背景 | （實作組背景說明，不是客戶原話）BL-0442 唯讀盤點（§10.7.1 #1、#5）以合成輸入實跑證實：#1 同一列「⬜ 資料不足」仍附「→ 建議從選股池換入『X』」且 LINE 判 actionable 推播；#5 分類未判定時 F 級仍「🔴 建議換」、判不動時回「🟢 保留 — 4 規則全未中」，與同頁 🎯「暫不提供換／留建議」矛盾 |
+| evidence／source | 客戶 2026-10-24 正式裁示，經總管派工單轉達；repo 內無逐字存檔。落地：`services/switch_advisor.py`、`services/switch_notify.py`、`ui/helpers/fund_grp_health/switch_advisor_section.py`、`services/health/replacement.py`、`ui/tab2_single_fund.py`（caption）；測試 `tests/test_dg6_missing_no_action.py` |
+| 影響範圍 | ④ 換股顧問表與 LINE 週報（資料不足列不再附換入建議、不再觸發推播）；Tab2「💰 換標的建議」、健診大表「換標的建議」欄、健診頁頂「🔴 淘汰候選」（分類未判定或判不動者改 ⬜，不再進紅區或顯示 🟢）。**揭露**：分類未判定的範圍沿用 `DEC-2026-10-24-09`／`-10` A1（空白、缺值、`asset_bucket` 對不到如「固定收益型」「組合型」「其他」等、例外），這些基金的換標的建議自此一律 ⬜；判得動定義使部分過去顯示 🟢 的基金改 ⬜ 無法判定。**不構成** DG-1～DG-3 核准、BL-0442 其他引擎、BL-0443 安全修或 BL-0445 的動工授權 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：`DEC-2026-10-24-09`／`-10` 禁止清單中「擴張到 BL-0442 其他引擎（含 `switch_advisor`）」一項，**僅就本筆核准的兩條路徑**解除；其餘禁令照舊。擴及 `DEC-2026-10-24-10` 永久原則 (2)（不是取代）。superseded by：無 |
+| provenance | **客戶正式裁示（非 AI 推論）**，經總管派工單轉達（決策者：客戶 2026-10-24；實作組未見客戶對話本身）。「判得動」定義為**總管讀法**；非配息基金補充與 label 用字為**實作組判讀**。由實作組單組寫成，未經第二組驗證 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
@@ -1058,3 +1072,4 @@
 - 第四節 `DEC-2026-10-24-09`：客戶裁示經總管派工單轉達，repo 內無逐字存檔，實作組未見客戶對話本身；五點為總管轉達要點，照寫不增刪；`-08` supersedes 欄的部分取代註記為實作組讀法；由實作組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-24-10`：客戶裁示（含 Batch B 授權，客戶本人同一則訊息）repo 內無逐字存檔，實作組未見客戶對話本身；A1～A3、永久原則兩句與 Batch B 範圍／禁令為總管轉來的要點，照寫不增刪；`-09` 就地註記為實作組依派工單寫成；由實作組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-24-11`：客戶指示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；四項禁止與接手測試為總管轉達要點；由文件組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-24-12`：客戶裁示經總管派工單轉達，repo 內無逐字存檔，實作組未見客戶對話本身；原則句、兩條核准項與禁止清單為總管轉達要點，照寫不增刪；「判得動」定義為總管讀法、非配息基金補充為實作組判讀；由實作組單組寫成，未經第二組驗證。

@@ -34,7 +34,20 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-24（第二十一次）現況 —— Final Save／Handoff Gate（以本框為準；下方第二十次框起皆為歷史快照）**（客戶 2026-10-24 Final Save／Handoff Gate 指示，`DEC-2026-10-24-11`；本框由 BL-0442 盤點框改寫為完整 Final Save 現況，狀態更新，不是漏刪：第二十次框整段保留於下方）
+> **⭐ 2026-10-24（第二十二次）現況 —— DG-6 裁示批（以本框為準；下方第二十一次框起皆為歷史快照）**（客戶裁示 `DEC-2026-10-24-12`；狀態更新，不是漏刪：第二十一次框整段保留於下方）
+> - **main 實況**：本框隨 DG-6 實作 PR 合併；該 PR 前 main 為 `74e556de`（#1045）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
+> - **Open PR**：本 PR（DG-6 批，分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。
+> - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；本框撰寫時尚未開 PR、無 CI 結果。
+> - **Phase**：DG-6 實作批（`DEC-2026-10-24-12`）；合併後無進行中任務。
+> - **本批內容**：客戶裁示 DG-6 —— `DEC-2026-10-24-10` 永久原則擴及兩條路徑：(a) `switch_advisor` 表現差 overlay＋LINE 週報（INSUFFICIENT 不再附換入建議、不判 actionable、⬜ 一行揭露）；(b) `check_replacement_recommendation`（分類未判定 → ⬜ 分類未判定；規則判不動 → ⬜ 無法判定，不給 🟢 保留）。測試 `tests/test_dg6_missing_no_action.py`。BL-0444 改 closed；BL-0446、BL-0447 新增（只登記）。
+> - **未完成（`docs/BACKLOG.md`）**：BL-0438 DG-1～DG-3（`DEC-2026-10-24-01` 暫定 B／C／C，**未核准實作**）；BL-0440（部分完成，open）；BL-0442（DG-6 只核准 #1、#5；其餘平行引擎未核准，open）；BL-0443（安全修清單，未指派）；BL-0445（retirement gate 候選）；BL-0446（換標的 4D 重算未傳幣別，open）；BL-0447（非配息 vs 配息資料全缺無法區分，待確認）。其他仍「待客戶裁示」的 Gate 同第二十一次框所列（逐列見 BACKLOG；列法見該框）。
+> - **Blocker**：無（無已授權工作）。
+> - **唯一下一步**：停手等客戶指示（無已授權工作）。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。候選（**皆未授權**，不得自行開工）：DG-1～DG-3（BL-0438）、BL-0443 安全修、BL-0445 retirement gate、BL-0442 其餘平行引擎（須新 Decision Gate）。
+> - **下一批建議 Model／Effort**：若客戶裁示後實作改投資語意 → Opus 5.5 High；若只做 BL-0443 安全修（須另授權）→ Medium；純文件 → Low（`PROJECT_RULES.md` 第 5 節 5.1 第 9 點）。
+> - **尚未授權動工**：DG-1、DG-2、DG-3、BL-0443、BL-0445 retirement、BL-0446、BL-0447、BL-0442 其他引擎任何修改（`CLAUDE.md` §-1；`DEC-2026-10-24-12` 只核准兩條路徑）。
+> - **接手入口**：同第二十一次框 (1)～(3)。補充（實作組 2026-10-24 實測）：`/root/.local/bin/pytest` 所在直譯器缺 `requests`／`pandas`，非文件測試會在 `tests/conftest.py` 匯入時失敗；本批是在 scratchpad 以 `uv venv --system-site-packages` 另建、`uv pip install -r requirements.txt` 加 `pytest` 的 venv 跑完整測試（venv 不在 repo）。
+
+> **⭐ 2026-10-24（第二十一次）現況 —— Final Save／Handoff Gate（~~以本框為準；下方第二十次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第二十二次框；#1045 已合併，main `74e556de`；本框「唯一下一步」DG-6 已由客戶裁示 `DEC-2026-10-24-12`；狀態更新，不是漏刪）**（客戶 2026-10-24 Final Save／Handoff Gate 指示，`DEC-2026-10-24-11`；本框由 BL-0442 盤點框改寫為完整 Final Save 現況，狀態更新，不是漏刪：第二十次框整段保留於下方）
 > - **main 實況**：本框隨 PR #1045 合併；該 PR 前 main 為 `11b28f8d`（#1044）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
 > - **Open PR**：#1045（本身；分支 `ccr-464564b4-9qluki`，docs-only）。撰寫時 GitHub 上無其他 open PR（REST 實查）。
 > - **CI**：#1045 head `e569e7a8` 之 Fast checks、Schema gate 為 success；Slow tests（informational）撰寫時進行中。本框之後的 commit 與最終結論以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）。
@@ -385,3 +398,4 @@
 - 2026-10-24 第二十次框（`DEC-2026-10-24-10` 補充批）：main `6d3baa19` 為實作組開工時 `git log` 實查（本分支與 `origin/main` 同點起算）；#1043 的 CI 結果本組未重查；客戶補充裁示與 Batch B 授權（`DEC-2026-10-24-10`，決策者：客戶）本組未見客戶對話本身；由實作組單組寫成，未經第二組驗證。
 - 2026-10-24 第二十一次框（BL-0442 唯讀盤點文件批）：main `11b28f8d` 為文件組開工時 `git log` 實查（本分支與 `origin/main` 同點起算）；#1044 的 CI 結果本組未重查；盤點內容為兩組研究組產出、總管彙整轉述，文件組未重讀原始碼、未重跑研究測試；DG-6 推薦為總管推薦方案、不是客戶裁示；由文件組單組寫成，未經第二組驗證。
 - 2026-10-24 第二十一次框改寫為 Final Save：#1045 head `e569e7a8` 三條 check-run 與 open PR 清單為文件組以 GitHub REST 實查（Slow tests 當時 in_progress）；「待客戶裁示」ID 清單為文件組以 awk 依狀態欄機械列出，未逐列判讀內容，不宣稱窮舉；由文件組單組寫成，未經第二組驗證。
+- 2026-10-24 第二十二次框（DG-6 裁示批）：main `74e556de` 為實作組開工時 `git log` 實查；#1045 的 CI 結果本組未重查；客戶裁示 `DEC-2026-10-24-12` 本組未見客戶對話本身（經總管派工單轉達）；本框撰寫時 PR 尚未開立、無 CI；由實作組單組寫成，未經第二組驗證。
