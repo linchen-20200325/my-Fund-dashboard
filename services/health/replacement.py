@@ -233,7 +233,8 @@ def check_replacement_recommendation(
     _rule_evaluable = {
         # (a) 吃本金是真訊號,或持有期已知且未達門檻(hard rule (a) 不可能觸發),
         #     或非配息基金(`check_eating_principal_1y_mk` 依既有契約回 None、且非例外 →
-        #     吃本金概念不適用,規則 (a) 確定不會觸發;實作組補充,見 DECISIONS 實作說明)
+        #     依既有契約視為吃本金不適用;⚠️ 配息資料全缺的配息基金亦會落此、無法區分
+        #     (BL-0447,Missing→保留殘餘風險);實作組補充,見 DECISIONS 實作說明)
         "a": bool(_eat_signal
                   or (eat_result is None and not _eat_err)
                   or (holding_y is not None
