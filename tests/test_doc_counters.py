@@ -2314,6 +2314,7 @@ _PROTOTYPE_FILES: tuple[str, ...] = (
     "docs/v2/prototype/ui_prototype_exp.html",
     "docs/v2/prototype/ui_prototype_hld.html",
     "docs/v2/prototype/ui_prototype_set.html",
+    "docs/v2/prototype/ui_prototype_set_oauth.html",
     "docs/v2/prototype/ui_prototype_today.html",
 )
 
