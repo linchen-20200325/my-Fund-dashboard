@@ -33,6 +33,19 @@
 | 現況 vs 目標、concentration、correlation、homogeneity、region／asset-class exposure、情境試算、A→B retrospective | ⚖️ 資產配置 | — | ⚖️ 重算市場或基金健康；只組合 🌍 evidence ＋ 💼 facts ＋ 🔍 exposure |
 | Google／Sheet 連線、同步、資料來源、freshness、fetch log、通知、NAV history 維護、必要診斷 | ⚙️ 設定 | 他頁只顯示 freshness 標記 | ⚙️ 放分析與選股 |
 
+### §2.1 操作能力的唯一擁有者（2026-10-25 補；`DEC-2026-10-25-01`；本節不構成 production 動工授權）
+
+§2 管「資訊」放哪一頁；本小節補「操作能力」由哪一頁擁有，不改 §2 任何一列。逐項能力、驗收條件與 Decision Gate 見 `docs/v2/62_old_ui_gap_matrix.md` §6。
+
+| 操作能力 | 唯一擁有頁 | 他頁只可以 |
+|---|---|---|
+| Google 登入／登出／帳號狀態；Sheet URL／ID 輸入、可存取清單、選擇、綁定、切換、新增、解除；連線／權限／同步／freshness 診斷；Refresh／Retry 機制本身（此項為文件組讀法，隨 BL-0452／CAP-GATE-08 請客戶確認） | ⚙️ 設定 | 顯示摘要、status、freshness 標記，指回 ⚙️；**💼 不放第二個 Sheet 選擇器** |
+| 代碼直查、名稱搜尋、候選池（新增／移除／重新載入）與候選工具 | 🔍 找基金 | 顯示必要數字、drill-down |
+| 持倉事實的載入與持倉操作（寫入與否待 Decision Gate） | 💼 我的持股 | ⚖️ 讀 💼 facts，不重算 |
+
+- 五頁的 Refresh／Retry 共用 ⚙️ 擁有的同一套機制，各頁只刷新本頁所讀的資料、不改任何設定；不各寫一套。
+- 刪除（Sheet 檔／分頁／資料）只定義能力與驗收、不排程，屬不可逆 Stop Gate。
+
 ## §3 HWM σ 正式邊界
 
 - **保留為「基金位置」核心候選**；語意只許「相對自身近一年高點的位置 evidence」。
