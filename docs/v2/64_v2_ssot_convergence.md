@@ -39,7 +39,7 @@
 
 | 操作能力 | 唯一擁有頁 | 他頁只可以 |
 |---|---|---|
-| Google 登入／登出／帳號狀態；Sheet URL／ID 輸入、可存取清單、選擇、綁定、切換、新增、解除；連線／權限／同步／freshness 診斷；Refresh／Retry 機制本身 | ⚙️ 設定 | 顯示摘要、status、freshness 標記，指回 ⚙️；**💼 不放第二個 Sheet 選擇器** |
+| Google 登入／登出／帳號狀態；Sheet URL／ID 輸入、可存取清單、選擇、綁定、切換、新增、解除；連線／權限／同步／freshness 診斷；Refresh／Retry 機制本身（此項為文件組讀法，隨 BL-0452／CAP-GATE-08 請客戶確認） | ⚙️ 設定 | 顯示摘要、status、freshness 標記，指回 ⚙️；**💼 不放第二個 Sheet 選擇器** |
 | 代碼直查、名稱搜尋、候選池（新增／移除／重新載入）與候選工具 | 🔍 找基金 | 顯示必要數字、drill-down |
 | 持倉事實的載入與持倉操作（寫入與否待 Decision Gate） | 💼 我的持股 | ⚖️ 讀 💼 facts，不重算 |
 

@@ -252,7 +252,7 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 2. **Sheet 狀態**：載入中（Loading）／成功（Success）／空（Empty：讀到了、但沒有資料列）／URL 或 ID 格式無效（Invalid）／找不到（Not found）／無權限（Permission denied）／認證失敗（Authentication failure）／API 或取數失敗（API／fetch failure）／缺值或無法判定（Missing／Unknown）。
    - **現有 API 能分到哪裡（讀碼，未實跑）**：設定試算表 L1 `repositories/settings_sheet_repository.py` 以 `SettingsSheetError.code` 區分 `not_configured`（未設定）、`no_service_account`（無服務帳戶）、`cooling`（冷卻中）、`header_mismatch`（標頭不符）、`api`（其餘上游例外，另帶 `http_status`，故 403／404 可由狀態碼分辨）。
    - **分不到的，一律併入「無法判定」**：(a) 持倉試算表（`repositories/policy/v2.py::load_all_policies_v2_with_error`）與選股池路徑只交出錯誤原文、不分類，403／404／認證失敗在現行 API 下**無法可靠區分**；(b) 「URL／ID 格式無效」本組未在 B 版路徑找到格式驗證（未驗）；(c) 「認證失敗」與「無權限」在服務帳戶路徑是否回不同狀態碼，未實測。這三類在新 API 能分辨前，畫面一律顯示「無法判定」並附錯誤原文（遮蔽後），不猜成其中一類。細分錯誤分類屬內部技術工作（不改語意），但會動 L1，須另派工。
-3. **操作結果**：成功 → 畫面顯示**最新**狀態（重新讀回，不是沿用按下前的畫面）；失敗 → 顯示失敗原因＋Retry，**保留上一份有效資料**（不得洗成 0、空表或「尚未建立」）。
+3. **操作結果**：成功 → 畫面顯示**最新**狀態（重新讀回，不是沿用按下前的畫面）；失敗 → 顯示失敗原因＋Retry，**保留上一份有效資料，並標示資料日期／舊資料**（不得洗成 0、空表或「尚未建立」；對齊 CAP-RFR-00 與 `CLAUDE.md` §2.4 `is_stale`）。
 4. **Missing 一律灰**：缺值顯示「⬜ 資料未取得／無法判定」（找基金欄位缺值沿用 64 §6「⬜ 資料未備／無法判定」），**不得顯示綠色／安全**。Missing ≠ 0 ≠ False ≠ HOLD ≠ 安全 ≠ 未觸發（`DEC-2026-10-24-02`、`PROJECT_RULES.md` 第 13 節 13.1）。
 5. **寫入邊界**：凡會寫入任何試算表（設定、持倉、選股池、NAV）的能力，畫面須明示「這個動作會寫入哪一本」；唯讀頁不出現寫入字樣或寫入控制項（BL-0349 完成條件）。是否開放寫入本身是 Decision Gate（§6.8）。
 6. **刷新只動資料、不動設定**：Refresh／Retry 只重新讀取資料，不得清除或改寫使用者設定（目標配置、門檻、綁定、觀察清單）。
@@ -271,7 +271,7 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 | CAP-SET-08 切換綁定 | ⚙️ | 選另一本 → 按「改綁定」→ 確認 | 同上 | §1 D2 | 無 | BL-0381 (6)(7)、BL-0392 | CAP-SET-07 | 1 | CAP-GATE-02 | 只有使用者明確操作才切換；不得自動改用其他 Sheet（BL-0381 (7)）；不得把 wen 帳本設計成永久唯一來源（BL-0392） |
 | CAP-SET-09 新增（綁定第二本／新建帳本） | ⚙️ | 新增一個綁定；或「建立新帳本」 | `create_dashboard_sheet`（舊 ④「✨ 新增帳本」，會在使用者 Drive 建檔） | §1 D2、D8 | 無 | BL-0392、BL-0402、BL-0363 | CAP-SET-07 | 1 | CAP-GATE-02（多本綁定的資料模型）；CAP-GATE-03（新建檔＝寫入使用者 Drive） | 新建整本試算表＝新增生產檔案；BL-0363 已登記「設定 L1 不得建立或複製整本試算表」的守衛方向 |
 | CAP-SET-10 解除綁定 | ⚙️ | 按「解除綁定」→ 確認 | 無 B 版實作 | — | 無 | BL-0381、BL-0392 | CAP-SET-07 | 1 | CAP-GATE-02 | 只移除綁定紀錄，不刪 Sheet 本身；解除後 💼 顯示「尚未綁定」，不是「沒有持倉」 |
-| CAP-SET-11 刪除（Sheet 檔／分頁／資料） | ⚙️ | （僅定義，不實作） | 舊 L1 `delete_policy_worksheet`／`delete_fund_in_policy`（production caller 未全 repo 驗證，見 §5 第 20 點） | §4.4 | 無 | BL-0405（T7 分頁去留）、BL-0409（淘汰候選清單） | — | 1（只定義） | **CAP-GATE-03（不可逆，Stop Gate）** | 本批只定義能力與驗收，不實作、不排程；不可逆刪除須客戶逐案裁示（v1.0 Gate：無法證明安全的資料／歷史成果刪除） |
+| CAP-SET-11 刪除（Sheet 檔／分頁／資料） | ⚙️ | （僅定義，不實作） | 舊 L1 `delete_policy_worksheet`／`delete_fund_in_policy`（production caller 未全 repo 驗證，見 §5 第 20 點） | §4.4 | 無 | BL-0405（T7 分頁去留）、BL-0409（淘汰候選清單） | — | —（只定義、不排程） | **CAP-GATE-03（不可逆，Stop Gate）** | 本批只定義能力與驗收，不實作、不排程；不可逆刪除須客戶逐案裁示（v1.0 Gate：無法證明安全的資料／歷史成果刪除） |
 | CAP-SET-12 重新載入（Sheet 清單與綁定狀態） | ⚙️ | 按「重新載入」 | 設定 L1 有冷卻機制（`code="cooling"`，帶剩餘秒數） | §1 F4（全域刷新） | SET-5「重新取數」只管市場指標與淨值兩層，不管 Sheet 清單／綁定 | BL-0402、BL-0452 | CAP-SET-07 | 1 | — | 冷卻中要顯示剩餘時間，不重複打上游（BL-0184：重新取數無次數限制） |
 | CAP-SET-13 連線／權限／同步／新鮮度／重試狀態 | ⚙️（他頁只顯示 freshness 標記） | 看一張狀態總表；失敗列旁有 Retry | SET-0 可信度結論燈、SET-1 資料新鮮度卡、SET-2 來源健康卡、SET-6 取數紀錄（`fetch_log`） | §1 F2（⑤ 診斷） | SET-0～SET-7 八塊（`ui_v2/set/logic.py::BLOCK_TITLES`）；客戶 2026-10-22 已登記「對一般使用者過度複雜」 | BL-0346、BL-0351、BL-0391、BL-0408、BL-0393 (5) | CAP-SET-07 | 1 | CAP-GATE-10（診斷深度方向衝突） | 新增 Google／Sheet 狀態列時，不得再加重 BL-0391 所指的工程資訊；精簡方向隨 UI 草稿 |
 
@@ -351,11 +351,11 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 
 ### §6.6 五頁 Refresh／Retry（一套機制，五頁共用）
 
-**原則**：五頁不各寫一套刷新邏輯。刷新機制本身（快取清除範圍、冷卻、`fetch_log` 紀錄、freshness 判定）的 SSOT 擁有者是 ⚙️（`services/v2_tables/settings_store.py` 的 `refetch_*`／`run_market_indicator_fetch` 一族與 L1 冷卻）；各頁只呼叫同一機制、只刷新本頁所讀的資料。刷新不得改寫任何設定（§6.1 第 6 點）；freshness 門檻值與語意不變（BL-0351；改門檻屬 Stop Gate）。
+**原則**：五頁不各寫一套刷新邏輯。刷新機制本身（快取清除範圍、冷卻、`fetch_log` 紀錄、freshness 判定）的 SSOT 擁有者是 ⚙️（文件組讀法，隨 BL-0452／CAP-GATE-08 請客戶確認；`services/v2_tables/settings_store.py` 的 `refetch_*`／`run_market_indicator_fetch` 一族與 L1 冷卻）；各頁只呼叫同一機制、只刷新本頁所讀的資料。刷新不得改寫任何設定（§6.1 第 6 點）；freshness 門檻值與語意不變（BL-0351；改門檻屬 Stop Gate）。
 
 | Capability | Owner page | User action | Existing evidence / current capability | Old UI reference | Current B UI state | Existing BL | Dependency | Implementation order | Decision Gate | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| CAP-RFR-00 共用刷新機制 | ⚙️ | — | `settings_store.refetch_cached_functions`、`refetch_market_indicator`、`refetch_nav`；L1 冷卻 | §1 F4 `infra.cache.global_refresh_all` | 預覽五頁共用一個行程，快取與冷卻共用；set「重新取數」會影響 mkt／hld（BL-0290） | BL-0452、BL-0290、BL-0184、BL-0351 | CAP-SET-12 | 4 | — | 先解決 BL-0290 的跨頁副作用，五頁一致化才安全 |
+| CAP-RFR-00 共用刷新機制 | ⚙️ | — | `settings_store.refetch_cached_functions`、`refetch_market_indicator`、`refetch_nav`；L1 冷卻 | §1 F4 `infra.cache.global_refresh_all` | 預覽五頁共用一個行程，快取與冷卻共用；set「重新取數」會影響 mkt／hld（BL-0290） | BL-0452、BL-0290、BL-0184、BL-0351 | CAP-SET-12 | 4 | — | 先解決 BL-0290 的跨頁副作用，五頁一致化才安全；舊 UI F4 `global_refresh_all` 列於 BL-0409 淘汰候選，僅作參考 |
 | CAP-RFR-01 🌍 市場與趨勢 | 🌍（機制屬 ⚙️） | 失敗或空時按「重新取數」 | `ui_v2/mkt/logic.py::_retry_button`（宣告寫 `market_indicator`、`fetch_log`） | §1 F1 | 取數失敗與三塊皆無資料時掛一枚 | BL-0452 | CAP-RFR-00 | 4 | — | 只刷新市場指標 |
 | CAP-RFR-02 ⚖️ 資產配置 | ⚖️（機制屬 ⚙️） | 重新讀持倉 facts 與目標 | — | §1 E7 | 「重新取數」不畫（ALO-GAP 登記） | BL-0452 | CAP-RFR-00、CAP-HLD-02 | 4 | CAP-GATE-08 | 只重讀；目標輸入（ALO-1）不得被刷新清掉 |
 | CAP-RFR-03 💼 我的持股 | 💼（機制屬 ⚙️） | 失敗列旁「重試」 | 見 CAP-HLD-04 | §1 F4 | 部分塊有、核心卡與 HLD-8 正式模式依裁示不放 | BL-0452、BL-0390 | CAP-RFR-00 | 3／4 | **CAP-GATE-08** | 與 G6、2026-09-23 裁示衝突，待客戶裁示 |
@@ -392,7 +392,7 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 | CAP-GATE-01 | Google 個人授權（OAuth）是否進 B 版、scope 多大、權杖存哪裡 | 授權範圍與資安；BL-0349 護欄 4 明文目前不授權改 OAuth scope／Q10／T6／production write architecture；須資安 2 組稽核（`PROJECT_RULES.md` 第 8 節） | CAP-SET-01～05 |
 | CAP-GATE-02 | Sheet 綁定紀錄的資料模型（存哪裡、可否多本、預設本） | 產品方向＋可能新增設定鍵或 schema；BL-0381 七步流程與 BL-0392 待裁 | CAP-SET-04、06～10 |
 | CAP-GATE-03 | 刪除 Sheet 檔／分頁／資料；新建整本試算表 | 不可逆或寫入使用者 Drive；v1.0 Gate「無法證明安全的資料／歷史成果刪除」 | CAP-SET-09、11；CAP-FND-04（若為刪列） |
-| CAP-GATE-04 | B 版是否開放寫入（持倉操作、寫選股池） | 與客戶 2026-09-21／2026-10-13「保單／帳本改由 Sheets 維護，B 線只讀取」裁示衝突；投資語意須獨立稽核；寫入紀錄去向牽動 BL-0405 `_Ledgers` | CAP-HLD-03；CAP-FND-03、04 |
+| CAP-GATE-04 | B 版是否開放寫入（持倉操作、寫選股池） | 持倉操作與客戶 2026-09-21／2026-10-13「保單／帳本改由 Sheets 維護，B 線只讀取」裁示衝突，投資語意須獨立稽核，寫入紀錄去向牽動 BL-0405 `_Ledgers`；寫選股池屬寫入邊界（BL-0349），是否在上述裁示射程內待客戶確認（原裁示只涵蓋保單與帳本；44 `READONLY_TABLES` 為 holding／policy／nav／dividend） | CAP-HLD-03；CAP-FND-03、04 |
 | CAP-GATE-05 | 「候選池」是選股池（`_fund_pool`）還是觀察清單（`exp_watchlist`），或兩者合一 | 兩份並存；再造一份即違 SSOT 去重（64 §4） | CAP-FND-03～05 |
 | CAP-GATE-06 | 名稱搜尋涵蓋：境內基金是否納入；是否啟用 UI 0 caller 的 `search_moneydj_by_name`／`search_fundclear` | 客戶要求不新增來源；啟用從未上線的取數路徑是否算新 production 來源路徑，需客戶判定 | CAP-FND-02 |
 | CAP-GATE-07 | 代碼直查可否查選股池以外的代碼 | 本檔 §1 A1 原列「需客戶裁示（池外查詢範圍）」；客戶 2026-10-25 要點「不需理解候選池」傾向可查，正式範圍隨 UI 草稿確認 | CAP-FND-01 |
