@@ -346,6 +346,8 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
 >
 > 📌 **2026-10-24 BL-0443 補記（狀態更新，不是漏刪；決策者：客戶授權執行 BL-0443 安全修）**：§10.7.3 第 1 問清單已處置 —— #4（部分處置：`assess_underperformance` 不再把 None 重算成 False、週報 except 補 log；呼叫端資料缺 GRAY→False 未處置，另登 BL-0450）、#13（成本 ≤0 → ⬜ 不再「續抱」、缺值原因分開標、帳本平均匯率 fallback 揭露）、#14（`deploy_pct` 0.0 → None）、#6（健診倉位欄區間σ 標註）、#7（−2σ 卡窗口不足揭露）、#2 caption（讀碼確認原 caption 不實：`composite_score` 唯一寫入點 `render_macro_tab` 無 production 呼叫點；只改文字，未接線）、`peer_rank` 用字，皆只改呈現／揭露，行動與判法未動；**#8 `tag_health_check` 未修**（改 N/A 會改變 `_verdict_text` 行動字樣，屬 DG-2，移至 `docs/BACKLOG.md` BL-0448）。測試 `tests/test_bl0443_safe_fixes.py`。下表證據欄照舊為盤點快照。
 
+> 📌 **2026-10-25 BL-0450 補記（狀態更新，不是漏刪；決策者：客戶授權執行 BL-0449～BL-0451）**：上一則「#4（部分處置……另登 BL-0450）」之未處置一半已處置 —— 紅燈三態（RED → True、GRAY → None、明確非紅 → False），App 與週報兩個呼叫端及 `assess_underperformance` 重算分支共用 `services/switch_advisor.py::redlight_from_signal`；#4 改記**已處置**。`is_underperforming` 判法與行動未動。測試 `tests/test_bl0449_0451_missing_honest.py`。
+
 #### §10.7.1 總表（production 可達的行動路徑）
 
 類別代號：A＝已誠實降級；B＝Missing 已揭露但仍給行動（或 DEC-10 原則 2 被繞過）；C＝Missing → 中性／Hold／預設；D＝口徑或用字落差；E＝dead／未證實（見 §10.7.2）。

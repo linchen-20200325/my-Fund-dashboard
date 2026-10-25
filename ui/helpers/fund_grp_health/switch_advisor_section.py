@@ -206,8 +206,8 @@ def _redlight_by_code(funds: list, excess_by_code: dict, eat_by_code: "dict | No
         _code = f.get("code")
         try:
             from services.fund_total_return import compute_1y_total_return
-            from services.switch_advisor import eat_is_red
-            from services.switch_strategy import RED, switch_score, switch_signal
+            from services.switch_advisor import redlight_from_signal
+            from services.switch_strategy import switch_score, switch_signal
             _tr, _ = compute_1y_total_return(f)
             _m = f.get("metrics") or {}
             _rm = f.get("risk_metrics") or {}
@@ -219,7 +219,9 @@ def _redlight_by_code(funds: list, excess_by_code: dict, eat_by_code: "dict | No
             _eat = _eat_map.get(_code, "")
             _cov: dict = {}
             _sc = switch_score(_tr, _sh, _dd, _vm, coverage_out=_cov)
-            out[_code] = (switch_signal(_tr, _sh, _eat, _sc, coverage=_cov) == RED) or eat_is_red(_eat)
+            # BL-0450:~~`(switch_signal(...) == RED) or eat_is_red(_eat)`~~ → 三態(有意識的更正,
+            # 不是漏刪;2026-10-25,客戶授權)。GRAY(資料不足)→ None,不再記成 False。
+            out[_code] = redlight_from_signal(switch_signal(_tr, _sh, _eat, _sc, coverage=_cov), _eat)
         except Exception as _e:  # noqa: BLE001 — 單檔失敗不拖垮整組;誠實 None
             print(f"[switch_advisor_section] {_code} 紅燈判定失敗:{type(_e).__name__}: {_e}",
                   file=sys.stderr)
@@ -241,7 +243,12 @@ def _underperf_by_code(funds: list) -> dict:
     for f in funds:
         try:
             _eat_map[f.get("code")] = (check_eating_principal_1y_mk(f) or {}).get("status", "")
-        except Exception:  # noqa: BLE001 — 單檔吃本金判定失敗不拖垮整組
+        except Exception as _e_eat:  # noqa: BLE001 — 單檔吃本金判定失敗不拖垮整組
+            # BL-0449:原本靜默吞掉 → 補 log(同 scripts/weekly_switch_notify.py 慣例:操作、代號、
+            # 例外類別);退 "" 的行為不變(有意識的更正,不是漏刪;2026-10-25,客戶授權)。
+            import sys
+            print(f"[switch_advisor_section] {f.get('code')} 吃本金判定失敗:{type(_e_eat).__name__}",
+                  file=sys.stderr)
             _eat_map[f.get("code")] = ""
     _red = _redlight_by_code(funds, _excess, eat_by_code=_eat_map)
     out: dict = {}
@@ -732,7 +739,8 @@ def _render_advice(res: dict, macro, fxlbl) -> None:
                      "**絕對虧損** = 近一年含息報酬與 Sharpe 同時為負(實際在虧)。"
                      "表現差時,右邊「換入標的」會從你的選股池挑替代標的;"
                      "但該檔必要資料不足(建議為 ⬜ 資料不足)時不提供換入建議。「—」= 沒有表現差 / 資料不足。"
-                     "「⬜ 絕對虧損未判定」= 紅燈(絕對虧損)這一半的計算失敗或未評估,"
+                     # BL-0450:~~計算失敗或未評估~~ → 加回資料不足(GRAY 自此傳 None;2026-10-25)
+                     "「⬜ 絕對虧損未判定」= 紅燈(絕對虧損)這一半資料不足、計算失敗或未評估,"
                      "不代表確認沒有虧損;此時只剩跑輸大盤那一半能觸發。"),
             "換入標的": _cc.TextColumn("換入標的", width="medium",
                 help="從你的選股池裡挑出的替換標的,括號裡是它現在離高點多遠(愈負 = 跌愈深)。"

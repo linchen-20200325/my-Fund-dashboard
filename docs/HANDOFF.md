@@ -34,7 +34,18 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-24（第二十四次）現況 —— BL-0443 安全修批（以本框為準；下方第二十三次框起皆為歷史快照）**（2026-10-24 客戶授權執行 BL-0443 安全修；非新裁示、無新 DEC；狀態更新，不是漏刪：第二十三次框整段保留於下方）
+> **⭐ 2026-10-25（第二十五次）現況 —— BL-0449～BL-0451 安全修批（以本框為準；下方第二十四次框起皆為歷史快照）**（2026-10-25 客戶授權執行 BL-0449、BL-0450、BL-0451；非新裁示、無新 DEC；狀態更新，不是漏刪：第二十四次框整段保留於下方）
+> - **main 實況**：本框隨本批 PR 合併；該 PR 前 main 為 `3b4de4ec`（#1048）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
+> - **Open PR**：本 PR（分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。
+> - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；本框撰寫時尚未開 PR、無 CI 結果。
+> - **本批內容**：BL-0449 App 換股區吃本金 except 補 log（退值不變）；BL-0450 紅燈三態（GRAY → None，App／週報／`assess_underperformance` 重算共用 `services/switch_advisor.py::redlight_from_signal`；`is_underperforming` 判法不變；表現差欄 help 加回「資料不足」）；BL-0451 T7 組合總報酬率總成本 ≤0 → None＋「⬜ 報酬率無法計算」（`_t7_total_return_pct`；真 0 損益仍 +0.00%）。只改狀態傳遞／log／顯示；未改判法、公式、門檻、資料源、schema、行動語意。測試 `tests/test_bl0449_0451_missing_honest.py`。三列改 closed。
+> - **未完成（重要，`docs/BACKLOG.md`）**：BL-0448（待客戶裁示，併 DG-2 gate）、DG-1～DG-3（BL-0438）、BL-0445 retirement gate、BL-0446、BL-0442 其餘平行引擎（須新 Decision Gate）。
+> - **Blocker**：無（無已授權工作）。
+> - **唯一下一步**：停手等客戶指示（無已授權工作）。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。
+> - **尚未授權動工**：DG-1、DG-2、DG-3、BL-0445 retirement、BL-0446、BL-0448、BL-0440、BL-0442 其他引擎任何修改（`CLAUDE.md` §-1）。
+> - **接手入口**：同第二十二次框（含 scratchpad venv 跑完整測試的補充）。
+
+> **⭐ 2026-10-24（第二十四次）現況 —— BL-0443 安全修批（~~以本框為準；下方第二十三次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第二十五次框；#1048 已合併，main `3b4de4ec`；狀態更新，不是漏刪）**（2026-10-24 客戶授權執行 BL-0443 安全修；非新裁示、無新 DEC；狀態更新，不是漏刪：第二十三次框整段保留於下方）
 > - **main 實況**：本框隨 BL-0443 PR 合併；該 PR 前 main 為 `1c777667`（#1047）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
 > - **Open PR**：本 PR（BL-0443，分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。
 > - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；本框撰寫時尚未開 PR、無 CI 結果。
