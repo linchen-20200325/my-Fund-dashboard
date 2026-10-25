@@ -34,15 +34,28 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-25（第二十七次）現況 —— 第 1 階段 ⚙️ 設定線框草稿＋CAP-GATE-01／02 請示單文件批（以本框為準；下方第二十六次框起皆為歷史快照）**（客戶 2026-10-25 授權本文件批，經總管派工單轉達；非新裁示、無新 DEC；狀態更新，不是漏刪：第二十六次框整段保留於下方）
-> - **main 實況**：本框隨本批 PR 合併；該 PR 前 main 為 `88e829de`（#1051）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
-> - **Open PR**：本 PR（分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。
+> **⭐ 2026-10-25（第二十八次）現況 —— ⚙️ 設定頁最終 Wireframe＋CAP-GATE-01／02 客戶裁示落盤文件批（以本框為準；下方第二十七次框起皆為歷史快照）**（客戶 2026-10-25 裁示，`docs/DECISIONS.md` `DEC-2026-10-25-02`，要點轉述；狀態更新，不是漏刪：第二十七次框整段保留於下方）
+> - **main 實況**：本框隨本批 PR 合併；該 PR 前 main 為 `3075e313`（#1052）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
+> - **Open PR**：本 PR（分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。開工時 Open PR 0（總管回報）。
 > - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；本框撰寫時尚未開 PR、無 CI 結果。
+> - **客戶裁示要點（`DEC-2026-10-25-02`）**：CAP-GATE-01 改採 **Google 個人 OAuth** 為新 UI 方向（多帳號登入／列 Sheet／選擇／登出／切換）；舊 UI 只當功能與邏輯參考、不搬畫面；**第一階段唯讀**；CAP-GATE-02 ⚙️ 為唯一 Sheet selection owner、**一次只有一個 active Sheet**、URL／ID 為次要入口且收斂到同一 SSOT；同意版面方案 1 與 Q1～Q4。⛔ **production OAuth 實作、`infra/oauth.py`／scope／callback／credential storage／secrets／token persistence 變更、任何寫入一律未授權**；`DEC-2026-10-17-03` 護欄 4 的實作限制在 Implementation／Security Gate 前仍有效（方向已裁，不是護欄已解除）。
+> - **本批內容（純文件，production code 0 變更）**：`docs/v2/65_set_wireframe_and_cap_gate_01_02.md` 改寫為**最終 Wireframe（客戶待審）**（390px＋桌機三層；登入前五態；登入後；切換帳號流程；Sheet Picker 各態；URL／ID 入口；Error／Missing 總表；三層收合正常畫面；Old Logic → New UI Mapping 與 read／write 混用 helper；唯讀原則；Unique Owner；實作前須另裁清單 J-1～J-13；上一版推薦與請示單移附錄 A 標 superseded）；`DEC-2026-10-25-02` 新增，`DEC-2026-10-17-03`、`-25-01` 就地補記關係；`docs/BACKLOG.md` BL-0402／0381／0392／0349／0342 列尾補記、BL-0453 新增（open，示範模式 md5 測試本機紅、CI 綠，只調查不修）；`docs/v2/62_old_ui_gap_matrix.md` §6.7／§6.8、`docs/v2/64_v2_ssot_convergence.md` §2.1 各加指標（既有列一字未改）。
+> - **稽核**：本框撰寫時尚未送獨立稽核（本批觸及 data identity／T6 方向的文件，依 `DEC-2026-10-16-05` 至少 1 組獨立稽核由總管安排）。
+> - **未完成（重要，`docs/BACKLOG.md`）**：同第二十六次框，另加 BL-0453。
+> - **Blocker**：無（無已授權工作）。
+> - **唯一下一步**：**客戶審 65 的最終 Wireframe**（含第 4 節「active Sheet 指持倉那一本」等文件組讀法）；**核准前不得規劃或寫 implementation**；核准後實作批開工前仍須客戶指派，並逐項過 65 第 J 節 Implementation／Security Gate。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。
+> - **尚未授權動工**：同第二十六次框；另含 OAuth 任何實作、scope／權杖／secrets 變更、active Sheet 儲存實作、T6 實作變更、任何寫入、65 任何一項的 production 實作。
+> - **接手入口**：同第二十二次框（含 scratchpad venv 跑完整測試的補充）。
+
+> **⭐ 2026-10-25（第二十七次）現況 —— 第 1 階段 ⚙️ 設定線框草稿＋CAP-GATE-01／02 請示單文件批（~~以本框為準；下方第二十六次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第二十八次框；狀態更新，不是漏刪）**（客戶 2026-10-25 授權本文件批，經總管派工單轉達；非新裁示、無新 DEC；狀態更新，不是漏刪：第二十六次框整段保留於下方）
+> - **main 實況**：~~本框隨本批 PR 合併；該 PR 前 main 為 `88e829de`（#1051）。~~ → **#1052 已合併，main `3075e313`**（前一 main `88e829de`；狀態更新，不是漏刪）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
+> - **Open PR**：~~本 PR（分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。~~ → **0**（#1052 已合併；狀態更新，不是漏刪）。
+> - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；~~本框撰寫時尚未開 PR、無 CI 結果。~~ → 總管回報合併後 main CI 綠（狀態更新，不是漏刪；第二十八次框撰寫組未查 check-run）。
 > - **本批內容（純文件，production code 0 變更）**：新增 `docs/v2/65_set_wireframe_and_cap_gate_01_02.md` —— ⚙️ 設定頁文字線框草稿（390px／桌機；三層漸進揭露：連線狀態 → 為什麼／怎麼處理 → 診斷細節；CAP-SET-01～13 位置索引；Google 四態與試算表各狀態長相；現行八塊＋各頁資料狀態總表＋進階診斷的 Old → New 對照，一項不刪；Gate 依賴元件畫虛線框並列各選項版面差異；三個版面方案比較）與 CAP-GATE-01（OAuth）、CAP-GATE-02（綁定資料模型）兩張請示單。推薦欄（版面方案 1、GATE-01 方案 A、GATE-02 方案 B）為文件組擬、待總管確認；⚠️ GATE-02 方案 B 會改變 T6，屬 `DEC-2026-10-17-03` 護欄 4 範圍，選 B 等於請客戶放寬護欄 4 的該部分；方案 1 偏離 44 第二節五頁共用結構，已在 65 第 8 節列明。`docs/BACKLOG.md` BL-0402 列尾補記（狀態不變）；`docs/v2/62_old_ui_gap_matrix.md` §6.7 加一行指標（既有列一字未改）。
 > - **稽核**：初稿 `1d7b8b0d` 經一組獨立文件稽核，結論 PASS-with-fixes；必修 1～6 與建議已在後續 commit 回修（試算表狀態示範改「⬜ 無法判定」、會取數的［重新讀取連線狀態］改虛線待裁示、導覽改只捲動、T6／護欄 4 限定、44 第二節偏離、審查題附推薦）；回修 delta 已經一組獨立複驗（PASS-with-fixes，必修 A～C 已於 `629899ba` 修正；`629899ba` 的 A～C 補字由總管自驗）。
 > - **未完成（重要，`docs/BACKLOG.md`）**：同第二十六次框。
 > - **Blocker**：無（無已授權工作）。
-> - **唯一下一步**：等客戶審 65 的線框草稿（含第 8 節草稿審查題 Q1～Q4）與 CAP-GATE-01、CAP-GATE-02 兩個 Gate；**裁示前不得寫任何 UI 程式**（G8 未解除；UI 草稿先行）。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。
+> - **唯一下一步**：~~等客戶審 65 的線框草稿（含第 8 節草稿審查題 Q1～Q4）與 CAP-GATE-01、CAP-GATE-02 兩個 Gate；**裁示前不得寫任何 UI 程式**（G8 未解除；UI 草稿先行）。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。~~ → 客戶已於 2026-10-25 裁示 CAP-GATE-01／-02 方向並同意方案 1 與 Q1～Q4（`DEC-2026-10-25-02`）；現行下一步見第二十八次框（狀態更新，不是漏刪）。
 > - **尚未授權動工**：同第二十六次框；另含 65 草稿任何一項的 production 實作、OAuth、綁定設定鍵新增。
 > - **接手入口**：同第二十二次框（含 scratchpad venv 跑完整測試的補充）。
 
@@ -462,3 +475,4 @@
 - 2026-10-24 第二十一次框（BL-0442 唯讀盤點文件批）：main `11b28f8d` 為文件組開工時 `git log` 實查（本分支與 `origin/main` 同點起算）；#1044 的 CI 結果本組未重查；盤點內容為兩組研究組產出、總管彙整轉述，文件組未重讀原始碼、未重跑研究測試；DG-6 推薦為總管推薦方案、不是客戶裁示；由文件組單組寫成，未經第二組驗證。
 - 2026-10-24 第二十一次框改寫為 Final Save：#1045 head `e569e7a8` 三條 check-run 與 open PR 清單為文件組以 GitHub REST 實查（Slow tests 當時 in_progress）；「待客戶裁示」ID 清單為文件組以 awk 依狀態欄機械列出，未逐列判讀內容，不宣稱窮舉；由文件組單組寫成，未經第二組驗證。
 - 2026-10-24 第二十二次框（DG-6 裁示批）：main `74e556de` 為實作組開工時 `git log` 實查；#1045 的 CI 結果本組未重查；客戶裁示 `DEC-2026-10-24-12` 本組未見客戶對話本身（經總管派工單轉達）；本框撰寫時 PR 尚未開立、無 CI；由實作組單組寫成，未經第二組驗證。
+- 2026-10-25 第二十八次框（⚙️ 最終 Wireframe＋`DEC-2026-10-25-02` 落盤批）：main `3075e313` 為文件組開工時 `git log` 實查（本分支與 `origin/main` 同點起算）；第二十七次框改寫中的「#1052 已合併」亦據此；「main CI 綠」「Open PR 0」為總管回報、本組未查 check-run；客戶裁示經總管派工單轉達，本組未見客戶對話本身；BL-0453 的測試狀態為總管回報、本組未重跑；由文件組單組寫成，未經第二組驗證。
