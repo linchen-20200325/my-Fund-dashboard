@@ -1,7 +1,7 @@
 # 65｜⚙️ 設定頁最終 Wireframe（客戶待審）＋CAP-GATE-01／CAP-GATE-02 裁示落盤
 
 - **建立日**：2026-10-25（上一版：提案草稿，讀碼基準 `88e829de`，隨 #1052 合併為 main `3075e313`）。**本版改寫日**：2026-10-25。**本版讀碼基準 SHA**：`3075e313`（`88e829de` → `3075e313` 之間只有文件與 `tests/test_doc_counters.py` 一行登記變更，`ui_v2/`、`infra/`、`repositories/`、`services/`、`ui/` 一行未動，故上一版的 B 版讀碼結論沿用；本版另行獨立讀了舊 UI 與底層 OAuth／Sheet 邏輯，見第 I 節）。
-- **性質**：⛔ **最終 Wireframe，客戶待審 —— 不構成 implementation 授權。** 客戶 2026-10-25 已裁示 CAP-GATE-01 的**方向**（新 UI 採 Google 個人 OAuth）與 CAP-GATE-02 的**擁有權與狀態模型**（⚙️ 唯一 Sheet selection owner、一次只有一個 active Sheet、URL／ID 為次要入口、兩入口收斂到同一個 active Sheet SSOT），並同意版面方案 1 與 Q1～Q4（`docs/DECISIONS.md` `DEC-2026-10-25-02`，要點轉述）。**production OAuth 實作、scope／callback／credential storage／secrets／token persistence 變更、任何寫入，一律未授權**，實作前另走 Implementation／Security Gate（第 J 節）。本檔不凌駕 `docs/v2/44_fund_ui_ssot.md`，不解凍 44，不解除 `DEC-2026-10-22-02` G8；客戶審過本 Wireframe 後，落到 44 的部分仍走 44 修正程序（`CLAUDE.md` §-1、§-1.5.4 UI 草稿先行）。
+- **性質**：⛔ **最終 Wireframe，~~客戶待審~~** → **客戶已於 2026-10-25 核准整體方向，並裁示 J-4、J-6、CAP-SET-10（`DEC-2026-10-25-04`，要點轉述；狀態更新，不是漏刪）** —— **不構成 implementation 授權。** 客戶 2026-10-25 已裁示 CAP-GATE-01 的**方向**（新 UI 採 Google 個人 OAuth）與 CAP-GATE-02 的**擁有權與狀態模型**（⚙️ 唯一 Sheet selection owner、一次只有一個 active Sheet、URL／ID 為次要入口、兩入口收斂到同一個 active Sheet SSOT），並同意版面方案 1 與 Q1～Q4（`docs/DECISIONS.md` `DEC-2026-10-25-02`，要點轉述）。**production OAuth 實作、scope／callback／credential storage／secrets／token persistence 變更、任何寫入，一律未授權**，實作前另走 Implementation／Security Gate（第 J 節）。本檔不凌駕 `docs/v2/44_fund_ui_ssot.md`，不解凍 44，不解除 `DEC-2026-10-22-02` G8；客戶審過本 Wireframe 後，落到 44 的部分仍走 44 修正程序（`CLAUDE.md` §-1、§-1.5.4 UI 草稿先行）。
 - **與上一版的關係**：上一版的 CAP-GATE-01 方案 A 推薦（不接個人登入）、CAP-GATE-02 方案 B 推薦（綁定紀錄存設定試算表、不需個人登入）、兩張請示單與「依賴 Gate 的元件」選項表，**已由 `DEC-2026-10-25-02` 取代**，原文保留於附錄 A 並標 superseded；**現行只有本版正文有效**。上一版已經過獨立稽核的部分（Old → New 對照、44 第二節偏離說明、護欄 6 落地、Q3 牴觸 `SET-5` 唯一入口）沿用於第 K、L 節，改標「客戶已同意」。
 - **位置選擇**：沿用 `docs/v2/59_b_line_390_wireframes.md`、`docs/v2/61_bl0250_batch3_wireframe.md` 的「`docs/v2/` 編號 `.md` 文字線框」慣例；不放 `docs/wireframes/`（該目錄 README 定義為客戶拍板原件區）。檔名不改（`tests/test_doc_counters.py::_MD_DOCS` 已登記此路徑）。
 - **2026-10-25 同日回修（客戶看可視化草稿後的 UX 細化，`DEC-2026-10-25-02` 已核准方向內；要點轉述）**：Sheet Picker 由一張張卡片改為**下拉式選單**；**選中（Pending）≠ 切換（Active）**，須按［使用這一本］並驗證成功才切換，驗證失敗維持舊 active；URL／ID 入口同樣「驗證成功 → 顯示目標 → ［使用這一本］→ 才切換」；［在 Google 開啟］**只指目前使用中（active）那一本**。同日稽核後再修：**第一層只顯示狀態**，拿掉［登入］［切換帳號］［選擇試算表］，只保留［看原因］與［在 Google 開啟］（客戶回修第 11 點＋總管裁定）。改動處：第 A.1／A.2／A.4 節線框、第 B 節、第 C 節、第 D 節 D-8、第 H 節、第 E 節（原卡片式清單移 E.0 標 superseded）、第 F 節、第 G 節 G-13a／G-13b／G-15、第 K.1 節 CAP-SET-06。**可視化 Preview**：`docs/v2/prototype/ui_prototype_set_oauth.html`（單一 HTML、假資料、不連網、頁首標「視覺草稿・假資料・非正式功能」）—— ⛔ **Preview 與本回修同樣不構成 implementation 授權**；Preview 與本檔不一致時以本檔為準。
@@ -31,7 +31,7 @@
 2. **一次只有一本「目前使用中」的試算表**，只能在設定頁選；其他四頁只讀這一本的結果，不放任何選擇器。另保留「已經知道試算表網址？」貼網址／ID 的次要入口，兩個入口最後設的是同一本、同一個狀態。
 3. **第一階段只讀**：登入、列清單、讀試算表、切換。不新增、不修改、不刪除您的試算表內容（第 5 節逐項列出不開的寫入路徑）。現行授權範圍比「只讀」大，實作時要先過一道資安／授權範圍關卡（第 J 節）。
 4. 版面照您同意的方案 1（三層漸進揭露）與 Q1～Q4：［在 Google 開啟］保留；沒有待處理項目時第二層可預設收起；只多一顆［重新讀取連線狀態］；燈旁［看原因］只捲到「需要處理的項目」。
-5. **本 Wireframe 等您審**；審過之前不寫任何程式，審過之後實作前還要先過第 J 節的實作／資安關卡。
+5. ~~**本 Wireframe 等您審**；審過之前不寫任何程式，審過之後實作前還要先過第 J 節的實作／資安關卡。~~ → 您已核准整體方向（`DEC-2026-10-25-04`）；核准不等於開工，實作前還要先過第 J 節的實作／資安關卡（狀態更新，不是漏刪）。
 
 ## 2. 客戶 2026-10-25 裁示要點與本檔射程（要點轉述；正式登記 `DEC-2026-10-25-02`）
 
@@ -39,7 +39,7 @@
 |---|---|---|
 | 1 | CAP-GATE-01 改裁示：新 UI 採 Google 個人 OAuth；原因是多個 Google 帳號需要登入／列 Sheet／選擇／登出／切換；不再做「固定憑證 vs OAuth」二選一 | 第 B～F 節；上一版 GATE-01 方案 A 推薦標 superseded（附錄 A） |
 | 2 | 只裁方向，不授權 production OAuth 實作；不得改 `infra/oauth.py`、scope、callback、credential storage、secrets、token persistence；實作前另走 Implementation／Security Gate | 本檔 0 行 `.py` 變更；第 J 節列實作前須另裁項目 |
-| 3 | 新 B UI 第一階段唯讀（登入、列 Sheet、讀 Sheet、切換 Sheet）；沿用舊 OAuth 邏輯 ≠ 繼承寫入權限；現行 scope 高於所需 → 只標「實作時需 Security／Scope Decision Gate」 | 第 5 節唯讀原則；第 J 節 J-1 |
+| 3 | 新 B UI 第一階段唯讀（登入、列 Sheet、讀 Sheet、切換 Sheet）；沿用舊 OAuth 邏輯 ≠ 繼承寫入權限；現行 scope 高於所需 → 只標「實作時需 Security／Scope Decision Gate」 | 第 5 節唯讀原則；第 J 節 J-1（2026-10-25 補記：J-6 已裁示，第一階段唯讀含 SET-4 類型，見第 5 節與 J-14） |
 | 4 | CAP-GATE-02：⚙️ 是唯一 Sheet selection owner；流程登入 → 顯示帳號 → 讀可存取 Sheet → 清單 → 選一本 → 驗證 → 設為目前使用中；一次只有一個 active Sheet；其他頁不得有 selector；URL／ID 為次要入口，兩入口收斂到同一個 active Sheet SSOT | 第 4、E、F 節 |
 | 5 | 版面方案 1（三層漸進揭露）；Q1 保留［在 Google 開啟］；Q2 無待處理項目時第二層可預設收起；Q3 只增加［重新讀取連線狀態］，不得增加其他重複 Refresh；Q4 燈旁［看原因］只捲到「需要處理的項目」，不取數、不改資料 | 第 A、H、L 節 |
 | 6 | 舊 UI 只當功能與邏輯來源，不搬畫面（sidebar 排版、expander、舊 Tab、過深設定區、舊按鈕位置、舊資訊架構都不是新規格） | 第 I 節分類 (3)「舊 UI 畫面專用、不搬」 |
@@ -49,9 +49,9 @@
 
 **方向與實作授權的界線（寫死，不得混讀）**
 
-- ✅ **已裁示（方向）**：新 UI 採個人 OAuth；⚙️ 唯一擁有 Sheet 選擇；單一 active Sheet；URL／ID 次要入口；第一階段唯讀；版面方案 1＋Q1～Q4。
+- ✅ **已裁示（方向）**：新 UI 採個人 OAuth；⚙️ 唯一擁有 Sheet 選擇；單一 active Sheet；URL／ID 次要入口；第一階段唯讀；版面方案 1＋Q1～Q4；**2026-10-25 另裁：Wireframe／Preview 整體方向核准、J-4（Active Sheet ＝ 持倉／保單那一本）、J-6（新 B UI 第一階段全部唯讀，含 SET-4 類型）、CAP-SET-10（不新增清除按鈕）**（`DEC-2026-10-25-04`）。
 - ⛔ **未授權（實作）**：任何 production OAuth 實作；`infra/oauth.py`、`GOOGLE_OAUTH_SCOPES`、callback、權杖存放與保存、secrets 的任何變更；active Sheet 的儲存實作；任何寫入。
-- ⚠️ **T6 與 `DEC-2026-10-17-03` 護欄 4**：客戶已裁示 ⚙️ 單一 active Sheet、其他頁只讀其結果；**若 J-4 確認 active 指持倉（保單）那一本**，持倉來源即改為 active Sheet（＝ T6 變更：客戶 2026-09-27「保單那一本」＋技術裁定「ui_v2 只讀 secret `POLICY_SHEET_ID`、不退回 session」），護欄 4 的實作限制在 Gate 前仍有效。「active 指哪一本」**仍是 J-4 待裁項**，本檔不把 T6 讀成已裁變更。**護欄 4 的實作限制（目前不授權改 OAuth scope、Q10、T6 或 production write architecture）在 Implementation／Security Gate 通過前仍然有效**；本檔不把護欄 4 讀成已解除。實作前須另裁的項目見第 J 節。
+- ⚠️ **T6 與 `DEC-2026-10-17-03` 護欄 4**：客戶已裁示 ⚙️ 單一 active Sheet、其他頁只讀其結果；~~**若 J-4 確認 active 指持倉（保單）那一本**，持倉來源即改為 active Sheet（＝ T6 變更：客戶 2026-09-27「保單那一本」＋技術裁定「ui_v2 只讀 secret `POLICY_SHEET_ID`、不退回 session」），護欄 4 的實作限制在 Gate 前仍有效。「active 指哪一本」**仍是 J-4 待裁項**，本檔不把 T6 讀成已裁變更。~~ → **J-4 已裁示（`DEC-2026-10-25-04`）（2026-10-25 補記；有意識的政策變更，不是漏刪；決策者：客戶）：active 指持倉（保單）那一本，持倉來源改為 active Sheet 即 T6 變更方向已裁（客戶 2026-09-27「保單那一本」＋技術裁定「ui_v2 只讀 secret `POLICY_SHEET_ID`、不退回 session」被此方向取代）；實作仍受護欄 4 約束、須先過 Implementation／Security Gate。** 舊條件句的用意仍然成立（客戶確認前不得把 T6 讀成已裁）；被權衡掉的是它的「若」—— 客戶已確認。**護欄 4 的實作限制（目前不授權改 OAuth scope、Q10、T6 或 production write architecture）在 Implementation／Security Gate 通過前仍然有效**；本檔不把護欄 4 讀成已解除。實作前須另裁的項目見第 J 節。
 
 ## 3. 現行 B 版設定頁盤點（`3075e313` 讀碼，沿用上一版 `88e829de` 結論；未看畫面）
 
@@ -84,7 +84,7 @@
 | connection refresh（［重新讀取連線狀態］） | ⚙️（唯一入口） | 不另放（Q3：不得增加其他重複 Refresh） |
 
 - **active Sheet SSOT 的規則**：(1) 清單選擇與 URL／ID 入口**寫同一個 active 狀態**，不得兩套；(2) 只有使用者在 ⚙️ 的明確操作（［使用這一本］＋確認）才改 active，任何程式路徑不得自動改用其他 Sheet（BL-0381 (6)(7)）；(3) 切換帳號、登出、驗證失敗時 active **不得被默默沿用**（第 D、G 節）。
-- **「active Sheet」指哪一本**：本 Wireframe 畫成「**持倉（保單）試算表**」那一本（舊 UI `policy_sheet_id` 所指、使用者自己維護的帳本）；設定試算表與選股池兩本照現行部署設定、本頁只顯示名稱與狀態。⚠️ **這是文件組讀法，不是客戶原話**（客戶要點只說「選擇目前使用的 Sheet」），列為第 J 節 J-4 請客戶審 Wireframe 時一併確認。
+- **「active Sheet」指哪一本**：本 Wireframe 畫成「**持倉（保單）試算表**」那一本（舊 UI `policy_sheet_id` 所指、使用者自己維護的帳本）；設定試算表與選股池兩本照現行部署設定、本頁只顯示名稱與狀態。~~⚠️ **這是文件組讀法，不是客戶原話**（客戶要點只說「選擇目前使用的 Sheet」），列為第 J 節 J-4 請客戶審 Wireframe 時一併確認。~~ → **J-4 已裁示（`DEC-2026-10-25-04`）（2026-10-25 補記；有意識的政策變更，不是漏刪；決策者：客戶）**：Active Sheet ＝ 持倉／保單那一本；設定試算表與選股池維持各自既有部署／資料來源設定；設定頁選的 Active Sheet 只控制持倉／保單資料來源；其他頁只讀 Active Sheet 的結果，不得自己猜、不自動切換、不自動 fallback 到其他 Sheet。舊讀法的內容被客戶原樣確認，被權衡掉的只是「文件組讀法、可被推翻」的身分。
 - **active 存在哪裡（session／設定試算表／其他）未裁**：屬第 J 節 J-5。若存進設定試算表就是一次寫入，與第一階段唯讀的關係須另裁；本 Wireframe 只畫「目前使用中：‹名稱›」與「上次選擇紀錄（未驗證）」兩種顯示，不預設儲存方式。
 
 ## 5. 唯讀原則（第一階段；客戶已裁示）
@@ -107,7 +107,7 @@
 | 交易紀錄（`_Ledgers`）寫入／新增分頁 | `repositories/ledger_repository.py::append_ledger_row`、`replace_ledgers_for_policy`、`ensure_ledger_worksheet` |
 | T7 帳本雙向同步（`_T7_State`） | `ui/tab3_t7_ledger.py` 內 `_t7_get_gsheet_client_sid` 一族 |
 
-- **不受本表影響的既有功能**：現行 `SET-4` 參數編輯經**服務帳戶**寫**設定試算表**（50 第 8 節既有、已核准的功能），不是個人 OAuth 路徑，本批不改它。⚠️ 「第一階段唯讀」是否也涵蓋 `SET-4` 這條既有寫入，客戶要點未明說 —— 本檔讀作「只管新的 OAuth／active Sheet 能力」（**文件組讀法，可被客戶推翻**），列 J-6。
+- ~~**不受本表影響的既有功能**：現行 `SET-4` 參數編輯經**服務帳戶**寫**設定試算表**（50 第 8 節既有、已核准的功能），不是個人 OAuth 路徑，本批不改它。⚠️ 「第一階段唯讀」是否也涵蓋 `SET-4` 這條既有寫入，客戶要點未明說 —— 本檔讀作「只管新的 OAuth／active Sheet 能力」（**文件組讀法，可被客戶推翻**），列 J-6。~~ → **J-6 已裁示（`DEC-2026-10-25-04`）（2026-10-25 補記；有意識的政策變更，不是漏刪；決策者：客戶）：新 B UI 第一階段全部唯讀，也包含現行 `SET-4` 類型的設定寫入。** 第一階段不得經新 B UI 寫入設定試算表、持倉／保單試算表、選股池或任何 Google Sheet 資料；舊 UI 行為只作邏輯參考，不代表新 UI 繼承寫入權限；與現行 44／50／其他 SSOT 衝突者依正式修正程序處理，不可偷留例外。現行 `SET-4` 參數編輯（經**服務帳戶**寫**設定試算表**，50 第 8 節既有、已核准的功能）在**舊 UI／現行頁面**的行為本批不動（本批不改 production）；`SET-4` 在新 B UI 第一階段**怎麼呈現**（唯讀顯示或暫不出現）客戶沒有裁，見 J-14。舊讀法（不涵蓋 `SET-4`）的用意仍然成立：它擋的是「把 SET-4 順手算進新 OAuth 能力」的越界；被客戶推翻的是結論 —— 唯讀涵蓋 `SET-4` 類型。
 - 畫面上第一階段**不出現**任何寫入字樣或寫入控制項（BL-0349 完成條件）；［使用這一本］只改「目前使用中」，不寫入任何一本試算表的內容（儲存位置待 J-5）。
 
 ## A. 完整設定頁 Wireframe（方案 1：三層漸進揭露；客戶已同意方向）
@@ -501,7 +501,7 @@
 | I-18 | `ui/tab3_portfolio.py` 內 v19.302 註解（Streamlit Cloud 上 app 內 OAuth 導回 `*.streamlit.app` 被平台攔截、帳號錯亂） | 已知平台風險 | (5) | 第 B、D 節 | 舊 UI 因此改為服務帳戶優先；新 UI 走 OAuth 前須先確認此風險（J-10） |
 | I-19 | `services/v2_tables/settings_store.py::service_account_status`、`sheet_title`；`repositories/settings_sheet_repository.py::load_sheet_title` | 服務帳戶有無設定、設定試算表標題 | (1) | 第 A 節試算表連線卡 | B 線現有，直接沿用 |
 | I-20 | `services/v2_tables/exp_universe.py::load_pool_codes`（`oauth_client` 注入點）；`repositories/pool_repository.py::get_pool_store` | 選股池讀取可吃個人 OAuth client | (4) | 其他四頁讀 active 結果的接線參考 | `ui_v2/exp/source.py` 恆傳 `None`；B 線無取得登入者 client 的途徑 |
-| I-21 | `repositories/policy_supplement_repository.py::policy_sheet_id`；`services/v2_tables/alo_holdings.py` | 現行 T6：持倉只讀 secret `POLICY_SHEET_ID` | (4)(5) | 第 4 節 active Sheet | 單一 active Sheet 已裁；**若 J-4 確認 active 指持倉那一本**，改讀 active Sheet 即 T6 變更，實作受護欄 4 約束（J-4、J-11）；J-4 未確認前不得讀成已裁的 T6 方向 |
+| I-21 | `repositories/policy_supplement_repository.py::policy_sheet_id`；`services/v2_tables/alo_holdings.py` | 現行 T6：持倉只讀 secret `POLICY_SHEET_ID` | (4)(5) | 第 4 節 active Sheet | 單一 active Sheet 已裁；~~**若 J-4 確認 active 指持倉那一本**，改讀 active Sheet 即 T6 變更，實作受護欄 4 約束（J-4、J-11）；J-4 未確認前不得讀成已裁的 T6 方向~~ → J-4 已裁示（`DEC-2026-10-25-04`）：改讀 active Sheet 即 T6 變更方向已裁；實作仍受護欄 4 約束（J-11）、須先過 Implementation／Security Gate |
 | I-22 | `services/v2_tables/masking.py::secret_values` | 遮蔽權杖與 OAuth 設定 | (1) | 第 0、A 節遮蔽 | B 線現有，沿用 |
 | I-23 | `ui/helpers/portfolio/policy_admin_section.py` 列資料夾／列檔的錯誤分支 | 錯誤字串含 `insufficient` 或 `403` 時提示「OAuth token 缺 `drive.metadata.readonly` 權限，登出再登入」 | (2)(5) | 第 E 節 E-5a | 新 UI 加「授權範圍不足」狀態並與 E-5（無權限）分開；字串判斷需改結構化（J-9）；範圍本身屬 J-1 |
 | I-24 | `st.session_state["active_policy_id"]` | 同一本試算表內選哪張保單（依總管轉述；讀碼只見 `ui/sidebar.py::render_sidebar` 登出時清除與 `ui/helpers/io/json_backup.py` 備份／還原，未查到讀取端） | (3)／不在 ⚙️ 射程 | — | 屬 💼（持倉事實與操作），不是 active Sheet；⚙️ 不擁有 |
@@ -523,9 +523,9 @@
 | J-1 | OAuth 授權範圍收窄（第一階段只需讀試算表、列清單、帳號 email）；`include_granted_scopes=true` 是否保留；既有已授予的寫入範圍如何處理 | 現行 scope 高於所需；改 scope ＝ 動 `infra/`（子法 1 §7.4.2 提案單） | 資安 2 組獨立稽核（`DEC-2026-10-16-05`） |
 | J-2 | callback 安全取捨（session 遺失時是否放行 state 檢查）；OAuth client 設定只准來自部署 secrets（不搬頁面輸入 client secret） | 授權碼搶奪窗口；secret 處理 | 資安 2 組 |
 | J-3 | 權杖存放與保存（只在本次 session，或跨重新整理保存）；登出是否向 Google 撤銷權杖（讀碼未見撤銷呼叫） | credential storage／token persistence 屬客戶明列禁改項 | 資安 2 組 |
-| J-4 | active Sheet 是否只指持倉（保單）那一本；設定試算表、選股池是否維持部署設定 | 文件組讀法（第 4 節），影響 T6 變更範圍 | 客戶確認（隨本 Wireframe 審） |
+| J-4 | ~~active Sheet 是否只指持倉（保單）那一本；設定試算表、選股池是否維持部署設定~~ → **客戶已裁示（`DEC-2026-10-25-04`）：active Sheet ＝ 持倉／保單那一本；設定試算表與選股池維持各自既有部署／資料來源設定；其他頁只讀、不猜、不自動切換、不自動 fallback** | ~~文件組讀法（第 4 節），影響 T6 變更範圍~~ → 已裁示；T6 變更方向已定，實作仍待 Gate（J-5、J-7、J-11） | ~~客戶確認（隨本 Wireframe 審）~~ → 已確認 |
 | J-5 | active Sheet 存在哪裡（session／設定試算表／其他）；若寫設定試算表，與第一階段唯讀的關係 | 資料身分（data identity）規則＋可能新增設定鍵（50／44 修正程序） | 至少 1 組獨立稽核 |
-| J-6 | 「第一階段唯讀」是否也涵蓋現行 `SET-4` 經服務帳戶寫設定試算表 | 客戶要點未明說；本檔讀作不涵蓋 | 客戶確認 |
+| J-6 | ~~「第一階段唯讀」是否也涵蓋現行 `SET-4` 經服務帳戶寫設定試算表~~ → **客戶已裁示（`DEC-2026-10-25-04`）：新 B UI 第一階段全部唯讀，也包含現行 SET-4 類型的設定寫入**；呈現方式見 J-14 | ~~客戶要點未明說；本檔讀作不涵蓋~~ → 已裁示（與舊讀法相反）；落 44 走修正程序 | ~~客戶確認~~ → 已確認 |
 | J-7 | 服務帳戶與個人 OAuth 並存規則：未登入時能否以服務帳戶驗證 URL／ID、讀部署那一本；部署 secret `POLICY_SHEET_ID` 是否保留為後備 | 牽動 T6「不退回 session」技術裁定與 BL-0381 (7)「不得自動改用其他 Sheet」 | 至少 1 組獨立稽核 |
 | J-8 | Picker 列表的辨識資訊欄位（最後修改、擁有者等）與是否保留資料夾篩選 | 需新增 Drive API 欄位請求；不得新增資料源 | 依 UI 草稿核准；資料語意至少 1 組 |
 | J-9 | 持倉／選股池／個人 OAuth 路徑的錯誤分類（403／404／認證失敗／格式）結構化 | 動 L1；分類前畫面一律「無法判定」 | 至少 1 組獨立稽核 |
@@ -533,8 +533,10 @@
 | J-11 | `DEC-2026-10-17-03` 護欄 4（OAuth scope、Q10、T6、production write architecture）在實作批的具體放寬範圍 | 方向已裁，實作限制仍有效；放寬要有正式裁示 | 客戶裁示＋資安 2 組 |
 | J-12 | ［重新讀取連線狀態］與 Q4 落點的 44 修正程序（`DEC-2026-10-17-07` (b-1)、(b-3)；G7） | 客戶已同意，落 44 須走修正程序 | 依 44 修正程序 |
 | J-13 | 其他四頁「⬜ 尚未選定試算表」指回 ⚙️ 的呈現 | 各頁版面屬 UI 草稿先行；本檔只定 ⚙️ | 依各頁 UI 草稿 |
+| J-14 | **`SET-4` 參數編輯在新 B UI 第一階段怎麼呈現**（`DEC-2026-10-25-04`，2026-10-25 新增）：客戶 J-6 只裁「第一階段全部唯讀、含 SET-4 類型」，沒有裁呈現方式。(a) **暫不出現**：第一階段新設定頁不畫 SET-4 塊；(b) **唯讀顯示**：保留塊，輸入欄改成只顯示值，不出現存檔鈕與任何寫入字樣。另附帶一題：現行頁面的 SET-4 寫入何時改成唯讀（隨實作批或另開批） | 客戶裁示未涵蓋；(a)(b) 兩者都牽動 44 修正程序（SET-4 塊的呈現條件）；不得由文件組自創 | 客戶裁示（附文件組推薦，見下一段） |
 
 - 上列每一項**都不是本批的授權**；客戶審過本 Wireframe 後，實作批開工前仍須客戶指派（`CLAUDE.md` §-1）並逐項過關。
+- **J-14 的推薦（文件組擬，待客戶裁示；不是裁示）：(a) 暫不出現。** 理由：(1) 本檔第 5 節與 BL-0349 完成條件要求第一階段畫面不出現任何寫入字樣或寫入控制項，(b) 的鎖定輸入欄仍帶「可編輯」外觀，容易被讀成壞掉或半成品；(2) `SET-3` 已用唯讀表呈現同一批設定鍵的目前值與最後修改時間，(a) 不損失資訊；(3) 44 第五節「按鈕停用時不隱藏」有 2026-10-17 的前例（永遠按不了的按鈕不畫，`DEC-2026-10-17-03`），(a) 與該前例同向；(4) 44 的 SET-4 塊保留、只標第一階段新 B UI 不出現，塊數與判準行數不動，日後開放寫入時不必重建。**代價**：第一階段使用者在新 UI 改不了門檻，只能在舊 UI 或直接在試算表改；且 (a) 與「現有能力一項不刪」（第 K 節）的關係，已由客戶 J-6 裁示取代（SET-4 的寫入能力在新 B UI 第一階段不保留）。**選 (b) 的情形**：客戶希望第一階段畫面仍看得到「有這一塊」。兩案都落 44 時走修正程序，且都不改現行頁面（本批不改 production）。
 
 ## K. Old → New 八塊對照（現有能力一項不刪；上一版已經獨立稽核，本版只更新 Gate 欄；客戶已同意方案 1）
 
@@ -549,7 +551,7 @@
 | ④ 小標「操作」 | ④ | 第二層「操作」 | **保留**（護欄 6） |
 | ④ 小標「證據／來源」 | ④ | 第三層標題「證據／來源」 | **保留**（護欄 6） |
 | `SET-3` 規則參數卡 | ④操作 | 第二層「操作」；卡頭「設定試算表：‹名稱›」移到「試算表連線」 | **保留＋拆出一行** |
-| `SET-4` 參數編輯 | ④操作 | 第二層「操作」 | **保留**（J-6） |
+| `SET-4` 參數編輯 | ④操作 | 第二層「操作」 | ~~**保留**（J-6）~~ → **第一階段新 B UI 唯讀，不得寫入（J-6 已裁示，`DEC-2026-10-25-04`）；呈現方式（唯讀顯示或暫不出現）待客戶裁示（J-14）；現行頁面的 SET-4 本批不動**（2026-10-25 補記；有意識的政策變更，不是漏刪；決策者：客戶） |
 | `SET-5` 重新取數 | ④操作 | 第二層「操作」 | **保留**；另加［重新讀取連線狀態］一顆（Q3，客戶已同意） |
 | `SET-2` 來源健康卡 | ④證據／來源 | 第三層 | **移入第三層**（原樣） |
 | `SET-6` 取數紀錄 | ④證據／來源 | 第三層 | **移入第三層**（原樣） |
@@ -577,7 +579,7 @@
 | CAP-SET-07 綁定＋顯示 | 「設為目前使用中」＝ active Sheet；第一層與第二層顯示名稱＋［在 Google 開啟］ | 方向已裁；儲存 J-5 |
 | CAP-SET-08 切換 | 同 CAP-SET-06（選另一本）；切換帳號見第 D 節 | 方向已裁 |
 | CAP-SET-09 新增／新建 | 不畫（一次只有一個 active；新建屬寫入） | 第一階段不提供；CAP-GATE-03 |
-| CAP-SET-10 解除 | 不另設按鈕：登出／切換帳號使 active 變「未驗證」或「尚未選定」 | 是否需要「清除目前使用中」按鈕，隨本 Wireframe 審 |
+| CAP-SET-10 解除 | 不另設按鈕：登出／切換帳號使 active 變「未驗證」或「尚未選定」 | ~~是否需要「清除目前使用中」按鈕，隨本 Wireframe 審~~ → **客戶已裁示（`DEC-2026-10-25-04`）：不新增「清除目前使用中」按鈕，不提供獨立清除 Active 的操作，登出／切換帳號後依既定「未驗證／尚未選定」規則處理，不得新增多餘按鈕或額外狀態路徑** |
 | CAP-SET-11 刪除 | 一行「不提供」 | CAP-GATE-03 |
 | CAP-SET-12 重新載入 | ［重新讀取連線狀態］（唯一入口） | 客戶已同意（Q3）；J-12 |
 | CAP-SET-13 連線／權限／同步／新鮮度／重試狀態 | 第一層摘要；第二層各卡；第三層原文 | 診斷深度 CAP-GATE-10 |
@@ -612,11 +614,12 @@
 3. `include_granted_scopes=true` 對已授予寫入範圍的實際影響、`prompt=select_account` 在 Streamlit Cloud 上的實際行為、v19.302 平台登入相撞是否仍會發生，皆未實測（J-1、J-10）。
 4. 舊 UI 登出清除範圍（第 D 節 D-5）只讀了 `ui/sidebar.py::render_sidebar` 的登出鈕；是否還有其他登出路徑未全 repo 查。
 5. 寫入路徑表（第 5 節）列的是本組讀到的舊 UI／底層寫入函式，**不宣稱窮舉**。
-6. 「active Sheet 指持倉那一本」（J-4）、「唯讀不涵蓋 `SET-4`」（J-6）為文件組讀法，不是客戶原話。
+6. ~~「active Sheet 指持倉那一本」（J-4）、「唯讀不涵蓋 `SET-4`」（J-6）為文件組讀法，不是客戶原話。~~ → 兩項已由客戶正式裁示（`DEC-2026-10-25-04`）：J-4 原樣確認；J-6 推翻（唯讀**涵蓋** SET-4 類型）；狀態更新，不是漏刪。
 7. 客戶 2026-10-25 裁示經總管派工單轉達，repo 內無逐字存檔；文件組未見客戶對話本身。
 8. `docs/v2/44_fund_ui_ssot.md` 本批未逐行讀；設定頁層表與最終字樣以 44 為準。
 9. 本版由文件組單組改寫，尚未經獨立稽核。
 10. 2026-10-25 回修（下拉、Pending／Active、［使用這一本］、［在 Google 開啟］只指 active）與 Preview `docs/v2/prototype/ui_prototype_set_oauth.html` 由架構與前端組單組產出；Preview 只在本機無頭瀏覽器以 390 與 1366 寬實跑（第一層只放狀態的版本只重拍 390），未經客戶實機、未經獨立稽核；Preview 的驗證三步、失敗分類與搜尋全是假資料模擬，不代表 Google API 實際能分出這些狀態（J-9）。
+11. 2026-10-25 補記（`DEC-2026-10-25-04`：J-4、J-6、CAP-SET-10 與 Wireframe／Preview 方向核准）：客戶裁示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；J-14 的題目切法與推薦為文件組擬、待客戶裁示；「現行頁面的 SET-4 本批不動」為文件組讀法；Preview `docs/v2/prototype/ui_prototype_set_oauth.html` 本批未改、未重新檢查其與本裁示是否衝突（見回報）；本次補記由文件組單組寫成，未經第二組驗證。
 
 ---
 
