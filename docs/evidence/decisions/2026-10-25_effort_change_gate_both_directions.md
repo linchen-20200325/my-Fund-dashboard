@@ -38,6 +38,30 @@
 9. `PROJECT_RULES.md` 的 Low／Medium／High 保留作 Minimum Sufficient Effort 的風險分級基準；**不得把這個三級風險分類誤讀成客戶介面 Effort picker 的選項上限**。實際切換要求以客戶當下產品介面可用選項為準。
 10. **省額度優先**：若較低 Model 或較低 Effort 已足以安全完成下一完整工作階段，必須主動建議降級；不得因「較強比較好」而長期維持較高設定。
 
+## Model × Effort 節省基準矩陣（2026-10-25 客戶核准）
+
+> 本表是**最低足夠設定的預設基準**，不是硬性綁定。每個完整工作階段仍必須依實際工作內容、風險與複雜度重新判斷；若現場判斷不同，依上方 Change Gate 停手請客戶切換。
+
+| 工作類型 | 預設建議 Model | 預設 Effort | 原則 |
+|---|---|---|---|
+| GitHub 狀態確認、HANDOFF／BACKLOG／DECISIONS 機械同步、改字、小型文件修正、簡單 commit／PR 收尾 | Haiku 5.5 | Low | 優先最低成本；若只需讀取／機械修改，不使用較高模型 |
+| 一般文件整理、規格明確的小修、簡單 bug、低風險測試修正 | Haiku 5.5 或 Sonnet 5.5 | Low～Medium | Haiku 能安全完成就不用 Sonnet；需一般推理再升 Sonnet |
+| 一般 UI／UX、單模組 bug、tests、wiring、一般低風險實作 | Sonnet 5.5 | Medium | 日常開發預設基準 |
+| Wireframe／UX 設計、規格清楚的跨少數模組工作 | Sonnet 5.5 | Medium | 不因「設計」自動使用 Opus |
+| OAuth／Google Sheet／跨模組架構、複雜 correctness、重要資料流 | Opus 5.5 | Medium | 涉及安全、跨模組或複雜狀態時才升 Opus |
+| 投資語意、Risk Cap、PIT、資料契約、重大架構、不可逆或高風險決策 | Opus 5.5 | High | 高風險語意與資料契約須保守處理 |
+| 極高複雜度、多方案重大衝突、大型紅隊／重大驗證 | Fable 5.1 或當下可用且明確更適合的最高能力模型 | High／更高（若介面提供） | 非必要不使用；必須有具體理由 |
+| Ultracode | 不預設使用 | 不預設 | 只有已確認有明確必要時才建議，且先停手讓客戶切換 |
+
+### 節省策略
+
+1. **平常不要把 Opus 當日常預設。** 一般開發優先 Sonnet；機械工作優先 Haiku。
+2. **Effort 採最低足夠值。** Low 能完成就不用 Medium；Medium 能完成就不用 High。
+3. **工作變簡單時必須重新判斷並停手提醒降級。** 例如架構設計結束、進入文件同步／CI 收尾時，不得因前一階段使用 Opus／High 而一路沿用。
+4. **不要為微小短暫狀態頻繁切換。** CI 等待、push、PR 開啟、同一完整工作階段內的短暫安全收尾，不視為新完整工作階段；只在新完整階段、工作性質明顯改變或 Safe Checkpoint 重新判斷。
+5. **模型表只是預設起點，不是固定對照。** 例如 UI 若只改一行文字可降至 Haiku；反之 UI 若牽涉 OAuth／跨模組資料契約則可升至 Opus，但都必須經 Change Gate。
+6. **目標是降低不必要的 token／使用量，不是犧牲 correctness。** 只要較低設定不足以安全完成，就應建議升級並停手等客戶調整。
+
 ## 白話判定
 
 - Model 建議不同：要停下來告知，等客戶改。
@@ -45,5 +69,9 @@
 - Medium → Low：要停下來告知「可以降」，等客戶改。
 - Low → Medium：要停下來問，等客戶改。
 - Medium → High：要停下來問，等客戶改。
+- 日常機械工作：優先 Haiku／Low。
+- 一般開發：優先 Sonnet／Medium。
+- 高風險／複雜架構：才用 Opus／較高 Effort。
+- Fable／Ultracode：不作預設。
 
-**一句話版本：只要建議 Model 或 Effort 跟目前不同，不論升級或降級，都先停手讓客戶修改；改好後才開始下一完整工作階段。**
+**一句話版本：只要建議 Model 或 Effort 跟目前不同，不論升級或降級，都先停手讓客戶修改；改好後才開始下一完整工作階段；並永遠優先採用能安全完成工作的最低足夠 Model × Effort。**
