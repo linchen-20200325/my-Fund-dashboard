@@ -149,6 +149,25 @@ def eat_is_red(eat_status) -> bool:
     return "🔴" in _e and "吃本金" in _e
 
 
+def redlight_from_signal(signal, eat_status) -> "bool | None":
+    """紅燈三態(BL-0450):`switch_signal` 的燈號 + 吃本金燈號 → True / False / None。
+
+    - 吃本金為紅(`eat_is_red`)或燈號為 RED → **True**(不論燈號是否為 GRAY)
+    - 燈號為 GRAY(資料不足)→ **None**(判不出來,不是「確認不是紅燈」)
+    - 其餘明確燈號(🟢/🟡)→ **False**
+
+    BL-0450:~~`switch_signal(...) == RED`~~ 會把 GRAY 記成 False(Missing→False)
+    (有意識的更正,不是漏刪;2026-10-25,決策者:客戶授權 BL-0450)。
+    只改狀態傳遞;燈號判法、`is_underperforming` 判法不變(None 與 False 都不觸發絕對虧損)。
+    """
+    from services.switch_strategy import GRAY, RED
+    if eat_is_red(eat_status) or signal == RED:
+        return True
+    if signal == GRAY:
+        return None
+    return False
+
+
 def assess_underperformance(*, fund_nav=None, benchmark_nav=None, benchmark_label=None,
                             excess_pct=None, full_period=False,
                             tr1y_pct=None, sharpe=None, eat_status=None,
@@ -190,10 +209,14 @@ def assess_underperformance(*, fund_nav=None, benchmark_nav=None, benchmark_labe
         bool(eat_status)
         or (tr1y_pct is not None and sharpe is not None and switch_score is not None)
     ):
-        from services.switch_strategy import RED, switch_signal
+        from services.switch_strategy import switch_signal
         # switch_signal 只認「嚴重」紅;正報酬但配息侵蝕本金(plain 🔴 吃本金)靠 eat_is_red 補上
-        redlight = (switch_signal(tr1y_pct, sharpe, eat_status, switch_score,
-                                  coverage=switch_coverage) == RED) or eat_is_red(eat_status)
+        # BL-0450:~~`(switch_signal(...) == RED) or eat_is_red(eat_status)`~~ → 三態
+        # (有意識的更正,不是漏刪;2026-10-25,客戶授權)。呼叫端傳 redlight=None(GRAY)且帶非空
+        # 吃本金燈號時,舊式會以全 None 輸入重算成 False,把呼叫端的 None 又洗回 False。
+        redlight = redlight_from_signal(
+            switch_signal(tr1y_pct, sharpe, eat_status, switch_score, coverage=switch_coverage),
+            eat_status)
     _abs = bool(redlight) if redlight is not None else False
     if _abs:
         # 紅燈原因講白:嚴重吃本金(報酬<0)> 吃本金(正報酬但配息侵蝕本金)> 籠統絕對虧損

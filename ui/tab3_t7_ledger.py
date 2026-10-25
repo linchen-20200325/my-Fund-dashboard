@@ -219,6 +219,23 @@ def _t7_units_to_twd(units: float, nav: float, fx: float) -> float:
     return float(units) * float(nav) * float(fx)
 
 
+def _t7_total_return_pct(pl_total_twd, cost_total_twd) -> "float | None":
+    """帳本 KPI「組合總報酬率」(%)。總成本基礎 ≤0 或缺 → None(算不出來,不是 0%)。
+
+    BL-0451:~~`if _cost_total_twd > 0 else 0.0`~~ → None(有意識的更正,不是漏刪;
+    2026-10-25,決策者:客戶授權 BL-0451)。舊碼寫 0.0 → 「+0.00% 報酬率」(Missing→0)。
+    公式不變;真 0 損益且成本 >0 仍回 0.0。
+    """
+    try:
+        _c = float(cost_total_twd)
+        _p = float(pl_total_twd)
+    except (TypeError, ValueError):
+        return None
+    if not (_c > 0) or _p != _p:      # ≤0 / NaN 成本、NaN 損益 → 算不出來
+        return None
+    return _p / _c * 100.0
+
+
 def _t7d_fetch_fund_meta(code: str, existing=None) -> dict:
     """v18.239: 薄殼 delegate 到 `ui.helpers.d_mode.fetch_fund_meta_safe`。
     v18.242: 加 `existing` (dict[code→fund_dict]) — 已抓過秒回不重抓。"""
@@ -3237,8 +3254,8 @@ def render_t7_section() -> None:
                                          column_config=_T7_SNAP_COL_CONFIG)
                     # v18.70: 市值 = 0 時用 invest_twd 顯示估算值，避免「上下不同步」視覺斷層
                     _pl_total = _v_total_twd - _cost_total_twd
-                    _pl_total_pct = (_pl_total / _cost_total_twd * 100.0
-                                      if _cost_total_twd > 0 else 0.0)
+                    # BL-0451:總成本 ≤0 → None(見 `_t7_total_return_pct`),不再寫 0.0
+                    _pl_total_pct = _t7_total_return_pct(_pl_total, _cost_total_twd)
                     # 計算 invest_twd 總和（fallback 用）
                     _invest_total_twd = sum(
                         float(_f.get("invest_twd", 0) or 0)
@@ -3259,12 +3276,21 @@ def render_t7_section() -> None:
                     else:
                         _pc1.metric("組合當前市值 (TWD)", "NT$0",
                                     help="尚無持倉資料 — 請加入基金 + 設定單位/NAV/匯率")
-                    _pc2.metric(
-                        "💸 整體未實現損益 (TWD)",
-                        fmt_twd(_pl_total, sign=True),
-                        delta=f"{_pl_total_pct:+.2f}% 報酬率",
-                        delta_color="normal",   # v18.26: 損益恆用 normal（虧損紅、賺綠）
-                    )
+                    if _pl_total_pct is not None:
+                        _pc2.metric(
+                            "💸 整體未實現損益 (TWD)",
+                            fmt_twd(_pl_total, sign=True),
+                            delta=f"{_pl_total_pct:+.2f}% 報酬率",
+                            delta_color="normal",   # v18.26: 損益恆用 normal（虧損紅、賺綠）
+                        )
+                    else:
+                        # BL-0451:報酬率算不出來 → 灰色 ⬜ 揭露,不顯示「+0.00%」
+                        _pc2.metric(
+                            "💸 整體未實現損益 (TWD)",
+                            fmt_twd(_pl_total, sign=True),
+                            delta="⬜ 報酬率無法計算（總成本基礎 ≤0）",
+                            delta_color="off", delta_arrow="off",
+                        )
                     # v18.172：年配息拆「現金」+「配股」兩格；每月現金流改 cash-only
                     _pc3.metric(
                         "💵 預估年現金配息 (TWD)",
