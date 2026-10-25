@@ -35,14 +35,16 @@
 ## 2. 現況 checkpoint
 
 > **⭐ 2026-10-25（第二十六次）現況 —— New UI Capability Matrix 收斂文件批（以本框為準；下方第二十五次框起皆為歷史快照）**（客戶 2026-10-25 授權文件批「New UI operational capabilities → 現有 SSOT／BACKLOG 收斂」，`docs/DECISIONS.md` `DEC-2026-10-25-01`；狀態更新，不是漏刪：第二十五次框整段保留於下方）
-> - **main 實況**：本框隨本批 PR 合併；該 PR 前 main 為 `7d41705f`（#1049）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
-> - **Open PR**：本 PR（分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。
-> - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；本框撰寫時尚未開 PR、無 CI 結果。
+> - **main 實況**：~~本框隨本批 PR 合併；該 PR 前 main 為 `7d41705f`（#1049）。~~ → **#1050 已 squash 合併，main `8c4f210b`**（前一 main `7d41705f`；PR head `a34f5849`；狀態更新，不是漏刪）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
+> - **Open PR**：~~本 PR（分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。~~ → **0**（#1050 已合併；狀態更新，不是漏刪）。
+> - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；~~本框撰寫時尚未開 PR、無 CI 結果。~~ → #1050 head `a34f5849` 三條 check-run 全 `success`：Fast checks、Schema gate、Slow tests（run 40156891082）（狀態更新，不是漏刪）。
+> - **稽核**：獨立文件稽核驗於 `dffd9981`，結論 PASS-with-fixes（必修 1：CAP-SET-11 實作順序改為「—（只定義、不排程）」；建議 5 項已處理）；回修 commit `a34f5849` 的 delta（4 檔 8+/8−、只改措辭）由總管自驗，**沒有送回稽核組複驗**。
 > - **本批內容（純文件，production code 0 變更）**：`docs/v2/62_old_ui_gap_matrix.md` 新增 §6 New UI Capability Matrix 與驗收條件（⚙️ CAP-SET-01～13、🔍 CAP-FND-01～07、💼 CAP-HLD-01～05、五頁 Refresh／Retry CAP-RFR-00～05、共通狀態規則 §6.1、Decision Gate CAP-GATE-01～10 §6.8；局部 ID 不是 BL ID）；`docs/v2/64_v2_ssot_convergence.md` 新增 §2.1 操作能力唯一擁有者；`docs/BACKLOG.md` BL-0397／0400／0402／0403／0405／0435／0351 列尾補記、BL-0452（五頁 Refresh／Retry 一致化，待客戶裁示）新增；`DEC-2026-10-25-01` 登記。
 > - **實作順序（只記錄、不授權）**：1 ⚙️ 設定／Google／Sheet 連線 → 2 🔍 找基金 → 3 💼 持股管理 → 4 五頁 Refresh／Retry → 5 視覺打磨（62 §6.7）。
 > - **未完成（重要，`docs/BACKLOG.md`）**：同第二十五次框（BL-0448、DG-1～DG-3〔BL-0438〕、BL-0445、BL-0446、BL-0442 其餘平行引擎），另加 BL-0452 與 CAP-GATE-01～10 待裁示題。
 > - **Blocker**：無（無已授權工作）。
-> - **唯一下一步**：停手等客戶指示 —— production UI 未授權（G8 未解除；版面類變更須 UI 草稿先行）。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。候選（**皆未授權**，不得自行開工）：第 1 階段 ⚙️ 設定的 UI 線框草稿＋CAP-GATE-01（OAuth）／-02（Sheet 綁定資料模型）請示單送客戶核准；CAP-GATE-05（候選池是哪一份）、-08（五頁 Retry vs G6）請示；DG-1～DG-3、BL-0448 等照第二十五次框。
+> - **風險（與本批無關，未查證）**：`tests/ui_v2/test_rulings_2026_10_18b_logic.py::test_示範模式_持倉體檢與標的探索全情境模型_md5與動手前相同` 本機紅，在乾淨的 `7d41705f` 上同樣失敗；CI 為綠 —— 是本機環境差異還是該測試不在 CI lane，未查證；BACKLOG 尚無對應列，本框只記錄、不新增 BL。
+> - **唯一下一步**：停手等客戶指示 —— production UI 未授權（G8 未解除；版面類變更須 UI 草稿先行）。~~若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。~~（#1050 已合併，此句已失效；狀態更新，不是漏刪）候選（**皆未授權**，不得自行開工）：第 1 階段 ⚙️ 設定的 UI 線框草稿＋CAP-GATE-01（OAuth）／-02（Sheet 綁定資料模型）請示單送客戶核准；CAP-GATE-05（候選池是哪一份）、-08（五頁 Retry vs G6）請示；DG-1～DG-3、BL-0448 等照第二十五次框。
 > - **尚未授權動工**：62 §6 任何能力的 production 實作；OAuth；寫入邊界開放；刪除；DG-1、DG-2、DG-3、BL-0445 retirement、BL-0446、BL-0448、BL-0440、BL-0442 其他引擎任何修改（`CLAUDE.md` §-1）。
 > - **接手入口**：同第二十二次框（含 scratchpad venv 跑完整測試的補充）。
 
