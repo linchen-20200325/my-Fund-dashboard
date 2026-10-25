@@ -43,7 +43,8 @@
 > - **稽核**：本框撰寫時尚未送獨立稽核（本批觸及 data identity／T6 方向的文件，依 `DEC-2026-10-16-05` 至少 1 組獨立稽核由總管安排）。
 > - **未完成（重要，`docs/BACKLOG.md`）**：同第二十六次框，另加 BL-0453。
 > - **Blocker**：無（無已授權工作）。
-> - **唯一下一步**：**客戶審 65 的最終 Wireframe**（含第 4 節「active Sheet 指持倉那一本」等文件組讀法）；**核准前不得規劃或寫 implementation**；核准後實作批開工前仍須客戶指派，並逐項過 65 第 J 節 Implementation／Security Gate。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。
+> - **2026-10-25 同日回修（本框內補記，不新增框）**：客戶看可視化草稿後裁示 Sheet Picker 改下拉、選定 ≠ 切換、須按［使用這一本］並驗證成功才切換、［在 Google 開啟］只指 active（`DEC-2026-10-25-02` 補記列，要點轉述）；65 第 A.2／C／D-8／E／F／G-15／K.1 節同步；可視化 Preview：`docs/v2/prototype/ui_prototype_set_oauth.html`（假資料、不連網、不構成實作授權；`tests/test_doc_counters.py::_PROTOTYPE_FILES` 登記一行）。**唯一下一步改為：客戶審此 Preview 與 65；核准前不實作。**
+> - **唯一下一步**：~~**客戶審 65 的最終 Wireframe**~~ → 客戶審 Preview `docs/v2/prototype/ui_prototype_set_oauth.html` 與 65 的最終 Wireframe（狀態更新，不是漏刪）（含第 4 節「active Sheet 指持倉那一本」等文件組讀法）；**核准前不得規劃或寫 implementation**；核准後實作批開工前仍須客戶指派，並逐項過 65 第 J 節 Implementation／Security Gate。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。
 > - **尚未授權動工**：同第二十六次框；另含 OAuth 任何實作、scope／權杖／secrets 變更、active Sheet 儲存實作、T6 實作變更、任何寫入、65 任何一項的 production 實作。
 > - **接手入口**：同第二十二次框（含 scratchpad venv 跑完整測試的補充）。
 

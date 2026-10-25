@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>設定頁草稿</title>
+<!--
+  ⚙️ 設定頁可視化 Preview（隔離的 HTML 原型）
+  - 性質：視覺草稿・假資料・非正式功能。客戶審查用，不構成 implementation 授權。
+  - 對照規格：docs/v2/65_set_wireframe_and_cap_gate_01_02.md（A～H 節；客戶 2026-10-25 回修：Sheet Picker 改下拉）。
+  - 本檔不連任何網路：不載外部字型、不載外部 script、不 fetch；Google 登入、列清單、驗證一律是本檔內的假資料模擬。
+  - 本檔不會被任何 production 入口 import（HTML 原型，放在 docs/v2/prototype/，不在 ui_v2/）。
+  - 本檔沒有任何寫入或刪除控制項；第一階段唯讀。
+-->
+<style>
+:root{
+  --bg:#eef1f5;
+  --surface:#ffffff;
+  --surface-2:#f5f7fa;
+  --ink:#151b23;
+  --ink-2:#47525e;
+  --ink-3:#5b6672;
+  --line:#d3dae3;
+  --edge:#7a8592;
+  --accent:#0f5f8c;
+  --accent-ink:#ffffff;
+  --accent-soft:#e3eff7;
+  --focus:#1a73c9;
+  --draft:#7a4a00;
+  --draft-bg:#fff4dc;
+  --draft-line:#c98a1b;
+  --ok:#1c6b3d;
+  --ok-bg:#e6f4ea;
+  --warn:#8a5600;
+  --warn-bg:#fdf1dc;
+  --err:#a1202f;
+  --err-bg:#fbe7ea;
+  --unk:#4f5966;
+  --unk-bg:#eceff3;
+  --info:#29548a;
+  --info-bg:#e5edf8;
+  --shadow:0 1px 2px rgba(20,27,35,.06),0 4px 14px -8px rgba(20,27,35,.25);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1117;
+    --surface:#161b22;
+    --surface-2:#1c222b;
+    --ink:#e6edf3;
+    --ink-2:#c3ccd6;
+    --ink-3:#9aa5b1;
+    --line:#2d353f;
+    --edge:#6b7682;
+    --accent:#4ea3d8;
+    --accent-ink:#0b1117;
+    --accent-soft:#16283a;
+    --focus:#79b8ff;
+    --draft:#f2c46b;
+    --draft-bg:#2a2112;
+    --draft-line:#a8781e;
+    --ok:#6fd39a;
+    --ok-bg:#12291c;
+    --warn:#f0b357;
+    --warn-bg:#2d2310;
+    --err:#ff8b97;
+    --err-bg:#331519;
+    --unk:#b4bec9;
+    --unk-bg:#232a33;
+    --info:#8fb8ef;
+    --info-bg:#172438;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px -8px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1117;
+  --surface:#161b22;
+  --surface-2:#1c222b;
+  --ink:#e6edf3;
+  --ink-2:#c3ccd6;
+  --ink-3:#9aa5b1;
+  --line:#2d353f;
+  --edge:#6b7682;
+  --accent:#4ea3d8;
+  --accent-ink:#0b1117;
+  --accent-soft:#16283a;
+  --focus:#79b8ff;
+  --draft:#f2c46b;
+  --draft-bg:#2a2112;
+  --draft-line:#a8781e;
+  --ok:#6fd39a;
+  --ok-bg:#12291c;
+  --warn:#f0b357;
+  --warn-bg:#2d2310;
+  --err:#ff8b97;
+  --err-bg:#331519;
+  --unk:#b4bec9;
+  --unk-bg:#232a33;
+  --info:#8fb8ef;
+  --info-bg:#172438;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px -8px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-size:15px;
+  line-height:1.55;
+  overflow-x:hidden;
+}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px 48px}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* 草稿標示與草稿操作（不是設計的一部分） */
+.banner{
+  margin:12px 0 0;padding:10px 12px;border:2px dashed var(--draft-line);
+  background:var(--draft-bg);color:var(--draft);border-radius:10px;font-weight:700;
+}
+.banner small{display:block;font-weight:400;margin-top:2px}
+.drafttools{
+  margin:10px 0 0;border:1px dashed var(--draft-line);border-radius:10px;
+  background:var(--draft-bg);color:var(--ink);
+}
+.drafttools > summary{padding:10px 12px;cursor:pointer;color:var(--draft);font-weight:700;min-height:44px}
+.drafttools .body{padding:0 12px 12px;display:grid;gap:10px}
+.drafttools label{display:grid;gap:4px;font-size:14px;color:var(--ink-2)}
+.drafttools select{min-height:40px;border:1px solid var(--edge);border-radius:8px;background:var(--surface);padding:0 8px;max-width:100%}
+.drafttools .row{display:flex;flex-wrap:wrap;gap:8px}
+@media (min-width:760px){.drafttools .body{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* 頁首 */
+.pagehead{margin:18px 0 10px}
+.pagehead h1{margin:0;font-size:22px}
+.pagehead p{margin:2px 0 0;color:var(--ink-2)}
+
+/* 卡片與層 */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);margin:10px 0;min-width:0}
+.card > .hd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px 4px}
+.card > .hd h2,.card > .hd h3{margin:0;font-size:16px}
+.card > .bd{padding:4px 14px 14px}
+.layerlabel{font-size:12px;color:var(--ink-3);letter-spacing:.04em;margin:18px 2px 0}
+.kv{display:grid;grid-template-columns:4.2em minmax(0,1fr);gap:4px 10px;align-items:start;padding:8px 0;border-top:1px solid var(--line)}
+.kv:first-child{border-top:0}
+.kv .k{color:var(--ink-3);font-size:14px;padding-top:2px}
+.kv .v{min-width:0;overflow-wrap:anywhere}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.btn{
+  min-height:44px;padding:8px 14px;border-radius:10px;border:1px solid var(--edge);
+  background:var(--surface);color:var(--ink);font-weight:600;
+}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.link{border-color:transparent;background:transparent;color:var(--accent);padding:8px 6px;text-decoration:underline}
+.btn[disabled]{opacity:.55;cursor:not-allowed}
+.muted{color:var(--ink-3);font-size:13px}
+.note{font-size:12px;color:var(--ink-3);margin-top:4px}
+.note b{color:var(--ink-2)}
+
+/* 狀態標記：一律符號＋文字，不只靠顏色 */
+.st{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid transparent;white-space:normal}
+.st.ok{color:var(--ok);background:var(--ok-bg);border-color:var(--ok)}
+.st.warn{color:var(--warn);background:var(--warn-bg);border-color:var(--warn)}
+.st.err{color:var(--err);background:var(--err-bg);border-color:var(--err)}
+.st.unk{color:var(--unk);background:var(--unk-bg);border-color:var(--unk)}
+.st.info{color:var(--info);background:var(--info-bg);border-color:var(--info)}
+.msg{border-radius:10px;padding:10px 12px;margin:8px 0;border:1px solid var(--line);background:var(--surface-2)}
+.msg.ok{border-color:var(--ok);background:var(--ok-bg)}
+.msg.err{border-color:var(--err);background:var(--err-bg)}
+.msg.warn{border-color:var(--warn);background:var(--warn-bg)}
+.msg.unk{border-color:var(--unk);background:var(--unk-bg)}
+.msg.info{border-color:var(--info);background:var(--info-bg)}
+
+/* 需要處理的項目 */
+#issues ul{list-style:none;margin:0;padding:0}
+#issues li{padding:8px 0;border-top:1px solid var(--line)}
+#issues li:first-child{border-top:0}
+#issues .why{display:block;color:var(--ink-2);font-size:14px}
+.flashhl{animation:hl 1.4s ease-out 1}
+@keyframes hl{0%{box-shadow:0 0 0 4px var(--focus)}100%{box-shadow:var(--shadow)}}
+
+/* 收合區 */
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:10px 0;box-shadow:var(--shadow)}
+.sec > .sechd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px 6px 14px}
+.sec > .sechd h2{margin:0;font-size:16px}
+.sec > .secbd{padding:0 10px 10px}
+.toggle{min-height:44px;min-width:44px;border:1px solid var(--edge);border-radius:10px;background:var(--surface);padding:6px 12px;font-weight:600}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:0 12px}
+@media (min-width:1024px){
+  .grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .grid > .card.open{grid-column:1 / -1}
+}
+.sub{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--surface-2)}
+.sub > .subhd{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 6px 4px 12px}
+.sub > .subhd h3{margin:0;font-size:15px}
+.sub > .subbd{padding:4px 12px 12px}
+
+/* 下拉選單（模擬 Streamlit selectbox 的可輸入過濾） */
+.dd{position:relative;margin-top:6px}
+.ddbtn{
+  width:100%;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 12px;border:1px solid var(--edge);border-radius:10px;background:var(--surface);text-align:left;
+}
+.ddbtn .caret{flex:none;font-size:13px;color:var(--ink-2)}
+.ddbtn .val{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.ddpanel{
+  margin-top:6px;border:1px solid var(--edge);border-radius:10px;background:var(--surface);
+  box-shadow:var(--shadow);overflow:hidden;
+}
+.ddpanel .search{padding:8px;border-bottom:1px solid var(--line)}
+.ddpanel input{width:100%;min-height:44px;border:1px solid var(--edge);border-radius:8px;padding:0 10px;background:var(--surface)}
+.ddlist{list-style:none;margin:0;padding:4px 0;max-height:320px;overflow-y:auto}
+.ddlist li{padding:8px 12px;cursor:pointer;border-top:1px solid var(--line)}
+.ddlist li:first-child{border-top:0}
+.ddlist li[aria-selected="true"]{background:var(--accent-soft)}
+.ddlist li.kbd{outline:2px solid var(--focus);outline-offset:-2px}
+.ddlist .nm{font-weight:600;overflow-wrap:anywhere}
+.ddlist .meta{display:block;font-size:12px;color:var(--ink-3)}
+.ddfoot{padding:6px 12px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-3)}
+.pending{border:2px dashed var(--accent);border-radius:10px;padding:10px 12px;margin-top:10px;background:var(--accent-soft)}
+.activebox{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.steps{list-style:none;margin:6px 0 0;padding:0}
+.steps li{padding:3px 0}
+.field{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.field input{flex:1 1 220px;min-width:0;min-height:44px;border:1px solid var(--edge);border-radius:10px;padding:0 10px;background:var(--surface)}
+.hr{border:0;border-top:1px solid var(--line);margin:12px 0}
+pre.raw{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0;font-family:ui-monospace,Consolas,monospace}
+table.t{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+table.t th,table.t td{border-top:1px solid var(--line);padding:6px 4px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+
+/* 模擬視窗與提示 */
+.modal{position:fixed;inset:0;background:rgba(10,14,20,.55);display:flex;align-items:flex-end;justify-content:center;padding:16px;z-index:20}
+.modal[hidden]{display:none}
+.modal .box{width:100%;max-width:420px;background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--line)}
+.modal h2{margin:0 0 6px;font-size:17px}
+@media (min-width:640px){.modal{align-items:center}}
+.toast{position:fixed;left:16px;right:16px;bottom:16px;max-width:520px;margin:0 auto;background:var(--ink);color:var(--surface);padding:10px 14px;border-radius:10px;z-index:30}
+.toast[hidden]{display:none}
+.foot{margin:24px 0 0;color:var(--ink-3);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="banner" role="note">
+    視覺草稿・假資料・非正式功能
+    <small>本頁只用來審查畫面長相：不連 Google、不需要真的登入、不讀也不改任何真實試算表。對照規格見 docs/v2/65（E、F 節）。核准前不實作。</small>
+  </div>
+
+  <details class="drafttools" id="drafttools" open>
+    <summary>草稿操作：切換示範情境（不屬於設計）</summary>
+    <div class="body">
+      <label>示範情境
+        <select id="scenario">
+          <optgroup label="未登入（五種，各自分開）">
+            <option value="b1">未登入：OAuth 未設定</option>
+            <option value="b2">未登入：尚未登入</option>
+            <option value="b3">未登入：登入沒有完成（callback 錯誤）</option>
+            <option value="b4">未登入：登入已過期</option>
+            <option value="b5">未登入：無法判定</option>
+          </optgroup>
+          <optgroup label="已登入">
+            <option value="ok" selected>已登入・正常（無待處理）</option>
+            <option value="okissue">已登入・有待處理項目</option>
+          </optgroup>
+          <optgroup label="試算表清單">
+            <option value="l_loading">清單：載入中</option>
+            <option value="l_empty">清單：這個帳號沒有可列出的試算表</option>
+            <option value="l_denied">清單：無權限</option>
+            <option value="l_scope">清單：授權範圍不足</option>
+            <option value="l_error">清單：API 錯誤（可重試）</option>
+            <option value="l_unknown">清單：無法判定</option>
+          </optgroup>
+          <optgroup label="登出與切換帳號">
+            <option value="loggedout">登出後（有上次使用紀錄）</option>
+            <option value="switched">切換帳號 A → B（待重新選擇）</option>
+          </optgroup>
+        </select>
+      </label>
+      <label>下一次［使用這一本］的驗證結果
+        <select id="nextVerify">
+          <option value="ok">成功</option>
+          <option value="denied">⛔ 無權限</option>
+          <option value="notfound">⛔ 找不到</option>
+          <option value="expired">◷ 登入已過期</option>
+          <option value="unknown">⬜ 無法判定</option>
+          <option value="failed">⛔ 驗證失敗（必要條件不符）</option>
+        </select>
+      </label>
+      <label>下一次網址／ID［驗證］的結果（格式錯誤由輸入內容自動判斷）
+        <select id="nextUrl">
+          <option value="ok">可存取</option>
+          <option value="notfound">⛔ 找不到</option>
+          <option value="denied">⛔ 無權限</option>
+          <option value="apifail">⛔ 驗證失敗（API）</option>
+          <option value="unknown">⬜ 無法判定</option>
+        </select>
+      </label>
+      <div class="row">
+        <button class="btn" type="button" id="fillUrl">填入示範網址</button>
+        <button class="btn" type="button" id="fillBad">填入格式錯誤的字串</button>
+        <button class="btn" type="button" id="themeBtn">主題：跟隨系統</button>
+      </div>
+    </div>
+  </details>
+
+  <header class="pagehead">
+    <h1>設定</h1>
+    <p>現在連到哪個帳號、哪一本，正不正常</p>
+  </header>
+
+  <div class="layerlabel">第一層・預設展開</div>
+  <section class="card" id="layer1" aria-labelledby="l1title">
+    <div class="hd"><h2 id="l1title">連線狀態</h2></div>
+    <div class="bd" id="l1body"></div>
+  </section>
+
+  <div class="layerlabel">第二層・為什麼／怎麼處理</div>
+  <section class="card" id="issues" aria-labelledby="issuesTitle" tabindex="-1" hidden>
+    <div class="hd"><h2 id="issuesTitle">需要處理的項目</h2></div>
+    <div class="bd"><ul id="issueList"></ul>
+      <div class="note">每列只描述狀態，不放按鈕（65 A.2）。</div>
+    </div>
+  </section>
+
+  <section class="sec" id="secKey">
+    <div class="sechd"><h2>關鍵數字</h2><button class="toggle" type="button" data-sec="key" aria-expanded="false">＋展開</button></div>
+    <div class="secbd" id="secKeyBody" hidden>
+      <div class="grid" id="keyGrid">
+        <section class="card" id="cardGoogle">
+          <div class="hd"><h3>Google 帳號</h3><button class="toggle" type="button" data-card="google" aria-expanded="false">＋</button></div>
+          <div class="bd" id="googleBody" hidden></div>
+        </section>
+        <section class="card" id="cardSheet">
+          <div class="hd"><h3>試算表連線</h3><button class="toggle" type="button" data-card="sheet" aria-expanded="false">＋</button></div>
+          <div class="bd" id="sheetBody" hidden></div>
+        </section>
+        <section class="card" id="cardFresh">
+          <div class="hd"><h3>資料新鮮度</h3><button class="toggle" type="button" data-card="fresh" aria-expanded="false">＋</button></div>
+          <div class="bd" id="freshBody" hidden>
+            <div class="muted">各頁資料狀態總表不計入上方結論燈（現行 TEXT_LAMP_NOTE，字樣沿用）。</div>
+            <table class="t">
+              <thead><tr><th>項目</th><th>資料截至</th><th>狀態</th></tr></thead>
+              <tbody>
+                <tr><td>淨值</td><td>10-24</td><td><span class="st ok">◆ 在上限內</span></td></tr>
+                <tr><td>配息</td><td id="divDate">10-24</td><td id="divState"><span class="st ok">◆ 在上限內</span></td></tr>
+                <tr><td>市場指標</td><td>10-24</td><td><span class="st ok">◆ 在上限內</span></td></tr>
+              </tbody>
+            </table>
+            <div class="note">假資料；現行 SET-1 全表與各頁資料狀態總表原樣搬入此卡。</div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="secOps">
+    <div class="sechd"><h2>操作</h2><button class="toggle" type="button" data-sec="ops" aria-expanded="false">＋展開</button></div>
+    <div class="secbd" id="secOpsBody" hidden>
+      <div class="sub"><div class="subhd"><h3>重新取數</h3></div><div class="subbd muted">現行 SET-5 原樣搬入；本草稿不重畫此卡內容。</div></div>
+      <div class="sub"><div class="subhd"><h3>規則參數</h3></div><div class="subbd muted">現行 SET-3 原樣搬入；卡頭「設定試算表：‹名稱›」那一行移到「試算表連線」。</div></div>
+      <div class="sub"><div class="subhd"><h3>參數編輯</h3></div><div class="subbd muted">現行 SET-4 原樣搬入；本草稿不畫任何編輯或寫入控制項（是否屬第一階段唯讀射程待 65 J-6）。</div></div>
+    </div>
+  </section>
+
+  <div class="layerlabel">第三層・證據／來源（預設收合）</div>
+  <section class="sec" id="secEvi">
+    <div class="sechd"><h2>證據／來源</h2><button class="toggle" type="button" data-sec="evi" aria-expanded="false">＋展開</button></div>
+    <div class="secbd" id="secEviBody" hidden>
+      <div class="sub"><div class="subhd"><h3>來源健康</h3></div><div class="subbd">
+        <table class="t"><thead><tr><th>來源</th><th>狀態</th></tr></thead><tbody>
+          <tr><td>淨值來源（示意）</td><td><span class="st ok">◆ 可讀</span></td></tr>
+          <tr><td>配息來源（示意）</td><td><span class="st ok">◆ 可讀</span></td></tr>
+          <tr><td>市場指標來源（示意）</td><td><span class="st unk">⬜ 無法判定</span></td></tr>
+        </tbody></table>
+        <div class="note">現行 SET-2 原樣下沉；列為假資料。</div>
+      </div></div>
+      <div class="sub"><div class="subhd"><h3>取數紀錄</h3></div><div class="subbd">
+        <pre class="raw" id="fetchLog"></pre>
+        <div class="note">現行 SET-6 原樣下沉；紀錄為假資料。</div>
+      </div></div>
+      <div class="sub"><div class="subhd"><h3>欄位對照（進階）</h3></div><div class="subbd muted">現行 SET-7 原樣下沉（位置依 61 待裁示 (5)）。</div></div>
+      <div class="sub"><div class="subhd"><h3>進階診斷（原始訊息）</h3></div><div class="subbd">
+        <div class="muted">Google 授權與試算表錯誤原文（遮蔽後）與 HTTP 狀態碼；權杖與 client secret 一律不顯示。</div>
+        <pre class="raw" id="rawDiag"></pre>
+      </div></div>
+    </div>
+  </section>
+
+  <p class="foot">頁尾指路句（現行字樣沿用）。本頁不負責投資判斷。<br>草稿檔：docs/v2/prototype/ui_prototype_set_oauth.html；假資料、不連網、不構成實作授權。</p>
+</div>
+
+<div class="modal" id="acctModal" hidden role="dialog" aria-modal="true" aria-labelledby="acctTitle">
+  <div class="box">
+    <h2 id="acctTitle">模擬：Google 帳號選擇頁</h2>
+    <p class="muted">草稿模擬。實作時會跳到 Google 的帳號選擇頁（65 D-3）；本頁不連 Google。</p>
+    <div class="btns" style="flex-direction:column">
+      <button class="btn" type="button" data-acct="A">帳號 A：we***@gmail.com</button>
+      <button class="btn" type="button" data-acct="B">帳號 B：ch***@gmail.com</button>
+      <button class="btn" type="button" data-acct="cancel">在 Google 頁面按「取消」</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="confirmModal" hidden role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+  <div class="box">
+    <h2 id="confirmTitle">切換 Google 帳號？</h2>
+    <p>切換後要重新選擇試算表。目前使用中的那一本不會自動沿用到新帳號。</p>
+    <div class="btns">
+      <button class="btn primary" type="button" id="confirmSwitch">繼續切換</button>
+      <button class="btn" type="button" id="cancelSwitch">取消</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+"use strict";
+/* ── 假資料（遮蔽後的帳號；試算表名稱、日期、擁有者、ID 末碼皆為虛構） ── */
+var ACCOUNTS = {
+  A: {mask: "we***@gmail.com"},
+  B: {mask: "ch***@gmail.com"}
+};
+function mk(id, name, mod, owner, tail){ return {id: id, name: name, mod: mod, owner: owner, tail: tail}; }
+var SHEETS = {
+  A: [
+    mk("s01", "我的基金持倉", "10-24", "本人", "…k3Pq"),
+    mk("s02", "退休規劃基金", "10-22", "本人", "…7Lw2"),
+    mk("s03", "海外基金追蹤", "10-20", "本人", "…Qe9d"),
+    mk("s04", "2026 家庭收支", "10-19", "本人", "…a1Rt"),
+    mk("s05", "保單整理", "10-18", "本人", "…Zp40"),
+    mk("s06", "子女教育金", "10-15", "本人", "…mM7c"),
+    mk("s07", "定期定額紀錄", "10-14", "本人", "…h2Ks"),
+    mk("s08", "房貸試算", "10-12", "本人", "…Yy81"),
+    mk("s09", "旅遊預算", "10-10", "本人", "…cD3e"),
+    mk("s10", "年度報稅資料", "10-08", "本人", "…pQ6v"),
+    mk("s11", "我的基金持倉（備份 09-30）", "09-30", "本人", "…t0Gh"),
+    mk("s12", "股票觀察清單", "09-28", "本人", "…Rk2m"),
+    mk("s13", "退休規劃基金", "09-25", "li***@gmail.com", "…Vb8n"),
+    mk("s14", "信用卡帳單", "09-22", "本人", "…xW5a"),
+    mk("s15", "醫療支出", "09-20", "本人", "…Ns4j"),
+    mk("s16", "保險理賠紀錄", "09-18", "本人", "…Ue1f"),
+    mk("s17", "外幣存款", "09-15", "本人", "…Bq7z"),
+    mk("s18", "黃金存摺", "09-11", "本人", "…Lc3y"),
+    mk("s19", "車輛保養", "09-07", "本人", "…Gt6p"),
+    mk("s20", "社團經費", "09-02", "ho***@gmail.com", "…Jm9s"),
+    mk("s21", "讀書會書單", "08-28", "本人", "…Fe2k"),
+    mk("s22", "投資筆記", "08-20", "本人", "…Oa5w"),
+    mk("s23", "配息再投入試算", "08-11", "本人", "…Ix8r"),
+    mk("s24", "舊帳本 2023", "07-02", "本人", "…Sd1q"),
+    mk("s25", "共用：家族基金", "06-18", "ma***@gmail.com", "…Wn4u")
+  ],
+  B: [
+    mk("s01", "我的基金持倉", "10-24", "we***@gmail.com", "…k3Pq"),
+    mk("b02", "公司報帳", "10-23", "本人", "…e7Hd"),
+    mk("b03", "專案時程", "10-21", "本人", "…r2Xc"),
+    mk("b04", "部門預算 2026", "10-17", "本人", "…u9Ab"),
+    mk("b05", "客戶名單（唯讀）", "10-09", "sa***@gmail.com", "…q4Lm"),
+    mk("b06", "教育訓練紀錄", "09-29", "本人", "…y6Tp"),
+    mk("b07", "退休規劃基金", "09-12", "本人", "…o3Zk"),
+    mk("b08", "年終獎金試算", "08-30", "本人", "…i5Nv")
+  ]
+};
+var URL_TARGET = {id: "s03", name: "海外基金追蹤"};
+
+/* ── 狀態（單一 active SSOT；pending 與 active 分開） ── */
+var S;
+var clockMin = 12;
+function now(){ var m = clockMin++; var h = 9 + Math.floor(m / 60); m = m % 60; return "10-25 " + (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m; }
+function fresh(){
+  return {
+    auth: "in",            /* notcfg | out | cberr | expired | unknown | logging | in */
+    account: "A",
+    active: null,          /* {id,name,account,at,status:'ok'|'unverified'} —— 唯一的 active SSOT */
+    lastUsed: null,        /* 登出／過期後只保留的歷史資訊，不是有效連線 */
+    prevAcctSheet: null,   /* 切換帳號後，上一個帳號使用中的那一本（D-8） */
+    list: "success",       /* loading | success | empty | denied | scope | error | unknown */
+    listAt: null,
+    pending: null,         /* 下拉中選中、尚未確認的那一本（不是 active） */
+    ddOpen: false,
+    search: "",
+    verify: null,          /* {target, steps:[...], done, result} */
+    flash: null,
+    url: {input: "", status: null, target: null},
+    refreshing: false,
+    refreshMsg: null,
+    extraIssue: false,
+    settingsSheet: "ok",
+    lastFail: null,
+    raw: [],
+    open: {key: false, ops: false, evi: false, google: false, sheet: false, fresh: false},
+    userToggled: false
+  };
+}
+function curSheets(){ return S.account ? SHEETS[S.account] : []; }
+function findSheet(id){ var l = curSheets(); for (var i = 0; i < l.length; i++) { if (l[i].id === id) return l[i]; } return null; }
+function loggedIn(){ return S.auth === "in"; }
+
+function applyScenario(v){
+  S = fresh();
+  var activeA1 = {id: "s01", name: "我的基金持倉", account: "A", at: "10-25 09:05", status: "ok"};
+  S.listAt = "10-25 09:05";
+  if (v === "b1") { S.auth = "notcfg"; S.account = null; S.list = null; S.raw.push("oauth: 部署設定缺少 Google OAuth client（鍵名已遮蔽：g***_oauth.*）"); }
+  else if (v === "b2") { S.auth = "out"; S.account = null; S.list = null; }
+  else if (v === "b3") { S.auth = "cberr"; S.account = null; S.list = null; S.cbReason = "換取失敗"; S.raw.push("oauth callback: token exchange failed (HTTP 400, invalid_grant)；原文已遮蔽"); }
+  else if (v === "b4") { S.auth = "expired"; S.list = null; S.lastUsed = {name: "我的基金持倉"}; S.raw.push("oauth: refresh token 已失效或被撤銷（HTTP 400, invalid_grant）；原文已遮蔽"); }
+  else if (v === "b5") { S.auth = "unknown"; S.account = null; S.list = null; S.raw.push("oauth: 讀取登入狀態時發生例外（類型：KeyError；內容已遮蔽）"); }
+  else if (v === "ok") { S.active = activeA1; }
+  else if (v === "okissue") { S.active = activeA1; S.extraIssue = true; S.settingsSheet = "denied"; S.raw.push("settings sheet: HTTP 403 PERMISSION_DENIED（服務帳戶，ID 已遮蔽）"); }
+  else if (v === "l_loading") { S.active = activeA1; S.list = "loading"; }
+  else if (v === "l_empty") { S.active = activeA1; S.list = "empty"; }
+  else if (v === "l_denied") { S.active = activeA1; S.list = "denied"; S.raw.push("drive.files.list: HTTP 403 PERMISSION_DENIED；原文已遮蔽"); }
+  else if (v === "l_scope") { S.active = activeA1; S.list = "scope"; S.raw.push("drive.files.list: HTTP 403 insufficientPermissions（缺列清單所需範圍）；原文已遮蔽"); }
+  else if (v === "l_error") { S.active = activeA1; S.list = "error"; S.raw.push("drive.files.list: HTTP 503 backendError；原文已遮蔽"); }
+  else if (v === "l_unknown") { S.active = activeA1; S.list = "unknown"; S.raw.push("drive.files.list: 例外類型無法分類（內容已遮蔽）"); }
+  else if (v === "loggedout") { S.auth = "out"; S.account = null; S.list = null; S.lastUsed = {name: "我的基金持倉"}; }
+  else if (v === "switched") { S.account = "B"; S.list = "success"; S.prevAcctSheet = {id: "s01", name: "我的基金持倉", account: "A"}; S.switchedNote = true; }
+  S.open.key = issues().length > 0;
+  if (v === "switched" || v.indexOf("l_") === 0) { S.open.key = true; S.open.sheet = true; }
+  render();
+}
+
+/* ── 需要處理的項目（只描述狀態，不寫「請…」） ── */
+function issues(){
+  var out = [];
+  if (S.auth === "notcfg") out.push(["err", "⛔ Google 登入：尚未設定", "這個儀表板還沒設定 Google 登入，目前無法登入。"]);
+  if (S.auth === "out") out.push(["unk", "⬜ Google：目前未登入", "尚未驗證試算表存取權限，持倉試算表無法讀取。"]);
+  if (S.auth === "cberr") out.push(["err", "⛔ Google：登入沒有完成", "原因分類：" + (S.cbReason || "無法判定") + "。"]);
+  if (S.auth === "expired") out.push(["warn", "◷ Google：登入已過期", "需要重新登入；上次使用的試算表目前未驗證。"]);
+  if (S.auth === "unknown") out.push(["unk", "⬜ Google：無法判定登入狀態", "讀不到登入狀態。"]);
+  if (loggedIn() && !S.active) out.push(["unk", "⬜ 試算表：尚未選定", S.prevAcctSheet ? "已切換帳號，上一個帳號使用中的那一本沒有沿用。" : "目前沒有使用中的試算表。"]);
+  if (loggedIn() && S.list === "denied") out.push(["err", "⛔ 試算表清單：無權限", "這個帳號沒有列出試算表的權限。"]);
+  if (loggedIn() && S.list === "scope") out.push(["err", "⛔ 試算表清單：授權範圍不足", "目前授權範圍不足，無法列出試算表。"]);
+  if (loggedIn() && S.list === "error") out.push(["err", "⛔ 試算表清單：列出失敗", "列出試算表失敗；目前使用中的那一本不受影響。"]);
+  if (loggedIn() && S.list === "unknown") out.push(["unk", "⬜ 試算表清單：無法判定", "分不出是哪一種失敗。"]);
+  if (S.lastFail) out.push([S.lastFail.cls, S.lastFail.label, "上次切換沒有完成；目前使用中：" + (S.active ? S.active.name : "尚未選定") + "（未變更）。"]);
+  if (S.settingsSheet === "denied") out.push(["err", "⛔ 設定試算表：無權限", "服務帳戶沒有這本的讀取權限。"]);
+  if (S.extraIssue) out.push(["warn", "◷ 配息：超過你設的上限 3 日", "資料截至 10-21。"]);
+  return out;
+}
+
+/* ── 小工具 ── */
+function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
+function st(cls, text){ return '<span class="st ' + cls + '">' + esc(text) + "</span>"; }
+function btn(id, text, cls, dis){ return '<button type="button" class="btn ' + (cls || "") + '" data-act="' + id + '"' + (dis ? " disabled" : "") + ">" + esc(text) + "</button>"; }
+
+function googleLine(){
+  switch (S.auth) {
+    case "notcfg": return st("err", "⛔ 尚未設定：Google 登入");
+    case "out": return st("unk", "⬜ 未登入");
+    case "cberr": return st("err", "⛔ 登入沒有完成");
+    case "expired": return st("warn", "◷ 登入已過期");
+    case "unknown": return st("unk", "⬜ 無法判定");
+    case "logging": return st("info", "… 登入中");
+    default: return st("ok", "◆ 已登入") + " " + esc(ACCOUNTS[S.account].mask);
+  }
+}
+function activeLine(full){
+  if (S.active && loggedIn()) {
+    var s = S.active.status === "ok" ? st("ok", "◆ 可讀取") + ' <span class="muted">（' + esc(S.active.at) + " 驗證）</span>"
+                                     : st("warn", "◷ " + S.active.at + " 驗證，尚未重新確認");
+    return "目前使用中：<b>" + esc(S.active.name) + "</b><br>" + s +
+      (full ? '<br><span class="muted">以 ' + esc(ACCOUNTS[S.active.account].mask) + " 驗證</span>" : "");
+  }
+  if (S.lastUsed && !loggedIn()) {
+    var why = S.auth === "expired" ? "◷ 登入已過期，尚未驗證存取權限" : "⛔ 目前未登入，尚未驗證存取權限";
+    return st("unk", "⬜ 上次使用：" + S.lastUsed.name) + "<br>" + st(S.auth === "expired" ? "warn" : "err", why) +
+      '<br><span class="muted">這是歷史資訊，不是有效連線；其他頁不會讀這一本。</span>';
+  }
+  if (!loggedIn()) {
+    if (S.auth === "unknown") return st("unk", "⬜ 無法判定");
+    return st("unk", "⬜ 尚未選定試算表") + '<br><span class="muted">需要先登入 Google</span>';
+  }
+  if (S.prevAcctSheet) return st("unk", "⬜ 尚未選定試算表（已切換帳號）") +
+    '<br><span class="muted">上一個帳號使用中：' + esc(S.prevAcctSheet.name) + "（未在 " + esc(ACCOUNTS[S.account].mask) + " 驗證，不自動沿用）</span>";
+  if (S.lastUsed) return st("unk", "⬜ 尚未選定試算表") +
+    '<br><span class="muted">上次使用：' + esc(S.lastUsed.name) + "（本次登入尚未驗證，不自動沿用）</span>";
+  return st("unk", "⬜ 尚未選定試算表");
+}
+function canOpenInGoogle(){ return !!(S.active && loggedIn() && S.active.status === "ok"); }
+function openInGoogleHtml(){
+  if (!canOpenInGoogle()) return "";
+  return '<a class="btn" href="#" data-act="openGoogle" role="button">在 Google 開啟</a>' +
+         '<span class="note" style="align-self:center">指向目前使用中：' + esc(S.active.name) + "（不是下拉中尚未確認的那一本）</span>";
+}
+
+/* ── 第一層 ── */
+function renderL1(){
+  var g = '<div class="kv"><div class="k">Google</div><div class="v">' + googleLine();
+  var b = [];
+  if (S.auth === "out") b.push(btn("login", "登入 Google", "primary"));
+  if (S.auth === "cberr" || S.auth === "expired") b.push(btn("login", "重新登入", "primary"));
+  if (loggedIn()) b.push(btn("switch", "切換帳號"));
+  if (S.auth === "notcfg") g += '<div class="muted">這個儀表板還沒設定 Google 登入，目前無法登入。</div>';
+  if (b.length) g += '<div class="btns">' + b.join("") + "</div>";
+  g += "</div></div>";
+
+  var sh = '<div class="kv"><div class="k">試算表</div><div class="v">' + activeLine(false);
+  var sb = [];
+  if (loggedIn()) sb.push(btn("gotoPicker", "選擇試算表"));
+  var og = openInGoogleHtml();
+  sh += '<div class="btns">' + sb.join("") + og + "</div>";
+  if (S.flash) sh += '<div class="msg ok" role="status">' + esc(S.flash) + "</div>";
+  sh += "</div></div>";
+
+  var data = '<div class="kv"><div class="k">資料</div><div class="v">' + st("ok", "◆ 示意：可信度結論燈原句") +
+    '<div class="note">判定沿用現行 SET-0，一字不動；此處只示意位置。</div></div></div>';
+
+  var n = issues().length;
+  var last = n > 0
+    ? '<div class="kv"><div class="k">處理</div><div class="v">需要處理 <b>' + n + "</b> 項 " + btn("why", "看原因", "link") + "</div></div>"
+    : '<div class="kv"><div class="k">處理</div><div class="v">資料截至 10-24 <span class="note">（沒有待處理項目時不寫「正常」）</span></div></div>';
+  document.getElementById("l1body").innerHTML = g + sh + data + last;
+}
+
+/* ── 第二層：需要處理的項目 ── */
+function renderIssues(){
+  var list = issues();
+  var box = document.getElementById("issues");
+  box.hidden = list.length === 0;
+  document.getElementById("issueList").innerHTML = list.map(function(x){
+    return "<li>" + st(x[0], x[1]) + '<span class="why">' + esc(x[2]) + "</span></li>";
+  }).join("");
+}
+
+/* ── 第二層：Google 帳號卡 ── */
+function renderGoogle(){
+  var h = '<div class="activebox">' + googleLine() + "</div>";
+  if (loggedIn()) {
+    h += '<div class="kv"><div class="k">登入方式</div><div class="v">Google 個人帳號</div></div>';
+    h += '<div class="kv"><div class="k">授權範圍</div><div class="v">' + st("unk", "⬜ 實作時以實際取得的範圍為準") +
+         '<div class="note">現行範圍含寫入；實作時若仍拿到寫入範圍，這一行要照實寫「含寫入權限」（65 J-1）。</div></div></div>';
+    h += '<div class="btns">' + btn("switch", "切換帳號") + btn("logout", "登出") + "</div>";
+    h += '<div class="note">登出只清除本次登入與目前帳號的清單，不刪任何試算表。</div>';
+  } else if (S.auth === "notcfg") {
+    h += '<p>這個儀表板還沒設定 Google 登入，目前無法登入。</p><div class="note">不畫［登入 Google］（65 B-1）。</div>';
+  } else if (S.auth === "unknown") {
+    h += "<p>讀不到登入狀態。</p><div class=\"note\">［重新讀取連線狀態］在「試算表連線」卡內（唯一一顆）。</div>";
+  } else if (S.auth === "logging") {
+    h += "<p>… 登入中</p>";
+  } else {
+    var label = S.auth === "out" ? "登入 Google" : "重新登入";
+    var line = S.auth === "out" ? "登入後可列出你能用的試算表。" : (S.auth === "expired" ? "登入已過期，需要重新登入。" : "原因分類：" + (S.cbReason || "無法判定") + "。");
+    h += "<p>" + esc(line) + '</p><div class="btns">' + btn("login", label, "primary") + "</div>";
+    h += '<div class="note">第一層的登入鈕與這一顆是同一個動作，不是兩套流程。</div>';
+  }
+  document.getElementById("googleBody").innerHTML = h;
+}
+
+/* ── 第二層：試算表連線卡（目前使用中／下拉／選中未確認／網址入口） ── */
+function filteredSheets(){
+  var q = S.search.trim().toLowerCase();
+  return curSheets().filter(function(x){ return !q || x.name.toLowerCase().indexOf(q) >= 0; });
+}
+function pickerHtml(){
+  var dis = !loggedIn();
+  var h = '<div class="hr"></div><div><b>選擇 Google Sheet</b></div>';
+  if (dis) {
+    return h + '<div class="dd"><button class="ddbtn" type="button" disabled><span class="val">需要先登入 Google</span><span class="caret">▼</span></button></div>' +
+      '<div class="note">未登入時下拉與網址入口停用（65 B 節）。</div>';
+  }
+  if (S.list === "loading") return h + '<div class="msg info" role="status">… 正在列出你能用的試算表</div><div class="note">不顯示空清單、不顯示上一個帳號的清單。</div>';
+  if (S.list === "empty") return h + '<div class="msg info">' + st("info", "◇ 這個帳號目前沒有可列出的試算表") + '</div><div class="note">只在清單讀取成功、且數量為零時才顯示這一句。</div>';
+  if (S.list === "denied") return h + '<div class="msg err">' + st("err", "⛔ 這個帳號沒有列出試算表的權限") + '</div><div class="note">原文在第三層「進階診斷」；不猜成「沒有試算表」。</div>';
+  if (S.list === "scope") return h + '<div class="msg err">' + st("err", "⛔ 目前授權範圍不足，無法列出試算表") + '<div class="btns">' + btn("login", "重新登入") + "</div></div>";
+  if (S.list === "error") return h + '<div class="msg err">' + st("err", "⛔ 列出試算表失敗") + '<div class="btns">' + btn("retryList", "重試") + '</div></div><div class="note">這顆［重試］只重列清單，屬下拉內的同一動作，不是第二顆 Refresh。</div>';
+  if (S.list === "unknown") return h + '<div class="msg unk">' + st("unk", "⬜ 無法判定") + '</div><div class="note">分不出是哪一種失敗；原文在第三層。不得猜成「沒有試算表」。</div>';
+
+  var shownId = S.pending || (S.active && S.active.account === S.account ? S.active.id : null);
+  var shown = shownId ? findSheet(shownId) : null;
+  var busy = !!(S.verify && !S.verify.done);
+  h += '<div class="dd">';
+  h += '<button class="ddbtn" type="button" id="ddbtn" data-act="ddToggle" aria-haspopup="listbox" aria-expanded="' + S.ddOpen + '" aria-controls="ddlist"' + (busy ? " disabled" : "") + '>' +
+       '<span class="val">' + (shown ? esc(shown.name) : "請從清單選一本") + '</span><span class="caret">' + (S.ddOpen ? "▲" : "▼") + "</span></button>";
+  if (S.ddOpen) {
+    var items = filteredSheets();
+    h += '<div class="ddpanel"><div class="search"><label class="sr" for="ddsearch">搜尋試算表名稱</label>' +
+         '<input id="ddsearch" type="search" autocomplete="off" placeholder="搜尋試算表名稱（只過濾已列出的清單）" value="' + esc(S.search) + '"></div>';
+    if (items.length === 0) {
+      h += '<div class="ddfoot" role="status">已列出的試算表中沒有符合的名稱</div>';
+    } else {
+      h += '<ul class="ddlist" id="ddlist" role="listbox" aria-label="可存取的試算表">';
+      items.forEach(function(x){
+        var tags = [];
+        if (S.active && S.active.id === x.id && S.active.account === S.account) tags.push("目前使用中");
+        if (S.prevAcctSheet && S.prevAcctSheet.id === x.id) tags.push("上一個帳號使用中的那一本");
+        h += '<li role="option" data-pick="' + x.id + '" aria-selected="' + (x.id === shownId) + '">' +
+             '<span class="nm">' + esc(x.name) + (tags.length ? " " + tags.map(function(t){ return st("info", t); }).join(" ") : "") + "</span>" +
+             '<span class="meta">最後修改 ' + esc(x.mod) + "｜擁有者 " + esc(x.owner) + "｜ID 末碼 " + esc(x.tail) + "</span></li>";
+      });
+      h += "</ul>";
+    }
+    h += '<div class="ddfoot">共 ' + curSheets().length + " 本（" + esc(S.listAt || "") + " 讀取）。辨識資訊欄位待 65 J-8。</div></div>";
+  }
+  h += "</div>";
+  h += '<div class="note">選一本只會「選中」，<b>不會切換</b>；按［使用這一本］並驗證成功後才切換。</div>';
+
+  if (S.pending) {
+    var p = findSheet(S.pending);
+    h += '<div class="pending" id="pendingBox"><div class="muted">選中的試算表（尚未切換）</div><div><b>' + esc(p.name) + "</b></div>";
+    if (S.prevAcctSheet && S.prevAcctSheet.id === p.id) h += '<div class="note">這一本是上一個帳號使用中的那一本；按［使用這一本］會以 ' + esc(ACCOUNTS[S.account].mask) + " 重新驗證，不沿用先前結果。</div>";
+    h += '<div class="btns">' + btn("use", busy ? "驗證中…" : "使用這一本", "primary", busy) + btn("clearPending", "取消選擇", "", busy) + "</div>";
+    h += '<div class="note">目前使用中仍是：' + (S.active ? esc(S.active.name) : "⬜ 尚未選定") + "</div></div>";
+  } else if (shown && S.active && shown.id === S.active.id) {
+    h += '<div class="note">下拉顯示的就是目前使用中的那一本。</div>';
+  }
+  return h;
+}
+function verifyHtml(){
+  if (!S.verify) return "";
+  var v = S.verify;
+  var h = '<div class="msg ' + (v.done ? (v.result === "ok" ? "ok" : (v.result === "expired" ? "warn" : (v.result === "unknown" ? "unk" : "err"))) : "info") + '" role="status" id="verifyBox">';
+  h += "<div><b>" + (v.done ? "驗證結果" : "正在驗證") + "：" + esc(v.target.name) + "</b>" + (v.via === "url" ? '<span class="muted">（由網址入口）</span>' : "") + "</div>";
+  h += '<ol class="steps">' + v.steps.map(function(s){ return "<li>" + s.mark + " " + esc(s.label) + "</li>"; }).join("") + "</ol>";
+  if (v.done) h += "<div>" + esc(v.msg) + "</div>";
+  h += "</div>";
+  return h;
+}
+function urlHtml(){
+  var dis = !loggedIn();
+  var h = '<div class="hr"></div><div><b>已經知道試算表網址？</b></div>';
+  h += '<div class="field"><label class="sr" for="urlIn">Google Sheet URL 或 ID</label>' +
+       '<input id="urlIn" type="text" inputmode="url" autocomplete="off" placeholder="貼上 Google Sheet URL 或 ID" value="' + esc(S.url.input) + '"' + (dis ? " disabled" : "") + ">" +
+       btn("checkUrl", "驗證", "", dis || (S.verify && !S.verify.done)) + "</div>";
+  if (dis) h += '<div class="note">需要先登入 Google（未登入時能否用服務帳戶驗證，待 65 J-7）。</div>';
+  var u = S.url.status;
+  if (u === "checking") h += '<div class="msg info" role="status">… 驗證中</div>';
+  else if (u === "badformat") h += '<div class="msg err">' + st("err", "⛔ 網址或 ID 格式不對") + '<div class="note">沒有送出任何查詢；輸入框內容保留。</div></div>';
+  else if (u === "notfound") h += '<div class="msg err">' + st("err", "⛔ 找不到這本試算表") + "</div>";
+  else if (u === "denied") h += '<div class="msg err">' + st("err", "⛔ 目前帳號沒有這本的讀取權限") + "</div>";
+  else if (u === "apifail") h += '<div class="msg err">' + st("err", "⛔ 驗證失敗") + '<div class="note">可再按［驗證］；原文在第三層。</div></div>';
+  else if (u === "unknown") h += '<div class="msg unk">' + st("unk", "⬜ 無法判定") + '<div class="note">不把「讀不到」顯示成 ID 或空白。</div></div>';
+  else if (u === "ok") {
+    var busy = !!(S.verify && !S.verify.done);
+    h += '<div class="pending"><div class="muted">網址指向的試算表（尚未切換）</div><div><b>' + esc(S.url.target.name) + "</b> " + st("ok", "◆ 可存取") + "</div>" +
+         '<div class="note">名稱來自實際讀取（此處為假資料），不是使用者輸入。</div>' +
+         '<div class="btns">' + btn("useUrl", busy ? "驗證中…" : "使用這一本", "primary", busy) + "</div>" +
+         '<div class="note">驗證成功不等於切換；按［使用這一本］後才切換。與上方下拉寫入同一個「目前使用中」。</div></div>';
+  }
+  return h;
+}
+function renderSheet(){
+  var h = '<div class="muted">目前使用中（持倉）</div><div class="activebox" id="activeBox">' + activeLine(true) +
+          '<div class="btns">' + openInGoogleHtml() + "</div></div>";
+  if (S.flash) h += '<div class="msg ok" role="status">' + esc(S.flash) + "</div>";
+  h += pickerHtml();
+  h += verifyHtml();
+  h += urlHtml();
+  h += '<div class="hr"></div>';
+  h += '<div class="kv"><div class="k">設定</div><div class="v">設定試算表：基金儀表板設定　' +
+       (S.settingsSheet === "denied" ? st("err", "⛔ 無權限") : st("ok", "◆ 可讀取")) + '<div class="note">部署設定指定，本頁不可改。</div></div></div>';
+  h += '<div class="kv"><div class="k">選股池</div><div class="v">選股池試算表：基金選股池　' + st("ok", "◆ 可讀取") + '<div class="note">部署設定指定，本頁不可改。</div></div></div>';
+  h += '<div class="hr"></div><div class="btns">' + btn("refresh", S.refreshing ? "… 讀取中" : "重新讀取連線狀態", "", S.refreshing) + "</div>";
+  h += '<div class="note">唯一一顆（Q3）：重讀登入狀態與三本試算表的連線狀態，不改目前使用中、不改任何設定。</div>';
+  if (S.refreshMsg) h += '<div class="msg ' + S.refreshMsg[0] + '" role="status">' + esc(S.refreshMsg[1]) + "</div>";
+  h += '<div class="note">刪除試算表／分頁／資料：不提供（待 CAP-GATE-03）。</div>';
+  document.getElementById("sheetBody").innerHTML = h;
+}
+
+/* ── 第三層 ── */
+function renderEvidence(){
+  document.getElementById("fetchLog").textContent =
+    "10-25 09:05  淨值   成功  rows=‹n›\n10-25 09:05  配息   成功  rows=‹n›\n10-25 09:05  市場   失敗  原因已遮蔽\n（假資料）";
+  var raw = S.raw.length ? S.raw.slice() : ["目前沒有錯誤原文。"];
+  document.getElementById("rawDiag").textContent = raw.join("\n");
+}
+
+/* ── 收合 ── */
+function setOpen(el, open){ el.hidden = !open; }
+function renderToggles(){
+  var map = {key: "secKeyBody", ops: "secOpsBody", evi: "secEviBody"};
+  Object.keys(map).forEach(function(k){
+    setOpen(document.getElementById(map[k]), S.open[k]);
+    var b = document.querySelector('[data-sec="' + k + '"]');
+    b.setAttribute("aria-expanded", S.open[k]); b.textContent = S.open[k] ? "－收合" : "＋展開";
+  });
+  var cards = {google: ["googleBody", "cardGoogle"], sheet: ["sheetBody", "cardSheet"], fresh: ["freshBody", "cardFresh"]};
+  Object.keys(cards).forEach(function(k){
+    setOpen(document.getElementById(cards[k][0]), S.open[k]);
+    document.getElementById(cards[k][1]).classList.toggle("open", S.open[k]);
+    var b = document.querySelector('[data-card="' + k + '"]');
+    b.setAttribute("aria-expanded", S.open[k]); b.textContent = S.open[k] ? "－" : "＋";
+    b.setAttribute("aria-label", (S.open[k] ? "收合" : "展開") + b.closest(".card").querySelector("h3").textContent);
+  });
+  document.getElementById("divDate").textContent = S.extraIssue ? "10-21" : "10-24";
+  document.getElementById("divState").innerHTML = S.extraIssue ? st("warn", "◷ 超過上限 3 日") : st("ok", "◆ 在上限內");
+}
+
+function render(){
+  var focusSearch = document.activeElement && document.activeElement.id === "ddsearch";
+  var caret = focusSearch ? document.activeElement.selectionStart : null;
+  var focusUrl = document.activeElement && document.activeElement.id === "urlIn";
+  renderL1(); renderIssues(); renderGoogle(); renderSheet(); renderEvidence(); renderToggles();
+  if (focusSearch) { var s = document.getElementById("ddsearch"); if (s) { s.focus(); try { s.setSelectionRange(caret, caret); } catch (e) { /* 部分輸入型別不支援，忽略不影響顯示 */ } } }
+  if (focusUrl) { var u = document.getElementById("urlIn"); if (u) u.focus(); }
+}
+
+/* ── 動作（全部是本檔內的模擬，不連網） ── */
+var toastTimer = null;
+function toast(t){ var el = document.getElementById("toast"); el.textContent = t; el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.hidden = true; }, 2600); }
+function later(ms, fn){ setTimeout(function(){ fn(); render(); }, ms); }
+function openSheetCard(){ S.open.key = true; S.open.sheet = true; S.userToggled = true; }
+
+function startLogin(){ document.getElementById("acctModal").hidden = false; document.querySelector("#acctModal [data-acct]").focus(); }
+function finishLogin(acct){
+  document.getElementById("acctModal").hidden = true;
+  if (acct === "cancel") { S.auth = "cberr"; S.cbReason = "取消"; S.account = null; S.list = null; S.raw.push("oauth callback: ?error=access_denied（使用者取消）"); render(); return; }
+  var wasSwitch = S.switching;
+  S.switching = false;
+  S.auth = "logging"; S.flash = null; render();
+  later(500, function(){
+    if (wasSwitch && S.active) { S.prevAcctSheet = {id: S.active.id, name: S.active.name, account: S.active.account}; }
+    S.auth = "in"; S.account = acct; S.active = null; S.pending = null; S.ddOpen = false; S.search = "";
+    S.url = {input: "", status: null, target: null}; S.verify = null; S.lastFail = null;
+    S.list = "loading"; openSheetCard();
+    later(600, function(){ S.list = "success"; S.listAt = now(); });
+  });
+}
+function doLogout(){
+  if (S.active) S.lastUsed = {name: S.active.name};
+  S.auth = "out"; S.account = null; S.active = null; S.list = null; S.pending = null; S.ddOpen = false;
+  S.verify = null; S.url = {input: "", status: null, target: null}; S.flash = null; S.prevAcctSheet = null; S.lastFail = null;
+  render();
+}
+function activate(target, via){
+  var r = document.getElementById("nextVerify").value;
+  var labels = ["確認帳號仍有權限", "確認試算表可讀", "確認必要條件（必要分頁）"];
+  S.flash = null; S.lastFail = null;
+  S.verify = {target: target, via: via, done: false, result: null, msg: "", steps: labels.map(function(l){ return {label: l, mark: "⬜ 未執行"}; })};
+  var failAt = {ok: 99, expired: 0, denied: 1, notfound: 1, unknown: 1, failed: 2}[r];
+  function step(i){
+    if (i > 2) return finish();
+    S.verify.steps[i].mark = "… 進行中"; render();
+    setTimeout(function(){
+      if (i === failAt) { S.verify.steps[i].mark = r === "unknown" ? "⬜ 無法判定" : (r === "expired" ? "◷ 登入已過期" : "⛔ 未通過"); return finish(); }
+      S.verify.steps[i].mark = "◆ 通過"; step(i + 1);
+    }, 450);
+  }
+  function finish(){
+    var keep = "目前使用中仍是：" + (S.active ? S.active.name : "尚未選定") + "（未變更）。";
+    S.verify.done = true; S.verify.result = r;
+    if (r === "ok") {
+      S.active = {id: target.id, name: target.name, account: S.account, at: now(), status: "ok"};
+      S.pending = null; S.prevAcctSheet = null; S.lastUsed = null; S.url = {input: "", status: null, target: null};
+      S.verify.msg = "◆ 已切換為：" + target.name;
+      S.flash = "◆ 已切換為：" + target.name;
+    } else {
+      var lab = {denied: ["err", "⛔ 無權限"], notfound: ["err", "⛔ 找不到"], expired: ["warn", "◷ 登入已過期"], unknown: ["unk", "⬜ 無法判定"], failed: ["err", "⛔ 驗證失敗"]}[r];
+      S.verify.msg = lab[1] + "：切換沒有完成。" + keep;
+      S.lastFail = {cls: lab[0], label: lab[1] + "：切換沒有完成"};
+      S.raw.push("activate(" + target.name + "): " + lab[1] + "（假資料原文，已遮蔽）");
+      if (r === "expired") { S.auth = "expired"; if (S.active) S.lastUsed = {name: S.active.name}; S.active = null; S.pending = null; S.list = null; S.ddOpen = false; S.lastFail = null; }
+    }
+    render();
+  }
+  step(0);
+}
+function parseSheetId(s){
+  s = s.trim();
+  var m = s.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/);
+  if (m) return m[1];
+  if (/^[A-Za-z0-9_-]{25,}$/.test(s)) return s;
+  return null;
+}
+function checkUrl(){
+  var inp = document.getElementById("urlIn");
+  S.url.input = inp ? inp.value : S.url.input;
+  var id = parseSheetId(S.url.input);
+  if (!id) { S.url.status = "badformat"; S.url.target = null; render(); return; }
+  S.url.status = "checking"; render();
+  later(500, function(){
+    var r = document.getElementById("nextUrl").value;
+    S.url.status = r;
+    S.url.target = r === "ok" ? URL_TARGET : null;
+    if (r !== "ok") S.raw.push("url check: " + r + "（假資料原文，ID 已遮蔽）");
+  });
+}
+function doRefresh(){
+  S.refreshing = true; S.refreshMsg = null; render();
+  later(600, function(){
+    S.refreshing = false;
+    var t = now();
+    if (loggedIn() && S.active) { S.active.at = t; S.active.status = "ok"; S.refreshMsg = ["ok", "◆ 已重新讀取（" + t + "）；目前使用中未變更。"]; }
+    else if (S.auth === "unknown") S.refreshMsg = ["unk", "⬜ 已重新讀取（" + t + "），仍無法判定登入狀態。"];
+    else if (!loggedIn()) S.refreshMsg = ["unk", "⬜ 已重新讀取（" + t + "）；目前未登入，未驗證任何試算表。"];
+    else S.refreshMsg = ["unk", "⬜ 已重新讀取（" + t + "）；尚未選定試算表。"];
+  });
+}
+
+document.addEventListener("click", function(ev){
+  var pick = ev.target.closest("[data-pick]");
+  if (pick) {
+    var id = pick.getAttribute("data-pick");
+    S.pending = (S.active && S.active.id === id && S.active.account === S.account) ? null : id;
+    S.ddOpen = false; S.search = ""; S.flash = null; S.verify = null;
+    render();
+    var b = document.getElementById("ddbtn"); if (b) b.focus();
+    return;
+  }
+  var t = ev.target.closest("[data-act],[data-sec],[data-card],[data-acct]");
+  if (!t) return;
+  if (t.hasAttribute("data-sec")) { var k = t.getAttribute("data-sec"); S.open[k] = !S.open[k]; S.userToggled = true; renderToggles(); return; }
+  if (t.hasAttribute("data-card")) { var c = t.getAttribute("data-card"); S.open[c] = !S.open[c]; renderToggles(); return; }
+  if (t.hasAttribute("data-acct")) { finishLogin(t.getAttribute("data-acct")); return; }
+  var a = t.getAttribute("data-act");
+  if (a === "openGoogle") { ev.preventDefault(); toast("草稿：不開外部網址。實作時開新分頁到目前使用中的那一本（" + S.active.name + "）。"); return; }
+  if (a === "login") { S.switching = false; startLogin(); }
+  else if (a === "switch") { document.getElementById("confirmModal").hidden = false; document.getElementById("confirmSwitch").focus(); }
+  else if (a === "logout") doLogout();
+  else if (a === "gotoPicker") { openSheetCard(); render(); var tgt = document.getElementById("ddbtn") || document.getElementById("cardSheet"); tgt.scrollIntoView({block: "center"}); if (tgt.focus) tgt.focus(); }
+  else if (a === "why") { var box = document.getElementById("issues"); box.scrollIntoView({block: "start"}); box.focus(); box.classList.remove("flashhl"); void box.offsetWidth; box.classList.add("flashhl"); }
+  else if (a === "ddToggle") { S.ddOpen = !S.ddOpen; S.search = ""; render(); if (S.ddOpen) { var s = document.getElementById("ddsearch"); if (s) s.focus(); } }
+  else if (a === "clearPending") { S.pending = null; S.verify = null; render(); }
+  else if (a === "use") { var p = findSheet(S.pending); if (p) activate(p, "list"); }
+  else if (a === "useUrl") { if (S.url.target) activate(S.url.target, "url"); }
+  else if (a === "checkUrl") checkUrl();
+  else if (a === "retryList") { S.list = "loading"; render(); later(600, function(){ S.list = "success"; S.listAt = now(); }); }
+  else if (a === "refresh") doRefresh();
+});
+document.addEventListener("input", function(ev){
+  if (ev.target.id === "ddsearch") { S.search = ev.target.value; render(); }
+  else if (ev.target.id === "urlIn") { S.url.input = ev.target.value; }
+});
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape") {
+    if (!document.getElementById("acctModal").hidden) { document.getElementById("acctModal").hidden = true; return; }
+    if (!document.getElementById("confirmModal").hidden) { document.getElementById("confirmModal").hidden = true; return; }
+    if (S.ddOpen) { S.ddOpen = false; render(); var b = document.getElementById("ddbtn"); if (b) b.focus(); }
+  }
+  if (ev.key === "Enter" && ev.target.id === "urlIn") checkUrl();
+  if (ev.key === "Enter" && ev.target.matches && ev.target.matches("[data-pick]")) ev.target.click();
+});
+document.getElementById("confirmSwitch").addEventListener("click", function(){ document.getElementById("confirmModal").hidden = true; S.switching = true; startLogin(); });
+document.getElementById("cancelSwitch").addEventListener("click", function(){ document.getElementById("confirmModal").hidden = true; });
+document.getElementById("scenario").addEventListener("change", function(ev){ applyScenario(ev.target.value); });
+document.getElementById("fillUrl").addEventListener("click", function(){ S.url.input = "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789Qe9d/edit"; S.url.status = null; openSheetCard(); render(); });
+document.getElementById("fillBad").addEventListener("click", function(){ S.url.input = "我的基金持倉"; S.url.status = null; openSheetCard(); render(); });
+var themes = ["auto", "light", "dark"], themeIdx = 0;
+document.getElementById("themeBtn").addEventListener("click", function(ev){
+  themeIdx = (themeIdx + 1) % 3;
+  var t = themes[themeIdx];
+  if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t);
+  ev.target.textContent = "主題：" + {auto: "跟隨系統", light: "淺色", dark: "深色"}[t];
+});
+applyScenario("ok");
+</script>
+</body>
+</html>
