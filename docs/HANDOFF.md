@@ -35,8 +35,8 @@
 ## 2. 現況 checkpoint
 
 > **⭐ 2026-10-25（第二十八次）現況 —— ⚙️ 設定頁最終 Wireframe＋CAP-GATE-01／02 客戶裁示落盤文件批（以本框為準；下方第二十七次框起皆為歷史快照）**（客戶 2026-10-25 裁示，`docs/DECISIONS.md` `DEC-2026-10-25-02`，要點轉述；狀態更新，不是漏刪：第二十七次框整段保留於下方）
-> - **main 實況**：本框隨本批 PR 合併；該 PR 前 main 為 `3075e313`（#1052）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
-> - **Open PR**：本 PR（分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。開工時 Open PR 0（總管回報）。
+> - **main 實況**：~~本框隨本批 PR 合併；該 PR 前 main 為 `3075e313`（#1052）。~~ → **#1055 已合併，main `3c9ec195`**（狀態更新，不是漏刪；查詢 2026-10-25）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
+> - **Open PR**：~~本 PR（分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。開工時 Open PR 0（總管回報）。~~ → **#1054**（Model／Effort 治理 canonical sync，狀態更新，不是漏刪）。`ccr-54480a1a-q528l2` 遠端分支已不存在（不處理）。
 > - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；本框撰寫時尚未開 PR、無 CI 結果。
 > - **客戶裁示要點（`DEC-2026-10-25-02`）**：CAP-GATE-01 改採 **Google 個人 OAuth** 為新 UI 方向（多帳號登入／列 Sheet／選擇／登出／切換）；舊 UI 只當功能與邏輯參考、不搬畫面；**第一階段唯讀**；CAP-GATE-02 ⚙️ 為唯一 Sheet selection owner、**一次只有一個 active Sheet**、URL／ID 為次要入口且收斂到同一 SSOT；同意版面方案 1 與 Q1～Q4。⛔ **production OAuth 實作、`infra/oauth.py`／scope／callback／credential storage／secrets／token persistence 變更、任何寫入一律未授權**；`DEC-2026-10-17-03` 護欄 4 的實作限制在 Implementation／Security Gate 前仍有效（方向已裁，不是護欄已解除）。
 > - **本批內容（純文件，production code 0 變更）**：`docs/v2/65_set_wireframe_and_cap_gate_01_02.md` 改寫為**最終 Wireframe（客戶待審）**（390px＋桌機三層；登入前五態；登入後；切換帳號流程；Sheet Picker 各態；URL／ID 入口；Error／Missing 總表；三層收合正常畫面；Old Logic → New UI Mapping 與 read／write 混用 helper；唯讀原則；Unique Owner；實作前須另裁清單 J-1～J-13；上一版推薦與請示單移附錄 A 標 superseded）；`DEC-2026-10-25-02` 新增，`DEC-2026-10-17-03`、`-25-01` 就地補記關係；`docs/BACKLOG.md` BL-0402／0381／0392／0349／0342 列尾補記、BL-0453 新增（open，示範模式 md5 測試本機紅、CI 綠，只調查不修）；`docs/v2/62_old_ui_gap_matrix.md` §6.7／§6.8、`docs/v2/64_v2_ssot_convergence.md` §2.1 各加指標（既有列一字未改）。
