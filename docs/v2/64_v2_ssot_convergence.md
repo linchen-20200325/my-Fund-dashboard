@@ -45,6 +45,7 @@
 
 - 五頁的 Refresh／Retry 共用 ⚙️ 擁有的同一套機制，各頁只刷新本頁所讀的資料、不改任何設定；不各寫一套。
 - 刪除（Sheet 檔／分頁／資料）只定義能力與驗收、不排程，屬不可逆 Stop Gate。
+- → **2026-10-25 補（上表一字未改；`DEC-2026-10-25-02`，決策者：客戶；不構成動工授權）**：⚙️ 唯一擁有 Google login／logout、切換帳號、account status、Sheet listing、Sheet selection、**active Sheet（一次只有一本）**、connection diagnostics、connection refresh；其他四頁只讀 active Sheet 的結果、不放任何 selector。Wireframe 見 `docs/v2/65_set_wireframe_and_cap_gate_01_02.md` 第 4 節（客戶待審）。
 
 ## §3 HWM σ 正式邊界
 

@@ -385,6 +385,7 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 - 與 BL-0435 Blueprint 路徑（底層邏輯收斂 → Blueprint → 客戶確認 → 新版實作）併讀：本順序是 Blueprint 內各能力的施工先後，不跳過 Blueprint 的客戶確認。
 - 候選的第一個動作（未授權）：第 1 階段 ⚙️ 設定的 UI 線框草稿＋CAP-GATE-01／02 請示單（附總管推薦方案），送客戶核准。
   - → 2026-10-25 指標（本節既有列一字未改）：該草稿與兩張請示單見 `docs/v2/65_set_wireframe_and_cap_gate_01_02.md`（提案草稿，客戶尚未審）。
+  - → 2026-10-25 第二次指標（狀態更新，不是漏刪；上一行在寫下當時為真）：客戶已裁示 CAP-GATE-01／-02 方向並同意版面方案 1 與 Q1～Q4（`docs/DECISIONS.md` `DEC-2026-10-25-02`）；65 已改寫為**最終 Wireframe（客戶待審）**，上一版請示單移該檔附錄 A 標 superseded。審過之前不得規劃或寫 implementation。
 
 ### §6.8 Decision Gates（本節發現；裁示前一律照現況，不動工）
 
@@ -402,6 +403,7 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 | CAP-GATE-10 | ⚙️ 要加更多能力 vs 客戶已判「設定與診斷過度複雜」 | 本檔 §1 F2 已標 [方向衝突]；BL-0391／BL-0408 | CAP-SET-13 |
 
 - 本節**未發現**需要改投資語意、公式、門檻或新資料來源才能成立的能力；CAP-GATE-04（投資語意）與 CAP-GATE-06（來源）是「若要做就會碰到」的停點，不是本節的建議。
+- → **2026-10-25 指標（本表既有列一字未改；狀態更新，不是漏刪；`DEC-2026-10-25-02`，決策者：客戶）**：**CAP-GATE-01 方向已裁示** —— 新 UI 採 Google 個人 OAuth（多帳號登入／列 Sheet／選擇／登出／切換），第一階段唯讀；scope 收窄、權杖存放與保存、callback 等實作細節仍屬 Implementation／Security Gate（BL-0349 護欄 4 的實作限制仍有效）。**CAP-GATE-02 擁有權與狀態模型已裁示** —— ⚙️ 唯一 Sheet selection owner、一次只有一個 active Sheet、URL／ID 為次要入口且收斂到同一個 active Sheet SSOT；active 存在哪裡、指哪一本仍待實作前另裁。逐項見 `docs/v2/65_set_wireframe_and_cap_gate_01_02.md` 第 J 節。CAP-GATE-03～10 不變。
 
 ### §6.9 對應 BACKLOG（本批更新；登記不構成動工授權）
 
