@@ -247,10 +247,10 @@ table.t th,table.t td{border-top:1px solid var(--line);padding:6px 4px;text-alig
 
   <div class="banner" role="note">
     視覺草稿・假資料・非正式功能
-    <small>本頁只用來審查畫面長相：不連 Google、不需要真的登入、不讀也不改任何真實試算表。對照規格見 docs/v2/65（E、F 節）。核准前不實作。</small>
+    <small>本頁只用來審查畫面長相：不連 Google、不需要真的登入、不讀也不改任何真實試算表。核准前不實作。上方「草稿操作」可切換示範情境。</small>
   </div>
 
-  <details class="drafttools" id="drafttools" open>
+  <details class="drafttools" id="drafttools">
     <summary>草稿操作：切換示範情境（不屬於設計）</summary>
     <div class="body">
       <label>示範情境
@@ -322,7 +322,7 @@ table.t th,table.t td{border-top:1px solid var(--line);padding:6px 4px;text-alig
   <section class="card" id="issues" aria-labelledby="issuesTitle" tabindex="-1" hidden>
     <div class="hd"><h2 id="issuesTitle">需要處理的項目</h2></div>
     <div class="bd"><ul id="issueList"></ul>
-      <div class="note">每列只描述狀態，不放按鈕（65 A.2）。</div>
+      <div class="note">每列只描述狀態，不放按鈕。</div>
     </div>
   </section>
 
@@ -341,7 +341,7 @@ table.t th,table.t td{border-top:1px solid var(--line);padding:6px 4px;text-alig
         <section class="card" id="cardFresh">
           <div class="hd"><h3>資料新鮮度</h3><button class="toggle" type="button" data-card="fresh" aria-expanded="false">＋</button></div>
           <div class="bd" id="freshBody" hidden>
-            <div class="muted">各頁資料狀態總表不計入上方結論燈（現行 TEXT_LAMP_NOTE，字樣沿用）。</div>
+            <div class="muted">各頁資料狀態總表不計入上方的資料結論燈（沿用現行說明句）。</div>
             <table class="t">
               <thead><tr><th>項目</th><th>資料截至</th><th>狀態</th></tr></thead>
               <tbody>
@@ -350,7 +350,7 @@ table.t th,table.t td{border-top:1px solid var(--line);padding:6px 4px;text-alig
                 <tr><td>市場指標</td><td>10-24</td><td><span class="st ok">◆ 在上限內</span></td></tr>
               </tbody>
             </table>
-            <div class="note">假資料；現行 SET-1 全表與各頁資料狀態總表原樣搬入此卡。</div>
+            <div class="note">假資料；現行的資料新鮮度表與各頁資料狀態總表原樣搬入此卡。</div>
           </div>
         </section>
       </div>
@@ -360,9 +360,9 @@ table.t th,table.t td{border-top:1px solid var(--line);padding:6px 4px;text-alig
   <section class="sec" id="secOps">
     <div class="sechd"><h2>操作</h2><button class="toggle" type="button" data-sec="ops" aria-expanded="false">＋展開</button></div>
     <div class="secbd" id="secOpsBody" hidden>
-      <div class="sub"><div class="subhd"><h3>重新取數</h3></div><div class="subbd muted">現行 SET-5 原樣搬入；本草稿不重畫此卡內容。</div></div>
-      <div class="sub"><div class="subhd"><h3>規則參數</h3></div><div class="subbd muted">現行 SET-3 原樣搬入；卡頭「設定試算表：‹名稱›」那一行移到「試算表連線」。</div></div>
-      <div class="sub"><div class="subhd"><h3>參數編輯</h3></div><div class="subbd muted">現行 SET-4 原樣搬入；本草稿不畫任何編輯或寫入控制項（是否屬第一階段唯讀射程待 65 J-6）。</div></div>
+      <div class="sub"><div class="subhd"><h3>重新取數</h3></div><div class="subbd muted">現行「重新取數」原樣搬入；本草稿不重畫此卡內容。</div></div>
+      <div class="sub"><div class="subhd"><h3>規則參數</h3></div><div class="subbd muted">現行「規則參數」原樣搬入；卡頭「設定試算表：‹名稱›」那一行移到「試算表連線」。</div></div>
+      <div class="sub"><div class="subhd"><h3>參數編輯</h3></div><div class="subbd muted">現行「參數編輯」原樣搬入；本草稿不畫任何編輯或寫入控制項（它和「第一階段只讀」的關係，實作前另外確認）。</div></div>
     </div>
   </section>
 
@@ -376,13 +376,13 @@ table.t th,table.t td{border-top:1px solid var(--line);padding:6px 4px;text-alig
           <tr><td>配息來源（示意）</td><td><span class="st ok">◆ 可讀</span></td></tr>
           <tr><td>市場指標來源（示意）</td><td><span class="st unk">⬜ 無法判定</span></td></tr>
         </tbody></table>
-        <div class="note">現行 SET-2 原樣下沉；列為假資料。</div>
+        <div class="note">現行「來源健康」原樣移到這裡；列為假資料。</div>
       </div></div>
       <div class="sub"><div class="subhd"><h3>取數紀錄</h3></div><div class="subbd">
         <pre class="raw" id="fetchLog"></pre>
-        <div class="note">現行 SET-6 原樣下沉；紀錄為假資料。</div>
+        <div class="note">現行「取數紀錄」原樣移到這裡；紀錄為假資料。</div>
       </div></div>
-      <div class="sub"><div class="subhd"><h3>欄位對照（進階）</h3></div><div class="subbd muted">現行 SET-7 原樣下沉（位置依 61 待裁示 (5)）。</div></div>
+      <div class="sub"><div class="subhd"><h3>欄位對照（進階）</h3></div><div class="subbd muted">現行「欄位對照」原樣移到這裡（最終位置另待確認）。</div></div>
       <div class="sub"><div class="subhd"><h3>進階診斷（原始訊息）</h3></div><div class="subbd">
         <div class="muted">Google 授權與試算表錯誤原文（遮蔽後）與 HTTP 狀態碼；權杖與 client secret 一律不顯示。</div>
         <pre class="raw" id="rawDiag"></pre>
@@ -390,13 +390,13 @@ table.t th,table.t td{border-top:1px solid var(--line);padding:6px 4px;text-alig
     </div>
   </section>
 
-  <p class="foot">頁尾指路句（現行字樣沿用）。本頁不負責投資判斷。<br>草稿檔：docs/v2/prototype/ui_prototype_set_oauth.html；假資料、不連網、不構成實作授權。</p>
+  <p class="foot">頁尾指路句（現行字樣沿用）。本頁不負責投資判斷。<br>草稿檔：docs/v2/prototype/ui_prototype_set_oauth.html；假資料、不連網、不構成實作授權。<br>對照規格（工程用）：docs/v2/65 第 A～H 節；第一層只放狀態依客戶 2026-10-25 回修第 11 點。</p>
 </div>
 
 <div class="modal" id="acctModal" hidden role="dialog" aria-modal="true" aria-labelledby="acctTitle">
   <div class="box">
     <h2 id="acctTitle">模擬：Google 帳號選擇頁</h2>
-    <p class="muted">草稿模擬。實作時會跳到 Google 的帳號選擇頁（65 D-3）；本頁不連 Google。</p>
+    <p class="muted">草稿模擬。實作時會跳到 Google 的帳號選擇頁；本頁不連 Google。</p>
     <div class="btns" style="flex-direction:column">
       <button class="btn" type="button" data-acct="A">帳號 A：we***@gmail.com</button>
       <button class="btn" type="button" data-acct="B">帳號 B：ch***@gmail.com</button>
@@ -520,6 +520,8 @@ function applyScenario(v){
   else if (v === "loggedout") { S.auth = "out"; S.account = null; S.list = null; S.lastUsed = {name: "我的基金持倉"}; }
   else if (v === "switched") { S.account = "B"; S.list = "success"; S.prevAcctSheet = {id: "s01", name: "我的基金持倉", account: "A"}; S.switchedNote = true; }
   S.open.key = issues().length > 0;
+  if (S.auth !== "in") S.open.google = true;
+  if (S.auth === "in" && !S.active) S.open.sheet = true;
   if (v === "switched" || v.indexOf("l_") === 0) { S.open.key = true; S.open.sheet = true; }
   render();
 }
@@ -590,29 +592,27 @@ function openInGoogleHtml(){
 
 /* ── 第一層 ── */
 function renderL1(){
+  /* 第一層只顯示狀態（客戶 2026-10-25 回修第 11 點）：登入／登出／切換帳號、下拉、網址入口一律在第二層。
+     第一層只保留直接附著在狀態上的［在 Google 開啟］（只指目前使用中）與［看原因］（只捲動）。 */
+  var guide = '<div class="note">到下方第二層「Google 帳號」處理</div>';
   var g = '<div class="kv"><div class="k">Google</div><div class="v">' + googleLine();
-  var b = [];
-  if (S.auth === "out") b.push(btn("login", "登入 Google", "primary"));
-  if (S.auth === "cberr" || S.auth === "expired") b.push(btn("login", "重新登入", "primary"));
-  if (loggedIn()) b.push(btn("switch", "切換帳號"));
   if (S.auth === "notcfg") g += '<div class="muted">這個儀表板還沒設定 Google 登入，目前無法登入。</div>';
-  if (b.length) g += '<div class="btns">' + b.join("") + "</div>";
+  if (!loggedIn() && S.auth !== "logging") g += guide;
   g += "</div></div>";
 
   var sh = '<div class="kv"><div class="k">試算表</div><div class="v">' + activeLine(false);
-  var sb = [];
-  if (loggedIn()) sb.push(btn("gotoPicker", "選擇試算表"));
   var og = openInGoogleHtml();
-  sh += '<div class="btns">' + sb.join("") + og + "</div>";
+  if (og) sh += '<div class="btns">' + og + "</div>";
+  if (loggedIn() && !S.active) sh += '<div class="note">到下方第二層「試算表連線」選擇</div>';
   if (S.flash) sh += '<div class="msg ok" role="status">' + esc(S.flash) + "</div>";
   sh += "</div></div>";
 
   var data = '<div class="kv"><div class="k">資料</div><div class="v">' + st("ok", "◆ 示意：可信度結論燈原句") +
-    '<div class="note">判定沿用現行 SET-0，一字不動；此處只示意位置。</div></div></div>';
+    '<div class="note">判定沿用現行的資料結論燈，一字不動；此處只示意位置。</div></div></div>';
 
   var n = issues().length;
   var last = n > 0
-    ? '<div class="kv"><div class="k">處理</div><div class="v">需要處理 <b>' + n + "</b> 項 " + btn("why", "看原因", "link") + "</div></div>"
+    ? '<div class="kv"><div class="k">處理</div><div class="v">需要處理 <b>' + n + "</b> 項 " + btn("why", "看原因", "link") + '<div class="note">到下方第二層處理</div></div></div>'
     : '<div class="kv"><div class="k">處理</div><div class="v">資料截至 10-24 <span class="note">（沒有待處理項目時不寫「正常」）</span></div></div>';
   document.getElementById("l1body").innerHTML = g + sh + data + last;
 }
@@ -633,11 +633,11 @@ function renderGoogle(){
   if (loggedIn()) {
     h += '<div class="kv"><div class="k">登入方式</div><div class="v">Google 個人帳號</div></div>';
     h += '<div class="kv"><div class="k">授權範圍</div><div class="v">' + st("unk", "⬜ 實作時以實際取得的範圍為準") +
-         '<div class="note">現行範圍含寫入；實作時若仍拿到寫入範圍，這一行要照實寫「含寫入權限」（65 J-1）。</div></div></div>';
+         '<div class="note">現行範圍含寫入；實作時若仍拿到寫入範圍，這一行要照實寫「含寫入權限」，不會寫成唯讀。</div></div></div>';
     h += '<div class="btns">' + btn("switch", "切換帳號") + btn("logout", "登出") + "</div>";
     h += '<div class="note">登出只清除本次登入與目前帳號的清單，不刪任何試算表。</div>';
   } else if (S.auth === "notcfg") {
-    h += '<p>這個儀表板還沒設定 Google 登入，目前無法登入。</p><div class="note">不畫［登入 Google］（65 B-1）。</div>';
+    h += '<p>這個儀表板還沒設定 Google 登入，目前無法登入。</p><div class="note">設定完成前不顯示登入按鈕。</div>';
   } else if (S.auth === "unknown") {
     h += "<p>讀不到登入狀態。</p><div class=\"note\">［重新讀取連線狀態］在「試算表連線」卡內（唯一一顆）。</div>";
   } else if (S.auth === "logging") {
@@ -646,7 +646,7 @@ function renderGoogle(){
     var label = S.auth === "out" ? "登入 Google" : "重新登入";
     var line = S.auth === "out" ? "登入後可列出你能用的試算表。" : (S.auth === "expired" ? "登入已過期，需要重新登入。" : "原因分類：" + (S.cbReason || "無法判定") + "。");
     h += "<p>" + esc(line) + '</p><div class="btns">' + btn("login", label, "primary") + "</div>";
-    h += '<div class="note">第一層的登入鈕與這一顆是同一個動作，不是兩套流程。</div>';
+    h += '<div class="note">登入、切換帳號、登出只在這張卡；第一層只顯示狀態。</div>';
   }
   document.getElementById("googleBody").innerHTML = h;
 }
@@ -661,7 +661,7 @@ function pickerHtml(){
   var h = '<div class="hr"></div><div><b>選擇 Google Sheet</b></div>';
   if (dis) {
     return h + '<div class="dd"><button class="ddbtn" type="button" disabled><span class="val">需要先登入 Google</span><span class="caret">▼</span></button></div>' +
-      '<div class="note">未登入時下拉與網址入口停用（65 B 節）。</div>';
+      '<div class="note">未登入時下拉與網址入口停用。</div>';
   }
   if (S.list === "loading") return h + '<div class="msg info" role="status">… 正在列出你能用的試算表</div><div class="note">不顯示空清單、不顯示上一個帳號的清單。</div>';
   if (S.list === "empty") return h + '<div class="msg info">' + st("info", "◇ 這個帳號目前沒有可列出的試算表") + '</div><div class="note">只在清單讀取成功、且數量為零時才顯示這一句。</div>';
@@ -694,7 +694,7 @@ function pickerHtml(){
       });
       h += "</ul>";
     }
-    h += '<div class="ddfoot">共 ' + curSheets().length + " 本（" + esc(S.listAt || "") + " 讀取）。辨識資訊欄位待 65 J-8。</div></div>";
+    h += '<div class="ddfoot">共 ' + curSheets().length + " 本（" + esc(S.listAt || "") + " 讀取）。第二行的辨識資訊欄位實作前另定。</div></div>";
   }
   h += "</div>";
   h += '<div class="note">選一本只會「選中」，<b>不會切換</b>；按［使用這一本］並驗證成功後才切換。</div>';
@@ -726,7 +726,7 @@ function urlHtml(){
   h += '<div class="field"><label class="sr" for="urlIn">Google Sheet URL 或 ID</label>' +
        '<input id="urlIn" type="text" inputmode="url" autocomplete="off" placeholder="貼上 Google Sheet URL 或 ID" value="' + esc(S.url.input) + '"' + (dis ? " disabled" : "") + ">" +
        btn("checkUrl", "驗證", "", dis || (S.verify && !S.verify.done)) + "</div>";
-  if (dis) h += '<div class="note">需要先登入 Google（未登入時能否用服務帳戶驗證，待 65 J-7）。</div>';
+  if (dis) h += '<div class="note">需要先登入 Google。</div>';
   var u = S.url.status;
   if (u === "checking") h += '<div class="msg info" role="status">… 驗證中</div>';
   else if (u === "badformat") h += '<div class="msg err">' + st("err", "⛔ 網址或 ID 格式不對") + '<div class="note">沒有送出任何查詢；輸入框內容保留。</div></div>';
@@ -755,9 +755,9 @@ function renderSheet(){
        (S.settingsSheet === "denied" ? st("err", "⛔ 無權限") : st("ok", "◆ 可讀取")) + '<div class="note">部署設定指定，本頁不可改。</div></div></div>';
   h += '<div class="kv"><div class="k">選股池</div><div class="v">選股池試算表：基金選股池　' + st("ok", "◆ 可讀取") + '<div class="note">部署設定指定，本頁不可改。</div></div></div>';
   h += '<div class="hr"></div><div class="btns">' + btn("refresh", S.refreshing ? "… 讀取中" : "重新讀取連線狀態", "", S.refreshing) + "</div>";
-  h += '<div class="note">唯一一顆（Q3）：重讀登入狀態與三本試算表的連線狀態，不改目前使用中、不改任何設定。</div>';
+  h += '<div class="note">這是唯一一顆重新讀取按鈕：重讀登入狀態與三本試算表的連線狀態，不改目前使用中、不改任何設定。</div>';
   if (S.refreshMsg) h += '<div class="msg ' + S.refreshMsg[0] + '" role="status">' + esc(S.refreshMsg[1]) + "</div>";
-  h += '<div class="note">刪除試算表／分頁／資料：不提供（待 CAP-GATE-03）。</div>';
+  h += '<div class="note">刪除試算表／分頁／資料：不提供。</div>';
   document.getElementById("sheetBody").innerHTML = h;
 }
 
@@ -824,6 +824,7 @@ function doLogout(){
   if (S.active) S.lastUsed = {name: S.active.name};
   S.auth = "out"; S.account = null; S.active = null; S.list = null; S.pending = null; S.ddOpen = false;
   S.verify = null; S.url = {input: "", status: null, target: null}; S.flash = null; S.prevAcctSheet = null; S.lastFail = null;
+  S.open.key = true; S.open.google = true;
   render();
 }
 function activate(target, via){
