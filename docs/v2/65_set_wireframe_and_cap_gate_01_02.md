@@ -4,7 +4,7 @@
 - **性質**：⛔ **提案草稿，客戶尚未審、尚未拍板 —— 不是已核准線框，也不是規格。** 本檔不凌駕 `docs/v2/44_fund_ui_ssot.md`，不解凍 44，不解除 `docs/DECISIONS.md` `DEC-2026-10-22-02` G8，不構成任何 production／UI 動工授權（`CLAUDE.md` §-1、§-1.5.4 UI 草稿先行）。客戶拍板後，落到 44 的部分仍走 44 修正程序。
 - **為什麼有這份**：`docs/v2/62_old_ui_gap_matrix.md` §6.7 把「第 1 階段 ⚙️ 設定的 UI 線框草稿＋CAP-GATE-01／02 請示單」列為候選的第一個動作；客戶 2026-10-25 授權本文件批（經總管派工單轉達；repo 內無逐字存檔；文件組未見客戶對話本身）。待辦登記仍在 `docs/BACKLOG.md` BL-0402，本檔不另立 BL。
 - **位置選擇**：沿用 `docs/v2/59_b_line_390_wireframes.md`、`docs/v2/61_bl0250_batch3_wireframe.md` 的「`docs/v2/` 編號 `.md` 文字線框」慣例。不放 `docs/wireframes/`：該目錄 README 定義為客戶拍板原件區。
-- **誰寫、誰驗過**：架構與前端組（文件任務）單組撰寫。**未起 Streamlit、未看畫面、未跑 UI**；「現行 B 版」一律指 `88e829de` 讀碼所得（`ui_v2/set/logic.py::BLOCK_TITLES`／`BLOCK_LAYERS`、`ui_v2/set/page.py::render`、`ui_v2/sections.py::RELAYER`、`ui_v2/set/live.py` 的設定試算表標題列、`infra/oauth.py::GOOGLE_OAUTH_SCOPES`）。方案推薦欄為「文件組擬，待總管確認」。初稿（`1d7b8b0d`）經一組獨立文件稽核，結論 PASS-with-fixes；本版為依稽核必修 1～6 與建議回修後的版本，回修 delta 已經一組獨立複驗（PASS-with-fixes，必修 A～C 已於本 commit 修正；本 commit 的 A～C 補字由總管自驗）。
+- **誰寫、誰驗過**：架構與前端組（文件任務）單組撰寫。**未起 Streamlit、未看畫面、未跑 UI**；「現行 B 版」一律指 `88e829de` 讀碼所得（`ui_v2/set/logic.py::BLOCK_TITLES`／`BLOCK_LAYERS`、`ui_v2/set/page.py::render`、`ui_v2/sections.py::RELAYER`、`ui_v2/set/live.py` 的設定試算表標題列、`infra/oauth.py::GOOGLE_OAUTH_SCOPES`）。方案推薦欄為「文件組擬，待總管確認」。初稿（`1d7b8b0d`）經一組獨立文件稽核，結論 PASS-with-fixes；本版為依稽核必修 1～6 與建議回修後的版本，回修 delta 已經一組獨立複驗（PASS-with-fixes，必修 A～C 已於 `629899ba` 修正；`629899ba` 的 A～C 補字由總管自驗）。
 
 ---
 
