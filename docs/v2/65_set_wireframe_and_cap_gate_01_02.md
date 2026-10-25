@@ -43,12 +43,14 @@
 | 5 | 版面方案 1（三層漸進揭露）；Q1 保留［在 Google 開啟］；Q2 無待處理項目時第二層可預設收起；Q3 只增加［重新讀取連線狀態］，不得增加其他重複 Refresh；Q4 燈旁［看原因］只捲到「需要處理的項目」，不取數、不改資料 | 第 A、H、L 節 |
 | 6 | 舊 UI 只當功能與邏輯來源，不搬畫面（sidebar 排版、expander、舊 Tab、過深設定區、舊按鈕位置、舊資訊架構都不是新規格） | 第 I 節分類 (3)「舊 UI 畫面專用、不搬」 |
 | 7 | Missing ≠ 0 ≠ False ≠ safe ≠ HOLD ≠ 未觸發；狀態必須有文字，不得只有顏色 | 第 0 節、第 G 節 |
+| 8（客戶要點） | 切換 Google 帳號後，原 active Sheet 必須重新驗證；即使新帳號也能存取，也不得自動沿用，要明確提示並讓使用者確認 | 第 D 節 D-5、D-8 |
+| 9（客戶要點） | 登出後不得顯示為仍正常連線；要區分「已有上次選擇紀錄」「目前未驗證權限」「因未登入無法讀取」，cached Sheet 不得當成有效連線 | 第 G 節 G-11、G-13、G-14；第 C 節［登出］ |
 
 **方向與實作授權的界線（寫死，不得混讀）**
 
 - ✅ **已裁示（方向）**：新 UI 採個人 OAuth；⚙️ 唯一擁有 Sheet 選擇；單一 active Sheet；URL／ID 次要入口；第一階段唯讀；版面方案 1＋Q1～Q4。
 - ⛔ **未授權（實作）**：任何 production OAuth 實作；`infra/oauth.py`、`GOOGLE_OAUTH_SCOPES`、callback、權杖存放與保存、secrets 的任何變更；active Sheet 的儲存實作；任何寫入。
-- ⚠️ **T6 與 `DEC-2026-10-17-03` 護欄 4**：裁示要點 4 會改變 T6（客戶 2026-09-27「保單那一本」＋技術裁定「ui_v2 只讀 secret `POLICY_SHEET_ID`、不退回 session」）—— **客戶已裁示方向**（持倉來源改為設定頁選定的 active Sheet）。但**護欄 4 的實作限制（目前不授權改 OAuth scope、Q10、T6 或 production write architecture）在 Implementation／Security Gate 通過前仍然有效**；本檔不把護欄 4 讀成已解除。實作前須另裁的項目見第 J 節。
+- ⚠️ **T6 與 `DEC-2026-10-17-03` 護欄 4**：客戶已裁示 ⚙️ 單一 active Sheet、其他頁只讀其結果；**若 J-4 確認 active 指持倉（保單）那一本**，持倉來源即改為 active Sheet（＝ T6 變更：客戶 2026-09-27「保單那一本」＋技術裁定「ui_v2 只讀 secret `POLICY_SHEET_ID`、不退回 session」），護欄 4 的實作限制在 Gate 前仍有效。「active 指哪一本」**仍是 J-4 待裁項**，本檔不把 T6 讀成已裁變更。**護欄 4 的實作限制（目前不授權改 OAuth scope、Q10、T6 或 production write architecture）在 Implementation／Security Gate 通過前仍然有效**；本檔不把護欄 4 讀成已解除。實作前須另裁的項目見第 J 節。
 
 ## 3. 現行 B 版設定頁盤點（`3075e313` 讀碼，沿用上一版 `88e829de` 結論；未看畫面）
 
@@ -99,7 +101,9 @@
 | 精簡／修正既有分頁 | `ui/helpers/cloud_io.py::fix_and_shrink_v2_sheets` |
 | 重新命名試算表 | `repositories/policy/v2.py::rename_sheet` |
 | 刪除（分頁、基金列、保單列） | `repositories/policy/v2.py::delete_policy_worksheet`、`delete_fund_in_policy`；`repositories/policy/v1.py::delete_policy_row`（CAP-SET-11，屬 CAP-GATE-03 不可逆 Stop Gate） |
-| 選股池寫回 | `repositories/pool_repository.py` 選股池 store 的 `upsert`、`remove`（`get_pool_store` 回傳；CAP-GATE-04 寫入邊界） |
+| 選股池寫回 | `repositories/pool_repository.py` 選股池 store 的 `upsert`、`remove`（`get_pool_store` 回傳）與模組函式 `add_or_update`、`set_type_override`、`set_secid`（CAP-GATE-04 寫入邊界） |
+| NAV 歷史 append | `services/nav_history_gs.py::append_points` |
+| 交易紀錄（`_Ledgers`）寫入／新增分頁 | `repositories/ledger_repository.py::append_ledger_row`、`replace_ledgers_for_policy`、`ensure_ledger_worksheet` |
 | T7 帳本雙向同步（`_T7_State`） | `ui/tab3_t7_ledger.py` 內 `_t7_get_gsheet_client_sid` 一族 |
 
 - **不受本表影響的既有功能**：現行 `SET-4` 參數編輯經**服務帳戶**寫**設定試算表**（50 第 8 節既有、已核准的功能），不是個人 OAuth 路徑，本批不改它。⚠️ 「第一階段唯讀」是否也涵蓋 `SET-4` 這條既有寫入，客戶要點未明說 —— 本檔讀作「只管新的 OAuth／active Sheet 能力」（**文件組讀法，可被客戶推翻**），列 J-6。
@@ -242,7 +246,7 @@
 |---|---|---|---|---|---|
 | B-1 OAuth 未設定 | 部署端沒有可用的 OAuth client 設定（舊 UI `ui/helpers/io/oauth_state.py::_resolve_oauth_cfg` 回 None 的情形） | ⛔ 尚未設定：Google 登入〔文件組擬定，沿用「⛔ 尚未設定：〈哪一項〉」句型〕 | 一句：「這個儀表板還沒設定 Google 登入，目前無法登入。」〔文件組擬定〕；**不畫［登入 Google］** | ⬜ 尚未選定試算表 | 缺哪一項設定（鍵名遮蔽） |
 | B-2 尚未登入 | OAuth 已設定、本次沒有登入 | 未登入［登入 Google］ | ［登入 Google］＋一句「登入後可列出你能用的試算表」〔文件組擬定〕 | ⬜ 尚未選定試算表（若有上次紀錄，見 G-13） | — |
-| B-3 callback error | 從 Google 授權頁回來時換取權杖失敗、使用者取消授權，或回傳的驗證碼與本次登入不符而被拒（舊 UI `handle_oauth_callback`、`_should_reject_oauth_code`） | ⛔ 登入沒有完成 | 一句原因分類（取消／被拒／換取失敗）〔文件組擬定〕＋同一位置［重新登入］ | ⬜ 尚未選定試算表 | 錯誤原文（遮蔽後） |
+| B-3 callback error | 從 Google 授權頁回來時換取權杖失敗，或回傳的驗證碼與本次登入不符而被拒（舊 UI `handle_oauth_callback`、`_should_reject_oauth_code`；舊碼只有換取失敗會出訊息，見 I-5）。分不出取消、被拒、換取失敗時，落 B-5 或 G-12（無法判定） | ⛔ 登入沒有完成 | 一句原因分類（取消／被拒／換取失敗）〔文件組擬定〕＋同一位置［重新登入］ | ⬜ 尚未選定試算表 | 錯誤原文（遮蔽後） |
 | B-4 token expired／invalid | 曾登入，但權杖過期且無法續期、或已被撤銷（舊 UI `infra/oauth.py::ensure_fresh_tokens` 丟 `OAuthError` 的情形） | ◷ 登入已過期 | 一句「登入已過期，需要重新登入」〔文件組擬定〕＋［重新登入］ | 照 G-13：上次選擇紀錄＋「⬜ 未驗證（登入已過期）」；**不當成有效連線** | 錯誤原文（遮蔽後） |
 | B-5 無法確認登入狀態 | 讀不到登入狀態（例如狀態讀取本身出錯） | ⬜ 無法判定 | 一句「讀不到登入狀態」＋［重新讀取連線狀態］在第二層既有位置 | ⬜ 無法判定 | 原文（若有） |
 
@@ -285,7 +289,7 @@
 | D-2 | 按［切換帳號］ | 一句確認「切換後要重新選擇試算表」〔文件組擬定〕；可取消 |
 | D-3 | 跳到 Google 帳號選擇頁 | 舊 UI 授權網址已帶 `prompt=select_account consent`（`infra/oauth.py::build_authorize_url`），會強制出現帳號選擇；可沿用此行為（實作時另驗） |
 | D-4 | 回來後驗證帳號 B | 顯示「登入中…」〔文件組擬定〕；失敗 → B-3／B-4 對應狀態，**不回退成 A 的已登入** |
-| D-5 | **清掉「A 可存取」的假設** | A 的清單、A 的驗證結果、以 A 驗證過的試算表名稱快取、A-1 的「可讀取」標記全部失效；舊 UI 登出只清 `gsheet_tokens`／`gsheet_email`／`_oauth_state`／`active_policy_id`，**沒有清** `policy_sheet_id`、`_t3_cur_sheet_title`、`_my_sheets`、`_t3_sa_can_open`、`_last_loaded_sheet_id`（`ui/sidebar.py::render_sidebar`）—— 新 UI 不得照搬這個缺口 |
+| D-5 | **清掉「A 可存取」的假設** | A 的清單、A 的驗證結果、以 A 驗證過的試算表名稱快取、A-1 的「可讀取」標記全部失效；舊 UI 登出只清 `gsheet_tokens`／`gsheet_email`／`_oauth_state`／`active_policy_id`，**沒有清** `policy_sheet_id`、試算表名稱快取（sidebar 用 `_t3_cur_sheet_title:{sid}`；`ui/helpers/portfolio/policy_admin_section.py` 另用無前綴的同名鍵 `_t3_cur_sheet_title`）、`_my_sheets`、`_t3_sa_can_open`、`_last_loaded_sheet_id`（`ui/sidebar.py::render_sidebar`）—— 新 UI 不得照搬這個缺口 |
 | D-6 | 重列 B 的試算表 | 進第 E 節 Picker（Loading → Success／Empty／錯誤） |
 | D-7 | 要求選新的 active | 第一層試算表列顯示「⬜ 尚未選定試算表（已切換帳號）」〔文件組擬定〕直到使用者選定 |
 | D-8 | **A-1 即使 B 也可存取** | 清單中 A-1 標「上一個帳號使用中的那一本」〔文件組擬定〕，**不自動沿用**；使用者按［使用這一本］後再確認「以帳號 B 使用 ‹名稱›？」才設為 active |
@@ -317,6 +321,7 @@
 | E-3 簡單搜尋 | 輸入框只在已取得的清單內過濾 | **不新增資料源、不另打 API**；搜尋無結果 → 「已列出的試算表中沒有符合的名稱」〔文件組擬定〕，不是 Empty |
 | E-4 Empty | ◇ 這個帳號目前沒有可列出的試算表〔文件組擬定〕 | **只在 API 成功回傳且清單為零時**才顯示；舊 UI 把「沒有試算表」與「權杖只看得到 app 建立的檔」混在同一句（`ui/helpers/portfolio/policy_admin_section.py` 的列檔提示），新 UI 分開 |
 | E-5 Permission denied | ⛔ 這個帳號沒有列出試算表的權限 | 原文進第三層；不猜成 Empty |
+| E-5a 授權範圍不足 | ⛔ 目前授權範圍不足，無法列出試算表〔文件組擬定〕＋［重新登入］ | 權杖缺列清單所需範圍（如 `drive.metadata.readonly`）時與 E-5 分開顯示；舊 UI 只以錯誤字串含 403／insufficient 判斷並提示重新登入（見 I-23）；範圍本身怎麼定屬 J-1 |
 | E-6 Auth failure | ◷ 登入已過期／⛔ 授權錯誤 → ［重新登入］ | 要求重新登入；不保留舊清單當成目前帳號的清單 |
 | E-7 API error | ⛔ 列出試算表失敗＋［重試］ | 這顆［重試］只重列清單，屬 Picker 內的同一動作，不是第二顆 Refresh；保留上一份成功清單時須標「‹MM-DD hh:mm› 的清單，可能已過期」 |
 | E-8 Unknown | ⬜ 無法判定 | 分不出是哪一種失敗時一律落這裡並附原文（遮蔽後）；**不得猜成「沒有試算表」** |
@@ -410,7 +415,7 @@
 | I-2 | `infra/oauth.py::GOOGLE_OAUTH_SCOPES` | 現值：`spreadsheets`（試算表讀寫）、`drive.file`（建立並管理 app 建立的檔）、`drive.metadata.readonly`（列出 Drive 檔案中繼資料）、`openid`、`userinfo.email` | (5) | 第一階段唯讀 | **高於第一階段所需**（讀試算表＋列清單＋帳號 email 即可）；本批不改，實作時需 Security／Scope Decision Gate（J-1） |
 | I-3 | `infra/oauth.py::generate_state`；`ui/helpers/io/oauth_state.py::get_login_state` | 每個 session 一組隨機 state，防跨 session 搶授權碼 | (1)／(2) | CAP-SET-01 | `get_login_state` 讀寫 `st.session_state`，屬舊 UI 層，B 線需另接（ui_v2 不得 import `ui/`） |
 | I-4 | `infra/oauth.py::exchange_code_for_tokens`、`decode_id_token_email` | 授權碼換權杖；從 id_token 解出 email | (1)(5) | CAP-SET-01、03 | 帳號顯示來源 |
-| I-5 | `ui/helpers/io/oauth_state.py::handle_oauth_callback`、`_should_reject_oauth_code` | 讀 `?code=` 換權杖、寫 `gsheet_tokens`／`gsheet_email`、成功 `st.rerun()`；失敗 `st.error` | (2)(5) | 第 B 節 B-3 | 現行在 session 遺失時放行 state 檢查（v19.305 可用性取捨，docstring 自陳會重開跨分頁搶碼窗口）—— 安全取捨屬 J-2；callback 錯誤目前只有一句 `st.error`，未分類 |
+| I-5 | `ui/helpers/io/oauth_state.py::handle_oauth_callback`、`_should_reject_oauth_code` | 讀 `?code=` 換權杖、寫 `gsheet_tokens`／`gsheet_email`、成功 `st.rerun()`；失敗 `st.error` | (2)(5) | 第 B 節 B-3 | 換取失敗才 `st.error`；state 不符時靜默 return、無任何訊息；使用者取消（`?error=`）未處理。另：session 遺失時放行 state 檢查（v19.305 可用性取捨，docstring 自陳會重開跨分頁搶碼窗口）—— 安全取捨屬 J-2 |
 | I-6 | `infra/oauth.py::ensure_fresh_tokens`、`refresh_access_token`、`is_token_expired`、`build_credentials_from_tokens` | 權杖續期、轉 gspread 憑證 | (1)(5) | 第 B 節 B-4 | 權杖只存 `st.session_state["gsheet_tokens"]`（讀碼未見其他持久化）；保存方式屬 J-3 |
 | I-7 | `ui/helpers/io/oauth_state.py::_get_oauth_client`；`repositories/policy/_helpers.py::get_gspread_client_from_oauth` | 由 session 權杖建 gspread client | (2)(4) | 第 E、F 節讀取 | 舊 UI 另有至少三處各自重做「續期＋建 client」（`ui/tab3_portfolio.py`、`ui/tab3_t7_ledger.py` 內數個區塊）—— 新 UI 需單一入口；B 線目前無對應物 |
 | I-8 | `ui/helpers/io/oauth_state.py::_resolve_oauth_cfg`、`refresh_oauth_state` | OAuth client 設定：secrets 優先，缺則讀 session 的 `custom_oauth_cfg`（舊 UI 精靈讓使用者在頁面輸入 client id／secret） | (3)(5) | 第 B 節 B-1 判斷 | **頁面輸入 client secret 不搬**；設定來源只能是部署 secrets（J-2 一併確認） |
@@ -426,8 +431,10 @@
 | I-18 | `ui/tab3_portfolio.py` 內 v19.302 註解（Streamlit Cloud 上 app 內 OAuth 導回 `*.streamlit.app` 被平台攔截、帳號錯亂） | 已知平台風險 | (5) | 第 B、D 節 | 舊 UI 因此改為服務帳戶優先；新 UI 走 OAuth 前須先確認此風險（J-10） |
 | I-19 | `services/v2_tables/settings_store.py::service_account_status`、`sheet_title`；`repositories/settings_sheet_repository.py::load_sheet_title` | 服務帳戶有無設定、設定試算表標題 | (1) | 第 A 節試算表連線卡 | B 線現有，直接沿用 |
 | I-20 | `services/v2_tables/exp_universe.py::load_pool_codes`（`oauth_client` 注入點）；`repositories/pool_repository.py::get_pool_store` | 選股池讀取可吃個人 OAuth client | (4) | 其他四頁讀 active 結果的接線參考 | `ui_v2/exp/source.py` 恆傳 `None`；B 線無取得登入者 client 的途徑 |
-| I-21 | `repositories/policy_supplement_repository.py::policy_sheet_id`；`services/v2_tables/alo_holdings.py` | 現行 T6：持倉只讀 secret `POLICY_SHEET_ID` | (4)(5) | 第 4 節 active Sheet | 改讀 active Sheet ＝ T6 變更；方向已裁，實作受護欄 4 約束（J-4、J-11） |
+| I-21 | `repositories/policy_supplement_repository.py::policy_sheet_id`；`services/v2_tables/alo_holdings.py` | 現行 T6：持倉只讀 secret `POLICY_SHEET_ID` | (4)(5) | 第 4 節 active Sheet | 單一 active Sheet 已裁；**若 J-4 確認 active 指持倉那一本**，改讀 active Sheet 即 T6 變更，實作受護欄 4 約束（J-4、J-11）；J-4 未確認前不得讀成已裁的 T6 方向 |
 | I-22 | `services/v2_tables/masking.py::secret_values` | 遮蔽權杖與 OAuth 設定 | (1) | 第 0、A 節遮蔽 | B 線現有，沿用 |
+| I-23 | `ui/helpers/portfolio/policy_admin_section.py` 列資料夾／列檔的錯誤分支 | 錯誤字串含 `insufficient` 或 `403` 時提示「OAuth token 缺 `drive.metadata.readonly` 權限，登出再登入」 | (2)(5) | 第 E 節 E-5a | 新 UI 加「授權範圍不足」狀態並與 E-5（無權限）分開；字串判斷需改結構化（J-9）；範圍本身屬 J-1 |
+| I-24 | `st.session_state["active_policy_id"]` | 同一本試算表內選哪張保單（依總管轉述；讀碼只見 `ui/sidebar.py::render_sidebar` 登出時清除與 `ui/helpers/io/json_backup.py` 備份／還原，未查到讀取端） | (3)／不在 ⚙️ 射程 | — | 屬 💼（持倉事實與操作），不是 active Sheet；⚙️ 不擁有 |
 
 **read／write 混在一起的 helper（記為 Implementation Gate 項目，本批不重構）**
 
