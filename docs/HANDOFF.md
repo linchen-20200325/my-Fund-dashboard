@@ -34,7 +34,19 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-25（第二十六次）現況 —— New UI Capability Matrix 收斂文件批（以本框為準；下方第二十五次框起皆為歷史快照）**（客戶 2026-10-25 授權文件批「New UI operational capabilities → 現有 SSOT／BACKLOG 收斂」，`docs/DECISIONS.md` `DEC-2026-10-25-01`；狀態更新，不是漏刪：第二十五次框整段保留於下方）
+> **⭐ 2026-10-25（第二十七次）現況 —— 第 1 階段 ⚙️ 設定線框草稿＋CAP-GATE-01／02 請示單文件批（以本框為準；下方第二十六次框起皆為歷史快照）**（客戶 2026-10-25 授權本文件批，經總管派工單轉達；非新裁示、無新 DEC；狀態更新，不是漏刪：第二十六次框整段保留於下方）
+> - **main 實況**：本框隨本批 PR 合併；該 PR 前 main 為 `88e829de`（#1051）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
+> - **Open PR**：本 PR（分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。
+> - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；本框撰寫時尚未開 PR、無 CI 結果。
+> - **本批內容（純文件，production code 0 變更）**：新增 `docs/v2/65_set_wireframe_and_cap_gate_01_02.md` —— ⚙️ 設定頁文字線框草稿（390px／桌機；三層漸進揭露：連線狀態 → 為什麼／怎麼處理 → 診斷細節；CAP-SET-01～13 位置索引；Google 四態與試算表各狀態長相；現行八塊＋各頁資料狀態總表＋進階診斷的 Old → New 對照，一項不刪；Gate 依賴元件畫虛線框並列各選項版面差異；三個版面方案比較）與 CAP-GATE-01（OAuth）、CAP-GATE-02（綁定資料模型）兩張請示單。推薦欄（版面方案 1、GATE-01 方案 A、GATE-02 方案 B）為文件組擬、待總管確認；⚠️ GATE-02 方案 B 會改變 T6，屬 `DEC-2026-10-17-03` 護欄 4 範圍，選 B 等於請客戶放寬護欄 4 的該部分；方案 1 偏離 44 第二節五頁共用結構，已在 65 第 8 節列明。`docs/BACKLOG.md` BL-0402 列尾補記（狀態不變）；`docs/v2/62_old_ui_gap_matrix.md` §6.7 加一行指標（既有列一字未改）。
+> - **稽核**：初稿 `1d7b8b0d` 經一組獨立文件稽核，結論 PASS-with-fixes；必修 1～6 與建議已在後續 commit 回修（試算表狀態示範改「⬜ 無法判定」、會取數的［重新讀取連線狀態］改虛線待裁示、導覽改只捲動、T6／護欄 4 限定、44 第二節偏離、審查題附推薦）；回修 delta 已經一組獨立複驗（PASS-with-fixes，必修 A～C 已於 `629899ba` 修正；`629899ba` 的 A～C 補字由總管自驗）。
+> - **未完成（重要，`docs/BACKLOG.md`）**：同第二十六次框。
+> - **Blocker**：無（無已授權工作）。
+> - **唯一下一步**：等客戶審 65 的線框草稿（含第 8 節草稿審查題 Q1～Q4）與 CAP-GATE-01、CAP-GATE-02 兩個 Gate；**裁示前不得寫任何 UI 程式**（G8 未解除；UI 草稿先行）。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。
+> - **尚未授權動工**：同第二十六次框；另含 65 草稿任何一項的 production 實作、OAuth、綁定設定鍵新增。
+> - **接手入口**：同第二十二次框（含 scratchpad venv 跑完整測試的補充）。
+
+> **⭐ 2026-10-25（第二十六次）現況 —— New UI Capability Matrix 收斂文件批（~~以本框為準；下方第二十五次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第二十七次框；狀態更新，不是漏刪）**（客戶 2026-10-25 授權文件批「New UI operational capabilities → 現有 SSOT／BACKLOG 收斂」，`docs/DECISIONS.md` `DEC-2026-10-25-01`；狀態更新，不是漏刪：第二十五次框整段保留於下方）
 > - **main 實況**：~~本框隨本批 PR 合併；該 PR 前 main 為 `7d41705f`（#1049）。~~ → **#1050 已 squash 合併，main `8c4f210b`**（前一 main `7d41705f`；PR head `a34f5849`；狀態更新，不是漏刪）。接手時以 `git log origin/main` 與 GitHub open PR 為準（`PROJECT_RULES.md` 第 2 節）。
 > - **Open PR**：~~本 PR（分支 `ccr-54480a1a-q528l2`；由總管開立，PR 號以 GitHub 為準）。~~ → **0**（#1050 已合併；狀態更新，不是漏刪）。
 > - **CI**：以 GitHub check-run 逐條 `conclusion` 為準（`CLAUDE.md` §-2.A 第 6 款 (b)）；~~本框撰寫時尚未開 PR、無 CI 結果。~~ → #1050 head `a34f5849` 三條 check-run 全 `success`：Fast checks、Schema gate、Slow tests（run 40156891082）（狀態更新，不是漏刪）。

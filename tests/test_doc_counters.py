@@ -2444,6 +2444,7 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/62_old_ui_gap_matrix.md",
     "docs/v2/63_market_trend_research_baseline.md",
     "docs/v2/64_v2_ssot_convergence.md",
+    "docs/v2/65_set_wireframe_and_cap_gate_01_02.md",
     "docs/v2/CONSTITUTION.md",
     "docs/v2/README_DRAFT_PACK.md",
 )
