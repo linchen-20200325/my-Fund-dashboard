@@ -530,8 +530,11 @@ def refetch_nav(secret_values, *, runtime: Optional[RuntimeFetchStore] = None) -
     決策者：客戶）：兩筆紀錄只記在 `runtime`（記憶體），不寫任何 Google Sheet；`runtime` 沒給時本函式自己開一份。
     下文的「fetch_log」一律指這份本次工作階段的取數紀錄（形狀同 `44` `fetch_log`）。
 
-    對象只有持倉基金（Q3），讀法與 hld 頁相同（`ui_v2/hld/source.py`：`alo_holdings.load_alo_tables`
+    對象只有持倉基金（Q3），讀法與 hld 頁**原本**相同（`alo_holdings.load_alo_tables`
     → `fund_keys.resolve_full_keys` → `build_nav_table`，每筆持倉列一筆、帶 `holding_ccy`、不去重）。
+    ⚠️ 2026-10-26 更正（有意識的更正，不是漏刪）：hld／alo 頁自批 3b-4 起改讀個人 Active Sheet
+    （`alo_holdings.load_alo_tables_active`），**本函式仍走舊的 `load_alo_tables`（服務帳戶＋ `POLICY_SHEET_ID`）**，
+    兩者目前不同源（BL-0460 待處理；本批不改 `refetch_nav` 行為）。
 
     快取：`fetch_nav` 掛的是 `infra/cache.py::_daily_cache`，**只有整批清除（`cache_clear()`），沒有單鍵清除**
     ⇒ 這裡清的是本行程裡 `fetch_nav` 的**全部**當日快取（含持倉以外的基金；舊樹頁面同行程內下次會重抓）。

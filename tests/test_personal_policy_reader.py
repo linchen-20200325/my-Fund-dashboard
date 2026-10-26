@@ -584,6 +584,27 @@ def test_續期失敗_ensure_fresh已清session_仍丟該帳號快取(monkeypatc
     assert not any(k[0] == SUB_A for k in reader._CACHE)
 
 
+def test_續期AUTH_EXPIRED_經load_alo_tables_active_留登入已過期一次性提示(monkeypatch):
+    """F2：session 被清掉後，設定頁登入卡要能讀到 AUTH_EXPIRED（拿掉 handle_read_error 的提示那行 → 紅）。"""
+    _use(monkeypatch, Net({TOKEN_A: _workbook()}))
+    state = _session_state(SUB_A)
+    _renew_fails(monkeypatch, state, ec.AUTH_EXPIRED)
+    with pytest.raises(alo_holdings.ActiveSourceError):
+        alo_holdings.load_alo_tables_active(state, [])
+    assert state[personal_session.KEY_LOGIN_NOTICE] == ec.AUTH_EXPIRED
+
+
+@pytest.mark.parametrize("reason", [personal_session.REASON_NO_ACTIVE, personal_session.REASON_DEPLOY_CONFIG])
+def test_PersonalSessionError的reason_經load_alo_tables_active_原樣帶到ActiveSourceError(monkeypatch, reason):
+    """F3：reason 在 L2 這一層不得掉（拿掉 `getattr(exc, "reason", None)` 的複製 → 紅）。"""
+    def fake(_state):
+        raise personal_session.PersonalSessionError(ec.UNAVAILABLE, reason)
+    monkeypatch.setattr(personal_session, "access_target", fake)
+    with pytest.raises(alo_holdings.ActiveSourceError) as e:
+        alo_holdings.load_alo_tables_active({}, [])
+    assert e.value.code == ec.UNAVAILABLE and e.value.reason == reason
+
+
 def test_變異檢查_不用失敗前取的sub_上一條就會紅(monkeypatch):
     real = personal_session.handle_read_error
     monkeypatch.setattr(personal_session, "handle_read_error",

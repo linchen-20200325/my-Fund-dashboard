@@ -95,10 +95,42 @@ def test_沒有Active_source拋NoActiveSource_不是錯誤_不退回舊路徑(bu
     from services.v2_tables import alo_holdings
 
     _page, make = build_source
-    source = make(alo_holdings.ActiveSourceError(code))
+    reason = active_gate.REASON_NO_ACTIVE if code == "UNAVAILABLE" else None   # UNAVAILABLE 要帶「沒有 Active」的 reason
+    source = make(alo_holdings.ActiveSourceError(code, reason))
     with pytest.raises(active_gate.NoActiveSource) as e:
         source.load_live()
     assert e.value.code == code and e.value.__suppress_context__ is True
+
+
+def test_reason字面_與L2橋接一致():
+    from services.v2_tables import personal_session as ps
+
+    assert active_gate.REASON_NO_ACTIVE == ps.REASON_NO_ACTIVE
+
+
+@pytest.mark.parametrize("reason", [None, "deploy_config", "something_else"])
+def test_UNAVAILABLE非沒有Active的原因_不是未選定畫面_走既有失敗路徑(build_source, reason):
+    # F3：UNAVAILABLE 身兼數職。只有 reason＝no_active 才畫「尚未選定持倉資料來源」；
+    # 部署設定缺等其他原因走既有持倉讀取失敗路徑（FAILURE_TEXT_DEFAULT），不把 Error 混成 Missing。
+    from services.v2_tables import alo_holdings
+
+    page, make = build_source
+    assert not active_gate.is_no_active("UNAVAILABLE", reason)
+    source = make(alo_holdings.ActiveSourceError("UNAVAILABLE", reason))
+    out = source.load_live()
+    errors = out["dataset"]["errors"]
+    assert errors["holding"] == active_gate.FAILURE_TEXT_DEFAULT
+    if page == "alo":
+        assert errors["policy"] == active_gate.FAILURE_TEXT_DEFAULT
+    assert out["dataset"]["holding"] == []
+
+
+def test_is_no_active_只有真的沒有Active才是():
+    assert active_gate.is_no_active("AUTH_REQUIRED")
+    assert active_gate.is_no_active("UNAVAILABLE", active_gate.REASON_NO_ACTIVE)
+    assert not active_gate.is_no_active("UNAVAILABLE")
+    assert not active_gate.is_no_active("UNAVAILABLE", "deploy_config")
+    assert not active_gate.is_no_active("AUTH_EXPIRED", active_gate.REASON_NO_ACTIVE)
 
 
 @pytest.mark.parametrize("code", sorted(set(active_gate.FAILURE_TEXT) | {ec.AUTH_STATE_INVALID}))

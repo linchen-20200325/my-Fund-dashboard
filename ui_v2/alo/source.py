@@ -76,7 +76,8 @@ _NAV_UNAVAILABLE_WITHHELD = frozenset({
     nav_dividend.WITHHELD_FETCHED_AT_FUTURE,
 })
 
-# `load_alo_tables` 回傳裡屬於「沒寫進持倉的列」那一組（草稿 D3）。本輪原樣轉交，不判讀、不歸納。
+# （hld／alo 現走 `load_alo_tables_active`；只有 `load_alo_tables`［`refetch_nav`，BL-0460］仍讀 `POLICY_SHEET_ID`。）
+# `load_alo_tables`／`load_alo_tables_active` 回傳裡屬於「沒寫進持倉的列」那一組（草稿 D3）。本輪原樣轉交，不判讀、不歸納。
 _SKIP_GROUPS = (
     "skipped_holdings",
     "missing_supplement",
@@ -134,6 +135,7 @@ def _secret_values() -> list:
         [st.secrets, os.environ],
         oauth_tokens=st.session_state.get("gsheet_tokens"),
         custom_oauth_cfg=st.session_state.get("custom_oauth_cfg"),
+        session_state=st.session_state,   # 個人 Google 登入權杖（`b_oauth.tokens`）也遮；經 L2 `masking`，本頁不碰 infra／shared
     )
 
 
@@ -154,7 +156,7 @@ def load_live() -> dict:
         # 不再讀 `POLICY_SHEET_ID`／服務帳戶，沒有任何 fallback。判定與計算（`build_alo_tables` 以下）一個字未動。
         tables = alo_holdings.load_alo_tables_active(st.session_state, values)
     except alo_holdings.ActiveSourceError as exc:
-        if active_gate.is_no_active(exc.code):
+        if active_gate.is_no_active(exc.code, exc.reason):
             raise active_gate.NoActiveSource(exc.code) from None   # 沒有 Active：整頁「⬜ 尚未選定持倉資料來源」，不是錯誤
         tables = None
         errors.update(live.tables_failed_together(active_gate.failure_text(exc.code, exc.reason)))

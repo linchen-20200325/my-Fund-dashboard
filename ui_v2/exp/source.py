@@ -63,6 +63,7 @@ def _secret_values() -> list:
         [st.secrets, os.environ],
         oauth_tokens=st.session_state.get("gsheet_tokens"),
         custom_oauth_cfg=st.session_state.get("custom_oauth_cfg"),
+        session_state=st.session_state,   # 個人 Google 登入權杖（`b_oauth.tokens`）也遮；經 L2 `masking`，本頁不碰 infra／shared
     )
 
 

@@ -54,6 +54,7 @@ def _secret_values() -> list:
         [st.secrets, os.environ],
         oauth_tokens=st.session_state.get("gsheet_tokens"),
         custom_oauth_cfg=st.session_state.get("custom_oauth_cfg"),
+        session_state=st.session_state,   # 個人 Google 登入權杖（`b_oauth.tokens`）也遮；經 L2 `masking`，本頁不碰 infra／shared
     )
 
 
@@ -222,7 +223,7 @@ def refetch(tier) -> dict:
 # 登入、確認、登出、切換是身分動作，不是試算表寫入：本段不呼叫任何 Sheet 寫入函式。
 # 失敗一律只往畫面交錯誤代號（九個之一），不交例外字串、不交權杖、不交授權碼。
 
-_KEY_NOTICE = "_set_login_notice"          # 上一個登入動作留下的錯誤代號（畫面讀一次就清）
+_KEY_NOTICE = personal_session.KEY_LOGIN_NOTICE  # "_set_login_notice"        # 上一個登入動作留下的錯誤代號（畫面讀一次就清）
 _KEY_SWITCH_ASK = "_set_login_switch_ask"  # 已按［切換帳號］、等使用者確認
 _KEY_CB_SEEN = "_set_login_cb_seen"        # 這個工作階段已處理過的 callback state（防重跑重放）
 # Google 導回時帶的參數：處理完一律從網址拿掉（授權碼一次性，不留在網址列、不隨重跑重送）。
