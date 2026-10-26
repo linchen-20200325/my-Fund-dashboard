@@ -167,9 +167,10 @@ def test_草稿3_資料未備下一行寫原因(monkeypatch):
 
 def test_草稿4與5_存檔與重新取數停用並寫原因_沒有in_memory說明(monkeypatch):
     at = _run(_SCRIPT_LIVE, monkeypatch)
-    save = [b for b in at.button if b.key == "mkt4_save"]
-    assert len(save) == 1 and save[0].disabled
-    assert save[0].help == "設定存檔尚未接上，存了也留不到下次開頁"
+    # ~~`mkt4_save` 恰一枚、停用、help 為「設定存檔尚未接上，存了也留不到下次開頁」~~ —— 有意識的行為變更，不是漏刪
+    # （決策者：客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6）：新 B UI 第一階段寫 `user_setting` 的「存檔」一律不畫
+    # （`ui_v2/readonly.py`），停用的也不畫。44 MKT-4／MKT-5 的存檔鈕待正式修正程序（44 凍結，本測試不改 44）。
+    assert not [b for b in at.button if b.key in ("mkt4_save", "mkt5_save") or b.label == "存檔"]
     # ~~retry 存在且停用、help 為「重新取數尚未接上」~~ → 2026-10-17 Phase 3 P0-③（44 第七節第三小節之七其二第 7 條；
     # 有意識的更正，不是漏刪）：正式模式下永遠停用的「重新取數」與「套用」在一般畫面不畫；停用原因照舊留在模型裡
     # （`tests/ui_v2/test_mkt_p03_controls_logic.py` 驗）。測試名保留，便於對照沿革。

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain, sections, symbols
+from .. import health, health_view, plain, readonly, sections, symbols
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -1091,6 +1091,9 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         quiet = health_view.quiet_cards("hld", model, collected)
         # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
         details = health_view.quiet_details("hld", model, collected)
+        # 新 B UI 第一階段唯讀（客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6）：寫 `user_setting` 的「存檔」不畫，
+        # 叫人存檔的說明一併改寫（`ui_v2/readonly.py`）。在收集與記錄之後做，判定與總表不受影響。
+        readonly.strip_write_controls(model)
     plain_mode = load_live is not None
 
     st.markdown(

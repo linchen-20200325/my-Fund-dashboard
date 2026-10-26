@@ -80,7 +80,8 @@ def test_EXP_真的取數失敗_燈與結果清單標題照寫取數失敗():
 
 def test_SET_未設定_參數編輯與取數紀錄標題_不寫表名():
     joined = _joined("set", "未設定")
-    assert "參數編輯 — ⛔ 尚未設定：試算表 ID" in joined
+    # ~~`assert "參數編輯 — ⛔ 尚未設定：試算表 ID" in joined`~~ —— 有意識的行為變更，不是漏刪（決策者：客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6、2026-10-26 J-14 補記）：新 B UI 第一階段 `SET-4` 參數編輯塊整塊不畫（`ui_v2/readonly.py`）；44 待正式修正程序（44 凍結，本測試不改 44）。
+    assert "參數編輯 — " not in joined
     assert "取數紀錄 — ⛔ 尚未設定：試算表 ID" in joined
     assert "取數失敗：user_setting" not in joined and "取數失敗：fetch_log" not in joined   # 欄位對照內容照舊會有表名
 
@@ -182,10 +183,13 @@ def test_SET_缺服務帳戶_燈以外各處統一一句_燈照C1_照印原文�
     assert "⛔ 狀態：取數失敗 ⛔ 取數失敗：未設定 Google 服務帳戶" in joined         # C1（DEC-2026-10-18-01）照舊
     assert texts.count("⛔ 取數失敗：未設定服務帳戶（google_service_account）") == 2   # SET-2、SET-6 照印原文（客戶核准的例外）
     assert "讀取失敗的原文" not in joined
-    for title in ("規則參數卡", "參數編輯", "來源健康卡", "取數紀錄"):
+    # ~~標題清單含「參數編輯」、`assert "尚未設定 Google 服務帳戶，暫停寫入" in joined`（那是 SET-4「存檔」的停用原因）~~ ——
+    # 有意識的行為變更，不是漏刪（決策者：客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6、2026-10-26 J-14 補記）：新 B UI 第一階段 `SET-4` 參數編輯塊整塊不畫（`ui_v2/readonly.py`）；44 待正式修正程序（44 凍結，本測試不改 44）。
+    for title in ("規則參數卡", "來源健康卡", "取數紀錄"):
         assert f"{title} — ⛔ 尚未設定：Google 服務帳戶" in joined, title
+    assert "參數編輯 — " not in joined
     assert "⛔ 讀不到試算表名稱：未設定 Google 服務帳戶" not in joined
-    assert "尚未設定 Google 服務帳戶，暫停寫入" in joined
+    assert "尚未設定 Google 服務帳戶，暫停寫入" not in joined
     assert "未設定服務帳戶" not in texts                             # 舊的停用原因那一行
 
 
@@ -200,7 +204,8 @@ def test_SET3_表頭與列上中文_沒有英文型別():
     joined = _joined("set", "正常")
     assert "設定項目 目前值 資料型態 最後修改時間（UTC+8） 計算基礎 ⬜ 未設定 清單" in joined
     assert "型別（value_kind）" not in joined and "鍵名 目前值" not in joined
-    assert "每個設定的輸入方式依它的資料型態決定。" in joined
+    # ~~`assert "每個設定的輸入方式依它的資料型態決定。" in joined`~~（那是 SET-4 的說明行）—— 有意識的行為變更，不是漏刪（決策者：客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6、2026-10-26 J-14 補記）：新 B UI 第一階段 `SET-4` 參數編輯塊整塊不畫（`ui_v2/readonly.py`）；44 待正式修正程序（44 凍結，本測試不改 44）。
+    assert "每個設定的輸入方式依它的資料型態決定。" not in joined
 
 
 def test_SET2與SET6_結果不寫英文原值_紀錄編號只在進階診斷():
