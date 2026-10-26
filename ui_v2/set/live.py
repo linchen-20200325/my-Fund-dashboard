@@ -38,7 +38,22 @@ TEXT_REASON_TIER_PENDING = "原因：這一層級的取數尚未接上"  # ★2�
 #   改寫成下面這一句。舊句的用意（取數紀錄的射程只到本頁按的那幾次）完全保留；被權衡掉的是重複與工程字樣。
 TEXT_LOG_SCOPE = "這裡只記在本頁按「重新取數」的結果；其他頁開頁時的取數不在這裡"  # ★3（只在 SET-6）
 # ~~「set 頁」~~ → 「本頁」（同上裁示；只換這兩個字，句意不動）。
-TEXT_MI_TIME_SCOPE = "這個時間是本頁最近一次取數存入的時間，不是市場總覽頁畫面上那一份的時間"  # ★4
+# ~~TEXT_MI_TIME_SCOPE = "這個時間是本頁最近一次取數存入的時間，不是市場總覽頁畫面上那一份的時間"~~
+# → 2026-10-26 客戶裁示第 6 節（Google Sheet 零寫入；有意識的更正，不是漏刪）：本次工作階段的重新取數不再「存入」，
+#   刪掉「存入」兩字，其餘一字未改。
+TEXT_MI_TIME_SCOPE = "這個時間是本頁最近一次取數的時間，不是市場總覽頁畫面上那一份的時間"  # ★4
+# 2026-10-26 裁示第 6 節：該塊含本次工作階段重新取數的結果（記憶體，未存入試算表）時，說明行加這一句標來源。
+TEXT_RUNTIME_SOURCE = "含本次工作階段取數，未存入試算表"
+# 2026-10-26 獨立稽核必修 1：本次資料在、但試算表那一份讀取失敗時，不說「含」（那會暗示試算表那份也在）。
+TEXT_RUNTIME_SOURCE_SHEET_FAILED = "本次工作階段取數，未存入試算表；試算表讀取失敗"
+
+
+def runtime_source_line(runtime: dict, errors: dict, tables) -> str | None:
+    """該塊的標來源句：`tables` 裡有一張含本次工作階段資料才標；其中有一張試算表讀取失敗 → 失敗那一句。"""
+    used = [t for t in tables if runtime.get(t)]
+    if not used:
+        return None
+    return TEXT_RUNTIME_SOURCE_SHEET_FAILED if any(errors.get(t) for t in tables) else TEXT_RUNTIME_SOURCE
 # SET-1 淨值列有時間時才印（客戶 2026-10-09 核准，`docs/v2/53_nav_source_plan.md` §7 第 4 列）。
 TEXT_NAV_TIME_SCOPE = "這個時間是本頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間"
 # 客戶 2026-10-19 裁示（同上）：`SET-4` 某鍵沒有任何畫面用到時那一行。~~「改這個鍵會影響：44 各塊的來源欄沒有宣告用它」~~
@@ -103,14 +118,18 @@ TEXT_SETTING_PENDING = "設定已存，{codes} 接上後生效"  # 客戶 2026-0
 TEXT_TIER_NOT_WIRED = "這一層級的取數尚未接上"
 TEXT_RUNNING = "取數中：{tier}"
 TEXT_DONE = "取數完成：{tier}，取回 {n} 列；結果記在取數紀錄（層 4）"
-# 取數紀錄寫不進去時（開始列或結束列），後半句「結果記在取數紀錄」是假話 → 只印前半（2026-09-26 總管裁示）。
-TEXT_DONE_NOT_LOGGED = "取數完成：{tier}，取回 {n} 列"
+# ~~TEXT_DONE_NOT_LOGGED = "取數完成：{tier}，取回 {n} 列"~~（取數紀錄寫不進去時只印前半）
+# ~~TEXT_LOG_WRITE_FAILED = "⛔ 取數紀錄寫入失敗：{message}"~~
+# → 2026-10-26 客戶裁示第 6 節（有意識的行為變更，不是漏刪）：取數紀錄改記在本次工作階段（記憶體），
+#   不再寫試算表，「取數紀錄寫入失敗」不可能發生 —— 兩句與對應分支一併移除。
 TEXT_DONE_EMPTY = "取數完成：{tier}，" + logic.TEXT_EMPTY_RESPONSE
-TEXT_LOG_WRITE_FAILED = "⛔ 取數紀錄寫入失敗：{message}"
 # ~~TEXT_SET5_NOTE = "目前只有市場指標可以重新取數；取回的列存進設定試算表，市場總覽頁不會因此重新整理。"~~
 # → 2026-10-09 換句（狀態更新，不是漏刪；客戶核准，`docs/v2/53_nav_source_plan.md` §7 第 9 列）。
-TEXT_SET5_NOTE = ("目前市場指標與淨值可以重新取數。市場指標取回的列存進設定試算表，市場總覽頁不會因此重新整理；"
-                  "淨值只取持倉基金，除了記一筆取數紀錄，不寫入任何表。")
+# ~~TEXT_SET5_NOTE = ("目前市場指標與淨值可以重新取數。市場指標取回的列存進設定試算表，市場總覽頁不會因此重新整理；"
+#                   "淨值只取持倉基金，除了記一筆取數紀錄，不寫入任何表。")~~
+# → 2026-10-26 客戶裁示第 6 節（Google Sheet 零寫入；有意識的更正，不是漏刪）：舊句「存進設定試算表」不再為真。
+TEXT_SET5_NOTE = ("目前市場指標與淨值可以重新取數。結果與取數紀錄只留在本次工作階段，不存入試算表；"
+                  "市場總覽頁不會因此重新整理；淨值只取持倉基金。")
 
 # ★9（草稿 ★9 細項；`50` 5.2／5.3／7.1／第 8 節，🟡 統一改成本頁的 ⚠，草稿 B3）
 TEXT_HEADER_MISMATCH = "⛔ 標頭與規格不符：{tab}"
@@ -254,19 +273,20 @@ def refetch_button(picked, notes, *, running=False) -> dict:
 
 
 def refetch_result_lines(result, mask_token) -> list:
-    """重新取數的結果行（草稿 6.2 成功／回空／失敗／取數紀錄寫入失敗）。回 `[node, ...]`。
+    """重新取數的結果行（草稿 6.2 成功／回空／失敗）。回 `[node, ...]`。
 
     `result` 見 `source.refetch`：分工照 `services/v2_tables/settings_store.py` 的 docstring ——
-    - `log_message`：與寫進 `fetch_log.message` 的字串逐字相同（`44` SET-5 判準），`begin` 成功才有；
-    - `masked_errors`：已遮蔽的真錯誤；`begin` 失敗（沒有 `log_message`）時以它組失敗行；
-    - `empty`：來源回空、原因未提供（`44` SET-5 的回空，不是失敗）；
-    - `message`：設定試算表本身的錯誤（寫不進取數紀錄），`stage` 為 `fetch_log_open`／`fetch_log` 時上畫面。
+    - `log_message`：與取數紀錄 `message` 的字串逐字相同（`44` SET-5 判準）；
+    - `masked_errors`：已遮蔽的真錯誤；沒有 `log_message` 時以它組失敗行；
+    - `empty`：來源回空、原因未提供（`44` SET-5 的回空，不是失敗）。
+    ~~`message`：設定試算表本身的錯誤（寫不進取數紀錄），`stage` 為 `fetch_log_open`／`fetch_log` 時上畫面~~ →
+    2026-10-26 客戶裁示第 6 節（有意識的行為變更，不是漏刪）：取數紀錄改記在本次工作階段，不寫試算表，
+    「取數紀錄寫入失敗」那一行與它的分支不可能發生，已移除。
     """
     tier = result["tier"]
     failure = result.get("log_message")
     if failure is None and result.get("masked_errors"):
         failure = "\n".join(f"{k}: {v}" for k, v in result["masked_errors"].items())
-    log_failed = result.get("stage") in ("fetch_log_open", "fetch_log")
     lines = []
     if failure:
         lines.append(_node(logic.fetch_failed_text(failure), "紅"))
@@ -275,13 +295,7 @@ def refetch_result_lines(result, mask_token) -> list:
     elif result.get("empty") and not result.get("fetched"):
         lines.append(_node(TEXT_DONE_EMPTY.format(tier=tier)))
     else:
-        done = TEXT_DONE_NOT_LOGGED if log_failed else TEXT_DONE
-        lines.append(_node(done.format(tier=tier, n=result.get("fetched", 0))))
-    if log_failed and result.get("message"):
-        message = result["message"]
-        lines.append(_node(TEXT_LOG_WRITE_FAILED.format(message=message), "紅"))
-        if _masked(message, mask_token):
-            lines.append(_node(MASKED_NOTE, "灰"))
+        lines.append(_node(TEXT_DONE.format(tier=tier, n=result.get("fetched", 0))))
     return lines
 
 
@@ -484,6 +498,11 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     set1["fail_nodes"] = [_decorate_placeholder(n, fail_map, notes, "SET-1") for n in set1["fail_nodes"]]
     set1["live_lines"] = _structure_lines(notes, "SET-1")
     set1["detail_lines"] = _strip_demo(set1["detail_lines"])  # ✂2
+    runtime = notes.get("runtime") or {}
+    errors = dataset.get("errors") or {}
+    line = runtime_source_line(runtime, errors, ("market_indicator", "fetch_log"))   # 2026-10-26 裁示第 6 節：標來源
+    if line:
+        set1["detail_lines"].append(line)
     # 客戶 2026-10-19 裁示：新鮮度上限那一行不帶括號裡的鍵名（`（set_max_age_days）`，一般畫面換字後是「（新鮮度上限日數）」）。
     set1["limit_lines"] = [line.replace(f"（{logic.MAX_AGE_KEY}）", "") for line in set1.get("limit_lines") or ()]
 
@@ -500,6 +519,9 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
         if _masked(row["message_text"], token):
             row["message_note_lines"].append(MASKED_NOTE)  # ★5
     set2["detail_lines"] = _strip_demo(set2["detail_lines"])  # ✂2（★3 只留在 SET-6，客戶 2026-10-19 裁示）
+    line = runtime_source_line(runtime, errors, ("fetch_log",))   # 2026-10-26 裁示第 6 節：標來源
+    if line:
+        set2["detail_lines"].append(line)
     _plain_results(set2, dataset)
     _relabel_unconfigured_lamp(set0, set2)
     if set2["placeholder"]:
@@ -638,6 +660,9 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     order = logic.TEXT_SET6_ORDER.replace("`", "") + "。"
     set6["detail_lines"] = [TEXT_SET6_ORDER_PLAIN if line == order else line
                             for line in _strip_demo(set6["detail_lines"])] + [TEXT_LOG_SCOPE]  # ✂2、★3；U7（c）
+    line = runtime_source_line(runtime, errors, ("fetch_log",))   # 2026-10-26 裁示第 6 節：標來源
+    if line:
+        set6["detail_lines"].append(line)
 
     _sa_raw_restore((set2, set6))
 

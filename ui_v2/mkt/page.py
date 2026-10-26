@@ -426,15 +426,17 @@ def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> No
     with st.expander(_expander_title(block, live_mode), expanded=block["_default_open"]):
         st.caption(block["answers"])
         days_field, date_field = block["inputs"]
-        st.number_input(
-            days_field["label"],
-            value=None,  # `44` 逐字：欄位無預設值
-            step=1,
-            placeholder=days_field["placeholder"],
-            key="mkt4_days",
-        )
-        st.date_input(date_field["label"], value=None, key="mkt4_baseline")
-        st.caption(date_field["placeholder"])
+        # 第一階段唯讀（J-14 精神，2026-10-26）：存檔鈕拿掉後這組輸入已不影響本次畫面結果 → 正式模式不畫（`ui_v2/readonly.py`）。
+        if not readonly.inputs_hidden(block):
+            st.number_input(
+                days_field["label"],
+                value=None,  # `44` 逐字：欄位無預設值
+                step=1,
+                placeholder=days_field["placeholder"],
+                key="mkt4_days",
+            )
+            st.date_input(date_field["label"], value=None, key="mkt4_baseline")
+            st.caption(date_field["placeholder"])
 
         for line in block["detail_lines"]:
             st.caption(line)
@@ -522,19 +524,22 @@ def _render_mkt5_picks(block: dict) -> None:
     # 整份停用只有一種情形：設定讀不到（`logic` 把每一項都停用並寫同一個原因）。達上限時已選的項目仍可用，不算。
     disabled = bool(items) and all(not item["_enabled"] for item in items)
     reasons = list(dict.fromkeys(item["disabled_reason"] for item in items if item["disabled_reason"]))
-    st.multiselect(
-        live.PICK_LABEL,
-        options=options,
-        format_func=plain.key_name,
-        key=_PICK_KEY,
-        max_selections=logic.INDICATOR_PICK_CAP,
-        placeholder="請選擇指標",
-        disabled=disabled,
-        help="　".join(reasons) or None,
-    )
-    # 停用原因寫成一行（44 `MKT-5`：「達上限時其餘項目停用並附一行停用原因」）。
-    for reason in reasons:
-        st.caption(reason)
+    # 第一階段唯讀（J-14 精神，2026-10-26）：存檔鈕拿掉後這組輸入已不影響本次畫面結果 → 正式模式不畫（`ui_v2/readonly.py`）。
+    # 多選清單與它的停用原因一併不畫；下方各指標的資料狀態行（不是輸入）照畫。
+    if not readonly.inputs_hidden(block):
+        st.multiselect(
+            live.PICK_LABEL,
+            options=options,
+            format_func=plain.key_name,
+            key=_PICK_KEY,
+            max_selections=logic.INDICATOR_PICK_CAP,
+            placeholder="請選擇指標",
+            disabled=disabled,
+            help="　".join(reasons) or None,
+        )
+        # 停用原因寫成一行（44 `MKT-5`：「達上限時其餘項目停用並附一行停用原因」）。
+        for reason in reasons:
+            st.caption(reason)
     # 可選項目上的狀態徽章（現行只有「資料未備」）：原本掛在每一格勾選框下，多選清單的選項上掛不了，
     # 改成同一種徽章一行、列出是哪幾項（字面取徽章本身，不另立文案）。
     # 客戶 2026-10-18 裁示 BL-0373（`DEC-2026-10-18-01`）：取數失敗的鍵掛「取數失敗」（`sections.mark_mkt7_fetch_failed`），

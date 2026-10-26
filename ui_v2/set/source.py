@@ -8,7 +8,7 @@
   不直接發任何網路請求，一律經 L2。
 - **秘密值在本層讀**（`st.secrets`、環境變數、登入後的 OAuth 權杖），交給 L2；遮蔽由 L2 接到 L1、
   在寫出點做一次。本層交給畫面的每一個失敗字串都已遮蔽。
-- `fetch_log.message` 原樣交給畫面、**不再遮第二次**：它在寫進試算表之前已由 L2 遮過，畫面與
+- `fetch_log.message` 原樣交給畫面、**不再遮第二次**：它在記錄之前已由 L2 遮過，畫面與
   `fetch_log` 必須是同一份字串（ACCEPTANCE 7.3 最後一條、7.4；`44` SET-5 判準）。
 
 三個入口（`page.render(load_live=..., save_live=..., refetch_live=...)`）：
@@ -24,7 +24,9 @@
   `mask_token`（遮蔽記號，L2 那一份）、`pending_tables`、`wired_tiers`、`pages_reading_settings`（L2 的接線旗標，草稿 B7）、
   `gate`（寫入閘門，不打上游）、`title`（★10：`{"state": ok|not_configured|cooling|failed, "text", "remaining_sec"}`）、
   `table_errors`（`{表: {"code", "remaining_sec", "tab", "expected", "actual"}}`）、
-  `structure`（★9 計數）、`source_cooldowns`（市場指標來源的冷卻狀態；只用在市場指標層，見 `live.refetch_button`）。
+  `structure`（★9 計數）、`source_cooldowns`（市場指標來源的冷卻狀態；只用在市場指標層，見 `live.refetch_button`）、
+  `runtime`（`{"fetch_log": bool, "market_indicator": bool}`：哪一張表含本次工作階段的重新取數結果；2026-10-26 裁示第 6 節，
+  重新取數不寫試算表，結果放在 `st.session_state`，讀取時優先併入，畫面標來源）。
 
 `save_setting(鍵, 值或 None, value_kind)` → L2 `save_setting_for_page` 的回傳（純 dict，訊息已遮蔽）。
 `refetch(層級)` → `{"tier", "fetched", "log_message", "masked_errors", "empty", "stage", "message", "ok"}`
@@ -113,6 +115,10 @@ def load_live() -> dict:
         structure["market_indicator"] = {"bad_rows": len(indicators["bad_rows"]),
                                          "conflicts": len(indicators["conflicts"]),
                                          "is_revised_mismatch": indicators["is_revised_mismatch"]}
+    # 2026-10-26 裁示第 6 節：併入本次工作階段的重新取數結果（記憶體，未存入試算表；規則見 `_merge_runtime`：
+    # 市場指標同主鍵不同值不覆蓋、計入主鍵矛盾），試算表讀取錯誤照留，畫面另標來源。
+    runtime = _merge_runtime(settings_store.session_runtime(st.session_state), fetch_log, mi_rows, errors,
+                             structure)
 
     # ★10：標題取自讀設定那一次打開（L1 記下），讀設定失敗時是同一個失敗的兩處呈現、不另計一次取數。
     if "user_setting" in errors:
@@ -148,8 +154,33 @@ def load_live() -> dict:
         "table_errors": table_errors,
         "structure": structure,
         "source_cooldowns": market_indicator.source_cooldowns(),
+        "runtime": runtime,
     }
     return {"dataset": dataset, "notes": notes}
+
+
+def _merge_runtime(runtime, fetch_log: list, mi_rows: list, errors: dict, structure: dict) -> dict:
+    """把本次工作階段的取數紀錄與市場指標列併進（就地改 `fetch_log`、`mi_rows`、`structure`）。
+
+    ~~有本次資料時 `errors.pop(表)`~~ → 2026-10-26 獨立稽核必修 1（有意識的更正，不是漏刪）：試算表讀取錯誤**照留**、
+    照既有方式顯示；畫面另標「本次工作階段取數，未存入試算表；試算表讀取失敗」（`live.TEXT_RUNTIME_SOURCE_SHEET_FAILED`）。
+    市場指標列以 L2 `merge_sheet_and_runtime_indicators` 合併（同主鍵不同值不覆蓋、計入主鍵矛盾；必修 2）。
+
+    回 `notes["runtime"]`：`{"fetch_log": bool, "market_indicator": bool, "conflicts": int}` —— 哪一張表含本次工作階段的資料、
+    本次與試算表主鍵矛盾幾組（畫面據此標來源）。都沒有 → 原樣（照既有 Missing／失敗呈現）。
+    """
+    logs = runtime.load_fetch_log()["rows"]
+    if logs:
+        ids = {r["log_id"] for r in logs}
+        fetch_log[:] = sorted([r for r in fetch_log if r["log_id"] not in ids] + [dict(r) for r in logs],
+                              key=lambda r: r["started_at"])
+    merged = settings_store.merge_sheet_and_runtime_indicators(mi_rows, runtime)
+    mi_rows[:] = merged["rows"]
+    conflicts = len(merged["conflicts"])
+    if conflicts:
+        mi = structure.setdefault("market_indicator", {"bad_rows": 0, "conflicts": 0, "is_revised_mismatch": 0})
+        mi["conflicts"] = mi.get("conflicts", 0) + conflicts   # ★9「⚠ 主鍵矛盾 N 組，未採用」照既有方式顯示
+    return {"fetch_log": bool(logs), "market_indicator": bool(merged["runtime_rows"]), "conflicts": conflicts}
 
 
 def save_setting(setting_key, setting_value, value_kind) -> dict:
@@ -162,13 +193,15 @@ def refetch(tier) -> dict:
     （客戶裁示 Q2～Q4；狀態更新，不是漏刪）。入口由 L2 `REFETCH_BY_TIER` 分派（與 `WIRED_TIERS` 同一組鍵）。"""
     if tier not in settings_store.WIRED_TIERS:
         raise ValueError(f"層級 {tier!r} 的取數尚未接上")
+    # 2026-10-26 裁示第 6 節：結果與取數紀錄記在本次工作階段（`st.session_state`），不寫任何 Google Sheet。
+    runtime = settings_store.session_runtime(st.session_state)
     if tier == market_indicator.SOURCE_TIER:
         # 2026-10-13：市場指標層含 FRED 三鍵，金鑰在本層讀好交下去（L2 不讀 secrets；讀法同 `ui_v2/mkt/source.py`）。
         out = settings_store.REFETCH_BY_TIER[tier](
-            _secret_values(),
+            _secret_values(), runtime=runtime,
             fred_api_key=market_indicator.fred_api_key_from([st.secrets, os.environ]))
     else:
-        out = settings_store.REFETCH_BY_TIER[tier](_secret_values())
+        out = settings_store.REFETCH_BY_TIER[tier](_secret_values(), runtime=runtime)
     persist = out["persist"]
     return {
         "tier": tier,

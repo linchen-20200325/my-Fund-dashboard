@@ -449,10 +449,14 @@ def _row_source_html(block: dict, row: dict, colspan: int) -> str:
     return f'<tr><td colspan="{colspan}" style="padding:.1rem .45rem .35rem">{"".join(parts)}</td></tr>'
 
 
-def _render_picks(block: dict) -> None:
-    """表格下方兩份多選清單（`EXP-3`「對照」、`EXP-5`「觀察清單」；44 第七節第三小節之七其二第 5 條）。"""
+def _render_picks(block: dict, *, hide_watch: bool = False) -> None:
+    """表格下方兩份多選清單（`EXP-3`「對照」、`EXP-5`「觀察清單」；44 第七節第三小節之七其二第 5 條）。
+    `hide_watch`：「觀察清單」那一份不畫（`EXP-5` 的輸入，存檔鈕拿掉後已不影響本次畫面結果；J-14 精神，2026-10-26）。
+    「對照」那一份會即時改 `EXP-3`／`EXP-6`，照畫。"""
     options = tuple(live.pick_options(block))
     for group in live.PICK_GROUPS:
+        if hide_watch and group == logic.GROUP_WATCH:
+            continue
         key = _PICK_KEYS[group]
         # 畫之前先把勾選狀態放進輸入欄（只放本次選項裡的檔）：換頁回來或條件改了之後，輸入欄與勾選狀態一致。
         shown = live.shown_picks(
@@ -472,7 +476,7 @@ def _render_picks(block: dict) -> None:
             st.caption(line)
 
 
-def _render_exp2_live(block: dict) -> None:
+def _render_exp2_live(block: dict, *, hide_watch: bool = False) -> None:
     _card_open(block, plain_mode=True)
     st.caption(block["answers"])
     _notes(block)
@@ -499,7 +503,7 @@ def _render_exp2_live(block: dict) -> None:
             f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>",
             unsafe_allow_html=True,
         )
-        _render_picks(block)
+        _render_picks(block, hide_watch=hide_watch)
     _fetch_fail_lines(block)
     _lines(block["detail_lines"], css="exp-detail")
     _card_close(block)
@@ -805,7 +809,9 @@ def _render_exp1_live(block: dict, rows: list, *, clicks: dict, plain_mode: bool
     st.caption(block["answers"])
     _notes(block)
     _fetch_fail_lines(block)
-    for row, model_row in zip(rows, block["_rows"]):
+    # 第一階段唯讀（J-14 精神，2026-10-26）：存檔鈕拿掉後這組輸入已不影響本次畫面結果 → 正式模式不畫（`ui_v2/readonly.py`）。
+    # 條件列（含每列的「清除這一列」）不畫；已存的條件列照舊列在篩選軌跡（`EXP-7`）。
+    for row, model_row in zip(() if readonly.inputs_hidden(block) else rows, block["_rows"]):
         cells = st.columns([3, 2, 2, 2])
         for cell, field, name in zip(cells, model_row["_fields"], ("field", "op", "value")):
             with cell:
@@ -844,14 +850,17 @@ def _render_exp4_live(block: dict, *, save_click, editable: bool = True, plain_m
             _error_lines(block)
             _lines(block["detail_lines"], css="exp-detail")
             return
-        columns = st.columns(len(block["_options"]))
-        for column, option in zip(columns, block["_options"]):
-            with column:
-                # 值一律由 session 決定（`_seed_live_fields` 以已存值填）；這裡傳 False ＝ 不預先勾任何一欄。
-                st.checkbox(option["label"], value=False, key=_col_key(option["_column"]))
-        # 選項清單照舊（值＝欄名字串，`_field_sort` 照舊以它反查欄位鍵）；正式模式只換顯示名（Phase 3 P0-①）。
-        st.selectbox("排序欄位", block["sort_options"], index=0, key=_SORT_KEY,
-                     format_func=plain.key_name if plain_mode else str)
+        # 第一階段唯讀（J-14 精神，2026-10-26）：存檔鈕拿掉後這組輸入已不影響本次畫面結果 → 正式模式不畫（`ui_v2/readonly.py`）。
+        # 欄位勾選框與排序下拉不畫；生效中的欄位與排序照舊見結果清單（欄名與排序說明）。
+        if not readonly.inputs_hidden(block):
+            columns = st.columns(len(block["_options"]))
+            for column, option in zip(columns, block["_options"]):
+                with column:
+                    # 值一律由 session 決定（`_seed_live_fields` 以已存值填）；這裡傳 False ＝ 不預先勾任何一欄。
+                    st.checkbox(option["label"], value=False, key=_col_key(option["_column"]))
+            # 選項清單照舊（值＝欄名字串，`_field_sort` 照舊以它反查欄位鍵）；正式模式只換顯示名（Phase 3 P0-①）。
+            st.selectbox("排序欄位", block["sort_options"], index=0, key=_SORT_KEY,
+                         format_func=plain.key_name if plain_mode else str)
         _live_buttons(block, "exp4", {live.ACTION_SAVE: save_click})
         _error_lines(block)
         _lines(block["detail_lines"], css="exp-detail")
@@ -1169,7 +1178,8 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
         field_columns=_field_columns() if readable else None,
         field_sort=_field_sort() if readable else None,
         compare_checked=_checked(logic.GROUP_COMPARE, live.LIVE_SCENARIO, ()),
-        watch_checked=_checked(logic.GROUP_WATCH, live.LIVE_SCENARIO, ()),
+        # 「觀察清單」多選第一階段不畫（`readonly.hides_inputs("EXP-5")`）：session 裡殘留的勾選不交給模型。
+        watch_checked=() if readonly.hides_inputs("EXP-5") else _checked(logic.GROUP_WATCH, live.LIVE_SCENARIO, ()),
         save_wired=save_live is not None,
         save_results=st.session_state.get(_SAVE_RESULTS_STATE),
     )
@@ -1253,7 +1263,7 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
     exp2 = logic.find_block(model, "EXP-2")
     with st.expander(f"{sections.EXP_RESULT_TITLE}　—　{exp2['summary_text']}", expanded=exp2["_default_open"]):
         # BL-0250 批次 3-B：每列來源展開與兩份多選清單（44 第七節第三小節之十三）；示範模式照舊 `_render_exp2`。
-        _render_exp2_live(exp2)
+        _render_exp2_live(exp2, hide_watch=readonly.inputs_hidden(logic.find_block(model, "EXP-5")))
         _render_exp3(logic.find_block(model, "EXP-3"), plain_mode=True)
     st.markdown(
         f'<div class="exp-layer-label exp-layer3">{plain.LABEL_LAYER3}</div>',

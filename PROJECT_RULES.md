@@ -71,6 +71,7 @@
 | Save／Handoff Gate | 第 6 節 6.1（`DEC-2026-10-22-03`；補強 `DEC-2026-10-23-04` F／G；Final Save 禁止事項與零記憶接手測試 `DEC-2026-10-24-11`，6.1 第 7 點） |
 | 新裁示同批 GitHub 落盤 | 第 12 節 12.1（`DEC-2026-10-24-05`） |
 | Stateless AI Handoff／GitHub = Project Memory | 第 6 節 6.1.1（`DEC-2026-10-24-07`） |
+| Quota-safe Resume Checkpoint／中斷續接 | 第 6 節 6.1.2（`DEC-2026-10-26-02`） |
 | 資料層 ≠ AI 推理層 | 第 13 節第 1 條；資料先行順序第 13 節 13.1（`DEC-2026-10-24-02`） |
 | 資料／證據 ≠ 投資行動；Missing／Unknown 不得經單軸訊號重新產生行動 | 第 13 節 13.1 末尾指標（`DEC-2026-10-24-10`；擴及 `switch_advisor` 表現差 overlay＋LINE 週報與 `check_replacement_recommendation` 兩條路徑，其餘平行引擎未核准：`DEC-2026-10-24-12`） |
 | Data-first 順序；Missing ≠ 0／False／中性／HOLD／安全；deterministic calculation 單一 SSOT；AI 不補不存在的資料 | 第 13 節 13.1「正式順序」與「禁止」（`DEC-2026-10-24-02`） |
@@ -376,6 +377,21 @@
 1. **GitHub 是 Project Memory／SSOT**；聊天與模型記憶不是正式專案記憶。換 AI、換對話、聊天紀錄不完整或完全不可用，只要 repository 與正式紀錄仍在，新 AI 必須能重建現況並安全接手。
 2. **交接完成條件**：工作階段結束時，下一個 AI 只讀 GitHub（不看本次聊天）必須能判斷以下 7 項；任一無法判斷 → 該工作階段**不得視為完成交接**：(1) main／PR／CI 狀態；(2) 已完成什麼；(3) 未完成什麼；(4) 客戶正式裁示；(5) 現行 SSOT／資料口徑／架構；(6) blocker／Decision Gate；(7) 下一個唯一 handoff point。
 3. **併讀**：寫入位置依 6.1 第 2 點（四份既有文件，不另建新檔）；新裁示同批落盤依第 12 節 12.1；7 項的實況核對依第 2 節 GitHub-first verification（文件與 GitHub 實況不一致時以實況為準）。
+
+#### 6.1.2 長期規則：Quota-safe Resume Checkpoint／中斷續接（客戶 2026-10-26 永久治理要求，`DEC-2026-10-26-02`）
+
+> **出處**：客戶 2026-10-26 永久治理要求，經總管派工單轉達；repo 內無逐字存檔，以下為條文化要點，本文以 `docs/DECISIONS.md` 該筆為準。目的：額度、對話、連線或 session 突然中斷時，新 session 只讀 GitHub 就知道做到哪、證據在哪、下一步做什麼，不需客戶重新解釋。本小節是 6.1／6.1.1 的細化，不是平行規則。
+
+1. **不建第二套狀態 SSOT**：沿用 `docs/HANDOFF.md`（熱狀態與唯一接手點）、`docs/BACKLOG.md`、`docs/DECISIONS.md` 與 GitHub branch／PR／commit／CI（操作事實）；不得另建 PROJECT_STATE、SESSION_STATE 等平行狀態檔（同 6.1 第 5 點）。
+2. **Resume Checkpoint**：`docs/HANDOFF.md` 開頭維持一個極短區塊，至少含：latest verified main SHA、current branch、current PR（若有）、current task／batch、completed in this batch、exact current stopping point、next single action、tests／CI 已完成與未完成、unresolved true Stop Gates、有無 uncommitted／unpushed work、recommended Model、recommended Effort、last checkpoint timestamp。禁止長篇流水帳。
+3. **觸發時機**（6.1 第 1、6、7 點之外另加）：
+   - **一般**：一個實作小批完成、commit 完成、PR 建立、稽核完成、PR 合併、Model／Effort 切換前、進入下一完整工作階段前。
+   - **額度約 >80%**：每個 meaningful safe checkpoint 都更新；優先小批次；避免一次開過大新工作。
+   - **額度約 >90%**：每完成一個可驗證步驟就保存；優先 push 已安全完成的 commit／branch；不把大量未保存工作留在本機工作樹；新批次若無法在安全 checkpoint 前保存就延後開始（併讀 6.1 第 7 點 Final Save：額度接近約 90% 時禁止開新 Batch；兩者不一致時以較嚴者為準）。
+4. **Git 保存原則**：可保存＝已完成且自驗通過的安全修改、feature branch commit、Draft PR、HANDOFF checkpoint。**不得為了 checkpoint**：把未驗證程式推進 main、繞過 CI／audit、降低 security gate、把 secret／token／credential 寫入文件或 commit（同 6.1 第 4 點）、拿 checkpoint 當完成證據（同第 1 節 1.3）。未完成但需保存 → 留在 feature branch、commit message 標示 WIP／checkpoint、PR 維持 Draft、HANDOFF 寫明「未完成、不可視為驗收」，最終仍走正常 review／CI／Auto-Ship（第 10 節）。既有規則若禁止 WIP commit 則以既有規則為準；**2026-10-26 文件組查 `CLAUDE.md`、`PROCESS.md`、`EXCEPTIONS.md`、本檔、`docs/DECISIONS.md`、`docs/HANDOFF.md`，未見禁止 WIP commit 的條文**（單組 grep，未經第二組驗證）；commit message 識別碼規則（第 10 節）照舊適用。
+5. **恢復流程**（新 session、額度恢復、對話中斷後，不問客戶「做到哪裡」）：(1) GitHub Verification Gate（第 2 節）→ (2) 讀本檔 → (3) 讀 HANDOFF Resume Checkpoint → (4) 讀相關 BACKLOG／DECISIONS → (5) 查 current PR／branch／CI → (6) 比對 HANDOFF 與 GitHub。**GitHub 操作事實優先**（第 1 節 1.1）：一致 → 直接從 next single action 繼續；不一致 → 以 GitHub 為準修正 HANDOFF 後繼續。只有真正 Stop Gate（第 4 節）才問客戶。
+6. **中斷後不得重做**：不因 session 失憶而重跑已有可信 CI 證據的整批工作、重問已正式裁示的問題、重建已存在的 PR、重寫已完成文件、重新研究已有 evidence 的結論；先讀現有 GitHub 證據再判斷是否真的需要重跑（併讀第 9 節 9.1）。
+7. **回覆規則**：Resume Checkpoint 更新屬例行安全治理，不需每次回報客戶，維持 Silent Autonomous Cruise（第 3 節 3.1）；只有真正資料不一致、保存失敗、Stop Gate 才回報。
 
 ## 第 7 節｜Definition of Done
 

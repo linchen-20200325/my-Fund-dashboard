@@ -165,8 +165,12 @@ def is_read_only() -> bool:
     """新 B UI（ui_v2）`user_setting` 存檔路徑是否唯讀：**第一階段恆為 True**，不讀任何旗標。
 
     ⚠️ 射程：**只管 `user_setting` 存檔路徑**（`settings_store.save_setting_for_page` 先問它）。
-    `SET-5`「重新取數」對 `fetch_log`／`fetch_log_open`／`market_indicator` 的 Google Sheet 寫入**不受本函式控制**，
-    依裁示第 6 節另批停寫 —— 本函式回 True **不代表**新 B UI 已對 Google Sheet 零寫入。
+    ~~`SET-5`「重新取數」對 `fetch_log`／`fetch_log_open`／`market_indicator` 的 Google Sheet 寫入**不受本函式控制**，
+    依裁示第 6 節另批停寫 —— 本函式回 True **不代表**新 B UI 已對 Google Sheet 零寫入。~~
+    → 2026-10-26 狀態更新（不是漏刪）：`SET-5` 已依裁示第 6 節停寫 —— 重新取數的結果與取數紀錄改記在本次工作階段
+    （`services/v2_tables/settings_store.py::RuntimeFetchStore`），不呼叫本檔任何寫入函式（守衛：
+    `tests/ui_v2/test_readonly_write_surface_guard.py::test_no_settings_sheet_l1_write_calls`）。本函式射程照舊只到
+    `user_setting` 存檔路徑；SET-5 的零寫入不是靠它，是靠不呼叫。
 
     依據：客戶 2026-10-26 正式裁示第 7 節（`docs/evidence/decisions/2026-10-26_ui_v2_implementation_security_gate_decisions.md`：
     「同一批或緊鄰批次把新 B UI 切為 default read-only」「不再依賴必須手動設定 `UI_V2_READ_ONLY=true` 才符合 J-6」
@@ -753,6 +757,19 @@ def open_fetch_log(source_tier: str, *, mask: Mask) -> dict:
     return opened
 
 
+def new_fetch_log_open(source_tier: str) -> dict:
+    """純函式：產生一次取數的開始紀錄（`log_id`、`source_tier`、`started_at` 三欄），**不寫任何分頁**。
+
+    `log_id` 格式同 `open_fetch_log`（`50` 5.3）。給新 B UI 第一階段的本次工作階段取數紀錄用
+    （客戶 2026-10-26 裁示第 6 節：Google Sheet 零寫入；`services/v2_tables/settings_store.py::RuntimeFetchStore`）。
+    `open_fetch_log` 本體不動（休眠寫入能力）。
+    """
+    if source_tier not in SOURCE_TIER_VALUES:
+        raise ValueError(f"source_tier 不在值域 {SOURCE_TIER_VALUES}（{source_tier!r}）")
+    started = _stamp(_utcnow())
+    return {"log_id": f"{started}-{os.urandom(4).hex()}", "source_tier": source_tier, "started_at": started}
+
+
 def fetch_log_row(opened: dict, *, outcome: str, row_count: Optional[int],
                   message: Optional[str]) -> dict:
     """由開始紀錄與結果組出 `fetch_log` 一列（`finished_at`＝當下）。不合規就 ValueError。"""
@@ -895,6 +912,56 @@ def load_market_indicator(*, mask: Mask) -> dict:
     """
     return _cached_read("market_indicator", (TAB_MARKET_INDICATOR,), _reduce_market_indicator,
                         mask=mask)
+
+
+def merge_market_indicator(existing: list, rows: list) -> dict:
+    """純函式：把本次取回的 `market_indicator` 列併進一份記憶體中的列（`44` 形狀），**不碰任何分頁**。
+
+    去重與矛盾規則同 `append_market_indicator`（同主鍵同值 → `already_present`；同主鍵不同值 → 只擋那些主鍵、
+    列入 `conflicts`）；`is_revised` 以「既有＋本批」主鍵集合重算。列格式不合 → ValueError（呼叫端 bug）。
+    給新 B UI 第一階段的本次工作階段取數結果用（客戶 2026-10-26 裁示第 6 節：Google Sheet 零寫入）。
+    `append_market_indicator` 本體不動（休眠寫入能力）。
+
+    回傳 `{"rows": 併好的列（既有在前、新列在後）, "appended", "already_present", "conflicts"}`。
+    """
+    def parse(row):
+        cells = _serialize(MARKET_INDICATOR_SPEC, row)   # 不合格 → ValueError
+        parsed, bad, _blank = _parse_rows(MARKET_INDICATOR_SPEC, [cells])
+        if bad:
+            raise ValueError(f"market_indicator 列格式化後無法解析：{bad[0]['reason']}")
+        return parsed[0]
+
+    known_list = [parse(r) for r in existing]
+    incoming = [parse(r) for r in rows]
+    known: dict = {}
+    for rec in known_list:
+        known.setdefault(_mi_pk(rec), []).append(rec)
+    batch: dict = {}
+    for rec in incoming:
+        batch.setdefault(_mi_pk(rec), []).append(rec)
+    conflicts, fresh, present = [], {}, 0
+    for pk, recs in batch.items():
+        pool = known.get(pk, []) + recs
+        clash = next(((a, b) for a in pool for b in pool if not _mi_same(a, b)), None)
+        if clash is not None:
+            old, new = clash
+            conflicts.append({"key": pk, "existing_value_num": old["value_num"],
+                              "new_value_num": new["value_num"],
+                              "existing_value_unit": old["value_unit"],
+                              "new_value_unit": new["value_unit"]})
+            continue
+        if pk in known:
+            present += len(recs)
+        else:
+            fresh[pk] = recs[0]
+            present += len(recs) - 1
+    all_pks = set(known) | set(fresh)
+    out = []
+    for rec in known_list + list(fresh.values()):
+        row = _public(rec, MARKET_INDICATOR_SPEC)
+        row["is_revised"] = _mi_revised(_mi_pk(rec), all_pks)
+        out.append(row)
+    return {"rows": out, "appended": len(fresh), "already_present": present, "conflicts": conflicts}
 
 
 def append_market_indicator(rows: list, *, mask: Mask) -> dict:

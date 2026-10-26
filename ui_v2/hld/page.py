@@ -590,42 +590,45 @@ def _hld4_keep_open() -> bool:
 def _render_hld4(block: dict, *, on_save=None, plain_mode: bool = False) -> None:
     with _expander(block, keep_open=_hld4_keep_open(), plain_mode=plain_mode):
         st.caption(block["answers"])
-        columns = st.columns(2)
-        for column, field in zip(columns, block["inputs"]):
-            with column:
-                st.text_input(
-                    field["label"],
-                    value=field["_value"] or "",
-                    placeholder=field["placeholder"],
-                    key=f"hld4_{field['name']}",
-                    on_change=_keep_hld4_open,
-                )
-        st.caption(block["threshold_caption"])
-        for index, row in enumerate(block["threshold_rows"]):
-            cells = st.columns([3, 2, 2, 2])
-            for cell, field in zip(cells, row):
-                with cell:
-                    key = f"hld4_{field['name']}"
+        # 第一階段唯讀（J-14 精神，2026-10-26）：存檔鈕拿掉後這組輸入已不影響本次畫面結果 → 正式模式不畫（`ui_v2/readonly.py`）。
+        # 區間兩欄、門檻列（含每列的「清除這一列」）與門檻列的標題一併不畫。
+        if not readonly.inputs_hidden(block):
+            columns = st.columns(2)
+            for column, field in zip(columns, block["inputs"]):
+                with column:
                     st.text_input(
                         field["label"],
-                        # 這一格已經有值（使用者輸入過，或「新增一列」「清除這一列」寫進去的）→ 不再給預設值，
-                        # 免得 Streamlit 記一筆「預設值與 Session State 同時設定」的警告；首次渲染照舊。
-                        value=None if key in st.session_state
-                        else ("" if field["_value"] == "" else str(field["_value"])),
+                        value=field["_value"] or "",
                         placeholder=field["placeholder"],
-                        key=key,
+                        key=f"hld4_{field['name']}",
                         on_change=_keep_hld4_open,
                     )
-            with cells[3]:
-                button = block["row_buttons"][index]
-                st.button(
-                    button["label"],
-                    key=f"hld4_row_{index}",
-                    disabled=not button["_enabled"],
-                    help=button["disabled_reason"] or None,
-                    on_click=_on_clear_row,
-                    args=(index,),
-                )
+            st.caption(block["threshold_caption"])
+            for index, row in enumerate(block["threshold_rows"]):
+                cells = st.columns([3, 2, 2, 2])
+                for cell, field in zip(cells, row):
+                    with cell:
+                        key = f"hld4_{field['name']}"
+                        st.text_input(
+                            field["label"],
+                            # 這一格已經有值（使用者輸入過，或「新增一列」「清除這一列」寫進去的）→ 不再給預設值，
+                            # 免得 Streamlit 記一筆「預設值與 Session State 同時設定」的警告；首次渲染照舊。
+                            value=None if key in st.session_state
+                            else ("" if field["_value"] == "" else str(field["_value"])),
+                            placeholder=field["placeholder"],
+                            key=key,
+                            on_change=_keep_hld4_open,
+                        )
+                with cells[3]:
+                    button = block["row_buttons"][index]
+                    st.button(
+                        button["label"],
+                        key=f"hld4_row_{index}",
+                        disabled=not button["_enabled"],
+                        help=button["disabled_reason"] or None,
+                        on_click=_on_clear_row,
+                        args=(index,),
+                    )
         _lines(block["detail_lines"])
         clicks = {"套用": _on_apply, "新增列": _on_add_row}
         if on_save is not None:   # 正式模式（客戶 2026-10-16 裁示第 2 點）；示範模式「存檔」照舊不接任何動作

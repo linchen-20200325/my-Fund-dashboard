@@ -31,7 +31,8 @@
     非美元幣別的匯率依 49 §6.1 Q9 經 L2 `market_indicator.build_fx_indicator_table` 取，與美元同一個閘門
     （`FX_OBS_DATE_RULE_VERIFIED` 為假時不取數、不寫列 ⇒ 該類別「⬜ 資料未備：缺換算匯率 <鍵>」），
     閘門狀態放在 `notes["fx_pending"]`。
-  - `market_indicator` 讀的是**已寫在試算表上的那一份**（`settings_store.load_market_indicator`），
+  - `market_indicator` 讀的是**已寫在試算表上的那一份**（`settings_store.load_market_indicator`）；2026-10-26 起另併
+    set 頁本次工作階段重新取數的列（`settings_store.session_runtime`，未存入試算表，同主鍵優先；裁示第 6 節），
     不觸發任何取數 —— 本頁是消費端，不是取數端。本頁只用得到 `fx_twd_per_usd` 那一個鍵，
     而它目前在 L2 是暫停取數的（`market_indicator.FX_OBS_DATE_RULE_VERIFIED` 為假），
     所以表上通常沒有那一列 ⇒ 市值基準會缺匯率，同樣照實顯示。
@@ -194,6 +195,18 @@ def load_live() -> dict:
     # 會讓人去查來源而不是查程式；它的用意（本頁沒有錯誤畫面、不要整頁崩）只對取數失敗成立。
     nav_rows = []
     mi_rows = [dict(row) for row in indicators["rows"]] if indicators else []
+    # 2026-10-26 客戶裁示第 6 節：set 頁重新取數的市場指標列只留在本次工作階段（`st.session_state`，未存入試算表）。
+    # ~~有就優先（同主鍵以本次為準）~~ → 獨立稽核必修 2（有意識的更正，不是漏刪）：以 L2 `merge_sheet_and_runtime_indicators`
+    # 合併（同主鍵不同值不覆蓋、留試算表值；與 set 頁同一套規則）。本頁只用匯率鍵：用到本次的匯率列時標來源；
+    # 匯率鍵主鍵矛盾 → 照既有取數失敗方式進 errors。試算表讀取失敗照舊進 errors。
+    notes["mi_sheet_failed"] = "market_indicator" in errors
+    merged = settings_store.merge_sheet_and_runtime_indicators(
+        mi_rows, settings_store.session_runtime(st.session_state))
+    mi_rows = merged["rows"]
+    notes["runtime_market_indicator"] = live.runtime_fx_used(merged["runtime_rows"])
+    conflict = live.runtime_fx_conflict_text(merged["conflicts"])
+    if conflict:
+        errors["market_indicator"] = "；".join(filter(None, [errors.get("market_indicator"), conflict]))
     if tables is not None and live.wants_market_value(setting_rows):
         mask = alo_holdings.masker(values)
         holding = tables["holding"]
