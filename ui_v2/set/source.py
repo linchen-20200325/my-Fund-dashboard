@@ -303,7 +303,7 @@ def login_act(action, displayed_email=None) -> None:
             return
         shown = displayed_email.strip() if isinstance(displayed_email, str) else ""
         if not (isinstance(current, dict) and current.get("login_state") == "pending_login" and shown
-                and current.get("pending_login_email") == shown):
+                and str(current.get("pending_login_email") or "").strip() == shown):
             return
         result = personal_session.confirm_login(state)
     elif action == "reject":

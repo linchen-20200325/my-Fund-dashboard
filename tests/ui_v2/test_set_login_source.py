@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-import importlib
+import importlib.util
 import pathlib
 import sys
 import types
@@ -20,19 +20,47 @@ _ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
 _MISSING = object()
-_saved_st = sys.modules.get("streamlit", _MISSING)
-_saved_src = sys.modules.pop("ui_v2.set.source", None)
-sys.modules["streamlit"] = types.ModuleType("streamlit")   # 只為讓 `import streamlit as st` 過
-try:
-    source = importlib.import_module("ui_v2.set.source")
-finally:
-    if _saved_st is _MISSING:
-        sys.modules.pop("streamlit", None)
-    else:
-        sys.modules["streamlit"] = _saved_st
-    sys.modules.pop("ui_v2.set.source", None)
-    if _saved_src is not None:
-        sys.modules["ui_v2.set.source"] = _saved_src
+
+
+def _load_source_under_test():
+    """以私有名字載入 `ui_v2/set/source.py`：不經 `import ui_v2.set.source`，所以 `ui_v2.set` 套件的 `source` 屬性與
+    `sys.modules["ui_v2.set.source"]` 完全不被建立或改動；替身 `streamlit` 只在執行該檔的期間放在 `sys.modules`。
+    名字掛在 `ui_v2.set` 底下（私有名，不是 `source`），檔內的相對 import（`from . import spec`）照常解析到真模組。
+    執行期間新載入、而且握著替身的模組一併移除（只移這些，不動其他真模組）。"""
+    stub = types.ModuleType("streamlit")
+    saved = sys.modules.get("streamlit", _MISSING)
+    before = set(sys.modules)
+    spec = importlib.util.spec_from_file_location("ui_v2.set._source_under_test", _ROOT / "ui_v2" / "set" / "source.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["streamlit"] = stub
+    sys.modules["ui_v2.set._source_under_test"] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if saved is _MISSING:
+            sys.modules.pop("streamlit", None)
+        else:
+            sys.modules["streamlit"] = saved
+        for name in set(sys.modules) - before:
+            held = sys.modules.get(name)
+            if name != "ui_v2.set._source_under_test" and held is not None and any(
+                    v is stub for v in vars(held).values()):
+                del sys.modules[name]
+    return module, stub, saved
+
+
+_STREAMLIT_BEFORE = sys.modules.get("streamlit", _MISSING)
+source, _STUB, _SAVED = _load_source_under_test()
+
+
+def test_載入不污染真的import圖_套件屬性與sys_modules不變():
+    pkg = sys.modules.get("ui_v2.set")
+    assert getattr(pkg, "source", None) is not source
+    assert sys.modules.get("ui_v2.set.source") is not source
+    now = sys.modules.get("streamlit", _MISSING)
+    assert now is _STREAMLIT_BEFORE and now is not _STUB
+    assert source.st is _STUB   # 被測模組握的是替身（執行時再換成測試用的 `st`）
+
 
 _URL = "https://accounts.google.com/o/oauth2/v2/auth?state=s&code_challenge=c"
 _ALL_PARAMS = ("code", "state", "scope", "authuser", "prompt", "hd", "error", "error_description", "iss")
