@@ -333,6 +333,11 @@ ALLOWED_IMPORTS: frozenset[str] = frozenset(
         "infra.cache",
         "infra.config",
         "infra.gspread_retry",
+        # 2026-10-26 新 B UI Batch 3b（總管裁定；只這一個子模組，不開整個 infra）：
+        # `services/v2_tables/personal_session.py` 的 Personal OAuth session 橋接。token HTTP 由
+        # infra.personal_oauth 負責，L2 本身不 import requests。v2_tables 側另有逐檔白名單
+        # （tests/test_v2_tables_market_indicator.py::_EXTRA_ALLOWED）限定只有該檔可用。
+        "infra.personal_oauth",
     }
 )
 

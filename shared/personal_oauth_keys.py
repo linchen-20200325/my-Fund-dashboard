@@ -29,6 +29,8 @@ KEY_AUTH_PENDING_STATE: str = SESSION_PREFIX + "pending_state"
 KEY_AUTH_PENDING_EXPIRES: str = SESSION_PREFIX + "pending_state_expires_at"
 #: 待確認登入（A1）：{"tokens", "sub", "email", "expires_at"}。get_tokens 不讀這個 key。
 KEY_PENDING_LOGIN: str = SESSION_PREFIX + "pending_login"
+#: 最近一次 Sheet Picker 清單回傳的 id 集合（`select_pending` 只准選這裡面的，不收自由輸入的 ID）。
+KEY_PICKER_IDS: str = SESSION_PREFIX + "picker_ids"
 
 SESSION_KEYS: tuple[str, ...] = (
     KEY_TOKENS,
@@ -40,4 +42,5 @@ SESSION_KEYS: tuple[str, ...] = (
     KEY_AUTH_PENDING_STATE,
     KEY_AUTH_PENDING_EXPIRES,
     KEY_PENDING_LOGIN,
+    KEY_PICKER_IDS,
 )
