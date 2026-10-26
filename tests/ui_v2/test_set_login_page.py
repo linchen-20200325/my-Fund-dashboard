@@ -91,10 +91,12 @@ def test_未登入_畫登入連結_不畫其他登入鈕():
     assert _login_buttons(at) == {}
 
 
-def test_未設定Google登入_不畫登入連結():
+def test_橋接回UNAVAILABLE_畫無法判定_不畫登入連結_也不印尚未設定():
+    """UNAVAILABLE 無法證明是「部署沒設定 Google 登入」（回修一：不再印「尚未設定」）。"""
     _install({"login_state": "logged_out"}, {"ok": False, "error_code": "UNAVAILABLE"})
     at = _run(_script())
-    assert live.TEXT_LOGIN_NOT_CONFIGURED in _text(at)
+    text = _text(at)
+    assert live.TEXT_LOGIN_UNKNOWN in text and live.TEXT_LOGIN_NOT_CONFIGURED not in text
     assert at.get("link_button") == [] and _login_buttons(at) == {}
 
 
