@@ -21,7 +21,7 @@ import re
 
 import streamlit as st
 
-from .. import health_view, page_health, plain, sections, symbols
+from .. import health_view, page_health, plain, readonly, sections, symbols
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -666,6 +666,10 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         sections.set_reshape(model, sheet_configured=live.sheet_configured(live_input["notes"]),
                              service_account_configured=live.service_account_configured(live_input["notes"]))
         attention = sections.attention_items(model, "set")
+        # 新 B UI 第一階段唯讀（客戶 2026-10-26 裁示第 6、7 節；`DEC-2026-10-25-04` J-6 與 2026-10-26 J-14 補記）：
+        # 寫 `user_setting` 的按鈕不畫（`ui_v2/readonly.py`）；`SET-4` 參數編輯塊整塊不畫（下方層 3／層 4 經 `readonly.visible_codes`）。
+        # 目前設定值照舊在 `SET-3` 唯讀呈現。`SET-5`「重新取數」不在本批（另一批處理）。
+        readonly.strip_write_controls(model)
         ctx = {
             "notes": live_input["notes"],
             "save_live": save_live,
@@ -711,7 +715,8 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         _html(f'<div class="set-layer-label">{plain.LABEL_DETAILS}</div>')
     _html(f'<div class="set-layer-label">{label3}</div>')
     with st.container(key="set_layer3"):
-        for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
+        layer3 = logic.codes_in_layer(model, 3)
+        for column, code in zip(st.columns(3), readonly.visible_codes(layer3) if plain_mode else layer3):
             with column:
                 if plain_mode:
                     _render_moved(code, logic.find_block(model, code), key, ctx)
@@ -719,7 +724,8 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
                     _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
     _html(f'<div class="set-layer-label">{label4}</div>')
-    for code in logic.codes_in_layer(model, 4):
+    layer4 = logic.codes_in_layer(model, 4)
+    for code in readonly.visible_codes(layer4) if plain_mode else layer4:
         if plain_mode:
             _render_moved(code, logic.find_block(model, code), key, ctx)
         else:

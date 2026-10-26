@@ -29,6 +29,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 SECRET = "k" + _secrets.token_hex(12)
 SHEET = "sheet-" + _secrets.token_hex(6)
+_REAL_IS_READ_ONLY = R.is_read_only   # `book` 會把它換成回 False 的替身（模擬唯讀解除）
 
 
 @pytest.fixture
@@ -40,6 +41,10 @@ def book(monkeypatch):
     monkeypatch.setattr(R, "_make_client", lambda creds: FakeClient(fake))
     monkeypatch.setattr(R, "_TITLES", {})
     monkeypatch.setattr(GR.time, "sleep", lambda _s: None)
+    # 本檔測的是**休眠中的寫入路徑**（型別判定、遮蔽、冷卻、寫進去的原值）。第一階段 `is_read_only()` 恆為 True
+    # （客戶 2026-10-26 裁示第 7 節），`save_setting_for_page` 會先短路回 `read_only`；這裡模擬唯讀解除，寫入函式本體才測得到。
+    # 預設唯讀的行為見 `test_預設唯讀_存檔短路_不打上游` 與 `tests/ui_v2/test_readonly_write_surface_guard.py`。
+    monkeypatch.setattr(R, "is_read_only", lambda: False)
     fake.cfg = cfg
     R.clear_cache()
     SB.reset_all()
@@ -66,6 +71,14 @@ def test_L2型別判定與畫面那一份逐一相同():
         assert S.value_matches_kind(value, kind) == logic.value_matches_kind(value, kind), (value, kind)
     assert sum(S.value_matches_kind(v, k) for v, k in _CORPUS) >= 8   # 不是全假
     assert sum(not S.value_matches_kind(v, k) for v, k in _CORPUS) >= 8
+
+
+def test_預設唯讀_存檔短路_不打上游(book, monkeypatch):
+    """第一階段預設唯讀（客戶 2026-10-26 裁示第 7 節）：拿掉 `book` 的唯讀解除，回真函式 —— 型別相符照樣不寫、上游零往返。"""
+    monkeypatch.setattr(R, "is_read_only", _REAL_IS_READ_ONLY)
+    out = S.save_setting_for_page("set_max_age_days", "21", "int", [SECRET])
+    assert out == {"status": "read_only", "key": "set_max_age_days", "message": S.READ_ONLY_MESSAGE}
+    assert book.calls == []
 
 
 def test_型別不符_不存_不呼叫L1_不打上游(book):

@@ -15,7 +15,7 @@ from datetime import date, datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain, sections, symbols
+from .. import health, health_view, plain, readonly, sections, symbols
 from . import fixtures, live, logic, theme
 
 # 層 2／層 3 的斷點直接由 logic 那支**已被測試釘住**的純函式推出來，
@@ -439,7 +439,9 @@ def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> No
         for line in block["detail_lines"]:
             st.caption(line)
 
-        apply_button, save_button = block["buttons"]
+        # 依類別取（第一階段唯讀時正式模式的「存檔」已由 `readonly.strip_write_controls` 拿掉，只剩「套用」）。
+        by_kind = {button["_action_kind"]: button for button in block["buttons"]}
+        apply_button, save_button = by_kind["套用"], by_kind.get("存檔")
         on_click, args = save_click if save_click is not None else (_on_save, ())
         if live_mode and live.hidden_in_live(apply_button):
             # 正式模式：永遠停用的「套用」不畫（44 第七節第三小節之七其二第 7 條）；只剩「存檔」。
@@ -455,14 +457,15 @@ def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> No
                     help=apply_button["disabled_reason"] or None,
                 )
         with columns[-1]:
-            st.button(
-                save_button["label"],
-                key="mkt4_save",
-                on_click=on_click,
-                args=args,
-                disabled=not save_button["_enabled"],
-                help=save_button["disabled_reason"] or None,
-            )
+            if save_button is not None:
+                st.button(
+                    save_button["label"],
+                    key="mkt4_save",
+                    on_click=on_click,
+                    args=args,
+                    disabled=not save_button["_enabled"],
+                    help=save_button["disabled_reason"] or None,
+                )
 
         store = {} if live_mode else st.session_state.get("_user_setting", {})
         if store.get("updated_at"):
@@ -779,6 +782,9 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         quiet = health_view.quiet_cards("mkt", model, collected)
         # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
         details = health_view.quiet_details("mkt", model, collected)
+        # 新 B UI 第一階段唯讀（客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6）：MKT-4／MKT-5 的「存檔」不畫，
+        # 叫人存檔的說明一併改寫（`ui_v2/readonly.py`）。在收集與記錄之後做，判定與總表不受影響。
+        readonly.strip_write_controls(model)
     plain_mode = live_input is not None
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)

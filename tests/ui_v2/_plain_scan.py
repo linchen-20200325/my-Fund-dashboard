@@ -254,7 +254,9 @@ try:
         _s.attrs["fetched_at"] = "2026-09-25T06:00:00+00:00"
         _s.attrs["exchange_tz"] = "Etc/UTC"
         _mi.fetch_yf_close_with_error = lambda ticker, *a, **k: (_s, None)
-        source.save_setting("set_max_age_days", "0", "int")
+        # 測試佈置（不是畫面操作）：直接經 L1 寫進假試算表。~~`source.save_setting(...)`~~ —— 第一階段 `is_read_only()`
+        # 恆為 True（客戶 2026-10-26 裁示第 7 節），經 L2 會短路回 read_only、佈置不進去（有意識的更正，不是漏刪）。
+        R.save_user_setting("set_max_age_days", "0", "int", mask=lambda text: text)
     if REFETCH or STALE:
         source.refetch("市場指標")
     for _slug, _entries in PRESET.items():
