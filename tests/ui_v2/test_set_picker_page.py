@@ -26,7 +26,7 @@ pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 st
 import _plain_scan as SCAN  # noqa: E402
 import _set_live_harness as H  # noqa: E402
 
-from ui_v2.set import live  # noqa: E402
+from ui_v2.set import live, page  # noqa: E402
 
 A = "1AAAAAAAAAAAAAAAAAAAA"
 B = "1BBBBBBBBBBBBBBBBBBBB"
@@ -82,6 +82,12 @@ def _text(at):
     return "\n".join(out)
 
 
+def _picker_boxes(at):
+    """試算表選單自己的下拉（以元件 key 過濾）。設定頁另有「看哪一頁的明細」下拉（key=set_page_health_pick），
+    所以不能用整頁的 `at.selectbox` 判斷「沒有選單」。"""
+    return [b for b in at.selectbox if b.key == page._PICKER_WIDGET_KEY]
+
+
 def _picker_buttons(at):
     return {b.key: b for b in at.button if b.key and b.key.startswith("set_picker_")}
 
@@ -91,14 +97,15 @@ def test_未登入_整張卡不畫():
         _install(status)
         at = _run(_script())
         assert live.PICKER_CARD_TITLE not in [e.label for e in at.expander]
-        assert _picker_buttons(at) == {} and not at.selectbox
+        assert _picker_buttons(at) == {} and not _picker_boxes(at)
 
 
 def test_已登入_畫下拉_選項只有清單內的_沒有預選():
     _install(_status())
     at = _run(_script())
     assert live.PICKER_CARD_TITLE in [e.label for e in at.expander]
-    box = at.selectbox(key="set_picker_select")
+    box = at.selectbox(key=page._PICKER_WIDGET_KEY)
+    assert _picker_boxes(at) == [box]
     assert list(box.options) and len(box.options) == 2
     assert box.value is None   # 不猜、不預選
     assert live.TEXT_PICKER_NO_ACTIVE in _text(at)
@@ -108,7 +115,7 @@ def test_已登入_畫下拉_選項只有清單內的_沒有預選():
 def test_選下拉_動作收到的是選項的id_且只是select():
     calls = _install(_status())
     at = _run(_script())
-    at.selectbox(key="set_picker_select").select(B).run()
+    at.selectbox(key=page._PICKER_WIDGET_KEY).select(B).run()
     assert calls == [("select", (B,))]
     assert not any(c[0] == "use" for c in calls)   # 選了不會自己驗證
 
@@ -143,13 +150,13 @@ def test_空清單_照實說沒有可選的_沒有下拉():
     at = _run(_script())
     text = _text(at)
     assert live.TEXT_PICKER_EMPTY in text and live.TEXT_PICKER_EMPTY_NOTE in text
-    assert not at.selectbox and set(_picker_buttons(at)) == {"set_picker_relist"}
+    assert not _picker_boxes(at) and set(_picker_buttons(at)) == {"set_picker_relist"}
 
 
 def test_清單失敗_不畫下拉_給重新列出():
     calls = _install(_status(), listing={"ok": False, "error_code": "NETWORK_ERROR"})
     at = _run(_script())
-    assert live.TEXT_PICKER_LIST_FAILED in _text(at) and not at.selectbox
+    assert live.TEXT_PICKER_LIST_FAILED in _text(at) and not _picker_boxes(at)
     _picker_buttons(at)["set_picker_relist"].click().run()
     assert calls == [("relist", ())]
 
@@ -164,7 +171,7 @@ def test_沒有任何清除使用中的鈕():
 def test_正式模式沒傳picker_live_不畫():
     _install(_status())
     at = _run(_script(with_picker=False))
-    assert live.PICKER_CARD_TITLE not in [e.label for e in at.expander] and not at.selectbox
+    assert live.PICKER_CARD_TITLE not in [e.label for e in at.expander] and not _picker_boxes(at)
 
 
 def test_示範模式傳picker_live_當場炸_不傳則畫面照舊():
