@@ -117,31 +117,20 @@ PKCE_ALLOWED_CHARS: frozenset[str] = frozenset(
 
 # ── session_state key（裁示第 4 節 J-10：專屬 namespace，不重用舊 key）────────
 #: 舊 UI 使用的 `gsheet_tokens`／`gsheet_email`／`_oauth_state` 本模組一律不碰。
-SESSION_PREFIX: str = "b_oauth."
-KEY_TOKENS: str = SESSION_PREFIX + "tokens"
-KEY_ACCOUNT_SUB: str = SESSION_PREFIX + "account_sub"
-KEY_ACCOUNT_EMAIL: str = SESSION_PREFIX + "account_email"
-KEY_GRANTED_SCOPES: str = SESSION_PREFIX + "granted_scopes"
-#: Active／Pending Sheet（裁示第 8 節 J-5）。本批只定義常數並在登出／切換帳號時清除，
-#: Active 邏輯由後續批次實作。
-KEY_ACTIVE_SHEET: str = SESSION_PREFIX + "active_sheet"
-KEY_PENDING_SHEET: str = SESSION_PREFIX + "pending_sheet"
-#: 本 session 已登記、尚未用掉的 OAuth state（B1：per-session 重用，不重複登記）。
-KEY_AUTH_PENDING_STATE: str = SESSION_PREFIX + "pending_state"
-KEY_AUTH_PENDING_EXPIRES: str = SESSION_PREFIX + "pending_state_expires_at"
-#: 待確認登入（A1）：{"tokens", "sub", "email", "expires_at"}。get_tokens 不讀這個 key。
-KEY_PENDING_LOGIN: str = SESSION_PREFIX + "pending_login"
-
-SESSION_KEYS: tuple[str, ...] = (
-    KEY_TOKENS,
-    KEY_ACCOUNT_SUB,
+#: 2026-10-26 鍵名搬到 L0 `shared/personal_oauth_keys.py`（Active Sheet 狀態機 `shared/active_sheet.py`
+#: 要共用，而 shared/ 不得 import infra/）；此處原名 re-export，`po.KEY_*` 呼叫端不變。
+from shared.personal_oauth_keys import (  # noqa: E402,F401 — re-export，保持相容
     KEY_ACCOUNT_EMAIL,
-    KEY_GRANTED_SCOPES,
+    KEY_ACCOUNT_SUB,
     KEY_ACTIVE_SHEET,
-    KEY_PENDING_SHEET,
-    KEY_AUTH_PENDING_STATE,
     KEY_AUTH_PENDING_EXPIRES,
+    KEY_AUTH_PENDING_STATE,
+    KEY_GRANTED_SCOPES,
     KEY_PENDING_LOGIN,
+    KEY_PENDING_SHEET,
+    KEY_TOKENS,
+    SESSION_KEYS,
+    SESSION_PREFIX,
 )
 
 
