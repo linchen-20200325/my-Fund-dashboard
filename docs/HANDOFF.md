@@ -5,6 +5,22 @@
 > 出處：客戶 2026-10-16 頒布 Project AI Constitution v1.0（總管轉達要點，對話中，repo 內無逐字原文）；本檔結構依總管 2026-10-16 設計基準。
 > 文中若引「約 :N」行號，以 `git show d5d391b:<path>` 讀（本批合併後交接本等檔的行號已因指標行而位移）。
 
+> **⏯ Resume Checkpoint**（規則：`PROJECT_RULES.md` 第 6 節 6.1.2，`DEC-2026-10-26-02`；**總管提供、合併前會再更新**；接手先依該節恢復流程比對 GitHub，不一致以 GitHub 為準）
+> - **last checkpoint**：2026-10-26（總管提供）
+> - **latest verified main**：`498494ee`（#1061 已合併）
+> - **current branch／PR**：本 PR（`docs/resume-checkpoint-20261026`；PR 號以 GitHub 為準）
+> - **in-flight PR**：#1062（客戶裁示 evidence 文件，CI 進行中）；#1063（`feat/ui-v2-default-readonly-20261026`：預設唯讀、五頁移除存檔鈕、SET-4 不顯示；獨立稽核進行中；未含 SET-5 零寫入）；#1064（`feat/ui-v2-oauth-foundation-20261026`：`infra/personal_oauth.py` 最小唯讀 scope、state fail-closed、PKCE S256、待確認登入、revoke；資安 2 組稽核多輪修補中，最後一項低嚴重度修補進行中）
+> - **current task**：新 B UI Implementation／Security Gate 實作（依 #1062 裁示順序，`DEC-2026-10-26-03`）
+> - **completed in this batch**：本 PR 落盤 `DEC-2026-10-26-02`／`-03`、本區塊、`docs/DECISIONS.md` 第五節標題恢復
+> - **exact stopping point**：#1063、#1064 等待稽核／CI 後 Auto-Ship
+> - **next single action**：合併 #1062／#1063／#1064 後，開**批次 2b**：SET-5 Google Sheet 零寫入（停寫 `fetch_log`／`fetch_log_open`／`market_indicator`，改 session／runtime；alo 與 set 的讀取端優先讀 runtime 結果）＋處理已無作用但仍顯示的輸入欄（mkt／hld／exp）
+> - **後續**：批次 3 Active Sheet runtime SSOT＋consumer wiring＋移除 `POOL_SHEET_ID` baked default＋Settings UI（登入需顯示 email 並明確確認）；批次 4 error taxonomy＋no-active UX；批次 5 文件同步
+> - **tests／CI**：各 in-flight PR 以 GitHub check-run 逐條 `conclusion` 為準；本區塊不代為宣稱
+> - **unresolved true Stop Gates**：無（相關資安取捨已由 #1062 裁示）
+> - **uncommitted／unpushed work**：無（各批皆已 push 到 feature branch；總管提供）
+> - **recommended Model／Effort**：Opus 5.5／Medium
+> - ⚠️ **未完成項不可視為驗收。**
+
 ---
 
 ## 0. 本檔的規則
@@ -47,8 +63,9 @@
 > - **唯一下一步**：~~**客戶審 65 的最終 Wireframe**~~ ~~→ 客戶審 Preview `docs/v2/prototype/ui_prototype_set_oauth.html` 與 65 的最終 Wireframe（狀態更新，不是漏刪）（含第 4 節「active Sheet 指持倉那一本」等文件組讀法）；**核准前不得規劃或寫 implementation**；核准後實作批開工前仍須客戶指派，並逐項過 65 第 J 節 Implementation／Security Gate。若接手時 `origin/main` 尚未含本 PR，先完成該 PR 合併前檢查。~~ → **客戶已於 2026-10-25 核准 Preview／Wireframe 整體方向並裁示 J-4、J-6、CAP-SET-10（`DEC-2026-10-25-04`）；現行唯一下一步見本框下一則「2026-10-25 客戶裁示補記」**（狀態更新，不是漏刪）。
 > - **尚未授權動工**：同第二十六次框；另含 OAuth 任何實作、scope／權杖／secrets 變更、active Sheet 儲存實作、T6 實作變更、任何寫入、65 任何一項的 production 實作。
 > - **2026-10-25 客戶裁示補記（本框內補記，不新增框；`DEC-2026-10-25-04`，要點轉述；狀態更新，不是漏刪）**：本批前 main `9f6e91a0`（#1054、#1055 已合併；合併後 SHA 會再變，接手時以 `git log origin/main` 為準）。客戶已裁示：Settings Preview／Wireframe 整體方向核准；**J-4**＝Active Sheet 指持倉／保單那一本（設定試算表、選股池維持各自部署設定；其他頁只讀、不猜、不自動切換、不 fallback）；**J-6**＝新 B UI 第一階段全部唯讀，**含 SET-4 類型的設定寫入**（推翻文件組原讀法「不涵蓋 SET-4」）；**CAP-SET-10**＝不新增清除按鈕。落地：65 的 J-4／J-6／CAP-SET-10 改為已裁示並新增 **J-14**（SET-4 在新 B UI 第一階段唯讀顯示或暫不出現；客戶未裁，文件組推薦暫不出現）；44 SET-4 塊行內補記與第七節第三小節之十六；`DEC-2026-10-25-02`、`DEC-2026-10-17-03` 就地補記；BL-0402 列尾補記。本批純文件，production code 0 變更；現行 ui_v2 的 SET-4 寫入行為本批不動。
-> - **J-14 已裁示（2026-10-26，`DEC-2026-10-25-04` 2026-10-26 補記）**：選 (a)，新 B UI 第一階段不出現 SET-4。**唯一下一步**：`docs/v2/44_fund_ui_ssot.md` 的 SET-4 塊依正式修正程序另開一輪（44 目前凍結，md5／行數守衛見 `tests/ui_v2/test_alo_logic.py`／`test_exp_logic.py`，解凍需另行裁示）；舊頁面 SET-4 寫入何時改唯讀，併入正式 implementation／舊 UI 退役批。任何 implementation 前仍須客戶另行指派，並逐項過 65 第 J 節 Implementation／Security Gate。
+> - **J-14 已裁示（2026-10-26，`DEC-2026-10-25-04` 2026-10-26 補記）**：選 (a)，新 B UI 第一階段不出現 SET-4。~~**唯一下一步**~~（→ 2026-10-26 已不是現行唯一下一步，見本框末則補記與檔首 Resume Checkpoint；狀態更新，不是漏刪）：`docs/v2/44_fund_ui_ssot.md` 的 SET-4 塊依正式修正程序另開一輪（44 目前凍結，md5／行數守衛見 `tests/ui_v2/test_alo_logic.py`／`test_exp_logic.py`，解凍需另行裁示）；舊頁面 SET-4 寫入何時改唯讀，併入正式 implementation／舊 UI 退役批。任何 implementation 前仍須客戶另行指派，並逐項過 65 第 J 節 Implementation／Security Gate。
 > - **2026-10-26 長期裁示索引（本框內補記，不新增框；`DEC-2026-10-26-01`，要點轉述；純文件）**：客戶長期裁示 Long-term UI & Logic Sustainability Principles（五頁 UI 為長期基準、UI 不承載核心投資邏輯、資料語意不漂移、AI 非資料真相來源、新需求 Gate A～E、舊 UI 退役原則）已落盤：完整條文見 `docs/DECISIONS.md` `DEC-2026-10-26-01`，精簡永久原則見 `PROJECT_RULES.md` 第 13 節 13.2。**不授權任何實作、不解凍 44、不改第一階段唯讀護欄與 OAuth 相關設定**；**本批不阻塞進行中的 Implementation／Security Gate 工作**，上方「唯一下一步」不變。
+> - **2026-10-26 補記（本框內補記，不新增框；`DEC-2026-10-26-02`、`-03`；狀態更新，不是漏刪）**：上方 J-14 那一則的「唯一下一步」（44 SET-4 塊修正另開一輪）已不是現行唯一下一步 —— 客戶 2026-10-26 Implementation／Security Gate 裁示（`DEC-2026-10-26-03`，evidence 由 PR #1062 落盤）後，Security Implementation 已依序進行；**現行唯一下一步以本檔開頭「⏯ Resume Checkpoint」為準**。44 SET-4 塊修正仍待另開一輪（44 凍結不變）。該則原文保留，只劃線「唯一下一步」標籤。
 > - **尚未授權動工（本批後，清單不變）**：同上一則；OAuth 任何實作、scope／權杖／secrets 變更、active Sheet 儲存實作、T6 實作變更、任何寫入、65 任何一項的 production 實作，一律仍未授權。
 > - **接手入口**：同第二十二次框（含 scratchpad venv 跑完整測試的補充）。
 

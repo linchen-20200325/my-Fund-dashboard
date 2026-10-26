@@ -1010,7 +1010,33 @@
 | supersedes／superseded by | supersedes：無。補充（不取代）：`DEC-2026-10-24-02`（資料先行順序與五頁順序）、`DEC-2026-10-25-04`（J-4／J-6／J-14）、`PROJECT_RULES.md` 第 13 節第 1～4、11、12 條。superseded by：無 |
 | provenance | **要點轉述**（決策者：客戶 2026-10-26，經總管派工單轉達；文件組未見客戶對話本身）。十二點條文化摘要忠於轉達要點、不增不減；「補充而非 supersede」「與既有條文同向」為文件組讀法，未經第二組驗證；第 10 點與既有刪除閘門的併讀（不自動授權刪除）為最保守讀法，可被客戶推翻。由文件組單組寫成，未經第二組驗證 |
 
-，以及不屬客戶裁示的決策登記）
+### DEC-2026-10-26-02｜客戶永久治理要求：Quota-safe Resume Checkpoint／中斷續接（**不授權實作**）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-26 |
+| 決策內容摘要 | **客戶永久治理要求（要點轉述，立即生效）**。目的：額度、對話、連線或 session 突然中斷時，新 session 只讀 GitHub 就知道做到哪、證據在哪、下一步做什麼，不需客戶重新解釋。(1) **不建第二套狀態 SSOT**：沿用 `docs/HANDOFF.md`／`docs/BACKLOG.md`／`docs/DECISIONS.md` 與 GitHub branch／PR／commit／CI；不得另建 PROJECT_STATE、SESSION_STATE 等平行狀態檔（除非既有正式治理另有授權）。(2) **Resume Checkpoint**：HANDOFF 維持極短區塊，至少含 latest verified main SHA、current branch、current PR、current task／batch、completed in this batch、exact current stopping point、next single action、tests／CI 已完成與未完成、unresolved true Stop Gates、有無 uncommitted／unpushed work、recommended Model、recommended Effort、last checkpoint timestamp；禁止長篇流水帳。(3) **觸發時機**（既有 Save／Handoff Gate 之外）：一般＝小批完成、commit、PR 建立、稽核完成、PR 合併、Model／Effort 切換前、進入下一完整工作階段前；額度約 >80%＝每個 meaningful safe checkpoint 更新、優先小批、避免開過大新工作；額度約 >90%＝每完成一個可驗證步驟就保存、優先 push 已安全完成的 commit／branch、不把大量未保存工作留在本機、新批次無法在安全 checkpoint 前保存則延後。(4) **Git 保存原則**：可保存已完成且自驗通過的安全修改、feature branch commit、Draft PR、HANDOFF checkpoint；不得為了 checkpoint 把未驗證程式推進 main、繞過 CI／audit、降低 security gate、寫入 secret／token／credential、拿 checkpoint 當完成證據；未完成但需保存 → 留 feature branch、commit message 標 WIP／checkpoint、PR 維持 Draft、HANDOFF 寫「未完成、不可視為驗收」，最終仍走正常 review／CI／Auto-Ship；既有規則禁止 WIP commit 時遵守既有規則、以可安全保存的最小單位 checkpoint，不得覆蓋上位規則。(5) **恢復流程**：不問客戶「做到哪裡」；先 GitHub Verification Gate → 讀 `PROJECT_RULES.md` → 讀 HANDOFF Resume Checkpoint → 讀相關 BACKLOG／DECISIONS → 查 current PR／branch／CI → 比對 HANDOFF 與 GitHub；GitHub 操作事實優先，一致則從 next single action 繼續，不一致則以 GitHub 為準修正 HANDOFF 後繼續；只有真正 Stop Gate 才問客戶。(6) **中斷後不得重做**：不重跑已有可信 CI 證據的整批工作、不重問已正式裁示的問題、不重建已存在的 PR、不重寫已完成文件、不重新研究已有 evidence 的結論。(7) **回覆規則**：Resume Checkpoint 更新屬例行安全治理，維持 Silent Autonomous Cruise；只有真正資料不一致、保存失敗、Stop Gate 才回報。(8) **立即執行**：進行中的 #1062／#1063 不因本規則改 scope；本規則在下一個必要治理文件批次正式落盤，不單獨阻塞 Security Implementation |
+| 理由／背景 | （文件組背景說明，不是客戶原話）既有 Save／Handoff Gate（`DEC-2026-10-22-03`、`-23-04` F／G、`-24-11`）與 Stateless AI Handoff（`DEC-2026-10-24-07`）規定「停止前存檔」與「只讀 GitHub 能接手」，但額度突然歸零時可能來不及走完整 Save Gate；本筆把保存點前移到每個安全小步，並規定恢復時的固定讀法與「不得重做」。 |
+| evidence／source | 客戶 2026-10-26 永久治理要求，經總管派工單轉達；repo 內無逐字存檔，文件組未見客戶對話本身。落地：`PROJECT_RULES.md` 第 6 節 6.1.2 與第 0.5 節快速索引一列、本筆、`docs/HANDOFF.md` 開頭 Resume Checkpoint 區塊。 |
+| 影響範圍 | 所有未來對話與 agent 的保存時機、HANDOFF 開頭格式、中斷後恢復流程。**不授權任何 production 實作；不放寬 CI／audit／security gate；不放寬 Auto-Ship 前置條件；不改 commit message 識別碼規則**。 |
+| 是否可逆 | 可逆（純文件；客戶可另行指示） |
+| supersedes／superseded by | supersedes：無。補充（不取代）：`DEC-2026-10-22-03`、`DEC-2026-10-23-04` F／G、`DEC-2026-10-24-07`、`DEC-2026-10-24-11`。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-26，經總管派工單轉達；文件組未見客戶對話本身）。八點條文化摘要忠於轉達要點、不增不減；「本 repo 既有規則未見禁止 WIP commit」為文件組單組 grep 判讀（`CLAUDE.md`、`PROCESS.md`、`EXCEPTIONS.md`、`PROJECT_RULES.md`、本檔、`docs/HANDOFF.md`），未經第二組驗證；落點選 6.1.2 為文件組判斷 |
+
+### DEC-2026-10-26-03｜客戶正式裁示：新 B UI Implementation／Security Gate（J-1／J-2／J-3／J-5／J-7／J-9／J-10／J-11／J-13＋SET-5 零寫入＋UI_V2_READ_ONLY 預設唯讀）——**索引條目**
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-26 |
+| 決策內容摘要 | **索引條目，不複製全文；本文以 evidence 檔為準。** 摘要（要點）：**J-1** OAuth 採最小唯讀 scope（`spreadsheets.readonly`、`drive.metadata.readonly`、`openid`、`userinfo.email`；不用 `include_granted_scopes=true`、不新增寫入 scope）；**J-2** state missing／mismatch／expired 一律 fail closed＋PKCE S256（verifier 只短期存在 runtime、不寫 log／Sheet／repo）；**J-3** token 只存 server-side／session runtime、不寫 Sheet／repo／plaintext／query parameter；logout 嘗試 revoke 後不論成敗都清本地狀態；切換帳號清舊狀態、不沿用舊 Active 驗證、舊 token 不得作 fallback；**J-10** Personal OAuth 與 Streamlit identity／auth state namespace 隔離、不做 token／identity fallback；**J-11** 護欄 4 只放寬 Settings 建立／選擇／驗證 Active Sheet 與已核准 consumer 對 Active Sheet 的**唯讀**接線；**SET-5** 第一階段 Google Sheet 零寫入（重新取數不得寫 `fetch_log`／`market_indicator` 等任何 Sheet，不設診斷寫入例外）；**UI_V2_READ_ONLY** 改為新 B UI **預設唯讀**、不再依賴手動設旗標；**J-5** `st.session_state` ＝ runtime Active Sheet SSOT（Pending／Active 分開、驗證成功才更新、失敗保留原 Active、不跨 session 持久化）；**J-7** Personal OAuth 管使用者 Sheet 清單與 Active holdings／policy Sheet，Service Account 維持 deployment-owned 來源，禁止兩者互相 fallback 或自動換另一本，**移除 `POOL_SHEET_ID` baked default**（無設定 → Missing／Unavailable）；**J-9** 正式 error taxonomy（`AUTH_REQUIRED`／`AUTH_EXPIRED`／`AUTH_STATE_INVALID`／`PERMISSION_DENIED`／`SHEET_NOT_FOUND`／`SCHEMA_INVALID`／`NETWORK_ERROR`／`UPSTREAM_ERROR`／`UNAVAILABLE`；Missing 與 Error 分開）；**J-13** 未選 Active 時顯示「⬜ 尚未選定持倉資料來源」＋「前往 ⚙️ 設定」，不得自動用 `POLICY_SHEET_ID`、自動選第一本、用舊 session 值或 fallback。另含：建議實作順序、已裁事項不得再升級為一般 Decision Gate、Model／Effort 建議（見 evidence 第 13～15 節） |
+| 理由／背景 | （文件組背景說明，不是客戶原話）`DEC-2026-10-25-04` 核准 ⚙️ 設定 Wireframe 方向後，65 第 J 節列出實作前須另裁的 Implementation／Security Gate 項目；本裁示收斂其中多項，使安全實作批可依序推進。evidence 檔開頭要求正式索引同步到本檔與 `docs/HANDOFF.md`，本筆即該索引。 |
+| evidence／source | `docs/evidence/decisions/2026-10-26_ui_v2_implementation_security_gate_decisions.md`（**evidence 由 PR #1062 落盤**；本筆寫入時該檔尚未進 main，文件組於 `origin/docs/security-gate-decisions-20261026` 讀到）。該檔自陳追溯基準 main `498494ee`（#1061 已合併）。 |
+| 影響範圍 | 新 B UI 第一階段 Personal OAuth、Google Sheet 唯讀接線、Active Sheet runtime state、SET-5、error taxonomy、未選 Active UX 的實作規格。**不解凍 `docs/v2/44_fund_ui_ssot.md`**；不新增資料來源；不放寬 CI／audit／security gate；`SET-4` 第一階段維持不顯示（`DEC-2026-10-25-04` J-14）。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：65 第 J 節對應項目（J-1、J-2、J-3、J-5、J-7、J-9、J-10、J-11、J-13）的「實作前須另裁」狀態，以 evidence 檔為準（文件組讀法）。補充（不取代）：`DEC-2026-10-25-02`、`DEC-2026-10-25-04`、`DEC-2026-10-26-01`。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-26；轉達人：ChatGPT 協作助手依既有 SSOT 收斂，evidence 檔自陳**經客戶確認落盤**，PR #1062；本索引經總管派工單交辦）。本筆摘要由文件組依該檔整理，不增不減；supersedes 欄的 65 J 節對應為文件組讀法，未經第二組驗證 |
+
+## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
 > 以下 ID 都由出處位置組成，不會與第四節的 `DEC-` 流水號撞號。
@@ -1146,3 +1172,6 @@
 - 第四節 `DEC-2026-10-25-02`：客戶裁示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；OAuth 六點、CAP-GATE-02 與版面同意項為總管轉達要點，照寫不增刪；`DEC-2026-10-17-03`、`-25-01` 的就地補記為文件組依派工單寫成；「active 指持倉那一本」「唯讀不涵蓋 `SET-4`」為文件組讀法；由文件組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-25-04`：客戶裁示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；四點為總管轉達要點，照寫不增刪；`DEC-2026-10-25-02`、`DEC-2026-10-17-03` 的就地補記、J-14 的登記與推薦、「現行 ui_v2 的 SET-4 本批不動」為文件組讀法；由文件組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-26-01`：客戶長期裁示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；十二點為總管轉達要點，照寫不增刪；「補充而非 supersede」與第 10 點和既有刪除閘門的併讀為文件組讀法；由文件組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-26-02`：客戶永久治理要求經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；八點為總管轉達要點，照寫不增刪；「未見禁止 WIP commit」為文件組單組 grep；由文件組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-26-03`：索引條目，內容摘自 PR #1062 的 evidence 檔（文件組讀的是 `origin/docs/security-gate-decisions-20261026` 上的版本；該 PR 合併前若內容再改，以合併後版本為準）；文件組未見客戶對話本身；由文件組單組寫成，未經第二組驗證。
+- 第五節標題：2026-10-26 恢復。該標題於 #1054（`9f6e91a0`）插入 `DEC-2026-10-25-03` 時被截斷，只剩殘片「，以及不屬客戶裁示的決策登記）」；以 pickaxe 搜尋（`log -S`）找到原文 `## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）`（首見 `cfebcc7c`／#997）逐字恢復，未改任何決策語意。另：`DEC-2026-10-25-04` 的 J-14 補記段（#1058）目前位在第五節標題之後，疑因標題殘缺而誤置；本批未移動，留待確認。
