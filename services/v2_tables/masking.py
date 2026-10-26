@@ -27,6 +27,8 @@ from __future__ import annotations
 import json
 from typing import Iterable, Mapping, Optional
 
+from shared.personal_oauth_keys import KEY_PENDING_LOGIN, KEY_TOKENS
+
 MASK = "‹已遮蔽›"  # ‹已遮蔽›
 
 # 7.2 甲／乙／乙之二：頂層鍵，整個值遮。
@@ -122,7 +124,7 @@ def _userinfo(url) -> list:
     return [v for v in (user, password) if v]
 
 
-def secret_values(sources: Iterable[Mapping], *, oauth_tokens=None, custom_oauth_cfg=None) -> list:
+def secret_values(sources: Iterable[Mapping], *, oauth_tokens=None, custom_oauth_cfg=None, session_state=None) -> list:
     """從各來源 mapping（例如 `st.secrets`、`os.environ`）取出 7.2 列名鍵的**值**。
 
     同一個鍵在多個來源都有值時全部收（值不同就兩個都遮）。回傳去重後的非空字串清單。
@@ -162,6 +164,15 @@ def secret_values(sources: Iterable[Mapping], *, oauth_tokens=None, custom_oauth
     if custom_oauth_cfg is not None and hasattr(custom_oauth_cfg, "get"):
         for field in MASKED_CUSTOM_OAUTH_FIELDS:
             add(_get(custom_oauth_cfg, field))
+    # 新 B UI 個人 Google 登入的權杖（`shared.personal_oauth_keys.KEY_TOKENS`，與待確認登入內的那一組）：
+    # 舊 `gsheet_tokens` 之外，頁面層遮蔽也要涵蓋，否則錯誤文字若帶出個人 access／refresh token 會原樣上畫面。
+    if session_state is not None and hasattr(session_state, "get"):
+        pending = session_state.get(KEY_PENDING_LOGIN)
+        for bag in (session_state.get(KEY_TOKENS),
+                    pending.get("tokens") if isinstance(pending, Mapping) else None):
+            if isinstance(bag, Mapping):
+                for field in MASKED_TOKEN_FIELDS:
+                    add(_get(bag, field))
     return list(dict.fromkeys(found))
 
 

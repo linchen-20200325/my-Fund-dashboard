@@ -134,6 +134,7 @@ def _secret_values() -> list:
         [st.secrets, os.environ],
         oauth_tokens=st.session_state.get("gsheet_tokens"),
         custom_oauth_cfg=st.session_state.get("custom_oauth_cfg"),
+        session_state=st.session_state,   # 個人 Google 登入權杖（`b_oauth.tokens`）也遮；經 L2 `masking`，本頁不碰 infra／shared
     )
 
 
@@ -154,7 +155,7 @@ def load_live() -> dict:
         # 不再讀 `POLICY_SHEET_ID`／服務帳戶，沒有任何 fallback。判定與計算（`build_alo_tables` 以下）一個字未動。
         tables = alo_holdings.load_alo_tables_active(st.session_state, values)
     except alo_holdings.ActiveSourceError as exc:
-        if active_gate.is_no_active(exc.code):
+        if active_gate.is_no_active(exc.code, exc.reason):
             raise active_gate.NoActiveSource(exc.code) from None   # 沒有 Active：整頁「⬜ 尚未選定持倉資料來源」，不是錯誤
         tables = None
         errors.update(live.tables_failed_together(active_gate.failure_text(exc.code, exc.reason)))

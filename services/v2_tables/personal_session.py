@@ -44,13 +44,27 @@ from shared import ui_v2_error_codes as ec
 from shared.personal_oauth_keys import KEY_PICKER_IDS
 
 
-class PersonalSessionError(Exception):
-    """`access_target` 專用：只帶九個 code 之一，不含 token。"""
+# `PersonalSessionError` 的固定原因（不是文字、不含 token；同 `SCHEMA_INVALID` 的 `reason` 做法，不新增 error code）。
+# `UNAVAILABLE` 這個 code 身兼數職，畫面端必須靠 reason 分辨「沒有 Active」與「部署設定缺」：
+REASON_NO_ACTIVE = "no_active"            # 已登入、但沒有 Active，或 Active 屬於別的帳號（J-13：不自動選）
+REASON_DEPLOY_CONFIG = "deploy_config"    # 續期時讀不到部署端 Google 登入設定（不是「沒有選定來源」）
+ALL_REASONS = frozenset({REASON_NO_ACTIVE, REASON_DEPLOY_CONFIG})
 
-    def __init__(self, code: str) -> None:
+# 登入卡的一次性提示欄（畫面讀一次就清）。不在 `b_oauth.` 前綴下 —— `clear_session` 會清前綴內的所有 key，
+# 而本提示正是 `clear_session` 之後才寫。`ui_v2/set/source.py::_KEY_NOTICE` 引用同一個值。
+KEY_LOGIN_NOTICE = "_set_login_notice"
+
+
+class PersonalSessionError(Exception):
+    """`access_target` 專用：只帶九個 code 之一（與選填的固定 `reason`），不含 token。"""
+
+    def __init__(self, code: str, reason: str | None = None) -> None:
         if code not in ec.ALL_ERROR_CODES:
             raise ValueError(f"非九個 error code 之一：{code!r}")
+        if reason is not None and reason not in ALL_REASONS:
+            raise ValueError(f"非固定 reason 之一：{reason!r}")
         self.code = code
+        self.reason = reason
         super().__init__(code)
 
 
@@ -126,6 +140,9 @@ def handle_read_error(state: MutableMapping, code: str, prior_sub=None) -> None:
         if sub is not None:
             policy_cache.drop_account(sub)
         po.clear_session(state)
+        # 一次性提示：設定頁登入卡讀到後說既有的「登入已過期」，而不是「未登入」（與選本流程同一個欄位）。
+        # 寫在 clear_session 之後（該 key 不在 `b_oauth.` 前綴下，本來也不會被清）。
+        state[KEY_LOGIN_NOTICE] = ec.AUTH_EXPIRED
     elif asheet.current_account_sub(state) is None and sub is not None:
         policy_cache.drop_account(sub)
 
@@ -215,13 +232,14 @@ def use_pending(state: MutableMapping) -> dict[str, Any]:
 def access_target(state: MutableMapping) -> tuple[str, str, str]:
     """（sheet_id, access_token, account_sub）供後續唯讀讀取；沒有可用的 Active → `PersonalSessionError`。
 
-    未登入 → AUTH_REQUIRED；續期失敗 → 該 code；沒有（或帳號不符的）Active → UNAVAILABLE（J-13：
+    未登入 → AUTH_REQUIRED；續期失敗 → 該 code（部署設定缺 → UNAVAILABLE＋`deploy_config`）；沒有（或帳號不符的）Active → UNAVAILABLE＋`no_active`（J-13：
     不自動用任何預設／第一本）。"""
     try:
         token = _fresh_token(state)
     except po.PersonalOAuthError as e:
-        raise PersonalSessionError(e.code) from None
+        # 續期時 UNAVAILABLE ＝ 部署端 Google 登入設定缺；與下面「沒有 Active」是兩回事，不可混成同一個畫面。
+        raise PersonalSessionError(e.code, REASON_DEPLOY_CONFIG if e.code == ec.UNAVAILABLE else None) from None
     active = asheet.get_active(state)
     if active is None:
-        raise PersonalSessionError(ec.UNAVAILABLE)
+        raise PersonalSessionError(ec.UNAVAILABLE, REASON_NO_ACTIVE)
     return active.sheet_id, token, active.account_sub

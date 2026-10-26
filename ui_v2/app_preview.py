@@ -42,13 +42,15 @@
   設定與診斷的「存檔」與設定與診斷的「重新取數」寫回這一本（市場總覽與標的探索 2026-10-13 起接上存檔，
   見本檔上方五頁表與 `ui_v2/mkt/page.py::render`、`ui_v2/exp/page.py::render` 的 `save_live` 說明）。
   沒有預設值，缺值照實顯示未設定。
-- `POLICY_SHEET_ID`：保單試算表（`repositories/policy_supplement_repository.py`）。持倉體檢、資產配置讀持倉與保單。
-  沒有預設值，不退回其他鍵。
+- `POLICY_SHEET_ID`：保單試算表（`repositories/policy_supplement_repository.py`）。
+  ⚠️ 2026-10-26 更正（有意識的更正，不是漏刪；批 3b-4）：持倉體檢、資產配置**不再**讀這一本 —— 兩頁的持倉與保單只讀使用者
+  在設定頁選定並驗證過的 Active Sheet（個人 Google 帳號、唯讀；沒有 Active 就是「尚未選定持倉資料來源」，無 fallback）。
+  仍讀這一本的只剩設定與診斷的「重新取數（淨值）」（`refetch_nav` 仍走舊路徑，BL-0460 待處理）。沒有預設值，不退回其他鍵。
 - `POOL_SHEET_ID`（選填）：選股池試算表（`repositories/pool_repository.py`；不設則用該檔內建的預設那一本）。
   標的探索的母體（2026-10-13 起）只讀這一本 `_fund_pool` 分頁的**代碼欄**；**沒有服務帳戶時不讀本機暫存檔**，
   畫面照實寫「選股池未設定雲端來源」。
-- `google_service_account`：服務帳戶憑證（TOML 表格或 JSON 字串）。上面兩本試算表都只走服務帳戶；
-  設定試算表會被寫入（存檔、重新取數），該帳戶要有編輯權；保單試算表本預覽只讀。
+- `google_service_account`：服務帳戶憑證（TOML 表格或 JSON 字串）。設定試算表走服務帳戶、會被寫入
+  （存檔、重新取數），該帳戶要有編輯權；保單試算表本預覽只讀，且只剩 `refetch_nav` 用它（持倉體檢、資產配置已改讀個人 Active Sheet）。
 - 選填 `PROXY_URL`（或 `[proxy]` 區段）：`infra/proxy.py` 的 NAS 代理。市場總覽（Yahoo）與持倉體檢的淨值
   （MoneyDJ）走 `infra.proxy.fetch_url`；不設就直連，雲端 IP 被擋時該頁照實顯示取數失敗。
 - ~~市場總覽第一階段只取 Yahoo（`^VIX`），不需要金鑰；FRED 三鍵、國發會兩鍵、匯率鍵目前在 L2 是暫停取數

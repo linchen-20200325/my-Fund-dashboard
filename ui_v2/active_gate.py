@@ -65,7 +65,16 @@ class NoActiveSource(Exception):
         super().__init__(code)
 
 
-def is_no_active(code) -> bool:
+# `UNAVAILABLE` 身兼數職（沒有 Active／部署設定缺…）：只有 reason 是這個固定值才是「沒有 Active」。
+# 字面與 `services/v2_tables/personal_session.REASON_NO_ACTIVE` 一致（測試比對；本檔不 import L2 橋接）。
+REASON_NO_ACTIVE = "no_active"
+
+
+def is_no_active(code, reason=None) -> bool:
+    """AUTH_REQUIRED（未登入）→ 沒有 Active；UNAVAILABLE 只在 reason 為 `no_active` 時才算。
+    其餘（含 UNAVAILABLE 的其他原因，如部署設定缺）走既有失敗路徑，不當成「尚未選定」。"""
+    if code == "UNAVAILABLE":
+        return reason == REASON_NO_ACTIVE
     return code in NO_ACTIVE_CODES
 
 

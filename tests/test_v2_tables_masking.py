@@ -337,3 +337,29 @@ def test_端到端_check_header的list訊息經正式masker遮住(repo):
                           mask=settings_store.masker(values))
     _assert_no_leak(str(info.value), password, repr(password)[1:-1])
     assert all(password not in cell for cell in info.value.details["actual"])
+
+
+# ───────────── F4：個人 Google 登入權杖（`b_oauth.tokens`）也遮 ─────────────
+
+def test_個人登入權杖_進秘密值清單_並被遮蔽():
+    from shared.personal_oauth_keys import KEY_PENDING_LOGIN, KEY_TOKENS
+
+    at, rt, pat = "personal-access-ZZ-1", "personal-refresh-ZZ-2", "pending-access-ZZ-3"
+    state = {KEY_TOKENS: {"access_token": at, "refresh_token": rt},
+             KEY_PENDING_LOGIN: {"tokens": {"access_token": pat}, "sub": "s", "email": "e"}}
+    values = masking.secret_values([{}], session_state=state)
+    assert {at, rt, pat} <= set(values)
+    out = masking.mask_message(f"失敗 {at} / {rt} / {pat}", values)
+    assert at not in out and rt not in out and pat not in out and masking.MASK in out
+    from services.v2_tables import alo_holdings
+
+    assert alo_holdings.masker(values)(f"x {at}") == f"x {masking.MASK}"
+
+
+def test_個人登入權杖_沒傳session_state就不遮_回退即紅():
+    # 變異對照：呼叫端若不把 session_state 交進來（＝修正前的行為），個人權杖不會被收進清單。
+    from shared.personal_oauth_keys import KEY_TOKENS
+
+    state = {KEY_TOKENS: {"access_token": "personal-access-ZZ-1"}}
+    assert "personal-access-ZZ-1" not in masking.secret_values([{}])
+    assert "personal-access-ZZ-1" in masking.secret_values([{}], session_state=state)

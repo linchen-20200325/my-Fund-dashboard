@@ -224,6 +224,7 @@ def test_access_target(env):
     with pytest.raises(ps.PersonalSessionError) as ei:
         ps.access_target(s)
     assert ei.value.code == ec.UNAVAILABLE  # J-13：沒選就是沒有，不自動選
+    assert ei.value.reason == ps.REASON_NO_ACTIVE
     ps.list_for_picker(s)
     ps.select_pending(s, S1)
     ps.use_pending(s)
@@ -242,6 +243,7 @@ def test_access_target_Active帳號不符視為沒有(env):
     with pytest.raises(ps.PersonalSessionError) as ei:
         ps.access_target(s)
     assert ei.value.code == ec.UNAVAILABLE
+    assert ei.value.reason == ps.REASON_NO_ACTIVE
 
 
 def test_未設定client時回UNAVAILABLE(monkeypatch):
@@ -289,3 +291,53 @@ def test_其他錯誤碼不清session(env):
     env.list_exc = drive.PersonalDriveError(ec.NETWORK_ERROR)
     ps.list_for_picker(s)
     assert ps.status(s)["login_state"] == "logged_in"
+
+
+# ───────────── F3：UNAVAILABLE 的固定 reason ─────────────
+
+def test_access_target_續期時部署設定缺_reason是deploy_config_不是no_active(env, monkeypatch):
+    s = {}
+    _login(s, env)
+    ps.list_for_picker(s)
+    ps.select_pending(s, S1)
+    ps.use_pending(s)                      # 已有可用的 Active
+    s[po.KEY_TOKENS]["expires_at"] = 0     # 逼 ensure_fresh 走續期 → 讀部署設定
+
+    def boom():
+        raise po.PersonalOAuthError(ec.UNAVAILABLE, "部署端尚未設定 Google 登入")
+    monkeypatch.setattr(po, "load_client_config", boom)
+    with pytest.raises(ps.PersonalSessionError) as ei:
+        ps.access_target(s)
+    assert ei.value.code == ec.UNAVAILABLE
+    assert ei.value.reason == ps.REASON_DEPLOY_CONFIG != ps.REASON_NO_ACTIVE
+
+
+def test_access_target_其他續期失敗_不帶reason(env):
+    with pytest.raises(ps.PersonalSessionError) as ei:
+        ps.access_target({})
+    assert ei.value.code == ec.AUTH_REQUIRED and ei.value.reason is None
+
+
+def test_PersonalSessionError_reason只收固定值():
+    with pytest.raises(ValueError):
+        ps.PersonalSessionError(ec.UNAVAILABLE, "任意文字")
+    assert ps.PersonalSessionError(ec.UNAVAILABLE).reason is None
+
+
+# ───────────── F2：AUTH_EXPIRED 清 session 後留一次性提示 ─────────────
+
+def test_handle_read_error_AUTH_EXPIRED_清session_並留登入已過期提示(env):
+    s = {}
+    _login(s, env)
+    ps.handle_read_error(s, ec.AUTH_EXPIRED, ps.current_sub(s))
+    assert ps.status(s)["login_state"] == "logged_out"
+    assert s[ps.KEY_LOGIN_NOTICE] == ec.AUTH_EXPIRED     # 登入卡讀到後說既有的「登入已過期」
+    assert not ps.KEY_LOGIN_NOTICE.startswith(po.SESSION_PREFIX)  # 不在會被 clear_session 清掉的前綴下
+
+
+@pytest.mark.parametrize("code", [ec.NETWORK_ERROR, ec.UPSTREAM_ERROR, ec.PERMISSION_DENIED, ec.UNAVAILABLE])
+def test_handle_read_error_其他code不留提示(env, code):
+    s = {}
+    _login(s, env)
+    ps.handle_read_error(s, code, ps.current_sub(s))
+    assert ps.KEY_LOGIN_NOTICE not in s

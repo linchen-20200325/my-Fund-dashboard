@@ -108,7 +108,8 @@ _DATETIME_HEAD = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", re.ASCII)
 #       與 §G 第 3 題、第 3a 題（客戶 2026-10-02 裁示：3-B，字面用 (ii)）。字面逐字，改字先回草稿。
 #
 # ⛔ **本檔不判定誰是 DIRECT。** 判定只有一處：L2 `services/v2_tables/alo_holdings.py::load_alo_tables`
-#    （`_key_text(policy_id) == contract.DIRECT_POLICY_ID`）—— alo 頁吃的就是同一次判定的產物：
+#    （`_key_text(policy_id) == contract.DIRECT_POLICY_ID`；批 3b-4 起正式頁走同檔 `load_alo_tables_active`，
+#    判定與計算同一條 `build_alo_tables`，只換原始表來源為個人 Active Sheet）—— alo 頁吃的就是同一次判定的產物：
 #    DIRECT 持倉**不產生 `holding` 列**（所以本頁每一塊的數字本來就不含它），另交一份 `direct` 清單。
 #    本頁依 `tests/ui_v2/test_ui_v2_live_import_guard.py` 第 (2)(5) 條不得 import `services`，
 #    所以 L2 的三個值由呼叫端（S6 的 `source.py`）以參數傳進來，本檔不另寫一份字面：
@@ -975,7 +976,7 @@ def build_live_model(
     本輪 `dataset` 由呼叫端給（測試用假資料的 dataset）；S6 由 `source.py` 取數後給。
     L2 的三個值與 `direct` 清單由呼叫端傳（見本檔「裁示 3-B (ii)」那一段）：
     - `direct_policy_id`：**一律要給**，沒給就 raise（S4 第二輪 M2）；
-    - `direct`：L2 `load_alo_tables` 交出的 `direct` 清單原樣；
+    - `direct`：L2 `load_alo_tables_active`（批 3b-4 起；與舊 `load_alo_tables` 同一條 `build_alo_tables`）交出的 `direct` 清單原樣；
     - `policy_tab_source`、`direct_sources`：`direct` 非空時要給，沒給就 raise，不猜。
     - `nav_provenance`（S5，裁示 1-A＋1-C）：L2 `build_nav_table` 回傳的 `provenance` 原樣
       （`{fund_code: {..., "cache_fallback", "stale"}}`）；**一律要給**，沒給或形狀不對就 raise。

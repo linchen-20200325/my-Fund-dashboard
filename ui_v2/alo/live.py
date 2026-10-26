@@ -241,7 +241,8 @@ def tables_failed_together(message: str) -> dict:
 
     ⚠️ 示範模式與正式模式在這裡對不起來，據實寫明：`ui_v2/alo/fixtures.py` 把 `holding`／`policy`
     當成**兩個可以各自失敗**的鍵（`holdfail`／`policyfail` 兩種情境），但正式模式這兩張表是
-    `services/v2_tables/alo_holdings.py::load_alo_tables` **同一次呼叫**的產物 —— 它拋
+    `services/v2_tables/alo_holdings.py::load_alo_tables_active`（批 3b-4 起；原 `load_alo_tables` 讀 `POLICY_SHEET_ID`／
+    服務帳戶，現只剩 `refetch_nav` 使用，BL-0460）**同一次呼叫**的產物 —— 它拋
     `PolicySupplementError` 時，兩張表一起沒有，分不出是誰壞的。所以正式模式一律兩個鍵一起標，
     不假裝其中一張還活著。
     """
