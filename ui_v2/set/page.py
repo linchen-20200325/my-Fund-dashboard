@@ -545,6 +545,23 @@ def _render_page_health(pages=None) -> None:
 _MOVED_SUMMARY = {"SET-2": sections.set2_summary, "SET-3": sections.set3_summary}
 
 
+def _render_login(login_live) -> None:
+    """第二層「Google 帳號」卡（批 3b-2）。只畫：字與鈕全部來自 `live.login_view`。
+
+    這幾枚鈕是工作階段身分動作（登入、確認、取消、登出、切換帳號），不是試算表寫入，也不在 `logic` 的按鈕表裡。
+    登入走 `st.link_button`（整頁導向 Google）；其餘走 `on_click`，動作先執行、再重畫，畫面讀到的就是動作之後的狀態。"""
+    view = live.login_view(login_live["load"]())
+    with st.expander(live.LOGIN_CARD_TITLE, expanded=True):
+        _lines(view["lines"])
+        for button in view["buttons"]:
+            key = f"set_login_{button['action']}"
+            if "url" in button:
+                st.link_button(button["label"], button["url"], key=key)
+            else:
+                st.button(button["label"], key=key, on_click=login_live["act"],
+                          args=(button["action"], *((button["arg"],) if "arg" in button else ())))
+
+
 def _render_set0_nav() -> None:
     """`SET-0` 燈旁那一枚 `導覽`（之八其二 (b-1) 第 2 條）：同頁錨點連結，只把畫面捲到 ④「操作」的 `SET-5`。
     純 HTML 錨點 —— 不是 `st.button`（按下會重跑整頁、重讀設定試算表），不讀也不寫任何資料表，
@@ -600,7 +617,7 @@ _RENDERERS = {
 }
 
 
-def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None, pages=None) -> None:
+def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None, pages=None, login_live=None) -> None:
     """畫整頁。
 
     三個參數都不傳（None）時行為與加這些參數之前完全相同：照舊以 ?scenario= 挑 fixtures 情境。
@@ -628,6 +645,8 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
             raise ValueError("mask_error 要與 load_live 一起傳")
         if pages is not None:
             raise ValueError("pages 要與 load_live 一起傳")
+        if login_live is not None:
+            raise ValueError("login_live 要與 load_live 一起傳")
         scenario = _pick_scenario()
         save_failed = _pick_save_failed()
         model = logic.build_page_model(fixtures.scenario_with(scenario, save_failed=save_failed))
@@ -701,6 +720,8 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         _render_set0_nav()
 
     _html(f'<div class="set-layer-label">{label2}</div>')
+    if login_live is not None:
+        _render_login(login_live)   # 65 第 A.2、C 節：第二層「關鍵數字」最上面的「Google 帳號」卡
     with st.container(key="set_layer2"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
             with column:

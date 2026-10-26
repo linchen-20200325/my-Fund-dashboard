@@ -293,7 +293,10 @@ def test_b_執行期_四頁傳入的物件與live入口傳的是同一批(no_sec
     assert preview_kwargs.keys() == live_kwargs.keys() and preview_kwargs
     for name, obj in preview_kwargs.items():
         assert obj is live_kwargs[name], (slug, name)
-        assert getattr(obj, "__module__", None) == _SOURCES[slug].__name__, (slug, name)
+        # 2026-10-26 批 3b-2（狀態更新，不是漏刪）：`login_live` 是 `{"load": 函式, "act": 函式}` 的 dict（本身沒有 `__module__`）→
+        # 逐一檢查每個值的 `__module__`；其他物件的斷言不變。
+        for part in (obj.values() if isinstance(obj, dict) else (obj,)):
+            assert getattr(part, "__module__", None) == _SOURCES[slug].__name__, (slug, name)
 
 
 def test_b_執行期_標的探索的示範入口照舊不傳任何參數(monkeypatch):

@@ -237,6 +237,10 @@ def page_set() -> None:
     set_page.render(
         load_live=set_source.load_live, save_live=set_source.save_setting, refetch_live=set_source.refetch,
         mask_error=set_source.mask_error, pages=_page_links(),
+        # 2026-10-26 批 3b-2：Google 個人登入卡，與 `ui_v2/app_set_live.py` 同名參數、同一物件（守衛同上）。
+        # ⚠️ 多頁預覽只有在 Google 導回的網址落在設定頁（`/set`）時才會處理 OAuth callback；導回落在別頁
+        # （例如預設首頁）時，那一頁不處理 code／state，登入不會完成。部署的 redirect_uri 要指向設定頁網址。
+        login_live=set_source.login_live,
     )
 
 

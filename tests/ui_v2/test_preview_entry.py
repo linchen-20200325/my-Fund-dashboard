@@ -233,8 +233,10 @@ def test_b_live入口的注入本身沒有漂移_體檢四份的關鍵字集合(
         "exp": {"load_live": "load_live", "save_live": "save_setting", "mask_error": "mask_error"},   # 2026-10-13 新增
         # 2026-10-16 總管判定（PR #976 稽核後）：資產配置入口與預覽同步加傳 mask_error（狀態更新，不是漏刪）。
         "alo": {"load_live": "load_live", "save_live": "save_setting", "mask_error": "mask_error"},
+        # ~~"set": {…, "mask_error": "mask_error"},~~ → 2026-10-26 批 3b-2（狀態更新，不是漏刪）：設定頁入口與預覽同步加傳
+        # login_live（Google 個人登入卡；`ui_v2/set/source.py::login_live`）。
         "set": {"load_live": "load_live", "save_live": "save_setting", "refetch_live": "refetch",
-                "mask_error": "mask_error"},
+                "mask_error": "mask_error", "login_live": "login_live"},
     }
 
 
@@ -516,3 +518,16 @@ def test_側邊欄說明的字面():
     assert "只接上選股池的基金代碼" not in note and "其餘欄位顯示資料未備" not in note
     assert "示意資料" not in note
     assert "正式上線" not in note   # 49 4.8：正式部署形態查不到，不得斷言
+
+
+def test_換頁清單不含個人登入的任何狀態_2026_10_26_批3b2():
+    """換頁時被 pop 的 key 一覽（`_PAGE_STATE_TO_DROP`）不得含個人 OAuth 的鍵（`b_oauth.` 命名空間）或設定頁登入卡的標記
+    （notice、callback 已處理的 state、切換標記）：這些在換頁（例如離開設定頁再回來）時必須保留，否則登入狀態會被換頁洗掉。
+    以 AST 讀清單的每個元素原文，不 import 預覽入口（不需要 streamlit）。"""
+    tree = _tree(_PREVIEW)
+    node = next(n for n in ast.walk(tree) if isinstance(n, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == "_PAGE_STATE_TO_DROP" for t in n.targets))
+    texts = [ast.unparse(e).lower() for e in node.value.elts]
+    assert texts, "清單讀不到元素"
+    for text in texts:
+        assert "oauth" not in text and "login" not in text, text
