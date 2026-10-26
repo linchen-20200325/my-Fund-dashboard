@@ -544,6 +544,27 @@
 
 📌 **2026-10-24 指標（客戶永久原則，`DEC-2026-10-24-10`；本節既有條文一字未改）**：(1) 資料／證據 ≠ 投資行動；(2) Missing／Unknown 不得被另一個單軸訊號繞過後重新產生行動。本文以 `docs/DECISIONS.md` `DEC-2026-10-24-10` 為準。
 
+### 13.2 長期規則：Long-term UI & Logic Sustainability Principles（客戶 2026-10-26 長期裁示，`DEC-2026-10-26-01`，永久）
+
+> 完整條文以 `docs/DECISIONS.md` `DEC-2026-10-26-01` 為準（要點轉述，repo 無逐字存檔）；本小節只列「五年後仍必須維持什麼」，已有條文用指標。**不授權任何實作、不解凍 44、不改第一階段唯讀護欄（第一階段 ＝ 全部唯讀、SET-4 不顯示，見 `DEC-2026-10-25-04` J-6／J-14）、不改 OAuth scope／callback／credential／token。**
+
+**問：五年後即使資料源、AI 模型、OAuth 或前端框架換掉，哪些必須維持？答：**
+
+1. **五頁資訊架構與職責**：🌍 市場與趨勢、⚖️ 資產配置、💼 我的持股、🔍 找基金、⚙️ 設定（順序見 `DEC-2026-10-24-02`）。新功能優先歸入既有五頁，不輕易增第六頁；不以 API／資料源／模型限制或「程式比較好接」改造資訊架構。
+2. **domain semantics、data contracts、user classifications、deterministic investment rules** 不隨技術元件更換而改；技術元件（Streamlit、Google Sheet、OAuth provider、外部 API、AI model、storage、前端框架）不是產品 SSOT。
+3. **Missing 語意**（已有，見第 13 節第 2～4 條）：Missing ≠ 0／False／HOLD／中性／正常／安全／未觸發；顏色不得是唯一語意載體。新來源給不出同語意時顯示 Missing／Unavailable，不用「差不多」的值替代。
+4. **可追溯性**：重要資料可追溯來源與時間（已有，第 13 節第 5 條）。
+5. **UI 不承載核心投資邏輯**：投資分類、風險判定、3-3-3、核心／衛星、配息／吃本金、趨勢判讀、配置規則、Missing 語意、Risk Cap 等必須在可測試的 domain／service／rule layer（明確輸入／輸出 contract），UI 只讀結果並呈現。
+6. **資料流**：Raw → Validate → Normalize → Domain／Rule → AI interpretation → UI。Raw 不直接當投資結論。
+7. **AI 非資料真相來源**（已有，第 13 節第 1 條、13.1）：AI 只讀已存在且可追溯的資料、解釋與整合 evidence；不補缺值、不猜數字、不改寫 deterministic rule 結果、不取代驗證或正式 investment semantics；換模型不改資料與 domain contract。
+8. **⚙️ 設定長期責任與 Active Sheet 原則**：帳號／OAuth、Active Sheet、連線狀態、sync／freshness、diagnostics 由 ⚙️ 管，其他頁不自管 Sheet／credential／connection。Active Sheet ＝ 持倉／保單 workbook；Pending ≠ Active；驗證成功才切換、失敗保留舊 Active；其他頁只消費結果，不猜、不 fallback 到別本（`DEC-2026-10-25-04` J-4）。
+
+**新需求分類 Gate**：先答屬於 A. Data／B. Domain／Rule／C. AI interpretation／D. UI／Interaction／E. Infrastructure／Auth 哪一層，先放對層再實作；不得因「最快」把邏輯塞進 UI。
+
+**大規模資訊架構改版只在四種情況允許**：使用者核心任務明顯改變；五頁已無法合理容納主要任務；有經驗證的 usability 問題；現行架構造成明確的資訊衝突。換 API／AI、新增單一功能、某頁難寫、資料暫時不足，都不是理由。
+
+**舊 UI 退役原則**：舊 UI 只提供已驗證公式、deterministic logic、已證實資料 mapping、已通過測試的行為；不自動提供新 UI 版型、導覽、文案、interaction pattern、寫入權限。新 UI 覆蓋必要邏輯後才切正式入口、移除舊頁、清 legacy wiring 與死碼，並保留必要 regression tests／domain rules。**退役與刪除仍受既有閘門約束**（第 13 節第 11、12 條、第 4 節停下清單、`CLAUDE.md` §-1.5.1c 判定 3）；本小節不授權任何刪除（最保守讀法，可被客戶推翻）。
+
 ## 第 14 節｜已裁示的治理衝突（2026-10-16 收斂）~~與尚待程序完成者~~（2026-10-16 全結，`DEC-2026-10-16-14`；有意識的狀態變更，不是漏刪；2026-10-16；決策者：客戶（#8 核准裁示，`DEC-2026-10-16-14`））
 
 > 原標題：~~未調和的衝突（待客戶裁示）~~（2026-10-16 改題；有意識的政策變更，不是漏刪；決策者：客戶，治理十一項裁示）
