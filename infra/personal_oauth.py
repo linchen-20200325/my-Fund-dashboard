@@ -32,8 +32,16 @@ Streamlit 的 OAuth 整頁導回（Google → redirect_uri）會建立**新的**
 
 這符合裁示第 2 節「`code_verifier` 只短期存在 server/session runtime」：短期（600 秒）、
 一次性、只在記憶體、不寫 log／Sheet／repo／檔案。
-⚠️ 多 worker／多 replica 部署時，各 process 的 store 互不相通 —— 導回落到別的 process
-會得到 `AUTH_STATE_INVALID`（fail closed，使用者需重新登入），不會放行。
+⚠️ **單 process 假設**：pending store 只存在單一 process 的記憶體。多 process（多 worker／
+多 replica）時，導回落到別的 process 會要求重新登入（`AUTH_STATE_INVALID`），**不放行**。
+
+────────────────────────────────────────────────────────────────────────
+授權範圍與帳號身分（總管 2026-10-26 依裁示第 1～4 節推導）
+────────────────────────────────────────────────────────────────────────
+- Google 回傳的 granted scope 只要含四項最小 scope 以外的任何權限，或回應根本沒帶
+  scope 欄位（無法確認）→ 拒絕登入：嘗試 revoke 該 token、清 session、拋 `PERMISSION_DENIED`。
+- 帳號身分不用未驗簽的 id_token；exchange 成功後以 access token 呼叫 Google OpenID
+  userinfo endpoint，要求 `sub`、`email`、`email_verified is True`，否則清 session 並拋錯。
 """
 from __future__ import annotations
 
@@ -68,6 +76,7 @@ PERSONAL_OAUTH_SCOPES: tuple[str, ...] = (
 GOOGLE_AUTH_URL: str = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL: str = "https://oauth2.googleapis.com/token"
 GOOGLE_REVOKE_URL: str = "https://oauth2.googleapis.com/revoke"
+GOOGLE_USERINFO_URL: str = "https://openidconnect.googleapis.com/v1/userinfo"
 
 #: 部署 secrets 內的 OAuth client 區塊名（與舊模組 docs/OAUTH_SETUP.md 同一區塊）。
 SECRETS_SECTION: str = "google_oauth"
@@ -90,6 +99,7 @@ PKCE_ALLOWED_CHARS: frozenset[str] = frozenset(
 #: 舊 UI 使用的 `gsheet_tokens`／`gsheet_email`／`_oauth_state` 本模組一律不碰。
 SESSION_PREFIX: str = "b_oauth."
 KEY_TOKENS: str = SESSION_PREFIX + "tokens"
+KEY_ACCOUNT_SUB: str = SESSION_PREFIX + "account_sub"
 KEY_ACCOUNT_EMAIL: str = SESSION_PREFIX + "account_email"
 KEY_GRANTED_SCOPES: str = SESSION_PREFIX + "granted_scopes"
 #: Active／Pending Sheet（裁示第 8 節 J-5）。本批只定義常數並在登出／切換帳號時清除，
@@ -99,6 +109,7 @@ KEY_PENDING_SHEET: str = SESSION_PREFIX + "pending_sheet"
 
 SESSION_KEYS: tuple[str, ...] = (
     KEY_TOKENS,
+    KEY_ACCOUNT_SUB,
     KEY_ACCOUNT_EMAIL,
     KEY_GRANTED_SCOPES,
     KEY_ACTIVE_SHEET,
@@ -277,8 +288,17 @@ def begin_authorization(now: float | None = None) -> dict[str, str]:
 # ──────────────────────────────────────────────────────────────────────
 # Token endpoint 共用
 # ──────────────────────────────────────────────────────────────────────
-def _post_token_endpoint(data: dict[str, str]) -> dict[str, Any]:
-    """POST token endpoint 並分類錯誤；不吞例外（§1）。訊息不含回應 body（可能含敏感值）。"""
+def _post_token_endpoint(
+    data: dict[str, str],
+    *,
+    rejected_code: str = ec.AUTH_STATE_INVALID,
+    reject_any_401: bool = False,
+) -> dict[str, Any]:
+    """POST token endpoint 並分類錯誤；不吞例外（§1）。訊息不含回應 body（可能含敏感值）。
+
+    Google 明確拒絕（400/401 + `invalid_grant`；`reject_any_401` 時任何 401）→ `rejected_code`；
+    網路失敗 → `NETWORK_ERROR`；其他非 200（含 5xx）→ `UPSTREAM_ERROR`。
+    """
     try:
         r = requests.post(GOOGLE_TOKEN_URL, data=data, timeout=HTTP_TIMEOUT_SEC)
     except requests.exceptions.RequestException as e:
@@ -295,9 +315,9 @@ def _post_token_endpoint(data: dict[str, str]) -> dict[str, Any]:
     if status != 200:
         err = payload.get("error") if isinstance(payload, dict) else None
         err = err if isinstance(err, str) else ""
-        if status in (400, 401) and err == "invalid_grant":
+        if (status in (400, 401) and err == "invalid_grant") or (reject_any_401 and status == 401):
             raise PersonalOAuthError(
-                ec.AUTH_STATE_INVALID, "授權碼無效或已使用，請重新登入"
+                rejected_code, "Google 拒絕這組授權（無效、已使用或已撤銷），請重新登入"
             )
         safe_err = err if err.replace("_", "").isalnum() else ""
         raise PersonalOAuthError(
@@ -330,27 +350,89 @@ def _normalize_token_payload(payload: dict[str, Any], now: float) -> dict[str, A
     rt = payload.get("refresh_token")
     if isinstance(rt, str) and rt:
         tokens["refresh_token"] = rt
-    idt = payload.get("id_token")
-    if isinstance(idt, str) and idt:
-        tokens["id_token"] = idt
     return tokens
 
 
-def _unverified_id_token_email(id_token: str | None) -> str:
-    """從 token endpoint 直接回傳的 id_token 取 email，**僅供顯示**，未驗簽。
+_ALLOWED_SCOPES: frozenset[str] = frozenset(PERSONAL_OAUTH_SCOPES)
 
-    解析失敗回空字串 —— 空字串代表「未知」，呼叫端不得把它當成任何帳號。
-    """
-    if not id_token:
-        return ""
+
+def _excess_scopes(tokens: Mapping[str, Any]) -> list[str] | None:
+    """回傳超出四項最小 scope 的權限清單；scope 欄位缺失／非字串 → None（無法確認）。"""
+    scope = tokens.get("scope")
+    if not isinstance(scope, str) or not scope.strip():
+        return None
+    return sorted(set(scope.split()) - _ALLOWED_SCOPES)
+
+
+def _revoke_token(token: str) -> LogoutResult:
+    """POST revoke endpoint；失敗只回報，不拋例外。"""
     try:
-        part = id_token.split(".")[1]
-        part += "=" * (-len(part) % 4)
-        data = json.loads(base64.urlsafe_b64decode(part))
-    except (IndexError, ValueError, json.JSONDecodeError):
-        return ""
-    email = data.get("email") if isinstance(data, dict) else None
-    return email if isinstance(email, str) else ""
+        r = requests.post(
+            GOOGLE_REVOKE_URL,
+            data={"token": token},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=REVOKE_TIMEOUT_SEC,
+        )
+    except requests.exceptions.RequestException:
+        return LogoutResult(True, False, ec.NETWORK_ERROR)
+    except Exception:  # noqa: BLE001 — 撤銷失敗只回報，呼叫端仍須完成本機清除
+        return LogoutResult(True, False, ec.UPSTREAM_ERROR)
+    if int(getattr(r, "status_code", 0) or 0) == 200:
+        return LogoutResult(True, True, None)
+    return LogoutResult(True, False, ec.UPSTREAM_ERROR)
+
+
+def _reject_scope_if_excess(session_state: MutableMapping, tokens: Mapping[str, Any]) -> None:
+    """授權範圍超出唯讀或無法確認 → revoke 該 token、清 session、拋 `PERMISSION_DENIED`。"""
+    excess = _excess_scopes(tokens)
+    if excess is not None and not excess:
+        return
+    token = tokens.get("refresh_token") or tokens.get("access_token")
+    if isinstance(token, str) and token:
+        _revoke_token(token)
+    clear_session(session_state)
+    if excess is None:
+        raise PersonalOAuthError(
+            ec.PERMISSION_DENIED, "無法確認 Google 授權範圍，為確保唯讀已拒絕登入"
+        )
+    raise PersonalOAuthError(
+        ec.PERMISSION_DENIED,
+        "Google 授權範圍超出唯讀（多了：" + "、".join(excess) + "），已拒絕登入",
+    )
+
+
+def fetch_verified_identity(access_token: str) -> tuple[str, str]:
+    """以 access token 呼叫 OpenID userinfo；回傳 (sub, email)。
+
+    要求 `sub`、`email` 為非空字串且 `email_verified is True`，否則 `AUTH_STATE_INVALID`；
+    網路失敗 `NETWORK_ERROR`；401／403 `AUTH_STATE_INVALID`；其他非 200 或非 JSON `UPSTREAM_ERROR`。
+    """
+    try:
+        r = requests.get(
+            GOOGLE_USERINFO_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=HTTP_TIMEOUT_SEC,
+        )
+    except requests.exceptions.RequestException as e:
+        raise PersonalOAuthError(
+            ec.NETWORK_ERROR, f"連線 Google 帳號資訊失敗（{type(e).__name__}）"
+        ) from e
+    status = int(getattr(r, "status_code", 0) or 0)
+    if status in (401, 403):
+        raise PersonalOAuthError(ec.AUTH_STATE_INVALID, "Google 拒絕提供帳號資訊，請重新登入")
+    if status != 200:
+        raise PersonalOAuthError(ec.UPSTREAM_ERROR, f"Google 帳號資訊回應異常（HTTP {status}）")
+    try:
+        data = r.json()
+    except (ValueError, json.JSONDecodeError):
+        raise PersonalOAuthError(ec.UPSTREAM_ERROR, "Google 帳號資訊回應不是 JSON") from None
+    if not isinstance(data, dict):
+        raise PersonalOAuthError(ec.UPSTREAM_ERROR, "Google 帳號資訊回應不是 JSON 物件")
+    sub, email = data.get("sub"), data.get("email")
+    if not (isinstance(sub, str) and sub and isinstance(email, str) and email
+            and data.get("email_verified") is True):
+        raise PersonalOAuthError(ec.AUTH_STATE_INVALID, "Google 帳號身分無法確認，請重新登入")
+    return sub, email
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -382,11 +464,17 @@ def complete_authorization(
 ) -> dict[str, Any]:
     """callback 完整流程：清掉本 session 舊登入 → exchange → 寫入 namespaced session。
 
+    exchange 之後依序：授權範圍檢查（超出唯讀即拒絕）→ userinfo 驗證帳號身分 → 才寫入。
     失敗時本 session 不留任何登入狀態（不沿用舊 token）。
     """
     clear_session(session_state)
     tokens = exchange_code(code, state, now)
+    _reject_scope_if_excess(session_state, tokens)
+    # 開頭已 clear_session，且到這行之前沒有寫入任何 key → 身分驗證失敗時 session 本來就是乾淨的
+    sub, email = fetch_verified_identity(tokens["access_token"])
     store_tokens(session_state, tokens)
+    session_state[KEY_ACCOUNT_SUB] = sub
+    session_state[KEY_ACCOUNT_EMAIL] = email
     return tokens
 
 
@@ -401,7 +489,6 @@ def store_tokens(session_state: MutableMapping, tokens: Mapping[str, Any]) -> No
     if not isinstance(expires_at, (int, float)):
         raise PersonalOAuthError(ec.UPSTREAM_ERROR, "token 缺 expires_at")
     session_state[KEY_TOKENS] = dict(tokens)
-    session_state[KEY_ACCOUNT_EMAIL] = _unverified_id_token_email(tokens.get("id_token"))
     scope = tokens.get("scope")
     session_state[KEY_GRANTED_SCOPES] = tuple(scope.split()) if isinstance(scope, str) else ()
 
@@ -424,8 +511,10 @@ def clear_session(session_state: MutableMapping) -> None:
 def ensure_fresh(session_state: MutableMapping, now: float | None = None) -> dict[str, Any]:
     """access_token 在 `TOKEN_REFRESH_LEEWAY_SEC` 內到期 → 用 refresh_token 換新並寫回。
 
-    未登入 → `AUTH_REQUIRED`。換新失敗（任何原因）→ 清 session 並拋 `AUTH_EXPIRED`；
-    不 fallback 到任何其他憑證。
+    未登入 → `AUTH_REQUIRED`。Google 明確拒絕 refresh（invalid_grant／401）或沒有
+    refresh_token → 清 session 並拋 `AUTH_EXPIRED`。網路失敗 → `NETWORK_ERROR`、5xx 等 →
+    `UPSTREAM_ERROR`，兩者**不清 session**。續期後授權範圍超出唯讀 → `PERMISSION_DENIED`
+    （revoke＋清 session）。任何情況都不 fallback 到其他憑證。
     """
     ts = _now(now)
     tokens = get_tokens(session_state)
@@ -439,23 +528,27 @@ def ensure_fresh(session_state: MutableMapping, now: float | None = None) -> dic
     if not isinstance(rt, str) or not rt:
         clear_session(session_state)
         raise PersonalOAuthError(ec.AUTH_EXPIRED, "登入已過期，需要重新登入")
+    cfg = load_client_config()
     try:
-        cfg = load_client_config()
-        payload = _post_token_endpoint({
-            "refresh_token": rt,
-            "client_id": cfg.client_id,
-            "client_secret": cfg.client_secret,
-            "grant_type": "refresh_token",
-        })
-        new_tokens = _normalize_token_payload(payload, ts)
+        payload = _post_token_endpoint(
+            {
+                "refresh_token": rt,
+                "client_id": cfg.client_id,
+                "client_secret": cfg.client_secret,
+                "grant_type": "refresh_token",
+            },
+            rejected_code=ec.AUTH_EXPIRED,
+            reject_any_401=True,
+        )
     except PersonalOAuthError as e:
-        clear_session(session_state)
-        raise PersonalOAuthError(
-            ec.AUTH_EXPIRED, f"登入已過期且無法續期（{e.code}），需要重新登入"
-        ) from e
+        if e.code == ec.AUTH_EXPIRED:
+            clear_session(session_state)
+        raise
+    new_tokens = _normalize_token_payload(payload, ts)
     new_tokens.setdefault("refresh_token", rt)  # Google 續期通常不回新的 refresh_token
-    if "id_token" not in new_tokens and isinstance(tokens.get("id_token"), str):
-        new_tokens["id_token"] = tokens["id_token"]
+    if not (isinstance(new_tokens.get("scope"), str) and new_tokens["scope"].strip()):
+        new_tokens["scope"] = tokens.get("scope", "")  # 續期回應未帶 scope → 沿用登入時已驗過的
+    _reject_scope_if_excess(session_state, new_tokens)
     store_tokens(session_state, new_tokens)
     return new_tokens
 
@@ -482,20 +575,7 @@ def logout(session_state: MutableMapping) -> LogoutResult:
         token = tokens.get("refresh_token") or tokens.get("access_token")
         if not isinstance(token, str) or not token:
             return LogoutResult(revoke_attempted=False, revoke_confirmed=False)
-        try:
-            r = requests.post(
-                GOOGLE_REVOKE_URL,
-                data={"token": token},
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=REVOKE_TIMEOUT_SEC,
-            )
-        except requests.exceptions.RequestException:
-            return LogoutResult(True, False, ec.NETWORK_ERROR)
-        except Exception:  # noqa: BLE001 — 撤銷失敗只回報，本機登出仍須完成（finally）
-            return LogoutResult(True, False, ec.UPSTREAM_ERROR)
-        if int(getattr(r, "status_code", 0) or 0) == 200:
-            return LogoutResult(True, True, None)
-        return LogoutResult(True, False, ec.UPSTREAM_ERROR)
+        return _revoke_token(token)
     finally:
         clear_session(session_state)
 

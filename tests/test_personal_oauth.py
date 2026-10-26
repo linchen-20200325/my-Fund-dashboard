@@ -46,6 +46,21 @@ def _iso(monkeypatch):
         raise AssertionError("unexpected network call")
 
     monkeypatch.setattr(po.requests, "post", _no_net)
+    monkeypatch.setattr(po.requests, "get", _no_net)
+
+
+GOOD_ID = {"sub": "1234", "email": "a@example.com", "email_verified": True}
+
+
+def _set_get(monkeypatch, fn):
+    calls = []
+
+    def _g(url, **kw):
+        calls.append((url, kw))
+        return fn(url, **kw)
+
+    monkeypatch.setattr(po.requests, "get", _g)
+    return calls
 
 
 def _set_post(monkeypatch, fn):
@@ -189,8 +204,13 @@ def test_session_custom_cfg_ignored(monkeypatch):
 def test_exchange_success_sends_verifier(monkeypatch):
     s, v = po.register_pending(now=100)
     calls = _set_post(monkeypatch, lambda url, **kw: FakeResp(200, _ok_token()))
+    gcalls = _set_get(monkeypatch, lambda url, **kw: FakeResp(200, dict(GOOD_ID)))
     sess = dict(OLD_KEYS)
     tokens = po.complete_authorization(sess, code="C", state=s, now=100)
+    assert gcalls[0][0] == po.GOOGLE_USERINFO_URL == "https://openidconnect.googleapis.com/v1/userinfo"
+    assert gcalls[0][1]["headers"]["Authorization"] == "Bearer AT"
+    assert gcalls[0][1]["timeout"] == po.HTTP_TIMEOUT_SEC
+    assert sess[po.KEY_ACCOUNT_SUB] == "1234" and sess[po.KEY_ACCOUNT_EMAIL] == "a@example.com"
     url, kw = calls[0]
     assert url == po.GOOGLE_TOKEN_URL == "https://oauth2.googleapis.com/token"
     assert kw["data"]["code_verifier"] == v
@@ -257,6 +277,7 @@ def _logged_in():
     s = dict(OLD_KEYS)
     s[po.KEY_TOKENS] = {"access_token": "AT", "refresh_token": "RT", "expires_at": 9e9}
     s[po.KEY_ACCOUNT_EMAIL] = "a@x"
+    s[po.KEY_ACCOUNT_SUB] = "sub-A"
     s[po.KEY_ACTIVE_SHEET] = "sheet-A"
     s[po.KEY_PENDING_SHEET] = "sheet-B"
     return s
@@ -327,7 +348,8 @@ def test_ensure_fresh_not_due():
 
 def test_ensure_fresh_refreshes(monkeypatch):
     calls = _set_post(monkeypatch, lambda url, **kw: FakeResp(200, {"access_token": "AT2", "expires_in": 3600}))
-    s = {po.KEY_TOKENS: {"access_token": "AT", "refresh_token": "RT", "expires_at": 1000}}
+    s = {po.KEY_TOKENS: {"access_token": "AT", "refresh_token": "RT", "expires_at": 1000,
+                         "scope": " ".join(po.PERSONAL_OAUTH_SCOPES)}}
     t = po.ensure_fresh(s, now=950)
     assert t["access_token"] == "AT2" and t["refresh_token"] == "RT"
     assert s[po.KEY_TOKENS]["access_token"] == "AT2"
@@ -336,15 +358,52 @@ def test_ensure_fresh_refreshes(monkeypatch):
 
 @pytest.mark.parametrize("resp", [
     lambda url, **kw: FakeResp(400, {"error": "invalid_grant"}),
-    lambda url, **kw: FakeResp(500, None, raise_json=True),
+    lambda url, **kw: FakeResp(401, {"error": "unauthorized_client"}),
 ])
-def test_ensure_fresh_failure_clears(monkeypatch, resp):
+def test_ensure_fresh_rejected_clears(monkeypatch, resp):
     _set_post(monkeypatch, resp)
     s = _logged_in()
     s[po.KEY_TOKENS]["expires_at"] = 1000
     with pytest.raises(po.PersonalOAuthError) as ei:
         po.ensure_fresh(s, now=990)
     assert ei.value.code == ec.AUTH_EXPIRED
+    _assert_cleared(s)
+
+
+def _raise(exc):
+    def _f(url, **kw):
+        raise exc
+    return _f
+
+
+@pytest.mark.parametrize("resp,code", [
+    (_raise(requests.exceptions.Timeout("slow")), ec.NETWORK_ERROR),
+    (_raise(requests.exceptions.ConnectionError("down")), ec.NETWORK_ERROR),
+    (lambda url, **kw: FakeResp(503, None, raise_json=True), ec.UPSTREAM_ERROR),
+    (lambda url, **kw: FakeResp(500, {"error": "internal"}), ec.UPSTREAM_ERROR),
+])
+def test_ensure_fresh_transient_keeps_session(monkeypatch, resp, code):
+    _set_post(monkeypatch, resp)
+    s = _logged_in()
+    s[po.KEY_TOKENS]["expires_at"] = 1000
+    before = {k: (dict(v) if isinstance(v, dict) else v) for k, v in s.items()}
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.ensure_fresh(s, now=990)
+    assert ei.value.code == code
+    assert s == before
+
+
+def test_ensure_fresh_excess_scope_rejected(monkeypatch):
+    calls = _set_post(monkeypatch, lambda url, **kw: (
+        FakeResp(200, {"access_token": "AT2", "expires_in": 3600,
+                       "scope": "openid https://www.googleapis.com/auth/drive"})
+        if url == po.GOOGLE_TOKEN_URL else FakeResp(200, {})))
+    s = _logged_in()
+    s[po.KEY_TOKENS]["expires_at"] = 1000
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.ensure_fresh(s, now=990)
+    assert ei.value.code == ec.PERMISSION_DENIED
+    assert calls[-1][0] == po.GOOGLE_REVOKE_URL
     _assert_cleared(s)
 
 
@@ -441,3 +500,72 @@ def test_error_messages_do_not_leak_secret(monkeypatch):
         assert secret not in msg
     assert "csecret" not in repr(po.load_client_config())
     json.dumps(msg)
+
+
+# ── 授權範圍檢查（總管裁定 3）──────────────────────────────────────────
+@pytest.mark.parametrize("scope", [
+    " ".join(po.PERSONAL_OAUTH_SCOPES) + " https://www.googleapis.com/auth/spreadsheets",
+    " ".join(po.PERSONAL_OAUTH_SCOPES) + " https://www.googleapis.com/auth/drive",
+    " ".join(po.PERSONAL_OAUTH_SCOPES) + " https://www.googleapis.com/auth/drive.file",
+    None,
+    "",
+])
+def test_excess_or_missing_scope_rejected(monkeypatch, scope):
+    s, _ = po.register_pending(now=0)
+    tok = _ok_token()
+    if scope is None:
+        tok.pop("scope")
+    else:
+        tok["scope"] = scope
+    calls = _set_post(monkeypatch, lambda url, **kw: FakeResp(200, tok) if url == po.GOOGLE_TOKEN_URL else FakeResp(200, {}))
+    sess = dict(OLD_KEYS)
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.complete_authorization(sess, code="C", state=s, now=0)
+    assert ei.value.code == ec.PERMISSION_DENIED
+    assert "唯讀" in ei.value.message
+    revokes = [c for c in calls if c[0] == po.GOOGLE_REVOKE_URL]
+    assert revokes and revokes[0][1]["data"] == {"token": "RT"}
+    _assert_cleared(sess)
+
+
+def test_scope_subset_accepted(monkeypatch):
+    s, _ = po.register_pending(now=0)
+    _set_post(monkeypatch, lambda url, **kw: FakeResp(200, _ok_token(scope="openid https://www.googleapis.com/auth/userinfo.email")))
+    _set_get(monkeypatch, lambda url, **kw: FakeResp(200, dict(GOOD_ID)))
+    sess = {}
+    po.complete_authorization(sess, code="C", state=s, now=0)
+    assert po.get_tokens(sess)["access_token"] == "AT"
+
+
+# ── 帳號身分（總管裁定 4）──────────────────────────────────────────────
+@pytest.mark.parametrize("get_fn,code", [
+    (lambda url, **kw: FakeResp(200, {"email": "a@x", "email_verified": True}), ec.AUTH_STATE_INVALID),
+    (lambda url, **kw: FakeResp(200, {"sub": "1", "email_verified": True}), ec.AUTH_STATE_INVALID),
+    (lambda url, **kw: FakeResp(200, {"sub": "1", "email": "a@x", "email_verified": False}), ec.AUTH_STATE_INVALID),
+    (lambda url, **kw: FakeResp(200, {"sub": "1", "email": "a@x", "email_verified": "true"}), ec.AUTH_STATE_INVALID),
+    (lambda url, **kw: FakeResp(200, {"sub": "1", "email": "a@x"}), ec.AUTH_STATE_INVALID),
+    (lambda url, **kw: FakeResp(401, {}), ec.AUTH_STATE_INVALID),
+    (lambda url, **kw: FakeResp(502, None, raise_json=True), ec.UPSTREAM_ERROR),
+    (lambda url, **kw: FakeResp(200, None, raise_json=True), ec.UPSTREAM_ERROR),
+    (_raise(requests.exceptions.Timeout("slow")), ec.NETWORK_ERROR),
+])
+def test_identity_required(monkeypatch, get_fn, code):
+    s, _ = po.register_pending(now=0)
+    _set_post(monkeypatch, lambda url, **kw: FakeResp(200, _ok_token()))
+    _set_get(monkeypatch, get_fn)
+    sess = dict(OLD_KEYS)
+    sess[po.KEY_TOKENS] = {"access_token": "PREV", "expires_at": 9e9}
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.complete_authorization(sess, code="C", state=s, now=0)
+    assert ei.value.code == code
+    _assert_cleared(sess)
+
+
+def test_no_id_token_parsing():
+    src = MOD_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    assert not any("id_token" in n for n in names)
+    literals = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+    assert "id_token" not in literals
+    assert "b64decode" not in src and "urlsafe_b64decode" not in src
