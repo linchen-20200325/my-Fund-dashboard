@@ -74,6 +74,8 @@ _FILE_ALLOWLIST = {
         "services.v2_tables.alo_holdings", "services.v2_tables.fund_keys",
         "services.v2_tables.market_indicator", "services.v2_tables.masking",
         "services.v2_tables.nav_dividend", "services.v2_tables.settings_store", "ui_v2.alo.live",
+        # 2026-10-26 批 3b-4：沒有 Active Sheet 的明確狀態（`NoActiveSource`、失敗碼對應字）；純 ui_v2 內部模組，不碰個人憑證
+        "ui_v2.active_gate",
     },
     "ui_v2/app_alo_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.alo.page", "ui_v2.alo.source",
@@ -84,6 +86,8 @@ _FILE_ALLOWLIST = {
         "services.v2_tables.alo_holdings", "services.v2_tables.contract", "services.v2_tables.fund_keys",
         "services.v2_tables.masking", "services.v2_tables.nav_dividend", "services.v2_tables.settings_store",
         "ui_v2.hld.live",
+        # 2026-10-26 批 3b-4：同 alo（見上）
+        "ui_v2.active_gate",
     },
     "ui_v2/app_hld_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.hld.page", "ui_v2.hld.source",

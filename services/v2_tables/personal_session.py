@@ -38,6 +38,7 @@ from typing import Any, MutableMapping
 
 import infra.personal_oauth as po
 from repositories import personal_drive_repository as drive
+from repositories import personal_policy_reader as policy_cache
 from shared import active_sheet as asheet
 from shared import ui_v2_error_codes as ec
 from shared.personal_oauth_keys import KEY_PICKER_IDS
@@ -101,7 +102,36 @@ def complete_login(state: MutableMapping, code: Any, state_param: Any) -> dict[s
     return {"ok": True, "pending_login_email": r["email"]}
 
 
+def _drop_account_cache(state: MutableMapping) -> None:
+    """丟掉目前（舊）帳號在持倉讀取快取裡的內容：登出、換帳號、確認新登入、AUTH_EXPIRED 清 session 前呼叫。"""
+    sub = asheet.current_account_sub(state)
+    if sub is not None:
+        policy_cache.drop_account(sub)
+
+
+def current_sub(state: MutableMapping):
+    """目前正式登入的帳號 sub（未登入 → None）。呼叫端在 `access_target`／`ensure_fresh` **之前**取，
+    因為續期失敗時 `ensure_fresh` 會自己清 session，之後就讀不到 sub 了。"""
+    return asheet.current_account_sub(state)
+
+
+def handle_read_error(state: MutableMapping, code: str, prior_sub=None) -> None:
+    """讀取失敗後的善後（`prior_sub`：失敗前取的帳號 sub，見 `current_sub`）。
+    - `AUTH_EXPIRED`（401：本機 expires_at 還沒到、但 token 已被 Google 拒絕）→ 與 `list_for_picker`／`use_pending`
+      同一個處置：丟該帳號的讀取快取、清整個 session（要求重新登入），否則下一次 `ensure_fresh` 會一直重用這顆死 token。
+    - 其他 code：若 session 已被別處清掉（`ensure_fresh` 遇到 PERMISSION_DENIED／AUTH_EXPIRED 會自己清）而 sub 已讀不到，
+      仍以 `prior_sub` 丟該帳號的快取。session 還在的其他失敗（網路、5xx…）不動。"""
+    sub = prior_sub if isinstance(prior_sub, str) and prior_sub.strip() else asheet.current_account_sub(state)
+    if code == ec.AUTH_EXPIRED:
+        if sub is not None:
+            policy_cache.drop_account(sub)
+        po.clear_session(state)
+    elif asheet.current_account_sub(state) is None and sub is not None:
+        policy_cache.drop_account(sub)
+
+
 def confirm_login(state: MutableMapping) -> dict[str, Any]:
+    _drop_account_cache(state)   # 確認的可能是另一個帳號：舊帳號的讀取快取不留
     try:
         r = po.confirm_pending_login(state)
     except po.PersonalOAuthError as e:
@@ -115,12 +145,14 @@ def reject_login(state: MutableMapping) -> dict[str, Any]:
 
 
 def logout(state: MutableMapping) -> dict[str, Any]:
+    _drop_account_cache(state)
     r = po.logout(state)
     return {"ok": True, "revoke_confirmed": r.revoke_confirmed}
 
 
 def switch_account(state: MutableMapping) -> dict[str, Any]:
     """登出（清 Active／Pending）→ 開始新授權；不沿用舊 token。"""
+    _drop_account_cache(state)
     try:
         r = po.begin_account_switch(state)
     except po.PersonalOAuthError as e:

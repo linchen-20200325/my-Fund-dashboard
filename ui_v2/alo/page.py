@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain, readonly, sections, symbols
+from .. import active_gate, health, health_view, plain, readonly, sections, symbols
 from . import fixtures, live, logic, theme
 
 _log = logging.getLogger(__name__)
@@ -673,6 +673,12 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
     else:
         try:
             live_input = load_live()
+        except active_gate.NoActiveSource:
+            # 批 3b-4（J-13）：沒有 Active Sheet ＝ 明確的第三種狀態「⬜ 尚未選定持倉資料來源」＋前往設定；不是錯誤、不是空持倉。
+            active_gate.render_no_active(
+                "alo", title=logic.PAGE_TITLE, answers=logic.PAGE_ANSWERS, title_class="alo-title",
+                sub_class="alo-sub", tone_hex=theme.tone_hex, settings_page=settings_page)
+            return
         except Exception as exc:  # noqa: BLE001 —— 不是吞：整頁改畫同一個錯誤畫面，原文進進階診斷並記 log（BL-0362）
             _render_live_error(exc, mask_error, settings_page)
             return

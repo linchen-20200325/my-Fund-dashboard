@@ -59,8 +59,10 @@ import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable
 
+from repositories import personal_drive_repository as personal_drive
+from repositories import personal_policy_reader as personal_repo
 from repositories import policy_supplement_repository as repo
-from services.v2_tables import contract
+from services.v2_tables import contract, personal_session
 from services.v2_tables.masking import mask_message
 
 PolicySupplementError = repo.PolicySupplementError
@@ -478,4 +480,49 @@ def load_alo_tables(secret_values) -> dict:
     # 它是給呈現端看的軟性提醒（分頁數、穩態每分鐘預估讀取數、以及「參考配額值未經一手查證」）。
     # 不放進 `build_alo_tables`：那一支是純函式、拿不到分頁數，診斷只有讀取端算得出來。
     out["read_estimate"] = policy["read_estimate"]
+    return out
+
+
+class ActiveSourceError(Exception):
+    """`load_alo_tables_active` 專用：Active Sheet 路徑失敗，只帶九個 error code 之一（`shared/ui_v2_error_codes.py`），
+    不含 token、不含上游原文。UI 以 `code` 比對，不比對例外字串（J-9）。"""
+
+    def __init__(self, code: str, reason: str | None = None, tab: str | None = None):
+        self.code = code
+        # `SCHEMA_INVALID` 的細分原因（`personal_policy_reader.PersonalSchemaError.reason`）；仍是同一個 code，不新增 code。
+        self.reason, self.tab = reason, tab
+        super().__init__(code)
+
+
+def load_alo_tables_active(state, secret_values) -> dict:
+    """持倉體檢／資產配置讀表的**個人 Active Sheet** 路徑（批 3b-4）：讀使用者自己的 Google 帳號、已驗證的 Active Sheet，唯讀。
+
+    與 `load_alo_tables`（服務帳戶＋ `POLICY_SHEET_ID`）完全分開，**沒有任何 fallback**（J-7、J-13）：
+    沒有 Active、未登入、續期失敗 → `ActiveSourceError(code)`，不退回 `POLICY_SHEET_ID`、不用服務帳戶、不回空表。
+    - 目標一律由 `personal_session.access_target(state)` 取得（內部先 `infra.personal_oauth.ensure_fresh` 續期；
+      回 `(sheet_id, access_token, account_sub)`）；`state` 由呼叫端注入。
+    - 讀取走 L1 `personal_policy_reader.load_workbook_tables`（token 只在 Authorization header；快取鍵含 account_sub）。
+    - 之後與 `load_alo_tables` 同一條：`build_alo_tables`（本檔，**計算規則一個字未動**，只換原始表的來源）。
+    - `mask` 把呼叫端給的秘密值**加上本次 access token** 一起遮（呼叫端的秘密值清單不含新 session 的 token）。
+    補充分頁標頭不符 → `ActiveSourceError(SCHEMA_INVALID, reason="supplement_header")`（不帶標頭原文，標頭可能是使用者資料）。
+    `HoldingIdCollision` 照舊往上拋。
+    回傳比 `load_alo_tables` 多一個 `actor`（＝`"oauth"`，來源標示）。
+    """
+    code = reason = tab = None
+    prior_sub = personal_session.current_sub(state)   # 續期失敗時 ensure_fresh 會自己清 session，所以要在它之前取
+    try:
+        sheet_id, token, account_sub = personal_session.access_target(state)
+        mask = masker(list(secret_values) + [token])
+        bundle = personal_repo.load_workbook_tables((sheet_id, token), account_sub=account_sub, mask=mask)
+    except (personal_session.PersonalSessionError, personal_drive.PersonalDriveError) as exc:
+        code, reason, tab = exc.code, getattr(exc, "reason", None), getattr(exc, "tab", None)
+    if code is not None:
+        # 讀 Google 回 AUTH_EXPIRED：死 token 不可再用 → 清 session（同 `list_for_picker`／`use_pending`）
+        personal_session.handle_read_error(state, code, prior_sub)
+        raise ActiveSourceError(code, reason, tab) from None
+    policy = bundle["policy"]
+    out = build_alo_tables(policy["rows"], bundle["supplement"], skipped_tabs=policy["skipped_tabs"],
+                           invest_twd_parse_errors=policy["invest_twd_parse_errors"])
+    out["read_estimate"] = policy["read_estimate"]
+    out["actor"] = bundle["actor"]
     return out

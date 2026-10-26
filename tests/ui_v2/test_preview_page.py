@@ -201,8 +201,11 @@ def test_整個入口跑得起來_預設頁是市場總覽_側邊欄寫明非正
 
 _MISSING = {
     "mkt": ("⛔ 取數失敗：" + _NO_NET,),
-    "hld": (POL.NOT_CONFIGURED_MESSAGE, SET_REPO.NOT_CONFIGURED_MESSAGE),
-    "alo": (POL.NOT_CONFIGURED_MESSAGE, SET_REPO.NOT_CONFIGURED_MESSAGE),
+    # ~~"hld"／"alo": (POL.NOT_CONFIGURED_MESSAGE, SET_REPO.NOT_CONFIGURED_MESSAGE)~~ → 2026-10-26 批 3b-4（有意識的更正，不是漏刪；
+    # 決策者：客戶 J-7／J-13）：持倉體檢與資產配置只讀個人 Active Sheet，不再讀 `POLICY_SHEET_ID`；沒有 Active ＝
+    # 「⬜ 尚未選定持倉資料來源」（明確狀態，不是取數失敗，下面另驗），所以這兩頁沒有「未設定保單試算表 ID」原文。
+    "hld": (),
+    "alo": (),
     "set": (SET_REPO.NOT_CONFIGURED_MESSAGE,),
     # ~~"exp": (EXP_UNIVERSE.TEXT_NOT_CLOUD, ...)~~ → 2026-10-26（有意識的更正，不是漏刪）：POOL_SHEET_ID 寫死預設本已移除，
     # 無憑證替身之下試算表 ID 也未設定，`load_pool_codes` 改回 TEXT_NO_SHEET_ID（原因寫對）；仍走 STATUS_NOT_CLOUD。
@@ -221,6 +224,16 @@ def test_e_無憑證_四頁照實顯示缺失_沒有Traceback_不碰fixtures_沒
         assert needle in where, (slug, needle)
         if slug != "set":
             assert needle not in text, (slug, needle)
+    if slug in ("hld", "alo"):
+        from ui_v2 import active_gate
+
+        assert active_gate.TEXT_NO_ACTIVE in text, slug
+        assert "取數失敗" not in text and "HOLD" not in text, slug
+        assert POL.NOT_CONFIGURED_MESSAGE not in text and POL.NOT_CONFIGURED_MESSAGE not in _raw_text(at, slug), slug
+        # 預覽入口傳了 settings_page → 一枚只換頁的連結（st.page_link），不是單頁入口的說明行
+        assert any(active_gate.LINK_LABEL in str(getattr(e, "label", "")) or active_gate.LINK_LABEL in repr(e)
+                   for e in at.main.get("page_link")), slug
+        assert active_gate.LINK_ELSEWHERE_TEXT not in text, slug
     assert _MARK not in text
     # fixtures 的每一個基金名、類別名、訊息原文都帶「示意」；正式模式的頁首也不印情境名。
     assert "示意" not in text, slug
@@ -343,6 +356,17 @@ def settings_book(monkeypatch, no_secrets):
     monkeypatch.setattr(GR, "time", types.SimpleNamespace(sleep=lambda _s: None))
     SET_REPO.clear_cache()
     SB.reset_all()
+    # 2026-10-26 批 3b-4（有意識的更正，不是漏刪；決策者：客戶 J-7／J-13）：hld／alo 不再讀 `POLICY_SHEET_ID`／服務帳戶，
+    # 持倉改讀個人 Active Sheet。這組測試關心的是換頁、存檔與輸入欄（不是持倉來源），原本靠「保單試算表未設定 →
+    # 持倉讀取失敗、設定欄仍照畫」的形狀讓兩頁照常畫；改成 Active 路徑讀取失敗（`UPSTREAM_ERROR`，不是「沒有 Active」——
+    # 那會整頁換成「尚未選定持倉資料來源」、沒有設定欄）以保留同一個畫面形狀。沒有 Active 的畫面另由 `test_e_`／
+    # `tests/ui_v2/test_active_gate.py` 驗。
+    from services.v2_tables import alo_holdings as _AH
+
+    def _active_read_fails(_state, _values):
+        raise _AH.ActiveSourceError("UPSTREAM_ERROR")
+
+    monkeypatch.setattr(_AH, "load_alo_tables_active", _active_read_fails)
     return book
 
 
@@ -696,19 +720,22 @@ p._on_page(st.query_params["slug"])
 # ═══════════════════════ Phase 3 P0-①：跨頁的原始訊息（設定與診斷頁的進階診斷） ═══════════════════════
 
 
-def test_P0_1_開過持倉體檢再到設定與診斷_進階診斷照印那一頁移出的原文(no_secrets, biting):
+def test_P0_1_開過市場總覽再到設定與診斷_進階診斷照印那一頁移出的原文(no_secrets, biting):
     """44 第七節第三小節之七其二第 8 條：四頁移出一般畫面的原文，換頁之後在設定與診斷頁的「進階診斷（原始訊息）」
-    照印（只收本次瀏覽開過的頁）。它不在 `_PAGE_STATE_TO_DROP` 裡，換頁不會被清掉。"""
+    照印（只收本次瀏覽開過的頁）。它不在 `_PAGE_STATE_TO_DROP` 裡，換頁不會被清掉。
+    ~~用持倉體檢示範~~ → 2026-10-26 批 3b-4（有意識的更正，不是漏刪）：持倉體檢沒有 Active Sheet 時畫的是「尚未選定持倉資料來源」，
+    不是取數失敗、沒有原文可移；改用市場總覽（無網路替身的取數失敗）驗同一條規則。"""
     from ui_v2 import plain
 
-    at = _go(_app_test(), "hld")
-    assert POL.NOT_CONFIGURED_MESSAGE not in _main_text(at)          # 一般畫面不印原文
-    assert POL.NOT_CONFIGURED_MESSAGE in _raw_text(at, "hld")
+    needle = _MISSING["mkt"][0]
+    at = _go(_app_test(), "mkt")
+    assert needle not in _main_text(at)          # 一般畫面不印原文
+    assert needle in _raw_text(at, "mkt")
     _go(at, "set")
     diag = [e for e in at.main.expander if e.label == plain.ADVANCED_DIAG_TITLE]
     assert len(diag) == 1
     body = "\n".join(html.unescape(m.value) for m in diag[0].markdown)
-    assert POL.NOT_CONFIGURED_MESSAGE in body and plain.PAGE_NAMES["hld"] in body
+    assert needle in body and plain.PAGE_NAMES["mkt"] in body
     assert f"{plain.PAGE_NAMES['exp']}（" not in body                  # 沒開過的頁不在「已記錄的頁」裡
 
 
@@ -738,7 +765,12 @@ def test_P0_2_四頁的前往設定與診斷是頁面連結_指向設定與診�
     from ui_v2 import health
 
     at = _go(_app_test(), slug)
-    links = [e for e in at.get("page_link") if e.proto.label == health.SETTINGS_LINK_LABEL]
+    # 2026-10-26 批 3b-4：hld／alo 沒有 Active Sheet 時，頁上的連結是「尚未選定持倉資料來源」旁的那一枚（`active_gate.LINK_LABEL`），
+    # 不是頁首的「前往設定與診斷」（整頁只有那一枚、同樣只換頁、指向同一頁）。
+    from ui_v2 import active_gate
+
+    label = active_gate.LINK_LABEL if slug in ("hld", "alo") else health.SETTINGS_LINK_LABEL
+    links = [e for e in at.get("page_link") if e.proto.label == label]
     assert len(links) == 1, [e.proto for e in at.get("page_link")]
     assert links[0].proto.page == "set" and links[0].proto.page_script_hash == calc_hash("set")
     assert health.SETTINGS_LINK_LABEL not in [b.label for b in at.button]
