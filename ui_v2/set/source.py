@@ -115,8 +115,8 @@ def load_live() -> dict:
         structure["market_indicator"] = {"bad_rows": len(indicators["bad_rows"]),
                                          "conflicts": len(indicators["conflicts"]),
                                          "is_revised_mismatch": indicators["is_revised_mismatch"]}
-    # 2026-10-26 裁示第 6 節：本次工作階段的重新取數結果（記憶體，未存入試算表）優先 —— 併在試算表既有資料之上
-    # （同 log_id／同主鍵以本次為準）；有它時，該表讀試算表失敗不再整塊畫失敗（資料取自本次工作階段，畫面另標來源）。
+    # 2026-10-26 裁示第 6 節：併入本次工作階段的重新取數結果（記憶體，未存入試算表；規則見 `_merge_runtime`：
+    # 市場指標同主鍵不同值不覆蓋、計入主鍵矛盾），試算表讀取錯誤照留，畫面另標來源。
     runtime = _merge_runtime(settings_store.session_runtime(st.session_state), fetch_log, mi_rows, errors,
                              structure)
 
