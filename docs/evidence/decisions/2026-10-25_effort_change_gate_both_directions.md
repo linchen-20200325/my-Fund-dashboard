@@ -48,7 +48,9 @@
 | 一般文件整理、規格明確的小修、簡單 bug、低風險測試修正 | Haiku 5.5 或 Sonnet 5.5 | Low～Medium | Haiku 能安全完成就不用 Sonnet；需一般推理再升 Sonnet |
 | 一般 UI／UX、單模組 bug、tests、wiring、一般低風險實作 | Sonnet 5.5 | Medium | 日常開發預設基準 |
 | Wireframe／UX 設計、規格清楚的跨少數模組工作 | Sonnet 5.5 | Medium | 不因「設計」自動使用 Opus |
-| OAuth／Google Sheet／跨模組架構、複雜 correctness、重要資料流 | Opus 5.5 | Medium | 涉及安全、跨模組或複雜狀態時才升 Opus |
+| ~~OAuth／Google Sheet／跨模組架構、複雜 correctness、重要資料流~~ | ~~Opus 5.5~~ | ~~Medium~~ | ~~涉及安全、跨模組或複雜狀態時才升 Opus~~ ⛔ 2026-10-26 客戶修訂 supersede（見文末修訂註；有意識的政策變更，不是漏刪） |
+| 一般 OAuth／Google Sheet 實作、規格明確的一般跨模組 wiring（含已明確規格的架構 wiring）〔2026-10-26 新列〕 | Sonnet 5.5 | Medium | 先用 Sonnet，不預設直接升 Opus |
+| 複雜 OAuth／資安決策、credential／token storage、scope／callback、資料契約、重大架構取捨、重要跨模組架構、複雜 correctness〔2026-10-26 新列〕 | Opus 5.5 | Medium | 只有 Sonnet 不足或風險明顯提高才升 Opus |
 | 投資語意、Risk Cap、PIT、資料契約、重大架構、不可逆或高風險決策 | Opus 5.5 | High | 高風險語意與資料契約須保守處理 |
 | 極高複雜度、多方案重大衝突、大型紅隊／重大驗證 | Fable 5.1 或當下可用且明確更適合的最高能力模型 | High／更高（若介面提供） | 非必要不使用；必須有具體理由 |
 | Ultracode | 不預設使用 | 不預設 | 只有已確認有明確必要時才建議，且先停手讓客戶切換 |
@@ -75,3 +77,9 @@
 - Fable／Ultracode：不作預設。
 
 **一句話版本：只要建議 Model 或 Effort 跟目前不同，不論升級或降級，都先停手讓客戶修改；改好後才開始下一完整工作階段；並永遠優先採用能安全完成工作的最低足夠 Model × Effort。**
+
+## 2026-10-26 客戶修訂註（要點轉述，經總管派工單轉達，非逐字；有意識的政策變更，不是漏刪）
+
+- 客戶 2026-10-26 修訂本檔矩陣（路線 a）：上方「OAuth／Google Sheet／跨模組架構…」列（Opus 5.5／Medium）已劃線，由兩列取代 —— 一般 OAuth／Google Sheet 實作與規格明確的一般跨模組 wiring ＝ Sonnet 5.5／Medium；複雜 OAuth／資安決策、credential／token storage、scope／callback、資料契約、重大架構取捨 ＝ Opus 5.5／Medium。其餘列照新版措辭微調（Haiku 列加入 commit／PR 收尾預設最低成本；Fable 列改為「極端複雜、重大治理衝突、大型 red-team、Opus 明顯不足」，非預設）。
+- 舊列兩邊理由：舊讀法的用意 —— 安全相關工作不輕忽 —— 仍成立；被權衡掉的是「看到 OAuth／Google Sheet／跨模組關鍵字就預設升 Opus」。上方「節省策略」第 5 點的 OAuth 舉例（「牽涉 OAuth／跨模組資料契約則可升至 Opus」）在新版下讀作「複雜 OAuth／資安或資料契約才升」，該例句原文不動。
+- 濃縮後的選用規則與現行矩陣以 `PROJECT_RULES.md` 5.1 第 10 點為準；本檔其餘（Change Gate、永久規則 1～10、白話判定）不變。客戶長文 Rule 1–12 未全文落盤。

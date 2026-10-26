@@ -315,18 +315,30 @@
    - **不觸發 Gate**：CI running／waiting、audit、commit／push、PR 開啟或等待 merge、agent／worktree 狀態、同一完整階段內的修正與複驗。不得在未提交的實作、PR 修復、CI 或 audit 途中要求切換。
    - **工作類型矩陣是預設基準，不是硬綁**：每個完整工作階段仍必須依實際內容、風險與複雜度重新判斷；現場判斷與矩陣不同時，以現場最低足夠判斷為準，並依上方 Gate 停手請客戶切換。
 
-     **Model × Effort 節省基準矩陣（客戶 2026-10-25 核准，預設起點）**
+     **Model × Effort 節省基準矩陣（客戶 2026-10-25 核准，預設起點；2026-10-26 客戶修訂，`DEC-2026-10-25-03` 補記）**
 
      | 工作類型 | 預設建議 Model | 預設 Effort | 原則 |
      |---|---|---|---|
-     | GitHub 狀態確認、HANDOFF／BACKLOG／DECISIONS 機械同步、改字、小型文件修正、簡單 commit／PR 收尾 | Haiku 5.5 | Low | 優先最低成本；若只需讀取／機械修改，不使用較高模型 |
-     | 一般文件整理、規格明確的小修、簡單 bug、低風險測試修正 | Haiku 5.5 或 Sonnet 5.5 | Low～Medium | Haiku 能安全完成就不用 Sonnet；需一般推理再升 Sonnet |
-     | 一般 UI／UX、單模組 bug、tests、wiring、一般低風險實作 | Sonnet 5.5 | Medium | 日常開發預設基準 |
-     | Wireframe／UX 設計、規格清楚的跨少數模組工作 | Sonnet 5.5 | Medium | 不因「設計」自動使用 Opus |
-     | OAuth／Google Sheet／跨模組架構、複雜 correctness、重要資料流 | Opus 5.5 | Medium | 涉及安全、跨模組或複雜狀態時才升 Opus |
-     | 投資語意、Risk Cap、PIT、資料契約、重大架構、不可逆或高風險決策 | Opus 5.5 | High | 高風險語意與資料契約須保守處理 |
-     | 極高複雜度、多方案重大衝突、大型紅隊／重大驗證 | Fable 5.1 或當下可用且明確更適合的最高能力模型 | High／更高（若介面提供） | 非必要不使用；必須有具體理由 |
+     | GitHub 狀態確認、HANDOFF／BACKLOG／DECISIONS 機械同步、改字、小型文件修正、commit／PR 收尾 | Haiku 5.5 | Low | 預設最低成本；若只需讀取／機械修改，不使用較高模型 |
+     | 規格明確的小修、一般文件整理、簡單 bug、低風險測試修正 | Haiku 5.5 | Low～Medium | Haiku 能安全完成就不升 Sonnet；需一般推理再升 Sonnet |
+     | 一般 UI／UX、一般 coding、單模組 bug、tests、低風險 wiring | Sonnet 5.5 | Medium | 日常開發主力 |
+     | Wireframe／UX 設計、規格清楚的跨少數模組工作 | Sonnet 5.5 | Medium | 不因「設計」自動使用 Opus（2026-10-25 列，客戶 2026-10-26 未提，保留） |
+     | 一般 OAuth／Google Sheet 實作、規格明確的一般跨模組 wiring（含已明確規格的架構 wiring） | Sonnet 5.5 | Medium | 先用 Sonnet，不預設直接升 Opus |
+     | 複雜 OAuth／資安決策、credential／token storage、scope／callback、資料契約、重大架構取捨、重要跨模組架構、複雜 correctness | Opus 5.5 | Medium | 只有 Sonnet 不足或風險明顯提高才升 Opus |
+     | 投資核心語意、Risk Cap、PIT、重大資料身分／資料契約、不可逆、高風險資料／production architecture | Opus 5.5 | High | 高風險語意與資料契約須保守處理 |
+     | 極端複雜、重大治理衝突、大型 red-team、Opus 明顯不足 | Fable 5.1 或當下明確更高能力模型 | High／更高（若介面提供） | 非預設，只在確有必要時；必須有具體理由 |
      | Ultracode | 不預設使用 | 不預設 | 只有已確認有明確必要時才建議，且先停手讓客戶切換 |
+
+     ~~舊列「OAuth／Google Sheet／跨模組架構、複雜 correctness、重要資料流 ｜ Opus 5.5 ｜ Medium ｜ 涉及安全、跨模組或複雜狀態時才升 Opus」~~ → 由上方「一般 OAuth／Google Sheet 實作…」（Sonnet 5.5／Medium）與「複雜 OAuth／資安決策…」（Opus 5.5／Medium）兩列取代（有意識的政策變更，不是漏刪；2026-10-26；決策者：客戶，`DEC-2026-10-25-03` 補記）。舊列的用意（安全相關工作不輕忽）仍成立，已由「複雜 OAuth／資安決策」列與下方第 2 條承接；被權衡掉的是「看到 OAuth／Google Sheet／跨模組關鍵字就預設升 Opus」。舊列全文保留於 `docs/evidence/decisions/2026-10-25_effort_change_gate_both_directions.md`（劃線）。
+
+     **選用規則（客戶 2026-10-26 修訂濃縮；實際可選模型仍以客戶當下介面為準，不新增模型名單限制）**
+
+     1. **從最低足夠配置往上判斷**，不得從最高配置往下降；Model 與 Effort 分開判斷，Effort 一律取最低足夠值。
+     2. **不因「OAuth／Google Sheet／跨模組」關鍵字自動升 Opus**；Opus 只在資安決策、資料契約、重大架構、投資核心，或 Sonnet 明顯不足時使用。
+     3. **Haiku 處理機械／低風險；Sonnet 是一般開發主力；Fable 不是日常預設。**
+     4. **只有工作「性質改變」才重判**；CI／push／PR 狀態、等待、merge 不算（同上方「不觸發 Gate」）。配置有變（升或降）一律依上方 Change Gate 停手。
+     5. **正確性優先於省 token**：最低配置無法可靠避免錯誤投資語意、錯誤資料契約、資安風險、Missing 被當成 0／False／safe、未驗證當已確認、自動 fallback 到錯誤資料源、不可逆操作缺 Stop Gate 時，必須升級（升級仍依 Change Gate 停手）。
+     6. **成本順序**：Haiku+Low → Haiku+Medium → Sonnet+Medium → Opus+Medium → Opus+High → Fable。
 
      **節省策略**：平常不以 Opus 為日常預設（一般開發用 Sonnet，機械工作用 Haiku）；Effort 採最低足夠值；工作變簡單時重新判斷並停手提醒降級；不為 CI 等短暫狀態頻繁切換；目標是降低不必要的 token／使用量，不是犧牲 correctness。
 

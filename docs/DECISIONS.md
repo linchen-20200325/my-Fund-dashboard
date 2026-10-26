@@ -981,6 +981,7 @@
 | 影響範圍 | 所有未來對話與 agent 的 Model／Effort 切換、Batch 開工前判斷與通知格式（5.1 第 10 點）。不改 Silent Autonomous Cruise、Stop／Decision Gate、GitHub-first 與 Safe Checkpoint。 |
 | 是否可逆 | 可逆（客戶可另行指示） |
 | supersedes／superseded by | supersedes：`PROJECT_RULES.md` 5.1 第 9 點「調低改標示、不停工」讀法與「主動降級義務」的停工範圍；3.1 第 6 點與第 1 點 ④ 中「只限提高」與「降低單獨不出聲」的讀法（已就地劃線）。superseded by：無。 |
+| 補記（2026-10-26 客戶修訂，狀態更新，不是漏刪） | 客戶 2026-10-26 修訂本筆的「工作類型矩陣」（要點轉述，經總管派工單轉達，非逐字；屬同一裁示線的修訂，**不新增 DEC**，沿用本檔既有「補記」列體例）：一般 OAuth／Google Sheet 實作、規格明確的一般跨模組 wiring（含已明確規格的架構 wiring）＝ Sonnet 5.5／Medium，**不再預設直接升 Opus**；複雜 OAuth／資安決策、credential／token storage、scope／callback、資料契約、重大架構取捨、重要跨模組架構、複雜 correctness ＝ Opus 5.5／Medium；Haiku 5.5／Low 為機械與 commit／PR 收尾預設最低成本；Fable 5.1 或更高能力模型非預設。**明示 supersede 舊讀法「OAuth／Google Sheet／跨模組預設 Opus」**（舊矩陣列於 `PROJECT_RULES.md` 5.1 第 10 點與證據檔以劃線保留；有意識的政策變更，不是漏刪）。兩邊理由：舊讀法的用意（安全相關工作不輕忽）仍成立，已由「複雜 OAuth／資安決策」列承接；被權衡掉的是「關鍵字即升 Opus」。同批併入 `PROJECT_RULES.md` 5.1 第 10 點六條濃縮選用規則（最低足夠往上判斷；不因關鍵字升 Opus；性質改變才重判；配置有變仍依本筆 Change Gate 停手；正確性優先於省 token；成本順序），客戶長文 Rule 1–12 不全文落盤。**不改**本筆 Change Gate（升降皆停手）、通知格式與「不得自行切換」。落地：`PROJECT_RULES.md` 5.1 第 10 點、`docs/evidence/decisions/2026-10-25_effort_change_gate_both_directions.md`（矩陣列劃線＋文末修訂註）。文件組讀法（可被客戶推翻）：「Haiku 5.5／Low～Medium」列的模型欄由原「Haiku 或 Sonnet」收為 Haiku（依客戶「Haiku 能安全完成就不升 Sonnet」）。 |
 | provenance | **要點轉述**（決策者：客戶 2026-10-25；文件組未見客戶對話本身）。「不得先施工再補問」「省額度優先」等為條文化措辭，可被客戶推翻。 |
 
 ### DEC-2026-10-25-04｜客戶正式裁示：⚙️ 設定頁 Wireframe 與 Preview 方向核准＋J-4（Active Sheet ＝ 持倉／保單）＋J-6（新 B UI 第一階段全部唯讀，含 SET-4 類型）＋CAP-SET-10（不新增清除按鈕）（**不授權實作**）
