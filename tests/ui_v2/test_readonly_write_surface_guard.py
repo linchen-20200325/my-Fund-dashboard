@@ -27,9 +27,15 @@ KNOWN_WRITE_FUNCTIONS = frozenset({
     "upsert_policy_row", "delete_policy_row",
     "upsert_fund_in_policy", "delete_fund_in_policy", "delete_policy_worksheet",
     "create_dashboard_sheet", "write_policy_v2",
+    # 稽核補充（2026-10-26，已讀碼確認函式名與模組）：
+    "rename_sheet",                                  # repositories/policy/v2.py
+    "append_ledger_row",                             # repositories/ledger_repository.py
+    "append_snapshot",                               # repositories/portfolio_perf_repository.py
+    "save_all_ledgers_snapshot", "save_holdings_overview",   # repositories/snapshot_repository.py
 })
 WRITE_MODULES = ("repositories.pool_repository", "repositories.policy",
-                 "repositories.policy_supplement_repository")
+                 "repositories.policy_supplement_repository", "repositories.ledger_repository",
+                 "repositories.portfolio_perf_repository", "repositories.snapshot_repository")
 
 # 名稱本身只可能是 gspread 寫入者的方法；任何接收者都算。
 GSPREAD_WRITE_UNAMBIGUOUS = frozenset({
@@ -151,6 +157,20 @@ def test_read_only_true_short_circuits(monkeypatch, fake_store, flag):
     assert fake_store.calls == 0
 
 
+@pytest.mark.parametrize("flag", [True, 1])
+def test_read_only_non_string_true(monkeypatch, fake_store, flag):
+    _set_flag(monkeypatch, flag)
+    assert ss.is_read_only() is True
+    assert ss.save_setting_for_page("k", "5", "int", {})["status"] == "read_only"
+    assert fake_store.calls == 0
+
+
+@pytest.mark.parametrize("flag", [False, 0, 2, -1, 1.0, ["1"]])
+def test_read_only_non_string_false(monkeypatch, fake_store, flag):
+    _set_flag(monkeypatch, flag)
+    assert ss.is_read_only() is False
+
+
 @pytest.mark.parametrize("flag", ["", "0", "false", "maybe", None])
 def test_read_only_false_keeps_current_path(monkeypatch, fake_store, flag):
     _set_flag(monkeypatch, flag)
@@ -158,3 +178,15 @@ def test_read_only_false_keeps_current_path(monkeypatch, fake_store, flag):
     out = ss.save_setting_for_page("k", "5", "int", {})
     assert out["status"] == "saved"
     assert fake_store.calls == 1
+
+
+# ───────── set 頁：read_only 不得靜默（不需 streamlit 的最小層；整頁版見 test_set_live_logic，CI 才跑得到） ─────────
+def test_set_live_read_only_surfaces_message():
+    live = pytest.importorskip("ui_v2.set.live")
+    result = {"status": "read_only", "key": "k", "message": ss.READ_ONLY_MESSAGE, "attempted": "21"}
+    out = live.dataset_with_save_results({"save_inputs": {}, "save_errors": {}}, {"k": result})
+    assert out["save_errors"]["k"] == ss.READ_ONLY_MESSAGE
+    assert out["save_inputs"]["k"] == "21"
+    lines = live._save_fail_lines(result, "")
+    assert ss.READ_ONLY_MESSAGE in lines[0]
+    assert live.TEXT_SAVE_MAYBE_WRITTEN not in lines

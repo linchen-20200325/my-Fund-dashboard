@@ -268,6 +268,10 @@ def is_read_only() -> bool:
     「可關」的機制，不代表已關閉。
     """
     raw = get_secret(READ_ONLY_SECRET_KEY, None)
+    if isinstance(raw, bool):          # secrets.toml 寫 `= true`
+        return raw
+    if isinstance(raw, int):           # secrets.toml 寫 `= 1`；其他整數為假
+        return raw == 1
     return isinstance(raw, str) and raw.strip().lower() in _TRUTHY_READ_ONLY
 
 

@@ -336,6 +336,17 @@ def test_存檔成功_已存檔_讀回新值(env):
     assert {f["name"]: f for f in _b(again, "SET-4")["inputs"]}["set_max_age_days"]["saved_lines"] == []
 
 
+def test_存檔_唯讀開關擋下_不再靜默_顯示原因_輸入留著_不印可能已寫入(env, monkeypatch):
+    S.save_setting_for_page("set_max_age_days", "14", "int", [])
+    monkeypatch.setattr(S, "is_read_only", lambda: True)
+    result = _save(env, "set_max_age_days", "21", "int")
+    assert result["status"] == "read_only" and result["message"]
+    _d, model = _page({"set_max_age_days": result})
+    field = {f["name"]: f for f in _b(model, "SET-4")["inputs"]}["set_max_age_days"]
+    assert field["fail_lines"] == ["⛔ 存檔寫入失敗：" + result["message"], logic.TEXT_KEEP_INPUT]
+    assert field["value_text"] == "21" and field["saved_lines"] == []
+
+
 def test_存檔失敗_403_當下讀設定被冷卻擋下_失敗框掛在塊上_不印上面這一欄(env):
     S.save_setting_for_page("set_max_age_days", "14", "int", [])
     env.fail_next("append_rows", PermissionError(f"no permission on {SHEET}"), title="user_setting_log")

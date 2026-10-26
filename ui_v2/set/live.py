@@ -318,7 +318,7 @@ def dataset_with_save_results(dataset, results):
         if result["status"] == "saved":
             continue
         out["save_inputs"][key] = result.get("attempted")
-        if result["status"] == "failed":
+        if result["status"] in ("failed", "read_only"):      # read_only：唯讀開關擋下，沿用失敗管道顯示原因
             out["save_errors"][key] = result["message"]
     return out
 
@@ -409,7 +409,8 @@ def _save_fail_lines(result, token) -> list:
     is_403 = result.get("http_status") == 403 or hint == TEXT_HINT_403
     is_404 = result.get("http_status") == 404 or hint.startswith(TEXT_HINT_404)
     # 「可能其實已寫入」只限一般失敗：冷卻、缺設定、標頭不符、403／404（打不開或沒有權限）都是根本沒寫。
-    if result.get("code") not in _NOT_WRITTEN_CODES and not is_403 and not is_404:
+    if result.get("status") != "read_only" and result.get("code") not in _NOT_WRITTEN_CODES \
+            and not is_403 and not is_404:
         lines.append(TEXT_SAVE_MAYBE_WRITTEN)
     if is_403:
         lines.append(TEXT_HINT_403)
@@ -574,7 +575,7 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
             continue
         if result["status"] == "saved":
             field["saved_lines"] = [TEXT_SAVED]
-        elif result["status"] == "failed":
+        elif result["status"] in ("failed", "read_only"):
             field["fail_lines"] = _save_fail_lines(result, token)
         elif result["status"] == "kind_missing":
             # 客戶 2026-09-26 裁示後每一鍵都有型別（alo_basis 定為 list 枚舉）；走到這裡是本頁的 bug，當場炸（§1）。
@@ -585,7 +586,7 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
         # 這是存檔失敗後最常見的樣子。「上面這一欄…」那一行照 logic 不印（會是假話），其餘照 ★6。
         set4["orphan_fail_lines"] = [
             [line for line in _save_fail_lines(results[k], token) if line != logic.TEXT_KEEP_INPUT]
-            for k in sorted(results) if results[k]["status"] == "failed"
+            for k in sorted(results) if results[k]["status"] in ("failed", "read_only")
         ]
     for field in set4["inputs"]:
         if field.get("used_by_text") == _USED_BY_NONE_DEMO:
