@@ -57,6 +57,8 @@ _FILE_ALLOWLIST = {
         "__future__", "os", "datetime.datetime", "datetime.timezone", "streamlit",
         "services.v2_tables.market_indicator", "services.v2_tables.masking",
         "services.v2_tables.settings_store", "ui_v2.set.spec",
+        # 2026-10-26 批 3b-2：Google 個人登入的 L2 橋接（只此一個，只給 set 頁的 source.py）
+        "services.v2_tables.personal_session",
     },
     "ui_v2/app_set_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.set.page", "ui_v2.set.source",

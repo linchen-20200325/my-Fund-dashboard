@@ -6,3 +6,4 @@ AppTest 在同一個行程裡跑腳本，所以測試對 L1（假 gspread）與 
 
 LOADERS: dict = {}
 CALLS: list = []
+LOGIN: dict = {}   # 批 3b-2：`page.render(login_live=...)` 的替身（`{"load": 函式, "act": 函式}`）

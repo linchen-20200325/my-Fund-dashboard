@@ -836,3 +836,148 @@ def _plain_set_words(model: dict) -> dict:
             continue
         visit(block)
     return model
+
+
+# ───────────────────────── Google 個人登入（批 3b-2；`docs/v2/65_set_wireframe_and_cap_gate_01_02.md` 第 B、C、D 節） ─────────────────────────
+#
+# 本段是「第二層 Google 帳號卡」的讀模型（純函式；不 import streamlit、不 import 舊樹、不碰任何權杖）。
+# 輸入是 L2 `services/v2_tables/personal_session.py` 回的純 dict（`status()`／`begin_login()`），由 `source.login_live`
+# 組好交來；本段只決定「畫哪幾行字、哪幾枚鈕」。登入、確認、登出、切換是工作階段身分動作，**不是試算表寫入**：
+# 這幾枚鈕不在 `logic` 的按鈕表裡、沒有 `_writes`，不經 `readonly.strip_write_controls`，也不取代它。
+#
+# 文案出處（逐字取自 65 第 B、C、D 節，標〔文件組擬定〕者為客戶已核准整體方向內的擬定字樣）：
+#   卡標題「Google 帳號」、「登入方式：Google 個人帳號」、「授權範圍：唯讀（列出與讀取試算表）」、
+#   「已登入 ‹帳號›」「已登入（帳號讀不到）」、［登入 Google］［重新登入］［切換帳號］［登出］、
+#   B-1「⛔ 尚未設定：Google 登入」＋「這個儀表板還沒設定 Google 登入，目前無法登入。」、
+#   B-2「⬜ 未登入」＋「登入後可列出你能用的試算表」、B-3「⛔ 登入沒有完成」、
+#   B-4「◷ 登入已過期」＋「登入已過期，需要重新登入」、B-5「⬜ 無法判定」＋「讀不到登入狀態」、
+#   D-2「切換後要重新選擇試算表」。
+# 本批新增、65 沒有逐字定義的字樣（請客戶審字）：見下方標 NEW 的常數。
+# 原因句只描述狀態、不寫指示動作（58 U-32、客戶 2026-10-02／10-03 裁示）；燈一律帶文字（58 U-21）。
+
+LOGIN_CARD_TITLE = "Google 帳號"
+LOGIN_METHOD_LINE = "登入方式：Google 個人帳號"
+LOGIN_SCOPE_LINE = "授權範圍：唯讀（列出與讀取試算表）"
+TEXT_LOGIN_LOGGED_IN = "已登入 {email}"
+TEXT_LOGIN_LOGGED_IN_NO_EMAIL = "已登入（帳號讀不到）"
+TEXT_LOGIN_LOGGED_OUT = "⬜ 未登入"
+TEXT_LOGIN_LOGGED_OUT_NOTE = "登入後可列出你能用的試算表"
+TEXT_LOGIN_NOT_CONFIGURED = "⛔ 尚未設定：Google 登入"
+TEXT_LOGIN_NOT_CONFIGURED_NOTE = "這個儀表板還沒設定 Google 登入，目前無法登入。"
+TEXT_LOGIN_FAILED = "⛔ 登入沒有完成"
+TEXT_LOGIN_EXPIRED = "◷ 登入已過期"
+TEXT_LOGIN_EXPIRED_NOTE = "登入已過期，需要重新登入"
+TEXT_LOGIN_UNKNOWN = "⬜ 無法判定"
+TEXT_LOGIN_UNKNOWN_NOTE = "讀不到登入狀態"
+TEXT_LOGIN_SWITCH_NOTE = "切換後要重新選擇試算表"
+# NEW：待確認登入面板（65 沒有定義這一步的字樣；字樣出自本批派工單的指定句型）
+TEXT_LOGIN_PENDING = "以 {email} 登入？"
+# NEW：D-2 切換確認與 B-3 原因分類的字樣（65 只定義了分類名稱「取消／被拒／換取失敗」，沒有逐字句）
+TEXT_LOGIN_REASON_REJECTED = "原因：登入驗證資訊不符或已逾時"
+TEXT_LOGIN_REASON_SCOPE = "原因：授權範圍或帳號身分未通過檢查"
+TEXT_LOGIN_REASON_EXCHANGE = "原因：向 Google 換取登入資料失敗"
+
+LOGIN_BUTTON_LOGIN = "登入 Google"
+LOGIN_BUTTON_RELOGIN = "重新登入"
+LOGIN_BUTTON_SWITCH = "切換帳號"
+LOGIN_BUTTON_LOGOUT = "登出"
+LOGIN_BUTTON_CONFIRM = "確認"            # NEW
+LOGIN_BUTTON_CANCEL = "取消"             # NEW
+LOGIN_BUTTON_SWITCH_GO = "繼續切換"      # NEW
+
+# 畫面層與來源層共用的動作代號（白名單；來源層只接這幾個）。
+LOGIN_ACTIONS = ("confirm", "reject", "logout", "switch_ask", "switch_cancel", "switch_go")
+
+# 授權網址只接 Google 授權端點（防呼叫端傳入非預期網址後被畫成連結）。
+_AUTHORIZE_PREFIX = "https://accounts.google.com/"
+
+_ERR_AUTH_EXPIRED = "AUTH_EXPIRED"
+_ERR_STATE_INVALID = "AUTH_STATE_INVALID"
+_ERR_PERMISSION = "PERMISSION_DENIED"
+_ERR_UNAVAILABLE = "UNAVAILABLE"
+_ERR_EXCHANGE = ("NETWORK_ERROR", "UPSTREAM_ERROR")
+
+
+def login_error_lines(code) -> list:
+    """錯誤代號 → 畫面字（只比對代號，不比對例外字串；J-9）。未知代號一律落「⬜ 無法判定」，不當成功。"""
+    if code == _ERR_AUTH_EXPIRED:
+        return [TEXT_LOGIN_EXPIRED, TEXT_LOGIN_EXPIRED_NOTE]
+    if code == _ERR_STATE_INVALID:
+        return [TEXT_LOGIN_FAILED, TEXT_LOGIN_REASON_REJECTED]
+    if code == _ERR_PERMISSION:
+        return [TEXT_LOGIN_FAILED, TEXT_LOGIN_REASON_SCOPE]
+    if code in _ERR_EXCHANGE:
+        return [TEXT_LOGIN_FAILED, TEXT_LOGIN_REASON_EXCHANGE]
+    return [TEXT_LOGIN_UNKNOWN, TEXT_LOGIN_UNKNOWN_NOTE]
+
+
+def _login_button(action: str, label: str, url=None) -> dict:
+    button = {"action": action, "label": label}
+    if url is not None:
+        button["url"] = url
+    return button
+
+
+def _clean_email(value):
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def login_view(login_input) -> dict:
+    """第二層 Google 帳號卡的讀模型。
+
+    `login_input`：`{"status": personal_session.status() 的 dict 或 None, "begin": begin_login() 的 dict 或 None,
+    "notice": 上一個動作留下的錯誤代號或 None, "switch_confirm": bool}`。
+    回傳 `{"state", "lines", "buttons", "error_code"}`：`state` ∈ logged_out／pending_login／logged_in／
+    not_configured／unknown；`buttons` 每枚 `{"action", "label"}`，登入鈕另帶 `"url"`（授權網址，不是權杖）。
+    待確認登入優先於已登入（換帳號時要先讓使用者看見待確認的帳號）；待確認帳號讀不到時只給［取消］、不給［確認］。
+    不存在任何自動確認的路徑：確認只由使用者按［確認］觸發。
+    """
+    inp = login_input if isinstance(login_input, dict) else {}
+    status = inp.get("status")
+    notice = inp.get("notice") if isinstance(inp.get("notice"), str) else None
+    notice_lines = login_error_lines(notice) if notice else []
+
+    def view(state, lines, buttons, code=None):
+        return {"state": state, "lines": list(lines), "buttons": list(buttons), "error_code": code}
+
+    login_state = status.get("login_state") if isinstance(status, dict) else None
+    if login_state not in ("logged_out", "pending_login", "logged_in"):
+        return view("unknown", notice_lines + [TEXT_LOGIN_UNKNOWN, TEXT_LOGIN_UNKNOWN_NOTE], [], notice)
+
+    if login_state == "pending_login":
+        email = _clean_email(status.get("pending_login_email"))
+        if email is None:   # 沒有帳號可給使用者看 → 不給確認鈕（不得在看不到帳號時確認）
+            return view("pending_login", notice_lines + [TEXT_LOGIN_UNKNOWN, TEXT_LOGIN_UNKNOWN_NOTE],
+                        [_login_button("reject", LOGIN_BUTTON_CANCEL)], notice)
+        return view("pending_login", notice_lines + [TEXT_LOGIN_PENDING.format(email=email)],
+                    [_login_button("confirm", LOGIN_BUTTON_CONFIRM), _login_button("reject", LOGIN_BUTTON_CANCEL)],
+                    notice)
+
+    if login_state == "logged_in":
+        email = _clean_email(status.get("email"))
+        head = TEXT_LOGIN_LOGGED_IN.format(email=email) if email else TEXT_LOGIN_LOGGED_IN_NO_EMAIL
+        if inp.get("switch_confirm") is True:
+            return view("logged_in", notice_lines + [head, TEXT_LOGIN_SWITCH_NOTE],
+                        [_login_button("switch_go", LOGIN_BUTTON_SWITCH_GO),
+                         _login_button("switch_cancel", LOGIN_BUTTON_CANCEL)], notice)
+        return view("logged_in", notice_lines + [head, LOGIN_METHOD_LINE, LOGIN_SCOPE_LINE],
+                    [_login_button("switch_ask", LOGIN_BUTTON_SWITCH), _login_button("logout", LOGIN_BUTTON_LOGOUT)],
+                    notice)
+
+    # logged_out
+    begin = inp.get("begin")
+    if not isinstance(begin, dict):
+        return view("unknown", notice_lines + [TEXT_LOGIN_UNKNOWN, TEXT_LOGIN_UNKNOWN_NOTE], [], notice)
+    if begin.get("ok") is not True:
+        code = begin.get("error_code")
+        if code == _ERR_UNAVAILABLE:   # 部署端沒有可用的 Google 登入設定（B-1）：不畫登入鈕
+            extra = [] if notice in (None, _ERR_UNAVAILABLE) else notice_lines
+            return view("not_configured", extra + [TEXT_LOGIN_NOT_CONFIGURED, TEXT_LOGIN_NOT_CONFIGURED_NOTE], [], code)
+        return view("unknown", notice_lines + login_error_lines(code), [], code if isinstance(code, str) else None)
+    url = begin.get("authorize_url")
+    if not (isinstance(url, str) and url.startswith(_AUTHORIZE_PREFIX)):
+        return view("unknown", notice_lines + [TEXT_LOGIN_UNKNOWN, TEXT_LOGIN_UNKNOWN_NOTE], [], notice)
+    if notice:   # B-3／B-4：同一位置的［重新登入］
+        return view("logged_out", notice_lines, [_login_button("login", LOGIN_BUTTON_RELOGIN, url)], notice)
+    return view("logged_out", [TEXT_LOGIN_LOGGED_OUT, TEXT_LOGIN_LOGGED_OUT_NOTE],
+                [_login_button("login", LOGIN_BUTTON_LOGIN, url)], None)
