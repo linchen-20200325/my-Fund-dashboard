@@ -11,7 +11,7 @@
 ## 0. 結論先講（給客戶的一段話）
 
 1. **D1 的第一層五類，和客戶已核准的「長期五頁」（🌍市場與趨勢／⚖️資產配置／💼我的持股／🔍找基金／⚙️設定）完全同一組**（`PROJECT_RULES.md` 13.2 第 1 條、`DEC-2026-10-26-01`）。五類各對應現有 B UI 的一頁（mkt／alo／hld／exp／set），不需要新增第六類。**【事實】**
-2. **第二層是真正的難題：現有 B UI 每一頁都是「一頁到底」的單一 Streamlit 頁**（①結論→②關鍵數字→③需要注意→④詳細資料），**沒有任何一頁已經被拆成子頁**。客戶範例的 18 個子頁名稱裡：**只有 1 個是整頁、其餘是「頁內的卡片或區塊」或「根本沒有對應功能」**（見第 3 節）。**【事實】**
+2. **第二層是真正的難題：現有 B UI 每一頁都是「一頁到底」的單一 Streamlit 頁**（①結論→②關鍵數字→③需要注意→④詳細資料），**沒有任何一頁已經被拆成子頁**。客戶範例的 18 個子頁名稱裡：**「整頁」（＝該名稱等同某現有頁的主視圖）只有 3 個：市場總覽、配置總覽、持倉總覽；其餘 11 個是「頁內的卡片或區塊」、4 個「根本沒有對應功能」**（見第 3 節）。**【事實】**
 3. **有 4 個範例名稱查無對應功能（⬜ 無對應功能）**：台股趨勢、國際趨勢、風險觀察、再平衡。其中「台股趨勢」是客戶 2026-10-23 自己裁示移除的方向（`DEC-2026-10-23-01`）、「再平衡」與 44 第三節 3.0 資產配置頁邊界「不產生再平衡動作」直接牴觸。**不硬湊。**
 4. **Streamlit 1.59 的原生 `st.navigation` 表達不出「選第一層、第二層只顯示該類子頁」**：原生只有「分組標題＋頁清單」（側欄全展開）或「頂部下拉」；且頁數超過 12 時側欄會收成「View X more」。要做 D1 必須 `position="hidden"` 後**自己用 `st.page_link` 畫側欄**。**【事實：已讀 1.59.2 原始碼；見第 7.3 節】**
 5. **AI 總管推薦：方案 A「殼層先行」**——Phase 1 只做**雙層側欄殼層**（第一層五類固定、第二層顯示該類「真實存在」的入口），**不拆頁、不動 44 內文、不增減任何功能**；第二層的「頁內區段跳轉」先做可行性驗證，驗過才上。**要把客戶範例的子頁真的拆成獨立頁（方案 B）屬另一個 Decision Gate，且牽涉 44 解凍**，建議在客戶看過方案 A 的實機後，**逐類**另案決定。
@@ -129,7 +129,7 @@
 | 🌍 市場與趨勢 | 市場總覽 | ✅ | `ui_v2/mkt/page.py::render`（頁）；`MKT-0` 結論燈＋`MKT-1`～`MKT-3` 三張卡 | **整頁** | 唯一一個與現有頁一對一的範例名 |
 | 🌍 | 台股趨勢 | ⬜ **無對應功能** | — | — | 客戶 2026-10-23 已裁示移除台股專屬趨勢軸（`DEC-2026-10-23-01`；`docs/v2/63_market_trend_research_baseline.md` 檔頭狀態更新）；B UI 無此頁也無此區塊 |
 | 🌍 | 國際趨勢 | ⬜ **無對應功能** | — | — | `63` 是 Research Baseline／NOT APPROVED SPEC；B UI 無「趨勢判讀」物件。`MKT-2` 景氣位置卡是指標位置，不是趨勢判讀，不可冒充 |
-| 🌍 | 風險觀察 | ⬜ **無對應功能**（最接近：`MKT-1` 風險情緒卡） | `MKT-1`（`^VIX`＋高收益信用利差，**卡片非頁**） | 區塊 | 舊 `services/risk_radar.py` 十燈**未接進 B UI**（本組 grep `ui_v2`／`services/v2_tables` 為 0 命中）；為免誤導，不以「風險觀察」命名一張只有兩個指標的卡 |
+| 🌍 | 風險觀察 | ⬜ **無對應功能**（最接近：`MKT-1` 風險情緒卡） | `MKT-1`（44 鍵名 `vol_index`＋`credit_spread_pct`，**卡片非頁**） | 區塊 | 舊 `services/risk_radar.py` 十燈**未接進 B UI**（本組 grep `ui_v2`／`services/v2_tables` 為 0 命中）；為免誤導，不以「風險觀察」命名一張只有兩個指標的卡 |
 | ⚖️ 資產配置 | 配置總覽 | 🟡 | `ALO-0` 差距結論燈＋`ALO-2` 目標對照卡 | 區塊（同在 `ui_v2/alo/page.py::render` 整頁內） | 整頁本身就是「配置總覽」；不需要為它另立子頁 |
 | ⚖️ | 偏離檢查 | 🟡 | `ALO-2` 的容許帶「外」、`ALO-0` 差距結論燈 | 區塊 | ⚠️ **同名但不同事**：44 的「偏離提示」（`HLD-1`，持倉對**自設門檻**）住在 💼 我的持股；配置頁的是「目標比重 vs 容許帶」。**命名要區分，否則使用者找錯頁** |
 | ⚖️ | 再平衡 | ⬜ **無對應功能** | — | — | 44 3.0 資產配置「不負責」明文「不產生再平衡動作」；方向性建議屬 `BL-0401`（deferred）。**客戶範例與凍結邊界牴觸，不得做成導覽項** |
@@ -140,12 +140,12 @@
 | 🔍 找基金 | 候選清單 | ✅ | `EXP-2` 候選清單卡（母體＝選股池代碼） | 區塊 | `ui_v2/exp/page.py::render` |
 | 🔍 | 條件篩選 | 🟡 | `EXP-1` 條件輸入卡、`EXP-7` 篩選軌跡 | 區塊 | **Phase 1 唯讀：條件輸入元件不畫**（`ui_v2/readonly.py::PHASE1_HIDDEN_INPUT_CODES`），只剩已存條件的結果；不是「可操作的篩選頁」 |
 | 🔍 | 基金比較 | ✅ | `EXP-3` 並排對照卡（多選「對照」） | 區塊 | 會即時影響畫面的少數輸入之一，Phase 1 保留 |
-| ⚙️ 設定 | Google 帳號 | ✅ | `ui_v2/set/page.py::_render_login`（登入卡；批 3b-2） | 區塊（頁內第二層頭一張卡） | ⚠️ OAuth callback 只在 `/set` 處理（`BL-0465`），見 §6.4 |
+| ⚙️ 設定 | Google 帳號 | ✅ | `ui_v2/set/page.py::_render_login`（登入卡；批 3b-2） | 區塊（頁內第二層頭一張卡） | ⚠️ OAuth callback 只在 `/set` 或單頁入口 `app_set_live` 處理（`BL-0465`），見 §6.4 |
 | ⚙️ | Active Sheet | ✅ | `ui_v2/set/page.py::_render_picker`（試算表連線卡＋「使用這一本」；批 3b-3）、`ui_v2/active_gate.py` | 區塊 | 設定頁是唯一 Sheet owner（`DEC-2026-10-25-02`、`PROJECT_RULES.md` 13.2 第 8 條） |
 | ⚙️ | 資料狀態 | ✅ | `SET-0` 可信度結論燈、`SET-1` 資料新鮮度、`SET-8` 各頁資料狀態總表 | 區塊 | |
 | ⚙️ | 診斷 | ✅ | `SET-2` 來源健康、`SET-6` 取數紀錄、`SET-7` 欄位對照表、`SET-5` 重新取數 | 區塊（④證據／來源） | `SET-5` 是動作，不是頁（§5） |
 
-**統計（【事實】依上表，量測基準 `830f0bb2`；客戶範例共 4＋3＋4＋3＋4＝18 個名稱）**：**整頁 1 個**（市場總覽）、**區塊／部分對應 13 個**、**⬜ 無對應功能 4 個**（台股趨勢、國際趨勢、風險觀察、再平衡）。
+**統計（【事實】依上表；量測基準 `830f0bb2`；客戶範例共 4＋3＋4＋3＋4＝18 個名稱）**：「整頁」定義＝該名稱等同某一現有頁的主視圖（頁首總覽，不需另立子頁）。**整頁 3 個**（市場總覽＝`mkt`；配置總覽＝`alo` 頁首 `ALO-0`＋`ALO-2`；持倉總覽＝`hld` 頁首 `HLD-0`～`HLD-3`；後兩者在表中性質欄寫「區塊」，同指該頁主視圖）、**區塊／部分對應 11 個**、**⬜ 無對應功能 4 個**（台股趨勢、國際趨勢、風險觀察、再平衡）。3＋11＝14，加 4 ＝ 18。
 
 ### 3.3 現有真實功能中，客戶範例沒有點名、但應有落點的項目
 
@@ -158,6 +158,8 @@
 | 指標明細表、新鮮度與來源清單 | `MKT-6`、`MKT-7` | 🌍 的區段 | 證據層 |
 | 規則參數（唯讀） | `SET-3` | ⚙️ 的區段 | Phase 1 只讀 |
 | 單檔基礎資料 | `EXP-6` | 🔍 的區段 | |
+| 目標修改紀錄（現讀作「現在的目標配置」） | `ALO-7` | ⚖️ 的區段（證據層） | 真實塊，範例無名稱 |
+| 篩選結果結論列 | `EXP-0` | 🔍 頁首結論（隨頁） | 真實塊，範例無名稱 |
 | **代碼直查一檔** | **現無**（B UI 母體只有選股池代碼） | ⬜ 現無對應 | `DEC-2026-10-25-01`／`DEC-2026-10-22-04` 規劃中、**現有 B UI 沒有**；本草稿不為它預留導覽項 |
 
 ---
@@ -191,7 +193,7 @@
 | 觀察清單加入（`EXP-5`）、各種存檔鈕、`SET-4` | — | **Phase 1 整塊／整組不畫**（`ui_v2/readonly.py`），不得在導覽暗示可修改 |
 | 載入失敗整頁、「⬜ 尚未選定持倉資料來源」畫面 | 各頁 | 是頁面狀態，不是導覽項；但其「前往 ⚙️ 設定」連結必須在改版後仍有效（§6.2） |
 | 示範模式（`?scenario=`、`ui_v2/app_<頁>.py` fixtures 入口） | — | 開發／驗收工具，不是使用者導覽；**不得**在正式導覽出現任何示範或舊版出口 |
-| 「切回舊版」「前往舊站」 | — | **客戶明禁**；本組 grep `ui_v2`、`app.py`、`ui/sidebar.py` 該字樣為 0 命中（【事實】）——B UI 現在沒有，D1 也不得新增 |
+| 「切回舊版」「前往舊站」 | — | **客戶明禁**；本組 grep `ui_v2`、`app.py`、`ui/sidebar.py` 該**完整字串**為 0 命中（【事實】；較寬的「舊版」字樣有命中，皆為註解或舊站版本文字，非導覽入口）——B UI 現在沒有，D1 也不得新增 |
 
 ---
 
@@ -205,7 +207,7 @@
 | D-2 | 其餘單頁 live 入口 `app_mkt_live`／`app_exp_live`／`app_set_live` | 同樣沒有換頁；`mkt`／`exp` 的「前往設定與診斷」在單頁入口改寫成一行說明（`ui_v2/health.py::SETTINGS_ELSEWHERE_TEXT`） | 同 D-1 | 同 D-1 |
 | D-3 | 預覽入口 `ui_v2/app_preview.py` | 是目前唯一有導覽的入口（Streamlit Cloud 第二個 App 的 main file，`docs/HANDOFF.md`） | **D1 殼層就加在這個入口** | 殼層放入口檔或新模組（見 §7.5 守衛影響） |
 | D-4 | 「前往設定與診斷」（四頁頁首資料狀態行旁，`ui_v2/health_view.py::render_settings_link`，由 `settings_page` 傳入 `st.Page`） | 只換頁，不取數 | 目標頁仍是 `/set`；若第二層日後拆頁，要決定落到哪個子頁 | Phase 1 目標＝⚙️ 預設入口（`set`）；方案 B 才需重新指定到「資料狀態」子頁 |
-| D-5 | 「前往 ⚙️ 設定」（hld／alo 無 Active 畫面，`ui_v2/active_gate.py::render_no_active`） | 同上，經 `settings_page` | **應直達 Active Sheet 區塊**，否則使用者落到設定頁頂端還要自己找 | Phase 1 若區段跳轉驗證通過 → 帶錨點；否則維持落到設定頁頂（仍非死路） |
+| D-5 | 「前往 ⚙️ 設定」（hld／alo 無 Active 畫面，`ui_v2/active_gate.py::render_no_active`） | 同上，經 `settings_page` | **應直達 Active Sheet 區塊**，否則使用者落到設定頁頂端還要自己找 | 【未驗】`st.page_link` 支援帶 query_params、**不支援 URL fragment**；跨頁「直達 Active Sheet 卡」本草稿引用的任何機制都不支援，故預設落到設定頁頂（仍非死路）；直達需另案（未驗） |
 | D-6 | 「前往該頁」（`SET-8` 各頁資料狀態總表四列，`ui_v2/set/page.py::_render_page_health` 吃 `pages` 字典） | 目標＝四頁的 `st.Page` | 四頁仍是同一組 `st.Page` | 不變（方案 A）；方案 B 需決定落子頁 |
 | D-7 | 「前往重新取數」（`SET-0` 下，頁內錨點 `set-refetch`） | 頁內錨點 | 與 §4 區段跳轉同機制 | 順便驗證 |
 | D-8 | 深連結／書籤 `/mkt`、`/hld`、`/exp`、`/alo`、`/set` | url_path 取自 `PAGES` | 必須保留 | §7.2 |
@@ -223,7 +225,7 @@
 | R-2 | 自繪側欄取代原生導覽，**失去原生的「目前頁高亮」與無障礙語意** | 中 | 【未驗】`st.page_link` 對目前頁的標示本組未驗；殼層必須自己以「文字＋符號」標目前頁（符合「顏色不是唯一語意」）；需 spike |
 | R-3 | 換頁清單 `_PAGE_STATE_TO_DROP`／`_on_page(slug)` 語意綁在「每頁一 slug」 | 中 | 方案 A 不增頁 → 不變；方案 B 拆頁則需逐項重判（§7.2） |
 | R-4 | 順序與 44 3.0 不同（客戶簡報：🌍→⚖️→💼→🔍→⚙️；44／`PAGES`：mkt→hld→exp→alo→set），`tests/ui_v2/test_preview_entry.py::test_頁序與頁名逐字對44的五頁總表` 會紅 | **高（硬衝突）** | 殼層用**獨立常數**表達導覽順序、`PAGES` 與 `st.Page` 註冊順序不動；是否解凍 44 另案（§7.4） |
-| R-5 | OAuth callback 只在 `/set` 處理（`BL-0465`）；ID 路徑若變更，部署的 `redirect_uri` 全部失效 | **高** | `set` 的 url_path 與「登入卡在 `/set`」不變；任何方案都不得動（§6.4） |
+| R-5 | OAuth callback 只在 `/set` 或單頁入口 `app_set_live` 處理（`BL-0465`）；ID 路徑若變更，部署的 `redirect_uri` 全部失效 | **高** | `set` 的 url_path 與「登入卡在 `/set`」不變；任何方案都不得動（§6.4） |
 | R-6 | 用 URL 導覽會**開新 session**（【事實】Streamlit `st.Page` 說明：Navigating to an internal page by URL starts a new session），session_state（含登入暫態）會丟 | 中 | 殼層一律用 `st.page_link`／`st.switch_page`（同 session），不使用 `<a href>` 連到其他頁 |
 | R-7 | 手機 390 抽屜與固定頁首互相遮蓋、點擊目標過小 | 中 | 每列 ≥48px；以 `tests/ui_v2/_ui_v2_chromium.py` 既有 Chromium 測試框架驗 390（【推論】可沿用，本組未讀其內容） |
 
@@ -253,15 +255,15 @@ Active Sheet 狀態機（`shared/active_sheet.py`）、OAuth（`infra/oauth.py`�
 | 能力 | 結果 | 依據 |
 |---|---|---|
 | `pages` 為 list | 扁平一層頁清單 | 【事實】docstring |
-| `pages` 為 `{分組標題: [頁…]}` | **側欄**：分組標題＋該組全部頁**同時展開**（不是「選了才出現」）；**頂部**：每組是可收合下拉 | 【事實】docstring |
+| `pages` 為 `{分組標題: [頁…]}` | **側欄**：分組標題＋該組頁清單（【推論】是否同時展開 docstring 未明寫，但沒有「選分類才顯示」的參數）；**頂部**：每組是可收合下拉 | 【事實】docstring |
 | `position="top"` | 導覽在頁首；dict 分組變下拉 | 【事實】 |
 | `position="hidden"` | 不畫導覽，頁仍註冊可路由 | 【事實】 |
-| `expanded` | 頁數 **>12** 時預設只顯示 10 頁＋「View X more」 | 【事實】docstring |
+| `expanded` | 頁數 **>12** 時預設只顯示 10 頁＋「View X more」；`expanded=True` 可強制全展開，但 docstring 說此參數**只在側欄下方另有其他元素時才生效**（只有導覽時本來就全展開）——故側欄另放元素時，`True` 可避免收合 | 【事實】docstring |
 | `st.Page(visibility="hidden")` | 頁註冊但不出現在原生選單，仍可被 `st.page_link`／`st.switch_page` 到達 | 【事實】docstring |
 | **「第一層固定、第二層只顯示目前類的子頁」** | **原生無此元件** | 【推論】由以上列舉推出（無對應參數） |
 
 **判斷**：
-- **原生 `dict` 分組（側欄）**＝「五個分組標題＋全部子頁一次列出」。若第二層真的拆成約 18 頁，**超過 12 頁就觸發「View X more」收合**，且第二層不是「只顯示目前類」。**不滿足 D1。**
+- **原生 `dict` 分組（側欄）**＝「五個分組標題＋各組子頁清單」，沒有「選分類後才顯示該類子頁」的機制（【推論】）。若第二層真的拆成約 18 頁，**預設會觸發「View X more」收合（可用 `expanded=True` 避免，結論不變）**，且第二層不是「只顯示目前類」。**不滿足 D1。**
 - **原生 `position="top"`＋dict**＝頂部下拉，兩層成立，但**不是固定側欄**，與客戶指定的「桌機固定第一層側欄」不同；手機行為本組未驗。**可作為方案 C（折衷）。**
 - **完整 D1** ＝ `st.navigation(..., position="hidden")` ＋ 在 `st.sidebar` 自己用 `st.page_link` 畫兩層（【推論】可行：`st.page_link` 在 sidebar 內可用、同 session 換頁）。代價：自繪目前頁標示、自繪手機抽屜行為依賴原生側欄的收合機制（【未驗】）。
 
@@ -282,9 +284,9 @@ Active Sheet 狀態機（`shared/active_sheet.py`）、OAuth（`infra/oauth.py`�
 
 | 守衛測試 | 保護什麼 | 方案 A 影響 | 方案 B 影響 |
 |---|---|---|---|
-| `tests/ui_v2/test_preview_entry.py` | 預覽入口不被正式程式 import；五頁注入與各 `app_<頁>_live.py` 逐一相同；`st.set_page_config` 全樹只在 `main()` 呼叫一次；**頁序與頁名逐字對 44**；每個 `page_*` 第一句是 `_on_page` 且 slug 對得上；換頁 pop 清單；**側邊欄說明字面**；換頁清單不含個人登入狀態 | **會碰**：`st.sidebar` 內容改變 → 「側邊欄說明字面」守衛需改；若殼層改 `PAGES` 順序 → 「頁序與頁名」守衛會紅（故殼層用獨立常數，R-4）；`_on_page` 與 `PAGES` 不動則其餘不受影響 | 同 A，另 `_on_page` 每頁一次的假設被打破，需重寫 |
+| `tests/ui_v2/test_preview_entry.py` | 預覽入口不被正式程式 import；五頁注入與各 `app_<頁>_live.py` 逐一相同；`st.set_page_config` 全樹只在 `main()` 呼叫一次；**頁序與頁名逐字對 44**；每個 `page_*` 第一句是 `_on_page` 且 slug 對得上；換頁 pop 清單；**側邊欄說明字面**；換頁清單不含個人登入狀態 | **會碰**：另有 `tests/ui_v2/test_preview_page.py::test_整個入口跑得起來…` 斷言 `at.sidebar.info == [PREVIEW_NOTE]`（【事實】），搬動或改 `PREVIEW_NOTE` 該測試也會紅；`st.sidebar` 內容改變 → 「側邊欄說明字面」守衛需改；若殼層改 `PAGES` 順序 → 「頁序與頁名」守衛會紅（故殼層用獨立常數，R-4）；`_on_page` 與 `PAGES` 不動則其餘不受影響 | 同 A，另 `_on_page` 每頁一次的假設被打破，需重寫 |
 | `tests/ui_v2/test_preview_page.py`（slow） | 真 `st.navigation` 下換頁、widget 不跨頁帶值（Streamlit 把頁雜湊算進 widget id）、`save`／`refetch` 呼叫次數 | `position="hidden"`＋自繪側欄後，AppTest 仍以 `url_path` 雜湊換頁（【推論】）；需補「經殼層連結換頁」的案例 | 拆頁後同名 widget 的跨頁隔離需重驗 |
-| `tests/ui_v2/test_ui_v2_live_import_guard.py` | `ui_v2/` 全部 `.py` 的 import 隔離：不得 import 舊樹（`ui`／`services`／`repositories`／`shared`／`infra`）、網路套件、動態 import；`app_preview` 只能 import 指定頁的 `source` | **新增的殼層檔會被掃**：必須是純導覽（只 import `streamlit`＋標準庫）；不得 import 任何 `source`（除 `app_preview` 既有口子）| 同 A |
+| `tests/ui_v2/test_ui_v2_live_import_guard.py` | `ui_v2/` 全部 `.py` 的 import 隔離：不得 import 舊樹（`ui`／`services`／`repositories`／`shared`／`infra`）、網路套件、動態 import；`app_preview` 只能 import 指定頁的 `source` | **新增的殼層檔會被掃**：必須是純導覽（只 import `streamlit`＋標準庫）；不得 import 任何 `source`（除 `app_preview` 既有口子）。⚠️ 該檔另有對 `ui_v2/app_preview.py` 的**逐檔 fail-closed import 白名單**（【事實】檔頭第 8 條）：`app_preview.py` 新增任何 import（含殼層模組）都要**改白名單＝修改一個守衛**，須在 PR 說明載明 | 同 A |
 | `tests/ui_v2/test_ui_v2_lane_guards.py` | `test_*_page.py` 整檔標 slow、`test_*_logic.py` 為 fast；CI 需裝 chromium | 殼層的純邏輯（導覽表資料結構）寫成 `test_*_logic.py` 才能進 fast lane | 同 A |
 | `tests/ui_v2/test_active_gate.py` | 無 Active 畫面與「前往 ⚙️ 設定」連結（有導覽／單頁入口兩種） | 連結目標不變則不受影響；需補經殼層驗證（§6.2） | 目標若改子頁則要改 |
 | `tests/ui_v2/test_health_page.py`、`test_p15_load_failure_page.py` | 「前往設定與診斷」只換頁、原文到得了設定 | 同上 | 同上 |
@@ -307,7 +309,7 @@ Active Sheet 狀態機（`shared/active_sheet.py`）、OAuth（`infra/oauth.py`�
 | 方案 | 內容 | 優點 | 缺點 | 風險 |
 |---|---|---|---|---|
 | **A（AI 總管推薦）殼層先行** | `position="hidden"`＋自繪雙層側欄（桌機固定、手機抽屜）；第一層五類、第二層＝該類現有整頁入口＋「本頁區段」跳轉（先 spike 驗證）；**不拆頁、不改 44 內文、不增減功能** | 改動面最小（只動入口與新的純導覽檔）；五個 url_path 與 `/set` OAuth 落點不變；直接解決「手機看不出在哪、不知道有哪些頁」；符合「最小改動」「功能不消失」 | 第二層項目多半是「區段」不是子頁，與客戶範例的「子頁」感覺有落差；需要先驗證錨點與抽屜行為 | 自繪導覽失去原生目前頁標示（R-2）；導覽順序／頁名與 44 不同需另裁（U-1、U-2）；錨點在手機不可行時第二層退化成每類 1 項（仍合規） |
-| **B 殼層＋拆真子頁** | 在 A 之上，把 `alo`／`hld`／`exp`／`set` 各頁依客戶範例拆成獨立 `st.Page`（以 `visibility="hidden"` 註冊或直接放自繪導覽） | 與客戶範例最一致；子頁可個別深連結 | 需改五個 `page.render` 的結構（現為單一函式畫整頁四層）；44 的「一頁十塊／四層／一頁一個問題」不再適用 → **必須先解凍 44（U-3）**；18 個名稱中 4 個⬜、13 個不是獨立功能，拆頁等於重新設計資訊架構 | 高：牽動 `_on_page`／換頁清單／widget 隔離／大量 `test_*_page.py`；若同時改順序／頁名，等於 `PROJECT_RULES.md` 13.2「大規模資訊架構改版」，需證明屬四種允許情況之一 |
+| **B 殼層＋拆真子頁** | 在 A 之上，把 `alo`／`hld`／`exp`／`set` 各頁依客戶範例拆成獨立 `st.Page`（以 `visibility="hidden"` 註冊或直接放自繪導覽） | 與客戶範例最一致；子頁可個別深連結 | 需改五個 `page.render` 的結構（現為單一函式畫整頁四層）；44 的「一頁十塊／四層／一頁一個問題」不再適用 → **必須先解凍 44（U-3）**；18 個名稱中 4 個⬜、11 個是區塊，拆頁等於重新設計資訊架構 | 高：牽動 `_on_page`／換頁清單／widget 隔離／大量 `test_*_page.py`；若同時改順序／頁名，等於 `PROJECT_RULES.md` 13.2「大規模資訊架構改版」，需證明屬四種允許情況之一 |
 | **C 原生分組（頂部下拉）** | `st.navigation({分組: [頁…]}, position="top")`，五類＝五個分組 | **幾乎零自訂程式碼**；兩層原生成立；無障礙由 Streamlit 負責 | 不是固定側欄（與客戶指定不符）；手機行為本組未驗；第二層仍是同樣的「每類 1 頁」問題；分組標題 emoji 與 44 頁名同樣有 U-2 | 中：偏離客戶指定形態；原生 UI 無法客製抽屜流程 |
 | **D 維持現狀＋手機頁首「目前在」** | 不做 D1；只在頁首加一行「目前在：‹頁名›」（`docs/v2/59` 6.5 節的原建議） | 風險最低、立即可做 | **不交付客戶要的 D1**；無第二層；頁數日後增加時又要重做 | 低；但客戶需求未滿足 |
 
@@ -329,7 +331,7 @@ Active Sheet 狀態機（`shared/active_sheet.py`）、OAuth（`infra/oauth.py`�
 
 ### 8.4 若選 A，Phase 1 的邊界（供稽核）
 
-- **做**：新增純導覽模組（只 import `streamlit`＋標準庫）；`app_preview.py` 的 `main()` 改 `position="hidden"` 並呼叫殼層；導覽順序／第一層標籤用獨立常數；補 fast lane 邏輯測試與 slow lane 殼層案例。
+- **做**：新增純導覽模組（只 import `streamlit`＋標準庫）；因 `app_preview.py` 需 import 它，須編輯 `test_ui_v2_live_import_guard.py` 的 `app_preview` 逐檔白名單（改守衛，明載於 PR）；同步處理 `PREVIEW_NOTE` 的 `at.sidebar.info` 斷言；`app_preview.py` 的 `main()` 改 `position="hidden"` 並呼叫殼層；導覽順序／第一層標籤用獨立常數；補 fast lane 邏輯測試與 slow lane 殼層案例。
 - **不做**：不改 `PAGES` 的順序與頁名、不改任何 `page.render` 內部、不改 `app_<頁>_live.py`、不改 44、不增減功能、不動 `shared/active_sheet.py`／OAuth／唯讀護欄／資料來源、不處理單頁入口死路（D-1／D-2 另案）。
 
 ---
