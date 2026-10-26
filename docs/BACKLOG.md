@@ -814,6 +814,12 @@
 | BL-ID | 狀態 | 類別 | 發現 | 問題 | 出處 | 擋 | 前提 | 下一步 | 裁示 |
 |---|---|---|---|---|---|---|---|---|---|
 | BL-0453 | open | tech debt | 2026-10-25 | **`tests/ui_v2/test_rulings_2026_10_18b_logic.py::test_示範模式_持倉體檢與標的探索全情境模型_md5與動手前相同` 本機紅、main 也紅、CI 綠（只調查）**：`docs/HANDOFF.md` 第二十六次框已記「本機紅，在乾淨的 `7d41705f` 上同樣失敗；CI 為綠 —— 是本機環境差異還是該測試不在 CI lane，未查證；BACKLOG 尚無對應列」；總管 2026-10-25 回報仍如此。同型的 `tests/ui_v2/test_hld_logic.py::test_第2件反向控制_十二情境乘九塊一百零八格逐格未變` 已由 BL-0342 登記（Python 3.13 本機紅、3.11 CI 綠），本列不重複、只交叉引用 | `docs/HANDOFF.md` 第二十六次框〈風險〉；總管 2026-10-25 派工單 | 否（不擋 CI；不擋本批文件） | — | 待調查：確認該測試在 CI 哪一條 lane、本機 Python 版本與日期／環境是否影響黃金 md5；**不修**，只有證明影響 production 或 CI 時才另派工（比照 BL-0342 客戶 2026-10-16 指示） | 否 |
+| BL-0454 | open | UX debt | 2026-10-26 | **(a) SET-5 重新取數按鈕在設定 Sheet 未設或冷卻中時為 disabled，需檢視 UX**（只登記）| ui_v2 SET-5（#1066 c98c9639）；總管派工單轉述，文件組未重跑 | 否 | — | 按鈕 disabled 時使用者看不出原因；需檢視是否補說明文字（只登記，不改行為）；登記不構成動工授權 | 是 |
+| BL-0455 | open | UX debt | 2026-10-26 | **(b) MKT-4／MKT-5 G3 文案「由使用者自行輸入」與已隱藏的輸入欄不符**（只登記）| #1066 隱藏無效輸入後的現況；總管派工單轉述，文件組未重跑 | 否 | — | 文案修正需客戶指定用語；未經客戶措辭不得自行改；登記不構成動工授權 | 是 |
+| BL-0456 | open | UX debt | 2026-10-26 | **(c) 舊 UI 未設選股池警示誤寫「沒有服務帳戶或未登入」**（只登記）| 舊 UI（`ui/`）未設 pool 的警示文字；總管派工單轉述，文件組未重跑 | 否 | — | 隨舊 UI 退役處理，不單獨修；登記不構成動工授權 | 否 |
+| BL-0457 | open | UX debt | 2026-10-26 | **(d) EXP-2 摘要 `ui_v2/exp/live.py::TEXT_POOL_NOT_CLOUD` 恆寫「沒有服務帳戶憑證」，即使實際是選股池 Sheet id 未設**（只登記）| `ui_v2/exp/live.py::TEXT_POOL_NOT_CLOUD`（#1068 fbb08116 移除 baked default 後更易遇到）；總管派工單轉述，文件組未重跑 | 否 | — | 需新措辭裁示，並區分「未設 Sheet」與「無憑證」；登記不構成動工授權 | 是 |
+| BL-0458 | open | UX debt | 2026-10-26 | **(e) `docs/v2/44_fund_ui_ssot.md` 需正式修正輪：新 UI 與其 SET-4 隱藏、儲存按鈕二處分歧**（只登記）| #1063、#1066；44 凍結（md5 守衛見 `tests/ui_v2/test_alo_logic.py`／`test_exp_logic.py`）；總管派工單轉述，文件組未重跑 | 否 | — | 44 凍結，本列不得直接編輯該檔；須先有解凍程序／客戶裁示，再走正式修正程序；登記不構成動工授權 | 是 |
+| BL-0459 | open | UX debt | 2026-10-26 | **(f) #1068 非阻擋後續：①`.github/workflows/fill_pool_currency.yml` env 區塊過期註解；②`scripts/weekly_switch_notify.py:319-323` 將 `list_pool` 讀取失敗當空池（應 fail loudly）；③`docs/v2/55_preview_acceptance_guide.md:47`、`65_set_wireframe_and_cap_gate_01_02.md:73`／`:560` 及 10／11／45／49 仍描述舊 baked 預設；④合併後以 `workflow_dispatch dry_run=true` 手動確認 guard 步驟為綠（需 actions:write token，當前 session 無）**（只登記）| #1068（fbb08116）後續；行號為 2026-10-26 main fbb08116 讀碼，未重驗；總管派工單轉述，文件組未重跑 | 否 | — | ①②③可為文件／小修，須指派；④須有 actions:write 權限者執行；② 屬行為變更（fail loudly），須判斷後另派；登記不構成動工授權 | 否（④需有權限者） |
 
 ## §5 判為關閉、合併與非待辦的來源條目（不開 BL 號；附依據）
 

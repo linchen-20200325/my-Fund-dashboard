@@ -5,20 +5,19 @@
 > 出處：客戶 2026-10-16 頒布 Project AI Constitution v1.0（總管轉達要點，對話中，repo 內無逐字原文）；本檔結構依總管 2026-10-16 設計基準。
 > 文中若引「約 :N」行號，以 `git show d5d391b:<path>` 讀（本批合併後交接本等檔的行號已因指標行而位移）。
 
-> **⏯ Resume Checkpoint**（規則：`PROJECT_RULES.md` 第 6 節 6.1.2，`DEC-2026-10-26-02`；**總管提供、合併前會再更新**；接手先依該節恢復流程比對 GitHub，不一致以 GitHub 為準）
-> - **last checkpoint**：2026-10-26T06:21Z（`date -u` 實測）
-> - **latest verified main**：`a2339aa5`（#1062、#1064、#1063 已合併）
-> - **current branch／PR**：#1065（`docs/resume-checkpoint-20261026`，本 PR）
-> - **in-flight**：#1065（本 PR）；批次 2b 分支 `feat/ui-v2-set5-zero-write-20261026`（SET-5 Google Sheet 零寫入＋隱藏無效輸入；實作中、尚未開 PR；**未完成不可視為驗收**）
-> - **current task**：新 B UI Implementation／Security Gate 實作（依 #1062 裁示順序，`DEC-2026-10-26-03`；evidence 已在 main）
-> - **completed in this batch**：本 PR 落盤 `DEC-2026-10-26-02`／`-03`、本區塊、`docs/DECISIONS.md` 第五節標題恢復與 J-14 補記段移回 `DEC-2026-10-25-04`
-> - **exact stopping point**：批次 2b 實作中（總管提供）
-> - **next single action**：完成批次 2b → Draft PR → 獨立稽核 → CI → Auto-Ship
-> - **後續**：批次 3（Active Sheet runtime SSOT＋consumer wiring＋Settings UI，登入需顯示 email 並明確確認＋移除 `POOL_SHEET_ID` baked default）；批次 4 error taxonomy＋no-active UX；批次 5 文件同步
-> - **tests／CI**：各 in-flight PR 以 GitHub check-run 逐條 `conclusion` 為準；本區塊不代為宣稱
-> - **unresolved true Stop Gates**：無（相關資安取捨已由 #1062 裁示）
-> - **uncommitted／unpushed work**：無（總管提供）
-> - **recommended Model／Effort**：Opus 5.5／Medium
+> **⏯ Resume Checkpoint**（規則：`PROJECT_RULES.md` 第 6 節 6.1.2，`DEC-2026-10-26-02`；**總管提供**；接手先依該節恢復流程比對 GitHub，不一致以 GitHub 為準）
+> - **last checkpoint**：2026-10-26
+> - **latest verified main**：`fbb08116`（#1059～#1068 已合併：#1066 SET-5 零寫入 `c98c9639`、#1067 Active Sheet 狀態機 `d2ca1933`、#1068 移除寫死 `POOL_SHEET_ID` 預設；客戶已確認 Actions＋Streamlit secrets 存在）
+> - **current branch／PR**：無 in-flight 實作 PR（本文件批另開 docs 分支）
+> - **current task**：新 B UI Implementation／Security Gate（`DEC-2026-10-26-03`）；批次 3a、2b、移除 baked default 已完成
+> - **exact stopping point**：批次 3b 尚未開始
+> - **next single action**：批次 3b Settings UI —— OAuth 登入顯示 email 並明確確認；Sheet Picker 走 `drive.metadata.readonly`；「使用這一本」以 `spreadsheets.readonly` 讀取驗證；hld／alo consumer 經 Active Sheet 用個人 OAuth 接線、無 `POLICY_SHEET_ID` fallback；並替 `shared/active_sheet.get_active` 補 docstring，註明呼叫端須先跑 `ensure_fresh`
+> - **後續**：批次 4（error taxonomy 接線＋未選定 UX「⬜ 尚未選定持倉資料來源」＋「前往 ⚙️設定」）→ 批次 5 文件同步
+> - **tests／CI**：已合併 PR 以 GitHub check-run 為準；本區塊不代為宣稱
+> - **unresolved true Stop Gates**：無
+> - **uncommitted／unpushed work**：無
+> - **recommended Model／Effort**：Sonnet 5.5／Medium（批次 3b）
+> - **新登記**：BL-0454～BL-0459（SET-5／文案／44 修正輪／#1068 後續；皆未授權動工）
 > - ⚠️ **未完成項不可視為驗收。**
 
 ---
