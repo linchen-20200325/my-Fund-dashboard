@@ -562,15 +562,18 @@ def _render_login(login_live) -> None:
                           args=(button["action"], *((button["arg"],) if "arg" in button else ())))
 
 
+_PICKER_WIDGET_KEY = "set_picker_select"   # 與 `source._KEY_PICKER_WIDGET` 同值（測試鎖定）
+
+
 def _pick_changed(act, key) -> None:
     """下拉選了一本：把選到的 id 交給動作（來源層只收畫面清單內的 id，且只設 Pending）。"""
     act("select", st.session_state.get(key))
 
 
-def _render_picker(picker_live) -> None:
+def _render_picker(picker_live, data) -> None:
     """「試算表連線」卡（批 3b-3）：只畫 `live.picker_view` 給的字、選項與鈕；未正式登入時整張不畫。
     選中只是待確認；［使用這一本］才驗證，其 `arg` 綁定畫面上顯示的待確認試算表 id。沒有任何「清除使用中」的控制項。"""
-    view = live.picker_view(picker_live["load"]())
+    view = live.picker_view(data)
     if view["state"] == "hidden":
         return
     with st.expander(live.PICKER_CARD_TITLE, expanded=True):
@@ -579,8 +582,8 @@ def _render_picker(picker_live) -> None:
             ids = [o["id"] for o in view["options"]]
             labels = {o["id"]: o["label"] for o in view["options"]}
             st.selectbox(live.PICKER_SELECT_LABEL, ids, index=view["selected"], format_func=labels.__getitem__,
-                         placeholder=live.PICKER_PLACEHOLDER, key="set_picker_select",
-                         on_change=_pick_changed, args=(picker_live["act"], "set_picker_select"))
+                         placeholder=live.PICKER_PLACEHOLDER, key=_PICKER_WIDGET_KEY,
+                         on_change=_pick_changed, args=(picker_live["act"], _PICKER_WIDGET_KEY))
         for button in view["buttons"]:
             st.button(button["label"], key=f"set_picker_{button['action']}", on_click=picker_live["act"],
                       args=(button["action"], *((button["arg"],) if "arg" in button else ())))
@@ -746,10 +749,13 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         _render_set0_nav()
 
     _html(f'<div class="set-layer-label">{label2}</div>')
+    # 選本資料要在登入卡之前讀：列清單／驗證遇到登入失效會清整個 session 並把代號轉給登入卡的提示欄，
+    # 登入卡晚於它讀狀態，才不會在同一次畫面上還說「已登入」。
+    picker_data = picker_live["load"]() if picker_live is not None else None
     if login_live is not None:
         _render_login(login_live)   # 65 第 A.2、C 節：第二層「關鍵數字」最上面的「Google 帳號」卡
     if picker_live is not None:
-        _render_picker(picker_live)   # 65 第 E 節：登入後才出現的「試算表連線」卡（選本 → 待確認 → 使用這一本）
+        _render_picker(picker_live, picker_data)   # 65 第 E 節：登入後才出現的「試算表連線」卡（選本 → 待確認 → 使用這一本）
     with st.container(key="set_layer2"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
             with column:

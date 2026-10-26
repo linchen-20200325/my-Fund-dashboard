@@ -234,3 +234,56 @@ def test_page的picker卡只在picker_live有傳時畫_示範模式傳了就炸_
 def test_source的動作代號白名單與live一致_且不含清除():
     assert live.PICKER_ACTIONS == ("select", "use", "relist")
     assert not any("clear" in a or "delete" in a for a in live.PICKER_ACTIONS)
+
+
+# ───────────── 回修一：B（使用／選取失敗不說「讀不到試算表清單」）、D（待確認不在清單就不給使用鈕） ─────────────
+
+
+@pytest.mark.parametrize("code", [ec.UNAVAILABLE, ec.AUTH_STATE_INVALID, "SOMETHING_ELSE", None])
+def test_B_使用與選取失敗_完整兩行_不含清單失敗的字(code):
+    assert live.picker_error_lines(code, "use") == ["⬜ 無法判定", "切換沒有完成，原因讀不到"]
+    assert live.picker_error_lines(code, "select") == ["⬜ 無法判定", "選取沒有完成，原因讀不到"]
+    assert live.picker_error_lines(code, "list") == ["⬜ 無法判定", "讀不到試算表清單"]
+
+
+def test_B_完整字樣釘住():
+    assert live.picker_error_lines(ec.PERMISSION_DENIED, "use") == ["⛔ 無權限：切換沒有完成。"]
+    assert live.picker_error_lines(ec.PERMISSION_DENIED, "list") == ["⛔ 這個帳號沒有列出試算表的權限"]
+    assert live.picker_error_lines(ec.AUTH_EXPIRED, "use") == ["◷ 登入已過期", "登入已過期，需要重新登入"]
+    assert live.picker_error_lines(ec.SCHEMA_INVALID, "use") == ["⛔ 驗證失敗：切換沒有完成。"]
+    assert live.picker_error_lines(ec.NETWORK_ERROR, "list") == ["⛔ 列出試算表失敗"]
+
+
+def test_B_使用失敗未知代號_畫面不出現讀不到試算表清單():
+    v = _view(_status(active_sheet={"id": A, "name": "甲", "verified_at": 1.0}, pending_sheet={"id": B, "name": "乙"}),
+              notice={"kind": "use_fail", "code": ec.UNAVAILABLE, "name": "乙"})
+    assert v["lines"][:3] == ["⬜ 無法判定", "切換沒有完成，原因讀不到", "目前使用中仍是：甲（未變更）"]
+    assert "讀不到試算表清單" not in _text(v)
+
+
+@pytest.mark.parametrize("listing", [
+    None, {"ok": False, "error_code": ec.NETWORK_ERROR}, {"ok": True, "sheets": []},
+    {"ok": True, "sheets": [{"id": A, "name": "甲"}, {"id": C, "name": "丙"}]}])   # 最後一種：清單不含待確認的 B
+def test_D_待確認不在畫面清單內_不顯示待確認_不給使用鈕(listing):
+    v = _view(_status(pending_sheet={"id": B, "name": "乙"}), listing=listing)
+    assert not [b for b in v["buttons"] if b["action"] == "use"]
+    assert "待確認" not in _text(v) and v["selected"] is None
+    assert [b["action"] for b in v["buttons"]] == ["relist"]
+
+
+def test_D_mutation_不檢查清單_就會給出對看不到的那本的使用鈕():
+    st = _status(pending_sheet={"id": B, "name": "乙"})
+    shown = _view(st, listing={"ok": True, "sheets": [{"id": A, "name": "甲"}]})
+    assert not [b for b in shown["buttons"] if b["action"] == "use"]
+    # 對照：待確認在清單內時才有（確認這個斷言咬得到東西）
+    assert [b for b in _view(st)["buttons"] if b["action"] == "use"]
+
+
+def test_A_頁面先讀選本資料_再畫登入卡_順序鎖定():
+    import ast
+    tree = ast.parse((_ROOT / "ui_v2" / "set" / "page.py").read_text(encoding="utf-8"))
+    render = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "render")
+    load = min(n.lineno for n in ast.walk(render) if isinstance(n, ast.Subscript)
+               and ast.unparse(n) == "picker_live['load']")
+    login = min(n.lineno for n in ast.walk(render) if isinstance(n, ast.Call) and ast.unparse(n.func) == "_render_login")
+    assert load < login

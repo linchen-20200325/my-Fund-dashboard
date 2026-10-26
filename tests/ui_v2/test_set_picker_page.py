@@ -188,3 +188,56 @@ def test_第一階段唯讀不變_SET4不畫_沒有存檔鈕():
     at = _run(_script())
     assert not [e for e in at.expander if e.label.startswith("參數編輯")]
     assert "存檔" not in [b.label for b in at.button if not (b.key or "").startswith("set_picker_")]
+
+
+_URL = "https://accounts.google.com/o/oauth2/v2/auth?state=s&code_challenge=c"
+
+
+def _script_both():
+    script = SCAN._set()
+    needle = "page.render(load_live=source.load_live, save_live=source.save_setting, refetch_live=source.refetch)"
+    assert needle in script
+    return script.replace(needle, "import _set_live_harness as _H\n    "
+                          "page.render(load_live=source.load_live, save_live=source.save_setting, "
+                          "refetch_live=source.refetch, login_live=_H.LOGIN, picker_live=_H.PICKER)")
+
+
+def test_回修A_選本讀到登入失效後_同一次畫面的登入卡不再說已登入():
+    """選本資料先讀：它把「session 已清掉」記下來；登入卡晚於它讀，必須如實顯示已過期、不能還是已登入。
+    （替身以共用旗標模擬「選本先清 session、登入卡後讀」；若頁面改回先畫登入卡，旗標還沒設、登入卡會說已登入 → 紅燈。）"""
+    flag = {"cleared": False}
+
+    def picker_load():
+        flag["cleared"] = True
+        return {"status": _status("logged_out"), "list": None, "notice": None}
+
+    def login_load():
+        if flag["cleared"]:
+            return {"status": _status("logged_out"), "begin": {"ok": True, "authorize_url": _URL},
+                    "notice": "AUTH_EXPIRED", "switch_confirm": False}
+        return {"status": _status("logged_in"), "begin": None, "notice": None, "switch_confirm": False}
+
+    H.PICKER.clear()
+    H.PICKER.update(load=picker_load, act=lambda *a: None)
+    H.LOGIN.clear()
+    H.LOGIN.update(load=login_load, act=lambda *a: None)
+    try:
+        at = _run(_script_both())
+    finally:
+        H.LOGIN.clear()
+    text = _text(at)
+    assert live.TEXT_LOGIN_EXPIRED in text and "已登入" not in text
+    assert live.PICKER_CARD_TITLE not in [e.label for e in at.expander]
+
+
+def test_回修D_待確認不在清單_畫面沒有使用這一本():
+    _install(_status(pending_sheet={"id": B, "name": "乙"}), listing={"ok": True, "sheets": [{"id": A, "name": "甲"}]})
+    at = _run(_script())
+    assert "set_picker_use" not in _picker_buttons(at) and "待確認" not in _text(at)
+
+
+def test_回修B_使用失敗未知代號_畫面不說讀不到試算表清單():
+    _install(_status(active_sheet={"id": A, "name": "甲", "verified_at": 1.0}, pending_sheet={"id": B, "name": "乙"}),
+             notice={"kind": "use_fail", "code": "UNAVAILABLE", "name": "乙"})
+    text = _text(_run(_script()))
+    assert "切換沒有完成，原因讀不到" in text and "讀不到試算表清單" not in text

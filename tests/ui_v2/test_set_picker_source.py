@@ -129,20 +129,22 @@ def test_待確認登入_也不列清單(env):
     assert source.picker_load()["list"] is None and env.list_calls == 0
 
 
-def _assert_no_listing_when_logged_out(env):
+def _assert_no_listing_when_logged_out(env, monkeypatch):
+    # 狀態雖說未登入、卻帶著一個 email（刻意讓「帳號讀不到」那道守衛不介入，單獨檢驗登入檢查）
+    monkeypatch.setattr(source, "_safe_status", lambda: {"login_state": "logged_out", "email": "a@example.com"})
     out = source.picker_load()
     assert out["list"] is None and source._KEY_PICKER_LIST not in env.st.session_state
 
 
-def test_未登入_清單輸入是None_不留快取(env):
-    _assert_no_listing_when_logged_out(env)
+def test_未登入_清單輸入是None_不留快取(env, monkeypatch):
+    _assert_no_listing_when_logged_out(env, monkeypatch)
 
 
 def test_mutation_登入檢查拿掉_未登入也會往下列清單就會紅燈(env, monkeypatch):
     """變異：`_logged_in` 恆真 → 未登入也進入列清單分支（清單輸入不再是 None、並留下快取）→ 上面的斷言必須失敗。"""
     monkeypatch.setattr(source, "_logged_in", lambda status: True)
     with pytest.raises(AssertionError):
-        _assert_no_listing_when_logged_out(env)
+        _assert_no_listing_when_logged_out(env, monkeypatch)
 
 
 def test_登入後列一次清單_之後用快取_不每次重打(env):
@@ -437,3 +439,160 @@ def test_不跨session持久化_source沒有任何寫檔或寫入Sheet的呼叫(
             if isinstance(node, ast.Attribute):
                 assert node.attr not in ("write_text", "write_bytes", "save_setting", "set_pending", "activate_pending",
                                          "clear_pending", "access_target", "worksheet", "update"), (fn.name, node.attr)
+
+
+# ───────────── 回修一：登入失效轉給登入卡；下拉元件值；M3／M4；email 讀不到 ─────────────
+
+_WIDGET = "set_picker_select"
+
+
+def _assert_expired_reaches_login_card(env):
+    out = source.login_load()
+    assert out["status"]["login_state"] == "logged_out" and out["notice"] == ec.AUTH_EXPIRED
+
+
+def test_列清單遇到登入失效_登入卡讀得到已過期_且讀到的是清掉之後的狀態(env):
+    _login(env)
+    env.list_exc = ps.drive.PersonalDriveError(ec.AUTH_EXPIRED)
+    source.picker_load()   # 頁面先讀選本資料（會清 session 並留下提示），再讀登入卡
+    _assert_expired_reaches_login_card(env)
+
+
+def test_使用時登入失效_登入卡讀得到已過期(env):
+    _login(env)
+    source.picker_load()
+    _pend(env, S1)
+    env.verify_result = _fail(ec.AUTH_EXPIRED)
+    source.picker_act("use", S1)
+    _assert_expired_reaches_login_card(env)
+
+
+def test_mutation_不轉給登入卡_登入失效就無聲消失(env, monkeypatch):
+    monkeypatch.setattr(source, "_login_notice_if_expired", lambda code: None)
+    _login(env)
+    env.list_exc = ps.drive.PersonalDriveError(ec.AUTH_EXPIRED)
+    source.picker_load()
+    with pytest.raises(AssertionError):
+        _assert_expired_reaches_login_card(env)
+
+
+def test_其他失敗代號不轉給登入卡(env):
+    _login(env)
+    source.picker_load()
+    _pend(env, S1)
+    env.verify_result = _fail(ec.PERMISSION_DENIED)
+    source.picker_act("use", S1)
+    assert source._KEY_NOTICE not in env.st.session_state
+
+
+def test_下拉元件值_與Pending不一致就丟掉(env):
+    _login(env)
+    env.st.session_state[_WIDGET] = S2   # 殘值：沒有 Pending
+    source.picker_load()
+    assert _WIDGET not in env.st.session_state
+    _pend(env, S1)
+    env.st.session_state[_WIDGET] = S1   # 與 Pending 一致 → 保留
+    source.picker_load()
+    assert env.st.session_state[_WIDGET] == S1
+
+
+def test_登出與重列_下拉元件值一併丟掉(env):
+    _login(env)
+    source.picker_load()
+    _pend(env, S1)
+    env.st.session_state[_WIDGET] = S1
+    source.picker_act("relist")
+    assert _WIDGET not in env.st.session_state
+    env.st.session_state[_WIDGET] = S1
+    ps.logout(env.st.session_state)
+    source.picker_load()
+    assert _WIDGET not in env.st.session_state
+
+
+def test_選本被拒_下拉元件值丟掉(env):
+    _login(env)
+    source.picker_load()
+    env.st.session_state[_WIDGET] = "1ZZZZZZZZZZZZZZZZZZZZ"
+    source.picker_act("select", "1ZZZZZZZZZZZZZZZZZZZZ")
+    assert _WIDGET not in env.st.session_state
+
+
+def test_清掉下拉選擇_arg是None_當成沒事_不顯示找不到(env):
+    _login(env)
+    source.picker_load()
+    source.picker_act("select", None)
+    assert source._KEY_PICKER_NOTICE not in env.st.session_state
+
+
+def test_元件key與page一致():
+    import ast
+    tree = ast.parse((_ROOT / "ui_v2" / "set" / "page.py").read_text(encoding="utf-8"))
+    vals = [n.value.value for n in ast.walk(tree) if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
+            and any(isinstance(t, ast.Name) and t.id == "_PICKER_WIDGET_KEY" for t in n.targets)]
+    assert vals == [source._KEY_PICKER_WIDGET]
+
+
+def _seed_pending_and_cache(env):
+    _login(env)
+    source.picker_load()
+    _pend(env, S1)
+    ps.logout(env.st.session_state)   # 登出會清橋接的 Pending；下面再手動塞回「殘留」的狀態
+    env.st.session_state[source._KEY_PICKER_LIST] = {"email": "a@example.com", "result": {
+        "ok": True, "sheets": [{"id": S1, "name": "甲"}]}}
+
+
+def _assert_act_inert_when_logged_out(env):
+    calls = []
+    for name in ("select_pending", "use_pending", "list_for_picker"):
+        setattr(source.personal_session, name, lambda *a, _n=name, **k: calls.append(_n) or {"ok": False})
+    source.picker_act("select", S1)
+    source.picker_act("use", S1)
+    source.picker_act("relist")
+    assert calls == []
+
+
+def test_M3_未登入時動作不碰L2_即使殘留清單快取(env, monkeypatch):
+    _seed_pending_and_cache(env)
+    for name in ("select_pending", "use_pending", "list_for_picker"):
+        monkeypatch.setattr(source.personal_session, name, getattr(source.personal_session, name))   # 事後還原
+    _assert_act_inert_when_logged_out(env)
+
+
+def test_M3_mutation_登入檢查拿掉_動作就會碰L2(env, monkeypatch):
+    _seed_pending_and_cache(env)
+    for name in ("select_pending", "use_pending", "list_for_picker"):
+        monkeypatch.setattr(source.personal_session, name, getattr(source.personal_session, name))
+    monkeypatch.setattr(source, "_logged_in", lambda status: True)
+    monkeypatch.setattr(source, "_safe_status", lambda: {"login_state": "logged_out", "email": "a@example.com",
+                                                         "pending_sheet": {"id": S1, "name": "甲"}})
+    with pytest.raises(AssertionError):
+        _assert_act_inert_when_logged_out(env)
+
+
+def _assert_foreign_cache_relisted(env):
+    _login(env)   # 登入為 a@example.com
+    env.st.session_state[source._KEY_PICKER_LIST] = {"email": "b@example.com", "result": {
+        "ok": True, "sheets": [{"id": S3, "name": "別人的"}]}}
+    out = source.picker_load()
+    assert env.list_calls == 1 and _ids(out) == [S1, S2]
+
+
+def test_M4_快取屬於別的帳號_重列(env):
+    _assert_foreign_cache_relisted(env)
+
+
+def test_M4_mutation_快取檢查拿掉_會沿用別人的清單(env, monkeypatch):
+    monkeypatch.setattr(source, "_cache_valid", lambda rec, email: isinstance(rec, dict))
+    with pytest.raises(AssertionError):
+        _assert_foreign_cache_relisted(env)
+
+
+def test_帳號讀不到_不列清單_不信快取_落無法判定_不每次重打(env, monkeypatch):
+    _login(env)
+    monkeypatch.setattr(source, "_safe_status", lambda: {"login_state": "logged_in", "email": None,
+                                                         "pending_sheet": None, "active_sheet": None})
+    env.st.session_state[source._KEY_PICKER_LIST] = {"email": None, "result": {"ok": True, "sheets": [{"id": S3}]}}
+    for _ in range(3):
+        out = source.picker_load()
+        assert out["list"] is None
+    assert env.list_calls == 0

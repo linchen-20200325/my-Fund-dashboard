@@ -331,6 +331,7 @@ login_live = {"load": login_load, "act": login_act}
 
 _KEY_PICKER_LIST = "_set_picker_list"      # {"email": 登入帳號, "result": 清單結果}（只存純字串）
 _KEY_PICKER_NOTICE = "_set_picker_notice"  # 上一個動作留下的 {"kind", "code", "name"}（畫面讀一次就清）
+_KEY_PICKER_WIDGET = "set_picker_select"  # 下拉元件的 key（`page.py` 用同一個字串，測試鎖定）
 _PICKER_ACTIONS = ("select", "use", "relist")   # 動作白名單（與 `live.PICKER_ACTIONS` 同步，測試鎖定）
 
 
@@ -367,18 +368,43 @@ def _displayed_ids() -> frozenset:
     return frozenset()
 
 
+def _cache_valid(rec, email) -> bool:
+    """清單快取只在「綁定的帳號 email 與目前正式登入的帳號相同」時可信；帳號讀不到（None）一律不可信。"""
+    return isinstance(rec, dict) and isinstance(email, str) and rec.get("email") == email
+
+
+def _login_notice_if_expired(code) -> None:
+    """選本流程遇到登入失效：把代號交給登入卡的提示欄，重畫後登入卡才會說「登入已過期」（否則這個代號會無聲消失）。
+    只轉 AUTH_EXPIRED；AUTH_REQUIRED 代表當下就是未登入，登入卡讀狀態就會如實說「未登入」，不必（也不該）借用「登入沒有完成」字樣。"""
+    if code == "AUTH_EXPIRED":
+        st.session_state[_KEY_NOTICE] = code
+
+
+def _reset_picker_widget(pending_id) -> None:
+    """下拉元件自己的值要與目前待確認的那一本一致；不一致（登出、換帳號、重列、選本被拒、Pending 已清）就丟掉，
+    讓下一次畫面依讀模型的 `selected` 重新決定（元件在這一輪還沒建立，丟 key 是允許的）。"""
+    if st.session_state.get(_KEY_PICKER_WIDGET) != pending_id:
+        st.session_state.pop(_KEY_PICKER_WIDGET, None)
+
+
 def picker_load() -> dict:
     """給 `page.render(picker_live=...)`：交出 `ui_v2/set/live.py::picker_view` 的輸入。
-    未正式登入 → 清掉清單快取與提示、不呼叫任何 Drive 動作（清單只在登入後才列）。"""
+    未正式登入 → 清掉清單快取與提示、不呼叫任何 Drive 動作（清單只在登入後才列）。
+    頁面要在畫登入卡**之前**呼叫本函式：列清單遇到登入失效會清整個 session，登入卡才讀得到清掉之後的狀態與提示。"""
     state = st.session_state
     status = _safe_status()
     if not _logged_in(status):
         state.pop(_KEY_PICKER_LIST, None)
         state.pop(_KEY_PICKER_NOTICE, None)
+        _reset_picker_widget(None)
         return {"status": status, "list": None, "notice": None}
     email = status.get("email") if isinstance(status.get("email"), str) and status.get("email").strip() else None
+    if email is None:   # 帳號讀不到：無法證明快取屬於誰 → 不列、不信快取，畫面落「無法判定」（不是每次重畫都打 Drive）
+        state.pop(_KEY_PICKER_LIST, None)
+        _reset_picker_widget(None)
+        return {"status": status, "list": None, "notice": state.pop(_KEY_PICKER_NOTICE, None)}
     rec = state.get(_KEY_PICKER_LIST)
-    if not (isinstance(rec, dict) and email is not None and rec.get("email") == email):   # 帳號讀不到 → 每次重列，不信快取
+    if not _cache_valid(rec, email):
         try:
             result = _clean_listing(personal_session.list_for_picker(state))
         except Exception as exc:  # noqa: BLE001 —— 不是吞：記類型、畫面落「無法判定」，不猜成空清單
@@ -388,8 +414,12 @@ def picker_load() -> dict:
         status = _safe_status()   # 列清單遇到登入失效會清整個 session：以動作之後的狀態為準
         if not _logged_in(status):
             state.pop(_KEY_PICKER_LIST, None)
+            _reset_picker_widget(None)
+            _login_notice_if_expired(result.get("error_code"))
             return {"status": status, "list": None, "notice": state.pop(_KEY_PICKER_NOTICE, None)}
         rec = state[_KEY_PICKER_LIST]
+    pending = status.get("pending_sheet") if isinstance(status.get("pending_sheet"), dict) else None
+    _reset_picker_widget(pending.get("id") if pending else None)
     return {"status": status, "list": rec.get("result"), "notice": state.pop(_KEY_PICKER_NOTICE, None)}
 
 
@@ -401,8 +431,9 @@ def picker_act(action, arg=None) -> None:
     """畫面動作（只接白名單內的代號；一律先重讀目前狀態，不是正式登入就不動作）。
 
     `select`：`arg`＝使用者在下拉選中的 id，必須在畫面上列出的清單內，且 L2 只收最近一次清單內的 id（雙重把關）；
-    只設 Pending，不啟用。`use`：`arg`＝畫面上顯示的待確認試算表 id，動作當下與目前 Pending 不同就不動作；
-    驗證成功才換 Active（L2 保證），失敗留舊 Active 並只交錯誤代號。`relist`：丟掉快取、下一次重畫重列。"""
+    只設 Pending，不啟用；`arg` 為 None（清除下拉選擇）＝什麼都不做。`use`：`arg`＝畫面上顯示的待確認試算表 id，
+    動作當下與目前 Pending 不同就不動作；驗證成功才換 Active（L2 保證），失敗留舊 Active 並只交錯誤代號
+    （登入失效另轉給登入卡）。`relist`：丟掉快取與下拉值、下一次重畫重列。"""
     if action not in _PICKER_ACTIONS:
         return
     state = st.session_state
@@ -412,16 +443,21 @@ def picker_act(action, arg=None) -> None:
     if action == "relist":
         state.pop(_KEY_PICKER_LIST, None)
         state.pop(_KEY_PICKER_NOTICE, None)
+        state.pop(_KEY_PICKER_WIDGET, None)
         return
     try:
         if action == "select":
+            if arg is None:   # 清掉下拉選擇不是「選了一本不存在的」
+                return
             if not (isinstance(arg, str) and arg in _displayed_ids()):
+                state.pop(_KEY_PICKER_WIDGET, None)
                 _notice("select_fail", "SHEET_NOT_FOUND")
                 return
             result = personal_session.select_pending(state, arg)
             if result.get("ok") is True:
                 state.pop(_KEY_PICKER_NOTICE, None)
             else:
+                state.pop(_KEY_PICKER_WIDGET, None)
                 _notice("select_fail", result.get("error_code"))
             return
         # use
@@ -435,6 +471,7 @@ def picker_act(action, arg=None) -> None:
             _notice("use_ok", None, active.get("name") or pending.get("name") or shown)
         else:
             _notice("use_fail", result.get("error_code"), pending.get("name"))
+            _login_notice_if_expired(result.get("error_code"))
     except Exception as exc:  # noqa: BLE001 —— 記類型（不記訊息）；失敗一律只交 UNAVAILABLE，不當成成功
         _LOG.warning("設定頁選本動作失敗（%s）：%s", action, type(exc).__name__)
         _notice("use_fail" if action == "use" else "select_fail", "UNAVAILABLE")
