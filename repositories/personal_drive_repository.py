@@ -15,12 +15,15 @@
   2. 至少有一個「保單分頁」——標題不以 `_` 開頭、且不等於 `Policies`。
      這與 `repositories/policy_supplement_repository.py::_list_policy_tabs`（持倉讀取的唯一分頁來源）
      的保單分頁定義一致；`_持倉補充`／`_保單資料` 為選填補充分頁，缺少不算不合格。
+  ⚠️ 此規則仍待客戶覆核，身分檢查偏弱：任何「有一個一般分頁」的試算表都會通過（不比對欄位表頭）。
   缺保單分頁 → `SCHEMA_INVALID`（驗證失敗，不是「找不到」）。不檢查欄位表頭（那需要讀儲存格內容，
   屬後續持倉讀取批次的責任）。
 
 錯誤對應（九個 code 之內；不新增）：401→AUTH_EXPIRED、403→PERMISSION_DENIED、404→SHEET_NOT_FOUND、
 429／5xx→UPSTREAM_ERROR、其他非 2xx→UPSTREAM_ERROR、逾時／連線失敗→NETWORK_ERROR、
 回應不是 JSON／形狀不對→UPSTREAM_ERROR、缺保單分頁→SCHEMA_INVALID。
+⚠️ Google 的 403 也可能是配額／速率限制或 API 未啟用，一律對應 PERMISSION_DENIED（本批維持，不細分）。
+本批不設回應大小上限。
 例外 `PersonalDriveError` 只帶 code 與固定的安全訊息，不回放回應內容。
 """
 from __future__ import annotations
@@ -75,24 +78,31 @@ def _status_to_code(status: int) -> str:
 def _get_json(access_token: str, url: str, params: dict[str, Any]) -> dict:
     if not isinstance(access_token, str) or not access_token.strip():
         raise PersonalDriveError(ec.AUTH_REQUIRED)
+    failure: str | None = None
+    resp = None
     try:
         resp = requests.get(
             url,
             params=params,
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=HTTP_TIMEOUT,
+            allow_redirects=False,  # 不跟轉址：Authorization header 不會被帶去別的網域
         )
     except (requests.Timeout, requests.ConnectionError):
-        raise PersonalDriveError(ec.NETWORK_ERROR) from None
+        failure = ec.NETWORK_ERROR
     except requests.RequestException:
-        raise PersonalDriveError(ec.UPSTREAM_ERROR) from None
+        failure = ec.UPSTREAM_ERROR
+    if failure is not None:
+        # 在 except 區塊之外才拋：`__context__` 也是 None，`RequestException.request.headers`
+        # （含 Authorization）從例外鏈走不到。
+        raise PersonalDriveError(failure) from None
     status = getattr(resp, "status_code", None)
     if not isinstance(status, int) or not 200 <= status < 300:
         raise PersonalDriveError(_status_to_code(status if isinstance(status, int) else 0))
     try:
         data = resp.json()
     except ValueError:
-        raise PersonalDriveError(ec.UPSTREAM_ERROR) from None
+        data = None
     if not isinstance(data, dict):
         raise PersonalDriveError(ec.UPSTREAM_ERROR)
     return data
@@ -141,7 +151,7 @@ def verify_spreadsheet(access_token: str, sheet_id: str) -> VerifyResult:
 
     不拋 `PersonalDriveError`（一律轉成 `VerifyResult`，供 `activate_pending` 直接使用）。
     """
-    if not isinstance(sheet_id, str) or not _SHEET_ID_RE.match(sheet_id):
+    if not isinstance(sheet_id, str) or not _SHEET_ID_RE.fullmatch(sheet_id):
         return VerifyResult(ok=False, error_code=ec.SHEET_NOT_FOUND, message=_SAFE_MESSAGES[ec.SHEET_NOT_FOUND])
     try:
         data = _get_json(

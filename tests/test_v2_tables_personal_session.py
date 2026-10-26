@@ -249,3 +249,43 @@ def test_未設定client時回UNAVAILABLE(monkeypatch):
         raise po.PersonalOAuthError(ec.UNAVAILABLE, "x")
     monkeypatch.setattr(po, "load_client_config", boom)
     assert ps.begin_login({}) == {"ok": False, "error_code": ec.UNAVAILABLE}
+
+
+def test_picker記錄帳號不符視為不在清單(env):
+    s = {}
+    _login(s, env)
+    ps.list_for_picker(s)
+    s[KEY_PICKER_IDS]["account_sub"] = "sub-OTHER"
+    assert ps.select_pending(s, S1) == {"ok": False, "error_code": ec.SHEET_NOT_FOUND}
+    assert ps.status(s)["pending_sheet"] is None
+
+
+def test_list遇401_AUTH_EXPIRED清session(env):
+    s = {}
+    _login(s, env)
+    env.list_exc = drive.PersonalDriveError(ec.AUTH_EXPIRED)
+    assert ps.list_for_picker(s) == {"ok": False, "error_code": ec.AUTH_EXPIRED}
+    assert ps.status(s)["login_state"] == "logged_out" and po.get_tokens(s) is None
+    assert ps.list_for_picker(s) == {"ok": False, "error_code": ec.AUTH_REQUIRED}  # 不再重用死 token
+
+
+def test_use_pending遇401_AUTH_EXPIRED清session(env):
+    s = {}
+    _login(s, env)
+    ps.list_for_picker(s)
+    ps.select_pending(s, S1)
+    env.verify_result = asheet.VerifyResult(ok=False, error_code=ec.AUTH_EXPIRED)
+    assert ps.use_pending(s) == {"ok": False, "error_code": ec.AUTH_EXPIRED}
+    assert po.get_tokens(s) is None and ps.status(s)["login_state"] == "logged_out"
+
+
+def test_其他錯誤碼不清session(env):
+    s = {}
+    _login(s, env)
+    ps.list_for_picker(s)
+    ps.select_pending(s, S1)
+    env.verify_result = asheet.VerifyResult(ok=False, error_code=ec.PERMISSION_DENIED)
+    ps.use_pending(s)
+    env.list_exc = drive.PersonalDriveError(ec.NETWORK_ERROR)
+    ps.list_for_picker(s)
+    assert ps.status(s)["login_state"] == "logged_in"

@@ -22,6 +22,15 @@ Sheet Picker 的 id 白名單：`list_for_picker` 成功時把 `{account_sub, sh
 `KEY_PICKER_IDS`；`select_pending` 只收這份清單內的 id（名稱以清單為準，不收呼叫端自帶的名稱），
 所以不能用手打／猜的 ID 進 Pending。清單失敗時白名單一併清掉（不留過期清單可選）。
 登出／換帳號由 `clear_session` 依前綴清空（該 key 在 `SESSION_KEYS`）。
+
+Pending Sheet 本身不帶 account_sub；它只因「`clear_session` 在每一次換帳號／登出／確認新登入時整個
+namespace 清空」而安全。第一階段 UI 必須一律經 `select_pending` 選本（不得直接以自由輸入的 id 呼叫
+`shared.active_sheet.set_pending`）。
+
+L1 回 AUTH_EXPIRED（Drive／Sheets 回 401，代表快取的 access_token 已被 Google 拒絕、但本機 expires_at
+還沒到）時，`list_for_picker`／`use_pending` 會 `po.clear_session`（與 `ensure_fresh` 自己遇到
+AUTH_EXPIRED 的語意一致：清整個 session、要求重新登入），否則下一次 `ensure_fresh` 會一直重用這顆死 token。
+不改 `infra.personal_oauth` 的安全模型；不嘗試強制續期（該模組沒有公開的強制續期入口）。
 """
 from __future__ import annotations
 
@@ -132,6 +141,8 @@ def list_for_picker(state: MutableMapping) -> dict[str, Any]:
     except po.PersonalOAuthError as e:
         return _fail(e.code)
     except drive.PersonalDriveError as e:
+        if e.code == ec.AUTH_EXPIRED:
+            po.clear_session(state)
         return _fail(e.code)
     sub = asheet.current_account_sub(state)
     if sub is None:  # 續期失敗路徑會清 session；走到這裡仍無 sub ＝ 不可信
@@ -163,6 +174,8 @@ def use_pending(state: MutableMapping) -> dict[str, Any]:
         return _fail(e.code)
     res = asheet.activate_pending(state, lambda sid: drive.verify_spreadsheet(token, sid))
     if not res.ok:
+        if res.error_code == ec.AUTH_EXPIRED:
+            po.clear_session(state)  # 死 token：與 ensure_fresh 的 AUTH_EXPIRED 語意一致
         return _fail(res.error_code or ec.UNAVAILABLE)
     return {"ok": True, "active_sheet": _active_dict(res.active)}
 

@@ -31,8 +31,9 @@ def calls(monkeypatch):
     log = Log()
     queue = []
 
-    def fake_get(url, params=None, headers=None, timeout=None):
-        log.append({"url": url, "params": dict(params or {}), "headers": headers, "timeout": timeout})
+    def fake_get(url, params=None, headers=None, timeout=None, allow_redirects=True):
+        log.append({"url": url, "params": dict(params or {}), "headers": headers, "timeout": timeout,
+                    "allow_redirects": allow_redirects})
         item = queue.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -157,7 +158,10 @@ def test_verify_中繼資料異常是UPSTREAM(calls, body):
     assert repo.verify_spreadsheet(TOKEN, SID).error_code == ec.UPSTREAM_ERROR
 
 
-@pytest.mark.parametrize("bad", ["", "a/b", "../x", "short", SID + "?x=1", None])
+@pytest.mark.parametrize("bad", [
+    "", "a/b", "../x", "short", SID + "?x=1", None,
+    "a" * 10 + "/../x", "abc%2F..%2Fabcdefg", "a" * 10 + "\n", "." * 12, "a" * 201,
+])
 def test_verify_壞ID不發請求(calls, bad):
     r = repo.verify_spreadsheet(TOKEN, bad)
     assert (r.ok, r.error_code) == (False, ec.SHEET_NOT_FOUND) and calls == []
@@ -173,3 +177,19 @@ def test_錯誤碼都在九個之內():
 def test_保單分頁定義與持倉讀取一致():
     H = pytest.importorskip("repositories.policy._helpers")
     assert repo._DEFAULT_POLICY_TAB == H.DEFAULT_WORKSHEET
+
+
+@pytest.mark.parametrize("exc", [requests.Timeout("t " + TOKEN), requests.ConnectionError("c"), requests.RequestException("x")])
+def test_例外鏈不可達_cause與context皆None且suppress(calls, exc):
+    exc.request = type("R", (), {"headers": {"Authorization": f"Bearer {TOKEN}"}})()
+    calls.queue.append(exc)
+    with pytest.raises(repo.PersonalDriveError) as ei:
+        repo.list_spreadsheets(TOKEN)
+    e = ei.value
+    assert e.__cause__ is None and e.__suppress_context__ is True and e.__context__ is None
+
+
+def test_不跟轉址(calls):
+    calls.queue.append(FakeResp(body={}))
+    repo.list_spreadsheets(TOKEN)
+    assert calls[0]["allow_redirects"] is False
