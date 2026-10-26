@@ -72,6 +72,7 @@
 | 新裁示同批 GitHub 落盤 | 第 12 節 12.1（`DEC-2026-10-24-05`） |
 | Stateless AI Handoff／GitHub = Project Memory | 第 6 節 6.1.1（`DEC-2026-10-24-07`） |
 | Quota-safe Resume Checkpoint／中斷續接 | 第 6 節 6.1.2（`DEC-2026-10-26-02`） |
+| Stop Gate 必須顯式回報，禁止靜默停住 | 第 6 節 6.1.3（`DEC-2026-10-26-04`） |
 | 資料層 ≠ AI 推理層 | 第 13 節第 1 條；資料先行順序第 13 節 13.1（`DEC-2026-10-24-02`） |
 | 資料／證據 ≠ 投資行動；Missing／Unknown 不得經單軸訊號重新產生行動 | 第 13 節 13.1 末尾指標（`DEC-2026-10-24-10`；擴及 `switch_advisor` 表現差 overlay＋LINE 週報與 `check_replacement_recommendation` 兩條路徑，其餘平行引擎未核准：`DEC-2026-10-24-12`） |
 | Data-first 順序；Missing ≠ 0／False／中性／HOLD／安全；deterministic calculation 單一 SSOT；AI 不補不存在的資料 | 第 13 節 13.1「正式順序」與「禁止」（`DEC-2026-10-24-02`） |
@@ -392,6 +393,15 @@
 5. **恢復流程**（新 session、額度恢復、對話中斷後，不問客戶「做到哪裡」）：(1) GitHub Verification Gate（第 2 節）→ (2) 讀本檔 → (3) 讀 HANDOFF Resume Checkpoint → (4) 讀相關 BACKLOG／DECISIONS → (5) 查 current PR／branch／CI → (6) 比對 HANDOFF 與 GitHub。**GitHub 操作事實優先**（第 1 節 1.1）：一致 → 直接從 next single action 繼續；不一致 → 以 GitHub 為準修正 HANDOFF 後繼續。只有真正 Stop Gate（第 4 節）才問客戶。
 6. **中斷後不得重做**：不因 session 失憶而重跑已有可信 CI 證據的整批工作、重問已正式裁示的問題、重建已存在的 PR、重寫已完成文件、重新研究已有 evidence 的結論；先讀現有 GitHub 證據再判斷是否真的需要重跑（併讀第 9 節 9.1）。
 7. **回覆規則**：Resume Checkpoint 更新屬例行安全治理，不需每次回報客戶，維持 Silent Autonomous Cruise（第 3 節 3.1）；只有真正資料不一致、保存失敗、Stop Gate 才回報。
+
+#### 6.1.3 長期規則：Stop Gate 必須顯式回報，禁止靜默停住（客戶 2026-10-26 永久治理要求，`DEC-2026-10-26-04`）
+
+> **出處**：客戶要點轉述，經總管派工單轉達；repo 內無逐字存檔，以 `docs/DECISIONS.md` 該筆為準。
+
+1. **停止必報**：因任何原因停止工作，立即回覆「🔴 需要客戶回覆：是」＋停止原因（一句話，觸發哪個 Stop Gate）／目前停在哪裡（PR／branch／task／batch／commit）／需要客戶決定什麼（只列真正需裁示者）／建議選項（A／B 附推薦）／收到什麼回覆後可繼續。
+2. **等待不是停止**：只等 CI／外部 job／review／GitHub 狀態更新且不需客戶操作 → 不得標「需要客戶回覆」，維持 Silent Autonomous Cruise（第 3 節 3.1），自行等待／重查。
+3. **Model／Effort Change Gate**：回「🟡 需要客戶操作：是」＋建議切換到 <Model>／建議 Effort <Low／Medium／High>／原因一句話／切換完成後請回覆「改好了」。
+4. **禁止**：突然停止無訊息；只說「等待回覆」不說等什麼；把 CI 等待誤當客戶 Stop Gate；已有既定規則可自行判斷卻丟回客戶；一般問題未先依 GitHub SSOT／本檔／`docs/DECISIONS.md`／ChatGPT 協作助手處理就停下。核心：能自行繼續就繼續；真的要停就一定明講。
 
 ## 第 7 節｜Definition of Done
 

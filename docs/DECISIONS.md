@@ -1038,6 +1038,19 @@
 | supersedes／superseded by | supersedes：65 第 J 節對應項目（J-1、J-2、J-3、J-5、J-7、J-9、J-10、J-11、J-13）的「實作前須另裁」狀態，以 evidence 檔為準（文件組讀法）。補充（不取代）：`DEC-2026-10-25-02`、`DEC-2026-10-25-04`、`DEC-2026-10-26-01`。superseded by：無 |
 | provenance | **要點轉述**（決策者：客戶 2026-10-26；轉達人：ChatGPT 協作助手依既有 SSOT 收斂，evidence 檔自陳**經客戶確認落盤**，PR #1062；本索引經總管派工單交辦）。本筆摘要由文件組依該檔整理，不增不減；supersedes 欄的 65 J 節對應為文件組讀法，未經第二組驗證 |
 
+### DEC-2026-10-26-04｜客戶永久治理要求：Stop Gate 必須顯式回報，禁止靜默停住（**不授權實作**）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-26 |
+| 決策內容摘要 | **客戶永久治理要求（要點轉述，立即生效）**：「Stop Gate 必須顯式回報，禁止靜默停住」。(1) 因任何原因停止工作時不得只停不報；進入停止狀態須立即以固定格式回覆：「🔴 需要客戶回覆：是」＋停止原因（一句話，觸發哪個 Stop Gate）／目前停在哪裡（PR／branch／task／batch／commit）／需要客戶決定什麼（只列真正需裁示者）／建議選項（A／B 須附推薦）／收到什麼回覆後可繼續。(2) 只是等 CI／外部 job／review／GitHub 狀態更新且不需客戶操作：不得標「需要客戶回覆」，維持 Silent Autonomous Cruise，自行等待／重查。(3) Model／Effort Change Gate 停止時回「🟡 需要客戶操作：是」＋建議切換到 <Model>／建議 Effort <Low／Medium／High>／原因一句話／切換完成後請回覆「改好了」。(4) 禁止：突然停止無訊息；只說「等待回覆」不說等什麼；把 CI 等待誤當客戶 Stop Gate；已有既定規則可自行判斷卻丟回客戶；一般問題未先依 GitHub SSOT／`PROJECT_RULES.md`／`docs/DECISIONS.md`／ChatGPT 協作助手處理就停下。核心：能自行繼續就繼續；真的要停就一定明講。 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）避免工作停在客戶端而客戶不知情，同時避免把可自行等待的 CI 誤報成客戶待辦。 |
+| evidence／source | 客戶 2026-10-26 永久治理要求，經總管派工單轉達；repo 內無逐字存檔，文件組未見客戶對話本身。落地：`PROJECT_RULES.md` 第 6 節 6.1.3、第 0.5 節快速索引一列、本筆、`docs/HANDOFF.md` Resume Checkpoint 一行。 |
+| 影響範圍 | 所有未來對話與 agent 的停止行為與回報格式。**不授權任何 production 實作；不放寬任何 Stop Gate、CI、audit、security gate**。 |
+| 是否可逆 | 可逆（純文件；客戶可另行指示） |
+| supersedes／superseded by | supersedes：無。補充（不取代）：第 4 節 Stop／Decision Gate、第 3 節 3.1 Silent Autonomous Cruise、`DEC-2026-10-26-02`。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-26，經總管派工單轉達）；條文化摘要由文件組單組寫成，未經第二組驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
