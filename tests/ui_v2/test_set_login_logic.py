@@ -316,6 +316,12 @@ def test_source只呼叫橋接的身分動作_不碰試算表寫入():
     # ~~本檔原寫 used 恰為七個身分動作、且不含 Picker 三個~~ → 2026-10-26 批 3b-3（狀態更新，不是漏刪）：source 加上
     # Picker／使用這一本的三個橋接動作（`list_for_picker`／`select_pending`／`use_pending`）。身分七個一個不少；
     # 仍然沒有 `access_target`（讀取試算表內容不在本批）、沒有任何 Sheet 寫入動作（用到的名字恰為下列十個）。
+    # 2026-10-26 批 4 F2（狀態更新，不是漏刪）：source 另引用橋接的**常數** `KEY_LOGIN_NOTICE`（登入卡一次性提示欄的 key，
+    # `_KEY_NOTICE` 的值來源）。它不是動作，故獨立列為「已知常數」；**動作集合仍恰為下列十個**，沒有 `access_target`、沒有 Sheet 寫入動作。
+    # 常數只准這一個名字：新增任何其他 `personal_session.<名字>` 都會讓下面的動作集合比對轉紅。
+    known_constants = {"KEY_LOGIN_NOTICE"}
+    assert known_constants <= used
+    used -= known_constants
     assert used == {"complete_login", "status", "begin_login", "confirm_login", "reject_login", "logout",
                     "switch_account", "list_for_picker", "select_pending", "use_pending"}
     assert not used & {"access_target"}
