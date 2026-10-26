@@ -17,6 +17,7 @@
 > - **unresolved true Stop Gates**：無
 > - **uncommitted／unpushed work**：無
 > - **recommended Model／Effort**：Sonnet 5.5／Medium（批次 3b）
+> - **實跑證據**（客戶 2026-10-26，總管已用 GitHub 核對）：workflow「每日 NAV 自動補齊 (nav_history)」run #71（id 40293976774，workflow_dispatch，branch main，head `fbb08116`）conclusion=success；步驟「檢查 POOL_SHEET_ID 已設定」success、dry-run 主步驟 success，未輸出 secret 值 ⇒ Actions 側 POOL_SHEET_ID 已驗證可用
 > - **新登記**：BL-0454～BL-0459（SET-5／文案／44 修正輪／#1068 後續；皆未授權動工）
 > - ⚠️ **未完成項不可視為驗收。**
 
