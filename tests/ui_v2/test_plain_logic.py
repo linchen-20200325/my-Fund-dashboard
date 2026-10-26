@@ -53,10 +53,18 @@ def _module_constant(relpath: str, name: str):
         ("MSG_POLICY_NOT_CONFIGURED", "repositories/policy_supplement_repository.py", "NOT_CONFIGURED_MESSAGE"),
         ("MSG_FRED_MISSING", "services/v2_tables/market_indicator.py", "MISSING_FRED_API_KEY"),
         ("MSG_POOL_NOT_CLOUD", "services/v2_tables/exp_universe.py", "TEXT_NOT_CLOUD"),
+        ("MSG_POOL_NO_SHEET_ID", "services/v2_tables/exp_universe.py", "TEXT_NO_SHEET_ID"),   # 2026-10-26 J-7
     ],
 )
 def test_鏡像常數逐字等於舊樹真身(mirror, relpath, name):
     assert getattr(plain, mirror) == _module_constant(relpath, name)
+
+
+def test_選股池試算表未設定那一句_歸選股池尚未設定():
+    """2026-10-26 J-7：POOL_SHEET_ID 未設定時資料層回 TEXT_NO_SHEET_ID，須與 TEXT_NOT_CLOUD 同歸「選股池的雲端來源尚未設定」。"""
+    raw = "fund_profile：" + plain.FETCH_FAIL_PREFIX + plain.MSG_POOL_NO_SHEET_ID
+    assert plain.not_configured_state(raw) == "選股池的雲端來源尚未設定"
+    assert plain._known(raw) == ("選股池", "選股池的雲端來源尚未設定")
 
 
 def test_失敗字首逐字等於五頁真身():
@@ -430,7 +438,8 @@ def _expected_class(raw: str) -> str:
         if re.search(rf"(?<![A-Za-z0-9_]){table}：\s*$", head):
             return name
     known = {plain.MSG_SETTINGS_NOT_CONFIGURED: "使用者設定", plain.MSG_POLICY_NOT_CONFIGURED: "保單與持倉",
-             plain.MSG_FRED_MISSING: "市場指標", plain.MSG_POOL_NOT_CLOUD: "選股池"}
+             plain.MSG_FRED_MISSING: "市場指標", plain.MSG_POOL_NOT_CLOUD: "選股池",
+             plain.MSG_POOL_NO_SHEET_ID: "選股池"}
     for message, name in known.items():
         if message in raw:
             return name
