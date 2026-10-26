@@ -243,7 +243,12 @@ def test_重新取數_配息停用_市場指標按下後寫紀錄並畫結果行
     assert not at.exception, [e.value for e in at.exception]
     text = "\n".join(_rendered(at))
     assert "取數完成：市場指標，取回 2 列；結果記在取數紀錄（層 4）" in text
-    assert [r[4] for r in real.data("fetch_log")[1:]] == ["ok"]
+    # ~~real.data("fetch_log")~~ → 2026-10-26 客戶裁示第 6 節（有意識的行為變更，不是漏刪）：取數紀錄記在本次工作階段，
+    # 試算表零寫入。
+    from services.v2_tables import settings_store as S
+    runtime = S.session_runtime(source.st.session_state)
+    assert [r["outcome"] for r in runtime.load_fetch_log()["rows"]] == ["ok"]
+    assert real.writes() == []
 
 
 
@@ -269,15 +274,19 @@ def test_重新取數_淨值層按下後只記一筆fetch_log_SET1淨值列印�
     assert not at.exception, [e.value for e in at.exception]
     text = "\n".join(_rendered(at))
     assert "取數完成：淨值，取回 2 列；結果記在取數紀錄（層 4）" in text
-    assert [r[1] for r in real.data("fetch_log")[1:]] == ["淨值"]
-    assert set(real.tabs) <= {"fetch_log", "fetch_log_open"}       # 不寫 nav、不寫任何其他分頁
+    # ~~real.data("fetch_log")／set(real.tabs) <= {"fetch_log", "fetch_log_open"}~~ → 2026-10-26 客戶裁示第 6 節
+    # （有意識的行為變更，不是漏刪）：取數紀錄記在本次工作階段，連取數紀錄分頁都不寫。
+    runtime = S.session_runtime(source.st.session_state)
+    assert [r["source_tier"] for r in runtime.load_fetch_log()["rows"]] == ["淨值"]
+    assert real.writes() == []                                       # 不寫 nav、不寫任何分頁
     assert live.TEXT_NAV_TIME_SCOPE in "\n".join(_rendered(_run()))
 
 def test_M11_SET版_取數失敗訊息與fetch_log逐字相同_SET2與SET6下一行加註(real, monkeypatch):
     from services.v2_tables import settings_store as S
     _stub_fetch(monkeypatch, None, f"HTTPSConnectionPool(host='127.0.0.1'): /x?api_key={KEY} refused")
     source.refetch("市場指標")
-    stored = S.load_fetch_log([])["rows"][-1]["message"]
+    # ~~S.load_fetch_log([])~~ → 2026-10-26 裁示第 6 節：讀本次工作階段那一份（`source.st.session_state`，下面 `_run` 共用）
+    stored = S.session_runtime(source.st.session_state).load_fetch_log()["rows"][-1]["message"]
     assert KEY not in stored and "‹已遮蔽›" in stored
     at = _run()
     escaped = _htmlmod.escape(stored, quote=True)

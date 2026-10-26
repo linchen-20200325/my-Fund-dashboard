@@ -105,7 +105,10 @@ def test_標的探索_結果清單框收合_EXP2與EXP3在框內_關鍵數字只
     # ~~assert box.checkbox~~ → BL-0250 批次 3-B（44 第七節第三小節之十三；有意識的更正，不是漏刪）：正式模式兩組勾選框
     # 改為兩份多選清單，照舊在框內；舊斷言在寫下當時為真，被推翻的是輸入元件的種類。
     assert not box.checkbox
-    assert {m.key for m in box.multiselect} == {"exp2live_pick_compare", "exp2live_pick_watch"}
+    # ~~{"exp2live_pick_compare", "exp2live_pick_watch"}~~ → 2026-10-26（J-14 精神；有意識的行為變更，不是漏刪）：
+    # 正式模式 `EXP-5` 觀察清單多選不畫（存檔鈕拿掉後已不影響畫面結果，`ui_v2/readonly.py::PHASE1_HIDDEN_INPUT_CODES`），
+    # 只剩會即時改 `EXP-3`／`EXP-6` 的「對照」多選。
+    assert {m.key for m in box.multiselect} == {"exp2live_pick_compare"}
 
 
 def test_標的探索_有無法判定檔時_需要注意列出():

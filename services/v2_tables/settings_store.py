@@ -7,22 +7,20 @@ L1 `repositories/settings_sheet_repository.py`。本檔做兩件事：
 1. **把遮蔽接上 L1**：L1 不得 import 本套件（上行），所以 L1 每個公開函式都要求 `mask`；
    本檔把 `masking.mask_message(訊息, 秘密值)` 包成 `mask` 交下去。秘密值由 L3 讀好傳進來
    （`masking.py` 檔頭：L2 不讀 secrets）。
-2. **第 2 步：取數後寫表**（`market_indicator` ＋ `fetch_log`）：
-   `run_market_indicator_fetch` 先寫 `fetch_log_open`，再以 `MarketIndicatorSheetSink` 當
-   `build_market_indicator_table(sink=...)` 的 sink 呼叫；sink 寫 `market_indicator`、再寫 `fetch_log`。
-   ~~**本輪只給 set 頁觸發用，不接任何 UI。**~~ → 狀態更新，不是漏刪：set 頁「重新取數」已接上（`ui_v2/set/source.py`）。
+2. ~~**第 2 步：取數後寫表**（`market_indicator` ＋ `fetch_log`）~~ → **重新取數只記在本次工作階段**
+   （2026-10-26 客戶裁示第 6 節「第一階段 Google Sheet＝零寫入、不建立診斷寫入例外」；有意識的行為變更，
+   不是漏刪；決策者：客戶）：`run_market_indicator_fetch` 以 `MarketIndicatorRuntimeSink` 當
+   `build_market_indicator_table(sink=...)` 的 sink，把取回的列與取數紀錄記進 `RuntimeFetchStore`（記憶體）；
+   `RuntimeFetchStore` 由畫面層放在 `st.session_state`（`session_runtime`），以參數注入。本檔不呼叫任何 L1 寫入函式
+   （守衛：`tests/ui_v2/test_readonly_write_surface_guard.py`）。L1 的寫入函式本體保留為休眠能力。
 3. **淨值層重新取數**（`refetch_nav`；客戶 2026-10-09 裁示 Q1～Q4，`docs/v2/53_nav_source_plan.md` §4）：
-   只取持倉基金的淨值、**不寫任何資料表**（不存 NAV），只記**一筆** `fetch_log`（`source_tier`＝`淨值`）；
+   只取持倉基金的淨值、**不寫任何資料表**（不存 NAV），只記**一筆**取數紀錄（`source_tier`＝`淨值`，同樣只在記憶體）；
    任一檔失敗 → 該筆 `failed`，`message` 逐檔保留原文（經遮蔽，「鍵: 值」逐行）。
 
-失敗處理（`50` 第 8 節）：
-- 寫表失敗**不讓取數結果消失**：sink 不往上拋寫表的 `SettingsSheetError`，改記在
-  `sink.persist` 交回（`build_market_indicator_table` 的 sink 例外會往上拋，那樣畫面就拿不到
-  本次取數的結果 —— 與 `50`「本次取數的結果照常顯示在頁面上，另外標明取數紀錄寫入失敗」相違）。
-  寫表以外的例外（程式錯誤、ValueError）照樣往上拋，不吞。
-- 取數紀錄本身寫失敗時**不遞迴**：不為「寫 `fetch_log` 失敗」再寫一筆 `fetch_log`。
-- 失敗訊息在本層遮一次，同一份字串同時放進 `fetch_log.message` 與回傳值
-  （`ACCEPTANCE.md` 7.3 最後一條、7.4）。L1 不再遮第二次。
+~~失敗處理（`50` 第 8 節）：寫表失敗不讓取數結果消失、取數紀錄寫失敗時不遞迴~~ → 2026-10-26 起沒有寫表，
+這兩條描述的失敗不再可能發生（記憶體寫入沒有「寫表失敗」）；舊段的用意（取數結果照常顯示、錯誤不吞）仍然成立：
+寫表以外的例外（程式錯誤、ValueError）照樣往上拋，不吞；失敗訊息在本層遮一次，同一份字串同時放進取數紀錄
+`message` 與回傳值（`ACCEPTANCE.md` 7.3 最後一條、7.4）。
 
 fetch_log 的 outcome（回修第 2 輪總管裁示必修 1、3、4；定案記在 docs/v2/50 第 10 節）：
 - `ok`：沒有任何失敗原因；`row_count`＝**L1 取回的列數（過濾前）**，取自 `table["fetched"]`
@@ -31,23 +29,10 @@ fetch_log 的 outcome（回修第 2 輪總管裁示必修 1、3、4；定案記�
   L1 有錯誤原文 → `failed`。判別方式：`errors[鍵]` 恰為 `market_indicator.EMPTY_WITHOUT_REASON`
   且取回 0 列，就是「L1 沒給原因的空」。⚠️ 已知限制：L1 失敗但沒交出原因時也會長這樣，分不出來。
 - `failed`：任一鍵有錯誤原文；或某鍵取回 >0 列但**一列都沒寫成**（例如全部缺 `fetched_at`）；
-  或寫前看到主鍵矛盾（**只擋矛盾的主鍵，其餘照寫**）；~~或 `market_indicator` 寫入失敗。~~
+  或看到主鍵矛盾（**只擋矛盾的主鍵，其餘照記**；2026-10-26 起比對對象是本次工作階段已記的列）。
   `row_count` 為空，`message` 為遮蔽後的原因（多條以換行分隔）。
-  ⚠️ 2026-09-26 更正（有意識的更正，不是漏刪；決策者：AI 總管）：劃掉的那一條~~**實際寫不出來**~~
-  → **對「上游（gspread）讀寫失敗、會登記冷卻的那一類」寫不出來**（第 6 輪收窄；上一輪寫成全稱，
-  被紅隊以標頭不符的情形實測推翻）。
-  那一類：`market_indicator` 寫入時 gspread 呼叫失敗，L1 會登記冷卻（`record_gspread_failure`；
-  試算表鍵或 429 的憑證鍵，冷卻秒數都大於 0），緊接著寫 `fetch_log` 時~~一定~~會被 `should_skip_gspread`
-  擋下（`code="cooling"`），所以 `fetch_log` 不會有這一列；`fetch_log_open` 那一列留著，讀取端要等
-  `OPEN_LOG_STALE_SEC`（1 小時）之後才顯示為「取數沒有結束紀錄」。那一次取數的真正原因只在回傳的
-  `persist`（`stage="fetch_log"`、`message` 含寫表失敗與冷卻兩段原文、`log_message` 是本來要寫的那一句）
-  裡，**不會進試算表**。
-  **已知不登記冷卻的有：標頭不符**（L1 拋 `SettingsSheetError(code="header_mismatch")`，不是上游失敗）——
-  這時 `fetch_log` 會照常寫出 `failed`，`message` 含「market_indicator 寫入失敗：標頭與規格不符……」
-  （由 `tests/test_v2_tables_settings_store.py::test_market_indicator標頭不符_fetch_log照常寫failed且附原因`
-  釘住）。⚠️ 這份「不登記冷卻」清單**未窮舉**，只列已知的。
-  舊句的用意（寫表失敗要記 `failed`）仍然成立，錯的是它描述的是意圖、不是行為。
-  **行為修正已登記下一輪**；本輪只改說明文字，邏輯未動。
+  （2026-09-26 那段「`market_indicator` 寫入失敗時取數紀錄被冷卻擋下／標頭不符照常寫 failed」的更正，
+  2026-10-26 起不再適用：沒有寫表，就沒有寫表失敗；有意識的行為變更，不是漏刪。）
 - `pending`（第一階段刻意不取數）與部分列被略過（例如當天未收盤的那一列）不是失敗。
 """
 
@@ -319,20 +304,104 @@ def _conflict_text(conflicts) -> str:
     return "\n".join(parts)
 
 
-class MarketIndicatorSheetSink:
-    """`build_market_indicator_table(sink=...)` 的 sink：寫 `market_indicator` 與 `fetch_log`。
+class RuntimeFetchStore:
+    """本次工作階段的重新取數結果與取數紀錄（**記憶體，不寫任何 Google Sheet**）。
 
-    用法：`sink.begin()`（寫 `fetch_log_open`）→ 當 sink 傳入 → 讀 `sink.persist`。
-    `begin()` 失敗時 sink 停用：之後不再嘗試任何寫入，`persist` 記下失敗階段與原文。
+    依據：客戶 2026-10-26 正式裁示第 6 節（`docs/evidence/decisions/2026-10-26_ui_v2_implementation_security_gate_decisions.md`）
+    「第一階段 Google Sheet＝零寫入」「不建立診斷寫入例外」：SET-5 重新取數可以更新記憶體與畫面，但不得寫
+    `fetch_log`／`fetch_log_open`／`market_indicator`。本物件由畫面層（`ui_v2/<頁>/source.py`）放在
+    `st.session_state` 持有（`session_runtime`），以參數注入本檔的取數入口；本檔不碰 streamlit。
 
-    ⚠️ **`begin()` 失敗時 `persist["log_message"]` 為 None**（沒有要寫的 `fetch_log` 列，也就沒有那一句）。
-    這時畫面要顯示取數錯誤，**一律讀 `persist["masked_errors"]`**（已遮蔽，`begin()` 失敗時照樣會填），
-    設定試算表本身的錯誤讀 `persist["message"]`。`log_message` 只在 `begin()` 成功後才有意義：
-    它與要寫進 `fetch_log.message` 的字串逐字相同（寫入成敗都放）。
+    方法名與形狀對齊 L1 的同名讀寫（`open_fetch_log`／`close_fetch_log`／`append_market_indicator`／
+    `load_fetch_log`／`load_market_indicator`），但只動本物件自己的清單：開始紀錄用 L1 純函式
+    `new_fetch_log_open`、結束列用 L1 純函式 `fetch_log_row`（同一套驗證）、市場指標列用 L1 純函式
+    `merge_market_indicator`（同一套去重與矛盾規則）。
     """
 
-    def __init__(self, secret_values):
+    def __init__(self):
+        self.open_rows: list = []        # 開始紀錄（`fetch_log_open` 三欄）
+        self.log_rows: list = []         # 結束列（`fetch_log` 七欄；同一 log_id 可能兩列，讀取端取第一列）
+        self.indicator_rows: list = []   # `market_indicator` 列（`44` 形狀，主鍵唯一）
+
+    def open_fetch_log(self, source_tier: str) -> dict:
+        opened = store.new_fetch_log_open(source_tier)
+        self.open_rows.append(dict(opened))
+        return opened
+
+    def close_fetch_log(self, opened: dict, *, outcome: str, row_count: Optional[int],
+                        message: Optional[str]) -> dict:
+        row = store.fetch_log_row(opened, outcome=outcome, row_count=row_count, message=message)
+        self.log_rows.append(dict(row))
+        return row
+
+    def append_market_indicator(self, rows: list) -> dict:
+        merged = store.merge_market_indicator(self.indicator_rows, rows)
+        self.indicator_rows = merged["rows"]
+        return {"appended": merged["appended"], "already_present": merged["already_present"],
+                "conflicts": merged["conflicts"]}
+
+    def load_fetch_log(self) -> dict:
+        """`{"rows", "duplicate_log_ids", "in_progress"}`；`rows` 同 L1 `load_fetch_log` 的列形狀，依 `started_at` 排序。"""
+        rows, seen, duplicates = [], set(), 0
+        for row in self.log_rows:
+            if row["log_id"] in seen:
+                duplicates += 1
+                continue
+            seen.add(row["log_id"])
+            rows.append(dict(row))
+        in_progress = len({r["log_id"] for r in self.open_rows} - seen)
+        rows.sort(key=lambda r: r["started_at"])
+        return {"rows": rows, "duplicate_log_ids": duplicates, "in_progress": in_progress}
+
+    def load_market_indicator(self) -> dict:
+        return {"rows": [dict(r) for r in self.indicator_rows]}
+
+    def is_empty(self) -> bool:
+        return not (self.log_rows or self.indicator_rows)
+
+
+def merge_sheet_and_runtime_indicators(sheet_rows: list, runtime: RuntimeFetchStore) -> dict:
+    """讀取端：試算表既有 `market_indicator` 列 ＋ 本次工作階段的列，沿用 L1 `merge_market_indicator` 的同一套規則
+    （2026-10-26 獨立稽核必修 2）：
+    - 同主鍵同值 → 視為已存在（留試算表那一列，不算本次來源）；
+    - 同主鍵不同值 → **不覆蓋**，留試算表值、本次那一列不採用，主鍵列入 `conflicts`（畫面照既有主鍵矛盾／失敗方式標示）；
+    - `is_revised` 以合併後的主鍵集合重算。
+    回 `{"rows": 合併後的列（試算表在前）, "runtime_rows": 本次採用的列（新主鍵）, "conflicts": [...]}`。
+    ~~同主鍵以本次為準~~（上一版的讀取端行為；有意識的更正，不是漏刪：它直接蓋掉試算表值、矛盾偵測消失）。"""
+    runtime_rows = runtime.load_market_indicator()["rows"]
+    if not runtime_rows:
+        return {"rows": [dict(r) for r in sheet_rows], "runtime_rows": [], "conflicts": []}
+    merged = store.merge_market_indicator(sheet_rows, runtime_rows)
+    n = len(sheet_rows)
+    return {"rows": merged["rows"], "runtime_rows": merged["rows"][n:], "conflicts": merged["conflicts"]}
+
+
+def session_runtime(state) -> RuntimeFetchStore:
+    """畫面層的 session 容器（`st.session_state` 或任何可變對映）→ 本次工作階段的 `RuntimeFetchStore`（沒有就放一個）。"""
+    runtime = state.get(RUNTIME_STATE_KEY)
+    if not isinstance(runtime, RuntimeFetchStore):
+        runtime = RuntimeFetchStore()
+        state[RUNTIME_STATE_KEY] = runtime
+    return runtime
+
+
+# session 容器裡放 `RuntimeFetchStore` 的鍵（set 頁寫、alo／set 頁讀；五頁同一個程式時共用同一份）。
+RUNTIME_STATE_KEY = "_v2_refetch_runtime"
+
+
+class MarketIndicatorRuntimeSink:
+    """`build_market_indicator_table(sink=...)` 的 sink：把取回的列與取數紀錄記進 `RuntimeFetchStore`（**不寫試算表**）。
+
+    ~~`MarketIndicatorSheetSink`：寫 `market_indicator` 與 `fetch_log`~~ → 2026-10-26 客戶裁示第 6 節（有意識的行為變更，
+    不是漏刪；決策者：客戶）：第一階段 Google Sheet 零寫入，寫表換成記憶體。介面不變：`sink.begin()` → 當 sink 傳入 →
+    讀 `sink.persist`（鍵照舊）。記憶體寫入沒有「寫表失敗」這一種結果，所以 `stage` 只有
+    `not_started`／`started`／`done`，`message`／`error_code` 恆為 None；寫表以外的例外（程式錯誤、ValueError）照樣往上拋。
+    `persist["log_message"]` 與取數紀錄 `message` 逐字相同。
+    """
+
+    def __init__(self, secret_values, runtime: RuntimeFetchStore):
         self._mask = masker(secret_values)
+        self._runtime = runtime
         self.opened: Optional[dict] = None
         self.persist = {"ok": False, "stage": "not_started", "message": None,
                         "error_code": None, "log_id": None, "fetch_log": None,
@@ -340,23 +409,16 @@ class MarketIndicatorSheetSink:
                         "masked_errors": {}, "empty": {}, "log_message": None,
                         "skipped_summary": []}
 
-    def _fail(self, stage: str, exc: store.SettingsSheetError) -> None:
-        self.persist.update(ok=False, stage=stage, message=str(exc), error_code=exc.code)
-
     def begin(self) -> bool:
-        try:
-            self.opened = store.open_fetch_log(mi.SOURCE_TIER, mask=self._mask)
-        except store.SettingsSheetError as exc:
-            self._fail("fetch_log_open", exc)
-            return False
+        self.opened = self._runtime.open_fetch_log(mi.SOURCE_TIER)
         self.persist.update(stage="started", log_id=self.opened["log_id"])
         return True
 
     def __call__(self, table: dict) -> None:
         fetched = table.get("fetched", {})
         # 回修第 3 輪 6：「來源回傳空值、原因未提供」（`44` SET-5 的回空）與真錯誤分開列。
-        # `masked_errors` 只放真錯誤，它們就是寫進 `fetch_log.message` 的那幾段字串（同一份）；
-        # 回空放 `empty`（該次 `fetch_log` 記 ok、message 為空，畫面自行顯示「回應為空」）。
+        # `masked_errors` 只放真錯誤，它們就是取數紀錄 message 的那幾段字串（同一份）；
+        # 回空放 `empty`（該次紀錄 ok、message 為空，畫面自行顯示「回應為空」）。
         empty, masked = {}, {}
         for key, raw in table["errors"].items():
             text = self._mask(str(raw))
@@ -367,7 +429,7 @@ class MarketIndicatorSheetSink:
         self.persist["masked_errors"] = masked
         self.persist["empty"] = empty
         if self.opened is None:
-            return  # begin 失敗或沒呼叫：不寫任何東西（persist 已記原因）
+            return  # 沒呼叫 begin：不記任何東西
         rows_by_key: dict = {}
         for row in table["rows"]:
             rows_by_key[row["indicator_key"]] = rows_by_key.get(row["indicator_key"], 0) + 1
@@ -378,25 +440,15 @@ class MarketIndicatorSheetSink:
             if count > 0 and rows_by_key.get(key, 0) == 0 and key not in table["errors"]:
                 why = "；".join(table.get("skipped", {}).get(key, [])) or "原因未記錄"
                 reasons.append(self._mask(f"{key}: 取回 {count} 列，全部未寫入（{why}）"))
-        write_failed = None
-        try:
-            result = store.append_market_indicator(table["rows"], mask=self._mask)
-        except store.SettingsSheetError as exc:
-            write_failed = exc
-            reasons.append(f"market_indicator 寫入失敗：{exc}")
-        else:
-            self.persist.update(appended=result["appended"],
-                                already_present=result["already_present"],
-                                conflicts=result["conflicts"])
-            if result["conflicts"]:
-                reasons.append(self._mask(_conflict_text(result["conflicts"])))
-        # 2026-10-14（稽核 N／M 合併修正輪，可觀測性）：該鍵**仍有寫成列**、但部分根被丟掉
-        # （未收盤、重複、週末、當地時刻與基準不一致、非有限值……）時，逐鍵列出各類略過筆數。
+        result = self._runtime.append_market_indicator(table["rows"])
+        self.persist.update(appended=result["appended"], already_present=result["already_present"],
+                            conflicts=result["conflicts"])
+        if result["conflicts"]:
+            reasons.append(self._mask(_conflict_text(result["conflicts"])))
+        # 2026-10-14（稽核 N／M 合併修正輪，可觀測性）：該鍵**仍有寫成列**、但部分根被丟掉時，逐鍵列出各類略過筆數。
         # - 一律放進 `persist["skipped_summary"]`（已遮蔽）。
-        # - 本次結果為 `failed` 時，另附在 `fetch_log.message` 失敗原因之後（message 本來就非空）。
-        # - ⚠️ 本次結果為 `ok` 時**不寫進 `fetch_log.message`**：`44` `fetch_log.message` 定義為
-        #   「失敗訊息原文；成功時為空」（44 已凍結），L1 `settings_sheet_repository.fetch_log_row` 也以此拒收
-        #   （ok 帶 message → ValueError）。要讓 ok 時也進試算表，須先改 44 的欄位定義，屬待裁示事項。
+        # - 本次結果為 `failed` 時，另附在取數紀錄 message 失敗原因之後（message 本來就非空）。
+        # - 本次結果為 `ok` 時不放進 message：`44` `fetch_log.message`「成功時為空」，L1 `fetch_log_row` 也以此拒收。
         # `row_count` 照舊是**取回的列數（過濾前）**（`44`：「取回的列數」；本檔檔頭 B12），不改成寫入列數。
         partial = []
         for key, count in fetched.items():
@@ -411,22 +463,10 @@ class MarketIndicatorSheetSink:
             outcome, row_count, message = "failed", None, "\n".join(reasons)
         else:
             outcome, row_count, message = "ok", sum(fetched.values()), None
-        # 回修第 4 輪 3：與要寫進 `fetch_log.message` 的字串逐字相同；不論下面寫入成敗都放。
         self.persist["log_message"] = message
-        try:
-            logged = store.close_fetch_log(self.opened, outcome=outcome, row_count=row_count,
-                                           message=message, mask=self._mask)
-        except store.SettingsSheetError as exc:
-            # 不遞迴：不為了「寫 fetch_log 失敗」再寫一筆 fetch_log，只回報。
-            self._fail("fetch_log", exc)
-            if write_failed is not None:
-                self.persist["message"] = f"{write_failed}\n{exc}"
-            return
-        self.persist["fetch_log"] = logged
-        if write_failed is not None:
-            self._fail("market_indicator", write_failed)
-            return
-        self.persist.update(ok=True, stage="done", message=None, error_code=None)
+        logged = self._runtime.close_fetch_log(self.opened, outcome=outcome, row_count=row_count,
+                                               message=message)
+        self.persist.update(ok=True, stage="done", message=None, error_code=None, fetch_log=logged)
 
 
 def refetch_cached_functions() -> list:
@@ -440,39 +480,41 @@ def refetch_cached_functions() -> list:
 
 
 def refetch_market_indicator(secret_values, *,
+                             runtime: Optional[RuntimeFetchStore] = None,
                              build: Callable = mi.build_market_indicator_table,
                              fred_api_key: Optional[str] = None) -> dict:
     """set 頁「重新取數」（市場指標）：先清本次會用到的 L1 取數函式自己的快取，再照
-    `run_market_indicator_fetch` 取數寫表。**不動來源冷卻、不呼叫全域清除**（`50` B9）。
+    `run_market_indicator_fetch` 取數、記進 `runtime`。**不動來源冷卻、不呼叫全域清除**（`50` B9）。
     冷卻中的來源照樣由 L1（`infra.source_backoff`）擋下，不因清了快取就多打一次。"""
     for fetcher in refetch_cached_functions():
         fetcher.cache_clear()
-    return run_market_indicator_fetch(secret_values, build=build, fred_api_key=fred_api_key)
+    return run_market_indicator_fetch(secret_values, runtime=runtime, build=build, fred_api_key=fred_api_key)
 
 
 def run_market_indicator_fetch(secret_values, *,
+                               runtime: Optional[RuntimeFetchStore] = None,
                                build: Callable = mi.build_market_indicator_table,
                                fred_api_key: Optional[str] = None) -> dict:
-    """set 頁「取數」：寫 `fetch_log_open` → 取數並寫表 → 寫 `fetch_log`。
+    """set 頁「取數」：開始紀錄 → 取數 → 結束紀錄，**全部記在 `runtime`（記憶體），不寫任何 Google Sheet**。
 
-    回傳 `{"table": build 的回傳（錯誤原文未遮）, "persist": sink.persist}`。
-    畫面顯示錯誤請用 `persist["masked_errors"]`（與 `fetch_log.message` 同一份遮蔽後字串）；
+    ~~寫 `fetch_log_open` → 取數並寫表 → 寫 `fetch_log`~~ → 2026-10-26 客戶裁示第 6 節（有意識的行為變更，不是漏刪；
+    決策者：客戶）：第一階段 Google Sheet 零寫入。`runtime` 沒給時本函式自己開一份（結果只在回傳值裡）。
+
+    回傳 `{"table": build 的回傳（錯誤原文未遮）, "persist": sink.persist, "runtime": 記了本次結果的 RuntimeFetchStore}`。
+    畫面顯示錯誤請用 `persist["masked_errors"]`（與取數紀錄 message 同一份遮蔽後字串）；
     回空（`44` SET-5）另列在 `persist["empty"]`，不是錯誤。
-    `fetch_log_open` 寫不進去時仍照常取數（`50` 第 8 節：結果照常顯示），只是不寫表；
-    此時 `persist["log_message"]` 為 None，錯誤請讀 `persist["masked_errors"]`（見 `MarketIndicatorSheetSink`）。
-    ⚠️ `market_indicator` 寫入時 gspread 上游失敗（會登記冷卻的那一類）時 `fetch_log` 寫不進去（被冷卻擋下）；
-    標頭不符等不登記冷卻的失敗則照常寫出 `failed`。見檔頭 outcome 段的更正。
     `fred_api_key`：FRED 三鍵的金鑰（2026-10-13 起；由 L3 讀好傳入，本層不讀 secrets）。
     **只有給了才往 `build` 傳**，沒給就照舊只傳 `sink` —— 既有以 `build=` 注入的替身不必改簽名；
     沒給時 L2 把 FRED 三鍵寫成「未設定 FRED_API_KEY」的取數失敗（`49` §4.1）。
     """
-    sink = MarketIndicatorSheetSink(secret_values)
+    runtime = runtime if runtime is not None else RuntimeFetchStore()
+    sink = MarketIndicatorRuntimeSink(secret_values, runtime)
     sink.begin()
     if fred_api_key is None:
         table = build(sink=sink)
     else:
         table = build(sink=sink, fred_api_key=fred_api_key)
-    return {"table": table, "persist": sink.persist}
+    return {"table": table, "persist": sink.persist, "runtime": runtime}
 
 
 # ── 淨值層重新取數（客戶 2026-10-09 裁示 Q1～Q4；`docs/v2/53_nav_source_plan.md` §3 步 2、3）──────
@@ -481,9 +523,12 @@ def run_market_indicator_fetch(secret_values, *,
 NAV_EMPTY_HOLDING = "持倉 0 列，沒有要取淨值的基金"
 
 
-def refetch_nav(secret_values) -> dict:
-    """set 頁「重新取數」（淨值層）：寫 `fetch_log_open` → 讀持倉 → 解代碼 → 清 `fetch_nav` 的日快取
-    → `nav_dividend.build_nav_table` → 寫**一筆** `fetch_log`。**不寫任何資料表**（Q1、Q2：不存 NAV）。
+def refetch_nav(secret_values, *, runtime: Optional[RuntimeFetchStore] = None) -> dict:
+    """set 頁「重新取數」（淨值層）：開始紀錄 → 讀持倉 → 解代碼 → 清 `fetch_nav` 的日快取
+    → `nav_dividend.build_nav_table` → **一筆**結束紀錄。**不寫任何資料表**（Q1、Q2：不存 NAV）。
+    ~~開始／結束紀錄寫 `fetch_log_open`／`fetch_log`~~ → 2026-10-26 客戶裁示第 6 節（有意識的行為變更，不是漏刪；
+    決策者：客戶）：兩筆紀錄只記在 `runtime`（記憶體），不寫任何 Google Sheet；`runtime` 沒給時本函式自己開一份。
+    下文的「fetch_log」一律指這份本次工作階段的取數紀錄（形狀同 `44` `fetch_log`）。
 
     對象只有持倉基金（Q3），讀法與 hld 頁相同（`ui_v2/hld/source.py`：`alo_holdings.load_alo_tables`
     → `fund_keys.resolve_full_keys` → `build_nav_table`，每筆持倉列一筆、帶 `holding_ccy`、不去重）。
@@ -505,7 +550,7 @@ def refetch_nav(secret_values) -> dict:
     不印、不寫 log、不拋錯；持倉讀取（`alo_holdings.load_alo_tables` → `policy_supplement_repository`）與代碼解析
     都不經這六支快取；錯誤訊息、回傳值、`fetch_log` 筆數不變。
 
-    `fetch_log`（Q4）：一次只記一筆。`row_count`＝L1 取回的列數（過濾前，`50` 第 10 節 B12，同市場指標）。
+    取數紀錄（Q4）：一次只記一筆。`row_count`＝L1 取回的列數（過濾前，`50` 第 10 節 B12，同市場指標）。
     - `ok`：沒有任何失敗原因。持倉為 0 列 → `ok`、`row_count` 0（`44` SET-5 的取數回空，同市場指標體例）。
     - `failed`：持倉讀不到；或持倉有分頁讀取失敗／未讀（`skipped_tabs`，持倉不完整）；或任一檔代碼解析失敗、
       L1 有錯誤原文、取回 >0 列卻一列都不能用（整檔扣下）；或**即時網址全敗、L1 退回預存舊序列**
@@ -524,51 +569,45 @@ def refetch_nav(secret_values) -> dict:
     `persist` 的鍵與 `MarketIndicatorSheetSink.persist` 中畫面會讀的那幾個相同
     （`ok`、`stage`、`message`、`error_code`、`log_id`、`fetch_log`、`masked_errors`、`empty`、`log_message`）。
     ~~寫表以外的例外（程式錯誤、L1 讀代碼對照表失敗）照樣往上拋，不吞。~~
-    → 2026-10-09 協作助手複驗必修（狀態更新，不是漏刪）：寫表以外的例外（程式錯誤、L1 讀代碼對照表失敗）
-    照樣往上拋，不吞；但離開前先收斂、再遮蔽：
-    - 本次 `fetch_log_open` 已寫成、且結束列還沒確定 → 先用 `close_fetch_log` 補記一筆 `failed`
-      （`row_count` 空、`message`＝遮蔽後的「例外類別: 原文」），不留沒有結束的紀錄。
-      ~~正常路徑在呼叫 `close_fetch_log` **之前**就標記「已嘗試結束」，所以 close 本身拋錯時不會再補第二筆。~~
-      → 2026-10-09 第二輪小修（狀態更新，不是漏刪）：「結束列已確定」＝`close_fetch_log` 正常回傳，或捕到
-      `SettingsSheetError`（確定寫不進，不遞迴）；只在這兩種情形之後才標記。正常路徑的 close 拋其他例外
-      （例如寫入前的 `fetch_log_row` 驗證錯）→ 未標記，照上面補記一筆 `failed`。若第一次 close 其實已寫入才
-      拋錯，同一 `log_id` 會有兩列，讀取端（`_reduce_fetch_log`）取第一列、計入 `duplicate_log_ids`。
-    - `Exception` → 改拋 `NavRefetchError`，訊息＝遮蔽後的「例外類別: 原文」（補記結束列又失敗時，該失敗的
-      遮蔽後「例外類別: 原文」以換行接在後面一併拋出，不吞）；保留原本的堆疊位置，但不帶出未遮蔽的原例外鏈。
-      開頭 `open_fetch_log` 拋 `SettingsSheetError` 以外的例外也一樣（沒有開始紀錄，不補記）。
+    → 2026-10-09 協作助手複驗必修（狀態更新，不是漏刪）：寫表以外的例外照樣往上拋，不吞；但離開前先收斂、再遮蔽：
+    - 開始紀錄已記、且結束列還沒確定 → 先補記一筆 `failed`（`row_count` 空、`message`＝遮蔽後的「例外類別: 原文」）。
+      「結束列已確定」＝結束紀錄正常記成；之後才標記。正常路徑記結束列時拋例外 → 未標記，照上面補記一筆 `failed`。
+      若第一次其實已記成才拋錯，同一 `log_id` 會有兩列，讀取端（`RuntimeFetchStore.load_fetch_log`）取第一列。
+    - `Exception` → 改拋 `NavRefetchError`，訊息＝遮蔽後的「例外類別: 原文」（補記又失敗時，該失敗的遮蔽後
+      「例外類別: 原文」以換行接在後面一併拋出，不吞）；保留原本的堆疊位置，但不帶出未遮蔽的原例外鏈。
       `str(例外)` 本身拋錯時只用例外類別名。
     - `Exception` 以外的 `BaseException`（例如 `KeyboardInterrupt`）→ 一樣先補記 `failed`，再原樣往上拋、不包裝。
-    - `fetch_log_open` 沒寫成 → 不寫任何紀錄，例外照樣遮蔽後往上拋。
+    （2026-10-26：原「`fetch_log_open` 沒寫成 → 不寫任何紀錄」「捕到 `SettingsSheetError`＝確定寫不進」兩條，
+    記憶體紀錄不會發生，已移除；有意識的行為變更，不是漏刪。）
     """
     mask = masker(secret_values)
+    runtime = runtime if runtime is not None else RuntimeFetchStore()
     persist = {"ok": False, "stage": "not_started", "message": None, "error_code": None,
                "log_id": None, "fetch_log": None, "masked_errors": {}, "empty": {}, "log_message": None}
 
     opened = None
-    # 結束列是否已確定（close 正常回傳，或捕到 SettingsSheetError＝確定寫不進）；未確定就由下面補記。
+    # 結束列是否已確定（close 正常回傳）；未確定就由下面補記。
     closing = {"settled": False}
     pending = None
     try:
-        try:
-            opened = store.open_fetch_log(nav_dividend.SOURCE_TIER_NAV, mask=mask)
-        except store.SettingsSheetError as exc:
-            _nav_fail(persist, "fetch_log_open", exc)   # `50` 第 8 節：照常取數，只是不寫紀錄
-        else:
-            persist.update(stage="started", log_id=opened["log_id"])
-        return _refetch_nav_run(secret_values, mask, persist, opened, closing)
+        opened = runtime.open_fetch_log(nav_dividend.SOURCE_TIER_NAV)
+        persist.update(stage="started", log_id=opened["log_id"])
+        out = _refetch_nav_run(secret_values, mask, persist, opened, closing, runtime)
+        out["runtime"] = runtime
+        return out
     except Exception as exc:
         text = mask(_exc_text(exc))
         if opened is not None and not closing["settled"]:
             try:
-                store.close_fetch_log(opened, outcome="failed", row_count=None, message=text, mask=mask)
+                runtime.close_fetch_log(opened, outcome="failed", row_count=None, message=text)
             except Exception as close_exc:   # 補記也失敗：不吞，遮蔽後以換行接在後面一併拋出
                 text = f"{text}\n{mask(_exc_text(close_exc))}"
         pending = (NavRefetchError(text), exc.__traceback__)
     except BaseException as exc:
         if opened is not None and not closing["settled"]:
             try:
-                store.close_fetch_log(opened, outcome="failed", row_count=None,
-                                      message=mask(_exc_text(exc)), mask=mask)
+                runtime.close_fetch_log(opened, outcome="failed", row_count=None,
+                                        message=mask(_exc_text(exc)))
             except Exception as close_exc:   # 不吞：遮蔽後掛在原例外上，原例外照樣原樣拋出
                 exc.add_note(mask(_exc_text(close_exc)))
         raise
@@ -594,10 +633,6 @@ def _exc_text(exc: BaseException) -> str:
         return name
 
 
-def _nav_fail(persist: dict, stage: str, exc) -> None:
-    persist.update(ok=False, stage=stage, message=str(exc), error_code=exc.code)
-
-
 def _clear_exp_caches() -> None:
     """2026-10-14 C2：exp 用到的自報基本資料三支 L1（各自的公開 `cache_clear()` 同時清成功快取與自己的失敗記憶）、
     exp 淨值逐檔記憶，以及 TDCC 3-2 被永久快取成 `[]` 的那一筆（只丟 `[]`，非空清單不動）。
@@ -610,7 +645,8 @@ def _clear_exp_caches() -> None:
     declared_profile.reset_tdcc_list_cache_if_empty()
 
 
-def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) -> dict:
+def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict,
+                     runtime: RuntimeFetchStore) -> dict:
     """`refetch_nav` 的本體（取數、組 message、寫結束列）；例外由 `refetch_nav` 收斂。"""
     masked, empty, table = {}, {}, None
     _clear_exp_caches()   # 2026-10-14 稽核必修 8：不依賴持倉讀取成功（持倉讀不到時也要清）
@@ -678,23 +714,15 @@ def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) 
                 masked[mask(code)] = mask(why)
     persist["masked_errors"] = masked
     persist["empty"] = empty
-    if opened is None:
-        return {"table": table, "persist": persist}
 
     if masked:
         outcome, row_count = "failed", None
         message = "\n".join(f"{k}: {v}" for k, v in masked.items())
     else:
         outcome, row_count, message = "ok", sum((table or {}).get("fetched", {}).values()), None
-    persist["log_message"] = message   # 與寫進 `fetch_log.message` 的字串逐字相同，不論下面寫入成敗
-    try:
-        logged = store.close_fetch_log(opened, outcome=outcome, row_count=row_count,
-                                       message=message, mask=mask)
-    except store.SettingsSheetError as exc:
-        closing["settled"] = True              # 確定寫不進：不補記
-        _nav_fail(persist, "fetch_log", exc)   # 不遞迴：不為「寫 fetch_log 失敗」再寫一筆 fetch_log
-        return {"table": table, "persist": persist}
-    closing["settled"] = True                  # 已寫成；之後再拋錯也不補記第二筆
+    persist["log_message"] = message   # 與取數紀錄 message 的字串逐字相同
+    logged = runtime.close_fetch_log(opened, outcome=outcome, row_count=row_count, message=message)
+    closing["settled"] = True                  # 已記成；之後再拋錯也不補記第二筆
     persist.update(ok=True, stage="done", message=None, error_code=None, fetch_log=logged)
     return {"table": table, "persist": persist}
 

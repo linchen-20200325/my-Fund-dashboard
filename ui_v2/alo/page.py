@@ -320,18 +320,23 @@ def _render_alo1(block: dict, scenario: str, ctx=None, *, plain_mode: bool = Fal
     _placeholder(block)
     fields = block["inputs"]
     target_fields = fields[: 2 * len(block["_rows"])]
+    # 第一階段唯讀（J-14 精神，2026-10-26）：存檔鈕拿掉後這組輸入已不影響本次畫面結果 → 正式模式不畫（`ui_v2/readonly.py`）。
+    # 目標比重與容許帶的輸入欄不畫；生效中的目標比重與容許帶照舊見 `ALO-2` 表格。
+    hidden = readonly.inputs_hidden(block)
     for index, row in enumerate(block["_rows"]):
-        left, right = st.columns(2)
-        with left:
-            _text_input(target_fields[2 * index], f"{scenario}_{target_fields[2 * index]['name']}", ctx)
-        with right:
-            _text_input(target_fields[2 * index + 1], f"{scenario}_{target_fields[2 * index + 1]['name']}", ctx)
+        if not hidden:
+            left, right = st.columns(2)
+            with left:
+                _text_input(target_fields[2 * index], f"{scenario}_{target_fields[2 * index]['name']}", ctx)
+            with right:
+                _text_input(target_fields[2 * index + 1], f"{scenario}_{target_fields[2 * index + 1]['name']}", ctx)
         if row["tail_text"]:
             _lines([row["tail_text"]], "alo-line")
     _lines(block["unset_lines"], "alo-line")
     _key_error_lines(block, "alo_target_weights")
-    for field in fields[2 * len(block["_rows"]) :]:
-        _text_input(field, f"{scenario}_{field['name']}", ctx)
+    if not hidden:
+        for field in fields[2 * len(block["_rows"]) :]:
+            _text_input(field, f"{scenario}_{field['name']}", ctx)
     _lines(block["tolerance_lines"], "alo-line")
     _key_error_lines(block, "alo_tolerance_pp")
     _lines(block["sum_lines"], "alo-line")
@@ -433,7 +438,10 @@ def _expander(block: dict, plain_mode: bool = False):
 def _render_alo4(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
     with _expander(block, plain_mode):
         st.caption(block["answers"])
-        for field in block["inputs"][:1]:
+        # 第一階段唯讀（J-14 精神，2026-10-26）：存檔鈕拿掉後這組輸入已不影響本次畫面結果 → 正式模式不畫（`ui_v2/readonly.py`）。
+        # 比重基準單選與類別名稱輸入欄不畫；生效中的比重基準照舊見下方 `basis_line`。
+        hidden = readonly.inputs_hidden(block)
+        for field in () if hidden else block["inputs"][:1]:
             options = list(field["_options"])
             chosen = _initial_value(field["name"], f"{scenario}_alo_basis", field["_value"], ctx)
             if chosen is not None and chosen not in options:
@@ -455,7 +463,7 @@ def _render_alo4(block: dict, scenario: str, ctx=None, *, plain_mode: bool = Fal
             )
         _lines([block["basis_line"]] if block["basis_line"] else [], "alo-line")
         _key_error_lines(block, "alo_basis")
-        for field in block["inputs"][1:]:
+        for field in () if hidden else block["inputs"][1:]:
             _text_input(field, f"{scenario}_{field['name']}", ctx)
         _lines(block["bucket_unset_lines"], "alo-line")
         _key_error_lines(block, "alo_bucket_names")
@@ -692,6 +700,9 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
             model = live.apply_live_notes(
                 logic.build_page_model(dataset),
                 wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
+                # 2026-10-26 裁示第 6 節：用到本次工作階段重新取數的匯率列 → `ALO-2` 標來源
+                runtime_source=bool(live_input["notes"].get("runtime_market_indicator")),
+                sheet_failed=bool(live_input["notes"].get("mi_sheet_failed")),
             )
             # BL-0250 批次 1：`ALO-6` 佔比與表尾合計改百分比（只換顯示字串；`live.alo6_as_percent`）。
             model = live.alo6_as_percent(model)

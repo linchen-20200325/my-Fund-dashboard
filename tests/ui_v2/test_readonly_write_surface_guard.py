@@ -50,7 +50,11 @@ GSPREAD_WRITE_AMBIGUOUS = frozenset({"update", "clear"})
 _GSPREAD_RECEIVER_HINTS = ("sheet", "ws", "worksheet", "spreadsheet", "gc", "gspread")
 
 # 白名單（repo 相對路徑，posix）。L1 repository 不在掃描目錄內，不用列。
-GSPREAD_WRITE_ALLOWLIST = frozenset({"services/v2_tables/settings_store.py"})
+# ~~GSPREAD_WRITE_ALLOWLIST = frozenset({"services/v2_tables/settings_store.py"})~~
+# → 2026-10-26 客戶裁示第 6 節（Google Sheet 零寫入、不建立診斷寫入例外；有意識的收緊，不是漏刪）：清空。
+#   `settings_store.py` 從來沒有直接呼叫 gspread（它經 L1 寫），所以它的 Google Sheet 寫入改由下方
+#   「L1 寫入函式呼叫」守衛鎖（`test_no_settings_sheet_l1_write_calls`）。
+GSPREAD_WRITE_ALLOWLIST = frozenset()
 
 
 def _files():
@@ -112,6 +116,141 @@ def test_gspread_write_calls_only_in_allowlist():
                         attr in GSPREAD_WRITE_AMBIGUOUS and any(h in recv for h in _GSPREAD_RECEIVER_HINTS)):
                     hits.append(f"{rel}:{node.lineno} .{attr}(")
     assert not hits, "白名單外的 gspread 寫入呼叫：\n" + "\n".join(hits)
+
+
+# ───────── 2026-10-26 裁示第 6 節：ui_v2／services/v2_tables 不得呼叫設定試算表 L1 的寫入函式 ─────────
+# L1 寫入函式名單不手抄：讀 `repositories/settings_sheet_repository.py`，凡函式本體以 `_run(..., write=True)` 打上游者即是
+# （L1 日後新增寫入函式自動納入），另加兩個私有寫入輔助。下限釘住現有四個，名單縮水（偵測失效）就紅。
+L1_SETTINGS_MODULE = "repositories.settings_sheet_repository"
+_L1_PRIVATE_WRITERS = frozenset({"_run", "_append", "_worksheet_for_append"})
+_L1_KNOWN_WRITERS = frozenset({"save_user_setting", "open_fetch_log", "close_fetch_log", "append_market_indicator"})
+
+
+def _l1_write_functions():
+    tree = _tree(ROOT / "repositories" / "settings_sheet_repository.py")
+    out = set()
+    for fn in tree.body:
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        for node in ast.walk(fn):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_run"
+                    and any(k.arg == "write" and isinstance(k.value, ast.Constant) and k.value.value is True
+                            for k in node.keywords)):
+                out.add(fn.name)
+    return frozenset(out) | _L1_PRIVATE_WRITERS
+
+
+def _l1_aliases(tree):
+    """本檔把 L1 設定試算表模組叫做什麼（`from repositories import settings_sheet_repository as store` 之類）。"""
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "repositories":
+            names |= {a.asname or a.name for a in node.names if a.name == "settings_sheet_repository"}
+        elif isinstance(node, ast.Import):
+            names |= {a.asname or a.name for a in node.names if a.name == L1_SETTINGS_MODULE}
+    return names
+
+
+def _short_circuit_index(fn):
+    """`if store.is_read_only(): return ...` 在函式本體的第幾句（沒有 → None）。"""
+    for i, stmt in enumerate(fn.body):
+        if (isinstance(stmt, ast.If) and "is_read_only()" in ast.unparse(stmt.test)
+                and stmt.body and isinstance(stmt.body[-1], ast.Return)):
+            return i
+    return None
+
+
+def _l1_write_problems(source: str, rel: str, writers) -> list:
+    """一個檔裡對 L1 寫入函式的違規呼叫／import。唯二放行（休眠的 `user_setting` 存檔路徑，且只在 settings_store）：
+    (1) `store.save_user_setting(...)` 只能出現在 L2 同名函式 `save_user_setting` 本體；
+    (2) L2 `save_user_setting(...)` 只能由 `save_setting_for_page` 在 `is_read_only()` 短路**之後**呼叫。"""
+    tree = ast.parse(source)
+    aliases = _l1_aliases(tree)
+    parents = _parents(tree)
+    problems = []
+
+    def enclosing_fn(node):
+        while node in parents:
+            node = parents[node]
+            if isinstance(node, ast.FunctionDef):
+                return node
+        return None
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == L1_SETTINGS_MODULE:
+            for a in node.names:
+                if a.name in writers:
+                    problems.append(f"{rel}:{node.lineno} from {node.module} import {a.name}")
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        fn = enclosing_fn(node)
+        # 接收者：別名（`store.x(...)`）或全路徑（`import repositories.settings_sheet_repository` 後的
+        # `repositories.settings_sheet_repository.x(...)`；2026-10-26 獨立稽核建議補）。
+        # ⚠️ 已知限制：`getattr(store, "open_fetch_log")(...)` 之類的動態取用不在偵測範圍。
+        receiver = ast.unparse(f.value) if isinstance(f, ast.Attribute) else ""
+        if isinstance(f, ast.Attribute) and (receiver in aliases or receiver == L1_SETTINGS_MODULE) \
+                and f.attr in writers:
+            ok = (rel == "services/v2_tables/settings_store.py" and f.attr == "save_user_setting"
+                  and fn is not None and fn.name == "save_user_setting" and receiver in aliases)
+            if not ok:
+                problems.append(f"{rel}:{node.lineno} 呼叫 L1 寫入 {receiver}.{f.attr}(")
+        elif isinstance(f, ast.Attribute) and f.attr == "save_user_setting":
+            problems.append(f"{rel}:{node.lineno} 經別的模組呼叫 save_user_setting（{ast.unparse(f)}）")
+        elif isinstance(f, ast.Name) and f.id == "save_user_setting":
+            gate = _short_circuit_index(fn) if fn is not None else None
+            top = node
+            while fn is not None and parents.get(top) is not fn:
+                top = parents[top]
+            ok = (rel == "services/v2_tables/settings_store.py" and fn is not None
+                  and fn.name == "save_setting_for_page" and gate is not None
+                  and fn.body.index(top) > gate)
+            if not ok:
+                problems.append(f"{rel}:{node.lineno} save_user_setting 不在 is_read_only 短路之後")
+    return problems
+
+
+def test_l1_write_function_list_is_derived_and_complete():
+    writers = _l1_write_functions()
+    assert _L1_KNOWN_WRITERS <= writers, writers
+    assert not ({"new_fetch_log_open", "fetch_log_row", "merge_market_indicator", "load_fetch_log",
+                 "load_market_indicator", "load_user_settings"} & writers)
+
+
+def test_no_settings_sheet_l1_write_calls():
+    """2026-10-26 裁示第 6 節：SET-5 重新取數零寫入 —— ui_v2／services/v2_tables 不得呼叫 `open_fetch_log`、
+    `close_fetch_log`、`append_market_indicator` 等；`save_user_setting` 只留休眠路徑（見 `_l1_write_problems`）。"""
+    writers = _l1_write_functions()
+    hits = []
+    for path in _files():
+        rel = path.relative_to(ROOT).as_posix()
+        hits += _l1_write_problems(path.read_text(encoding="utf-8"), rel, writers)
+    assert not hits, "設定試算表 L1 寫入呼叫：\n" + "\n".join(hits)
+
+
+def test_l1_write_detector_catches_synthetic_violations():
+    """負控（現編程式碼，不落檔）：把任一寫入加回、或把存檔移到短路之前，偵測器就抓得到。"""
+    writers = _l1_write_functions()
+    rel = "services/v2_tables/settings_store.py"
+    head = "from repositories import settings_sheet_repository as store\n"
+    ok = (head + "def save_user_setting(k):\n    return store.save_user_setting(k)\n"
+          "def save_setting_for_page(k):\n    if store.is_read_only():\n        return 1\n"
+          "    return save_user_setting(k)\n")
+    assert _l1_write_problems(ok, rel, writers) == []
+    for bad in ("def refetch(x):\n    store.open_fetch_log('市場指標', mask=x)\n",
+                "def refetch(x):\n    store.close_fetch_log({}, outcome='ok', row_count=0, message=None, mask=x)\n",
+                "def refetch(x):\n    store.append_market_indicator([], mask=x)\n",
+                "def other(k):\n    return store.save_user_setting(k)\n"):
+        assert _l1_write_problems(head + bad, rel, writers), bad
+    early = ok.replace("    if store.is_read_only():\n        return 1\n    return save_user_setting(k)\n",
+                       "    save_user_setting(k)\n    if store.is_read_only():\n        return 1\n")
+    assert _l1_write_problems(early, rel, writers)
+    assert _l1_write_problems("from repositories.settings_sheet_repository import open_fetch_log\n", rel, writers)
+    assert _l1_write_problems("import x\nx.settings_store.save_user_setting(1)\n", "ui_v2/a.py", writers)
+    full = ("import repositories.settings_sheet_repository\n"
+            "def refetch(x):\n    repositories.settings_sheet_repository.open_fetch_log('市場指標', mask=x)\n")
+    assert _l1_write_problems(full, rel, writers)
+    assert _l1_write_problems(full.replace("open_fetch_log", "append_market_indicator"), "ui_v2/a.py", writers)
 
 
 def test_detectors_catch_synthetic_violations():
@@ -295,17 +434,23 @@ def test_visible_codes_hides_set4_only():
 _REWRITE_SOURCES = [
     ("mkt", "MKT-1", mkt_logic.TEXT_INCOMPLETE_INCONSISTENT, "⬜ 設定不完整：比較條件不一致"),
     ("mkt", "MKT-7", mkt_logic.TEXT_UNSAVED_NONE, "尚未選定任何指標"),
+    # ~~期望值「勾選只決定下方指標明細顯示哪些指標；三張核心卡固定顯示。」~~ → 2026-10-26（J-14 精神）`MKT-5` 多選清單不畫，
+    # 「勾選」改成不暗示可改的說法（`readonly.PHASE1_HIDDEN_INPUT_TEXT`；有意識的更正，不是漏刪）。
     ("mkt", "MKT-5", "勾選只決定下方指標明細顯示哪些指標；三張核心卡固定顯示。存檔後，下一次重新載入才生效。",
-     "勾選只決定下方指標明細顯示哪些指標；三張核心卡固定顯示。"),
-    ("mkt", "MKT-4", mkt_live.TEXT_UNSAVED_WINDOW, "欄位的觀察窗與比較基準日和已存值不同"),
-    ("mkt", "MKT-5", mkt_live.TEXT_UNSAVED_PICKS, "勾選與已存清單不同"),
+     "下方指標明細只顯示已存的指標；三張核心卡固定顯示。"),
+    # ~~期望值「欄位的觀察窗與比較基準日和已存值不同」「勾選與已存清單不同」~~ → 2026-10-26：輸入元件不畫之後，
+    # 「和已存值不同」指的是看不到的欄位 ⇒ 整句拿掉（期望值 "" ＝ 該行從清單移除；下同 exp 兩句）。
+    ("mkt", "MKT-4", mkt_live.TEXT_UNSAVED_WINDOW, ""),
+    ("mkt", "MKT-5", mkt_live.TEXT_UNSAVED_PICKS, ""),
     ("hld", "HLD-4", hld_live.TEXT_APPLY_NOT_SHOWN, "畫面上的結果只讀已存的設定。"),
     ("hld", "HLD-4", hld_logic.HLD4_SAVE_SCOPE_NOTE,
      "本頁不寫持倉、保單、淨值、配息四張表任何一張，也不代你填任何值、不把空欄補成任何候選值。"),
     ("alo", "ALO-4", alo_live.TEXT_ALO4_SHEETS, "類別在 Sheets 維護"),
-    ("exp", "EXP-1", exp_logic.TEXT_UNSAVED_RULES, "條件列與已存值不同"),
-    ("exp", "EXP-4", exp_live.TEXT_UNSAVED_EXP4, "欄位勾選或排序欄位與已存值不同"),
-    ("exp", "EXP-4", exp_logic.LIVE_DEV_NOTE_EDITS[exp_logic.TEXT_EXP4_LIVE], None),
+    ("exp", "EXP-1", exp_logic.TEXT_UNSAVED_RULES, ""),
+    ("exp", "EXP-4", exp_live.TEXT_UNSAVED_EXP4, ""),
+    # ~~期望值 None（只驗不再叫人存檔）~~ → 2026-10-26：勾選框不畫之後連「取消勾基金名」那半句一併拿掉，釘住全文。
+    ("exp", "EXP-4", exp_logic.LIVE_DEV_NOTE_EDITS[exp_logic.TEXT_EXP4_LIVE],
+     "候選清單只吃已存的設定。正式模式的候選清單另有 基金代碼 一欄可辨認每一列。"),
     ("exp", "EXP-4", "本塊不提供推薦欄位組合；「存檔」只寫 user_setting，不寫入 holding、policy、nav、dividend（G1†）。",
      "本塊不提供推薦欄位組合；本頁不寫入 持倉、保單、淨值、配息。"),
 ]
@@ -316,8 +461,12 @@ def test_text_rewrites_hit_their_source_and_stop_asking_to_save(page, code, sour
     shown = plain.plain_text(source_text, page=page, code=code)
     model = {"blocks": [{"code": code, "detail_lines": [shown]}]}
     readonly.strip_write_controls(model)
-    out = model["blocks"][0]["detail_lines"][0]
-    assert "存檔" in shown and out != shown, f"改寫表沒有打到這一句：{shown}"
+    lines = model["blocks"][0]["detail_lines"]
+    assert "存檔" in shown and lines != [shown], f"改寫表沒有打到這一句：{shown}"
+    if expected == "":
+        assert lines == []          # 2026-10-26：整句拿掉，不留空行
+        return
+    out = lines[0]
     assert "存檔" not in out
     if expected is not None:
         assert out == expected
@@ -433,3 +582,229 @@ def test_ast_detector_catches_missing_or_late_strip():
                  "    if load_live is None:\n        readonly.strip_write_controls(1)\n"
                  "    _render_x(1)\n")
     assert _strip_problems(demo_only, "render")
+
+
+# ═════════ 2026-10-26（J-14 精神）：存檔鈕拿掉後已無作用、但仍顯示的輸入元件，正式模式不畫 ═════════
+# 依據：`DEC-2026-10-25-04` J-14（第一階段不出現暗示可修改的控制項）；各頁正式結果只讀已存設定
+# （mkt／hld／exp `live.build_live_model`、alo `logic.build_page_model(dataset)`），這幾組輸入只影響存檔與「和已存值不同」提示。
+# 保留：`ALO-3` 試算、`EXP-3`／`EXP-6` 的「對照」多選（會即時改畫面）。
+# 兩層：(甲) 模型層 —— 旗標、改輸入列的按鈕拿掉；(乙) 執行期 —— 以記錄器替換 `st` 真的跑各塊渲染函式，輸入元件零枚
+# （負控：同一塊不經 `strip_write_controls` 時 > 0）；(丙) AST —— 渲染函式裡每一個輸入元件呼叫都在 `inputs_hidden` 的條件之下。
+HIDDEN_INPUT_CODES = {"MKT-4", "MKT-5", "HLD-4", "EXP-1", "EXP-4", "EXP-5", "ALO-1", "ALO-4"}
+
+
+def _plain_models():
+    return {page: plain.plain_model(model, page=page)[0] for page, model in _demo_models().items()}
+
+
+def test_hidden_input_codes_are_exactly_the_audited_list():
+    assert readonly.PHASE1_HIDDEN_INPUT_CODES == HIDDEN_INPUT_CODES
+    assert not ({"ALO-3", "EXP-2", "EXP-3", "EXP-6", "SET-5"} & readonly.PHASE1_HIDDEN_INPUT_CODES)
+
+
+def test_strip_flags_hidden_input_blocks_and_drops_row_edit_buttons():
+    models = _plain_models()
+    edit_before = sum(1 for m in models.values() for blk in m["blocks"] if blk["code"] in HIDDEN_INPUT_CODES
+                      for b in list(blk.get("buttons") or ()) + list(blk.get("row_buttons") or ())
+                      if b["_action_kind"] in readonly.INPUT_EDIT_KINDS)
+    assert edit_before > 0, "拿掉之前就沒有新增列／清除鈕，這條量不到東西"
+    seen = set()
+    for model in models.values():
+        readonly.strip_write_controls(model)
+        for blk in model["blocks"]:
+            if blk["code"] in HIDDEN_INPUT_CODES:
+                seen.add(blk["code"])
+                assert readonly.inputs_hidden(blk) is True
+                assert not [b for b in blk.get("buttons") or () if b["_action_kind"] in readonly.INPUT_EDIT_KINDS]
+                assert blk.get("row_buttons", []) == []
+            else:
+                assert not readonly.inputs_hidden(blk), blk["code"]
+        assert set(model["_readonly_inputs_hidden"]) <= HIDDEN_INPUT_CODES
+    assert seen == HIDDEN_INPUT_CODES
+
+
+def test_hidden_inputs_noop_when_controls_enabled(monkeypatch):
+    monkeypatch.setattr(readonly, "WRITE_CONTROLS_ENABLED", True)
+    model = _plain_models()["exp"]
+    readonly.strip_write_controls(model)
+    assert model["_readonly_inputs_hidden"] == []
+    assert not any(readonly.inputs_hidden(blk) for blk in model["blocks"])
+    assert readonly.hides_inputs("EXP-5") is False
+
+
+def test_hidden_input_text_rules_hit_and_drop_empty_lines():
+    model = {"blocks": [{"code": "EXP-5", "summary_text": exp_logic.TEXT_NO_PICK, "detail_lines": []},
+                        {"code": "EXP-3", "summary_text": exp_logic.TEXT_NO_PICK, "detail_lines": []},
+                        {"code": "EXP-1", "notes": ["尚未新增任何條件列。"], "detail_lines": []},
+                        {"code": "ALO-1", "intro_line": "目標在這裡輸入；對照與試算在上方「關鍵數字」。"}]}
+    readonly.strip_write_controls(model)
+    exp5, exp3, exp1, alo1 = model["blocks"]
+    assert exp5["summary_text"] == "本頁唯讀" and exp3["summary_text"] == exp_logic.TEXT_NO_PICK   # 只改該塊
+    assert exp1["notes"] == ["沒有已存的條件列。"]
+    assert alo1["intro_line"] == "對照與試算在上方「關鍵數字」。"
+
+
+# ───────── (乙) 執行期：記錄器替換 `st`，真的跑各塊渲染函式 ─────────
+INPUT_WIDGETS = frozenset({"text_input", "number_input", "date_input", "multiselect", "checkbox", "selectbox",
+                           "radio", "text_area", "slider", "toggle", "data_editor", "select_slider"})
+
+
+class _Recorder:
+    """極簡 `st` 替身：記下每一次呼叫（名稱、key），容器類回自己（可 `with`）。"""
+
+    def __init__(self):
+        self.calls = []
+        self.session_state = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def columns(self, spec, **_kw):
+        n = spec if isinstance(spec, int) else len(spec)
+        return [self for _ in range(n)]
+
+    def __getattr__(self, name):
+        def call(*args, **kwargs):
+            self.calls.append((name, kwargs.get("key")))
+            return None if name in INPUT_WIDGETS or name == "button" else self
+        return call
+
+    def inputs(self):
+        return [c for c in self.calls if c[0] in INPUT_WIDGETS]
+
+    def row_edit_buttons(self):
+        return [c for c in self.calls if c[0] == "button" and c[1] and ("_row_" in c[1] or "_clear_" in c[1])]
+
+
+def _render_cases():
+    pytest.importorskip("streamlit")
+    from ui_v2.alo import page as alo_page
+    from ui_v2.exp import page as exp_page
+    from ui_v2.hld import page as hld_page
+    from ui_v2.mkt import page as mkt_page
+
+    def exp1_rows(blk):
+        return [{"_id": i, "field": "", "op": "", "value": ""} for i in range(len(blk["_rows"]))]
+
+    return {
+        "MKT-4": (mkt_page, lambda blk: mkt_page._render_mkt4(blk, live_mode=True, save_click=None)),
+        "MKT-5": (mkt_page, lambda blk: mkt_page._render_mkt5(blk, save_click=(None, ()), plain_mode=True)),
+        "HLD-4": (hld_page, lambda blk: hld_page._render_hld4(blk, on_save=None, plain_mode=True)),
+        "EXP-1": (exp_page, lambda blk: exp_page._render_exp1_live(blk, exp1_rows(blk), clicks={}, plain_mode=True)),
+        "EXP-4": (exp_page, lambda blk: exp_page._render_exp4_live(blk, save_click=(None, ()), plain_mode=True)),
+        "ALO-1": (alo_page, lambda blk: alo_page._render_alo1(blk, "live", None, plain_mode=True)),
+        "ALO-4": (alo_page, lambda blk: alo_page._render_alo4(blk, "live", None, plain_mode=True)),
+    }
+
+
+_PAGE_OF = {"MKT": "mkt", "HLD": "hld", "EXP": "exp", "ALO": "alo"}
+
+
+def _block_of(code, *, strip):
+    model = _plain_models()[_PAGE_OF[code.split("-")[0]]]
+    if strip:
+        readonly.strip_write_controls(model)
+    return next(b for b in model["blocks"] if b["code"] == code)
+
+
+@pytest.mark.parametrize("code", ["MKT-4", "MKT-5", "HLD-4", "EXP-1", "EXP-4", "ALO-1", "ALO-4"])
+def test_live_renderer_draws_zero_inputs_after_strip(monkeypatch, code):
+    module, render = _render_cases()[code]
+    before = _Recorder()
+    monkeypatch.setattr(module, "st", before)
+    render(_block_of(code, strip=False))
+    assert before.inputs(), f"{code}：拿掉之前就沒畫任何輸入元件，這條量不到東西"
+    after = _Recorder()
+    monkeypatch.setattr(module, "st", after)
+    render(_block_of(code, strip=True))
+    assert after.inputs() == [], after.inputs()
+    assert after.row_edit_buttons() == [], after.row_edit_buttons()
+
+
+def test_exp_watch_picks_hidden_compare_picks_kept(monkeypatch):
+    """`EXP-5` 的輸入（觀察清單多選）不畫；`EXP-3`／`EXP-6` 的「對照」多選會即時改畫面，照畫。"""
+    _render_cases()
+    from ui_v2.exp import page as exp_page
+    exp2 = _block_of("EXP-2", strip=True)
+    rec = _Recorder()
+    monkeypatch.setattr(exp_page, "st", rec)
+    exp_page._render_picks(exp2, hide_watch=False)
+    keys_all = [k for name, k in rec.inputs() if name == "multiselect"]
+    rec2 = _Recorder()
+    monkeypatch.setattr(exp_page, "st", rec2)
+    exp_page._render_picks(exp2, hide_watch=True)
+    keys_hidden = [k for name, k in rec2.inputs() if name == "multiselect"]
+    assert len(keys_all) == 2 and keys_hidden == [exp_page._PICK_KEYS[exp_logic.GROUP_COMPARE]]
+    # 接線：正式頁傳的是 `EXP-5` 那一塊的旗標；組模型時 session 殘留的觀察清單勾選不交給模型。
+    src = (ROOT / "ui_v2" / "exp" / "page.py").read_text(encoding="utf-8")
+    assert '_render_exp2_live(exp2, hide_watch=readonly.inputs_hidden(logic.find_block(model, "EXP-5")))' in src
+    assert 'watch_checked=() if readonly.hides_inputs("EXP-5") else' in src
+
+
+# ───────── (丙) AST：渲染函式裡每一個輸入元件呼叫都在 `inputs_hidden` 的條件之下 ─────────
+_GUARDED_RENDERERS = [
+    ("mkt", "_render_mkt4"), ("mkt", "_render_mkt5_picks"), ("hld", "_render_hld4"),
+    ("exp", "_render_exp1_live"), ("exp", "_render_exp4_live"), ("alo", "_render_alo1"), ("alo", "_render_alo4"),
+]
+_INPUT_HELPERS = frozenset({"_text_input", "_field_select"})
+
+
+def _input_guard_problems(source: str, fn_name: str) -> list:
+    tree = ast.parse(source)
+    fn = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == fn_name), None)
+    if fn is None:
+        return [f"找不到 {fn_name}"]
+    parents = _parents(tree)
+    hidden_names = {t.id for n in ast.walk(fn) if isinstance(n, ast.Assign) and "readonly.inputs_hidden(" in ast.unparse(n.value)
+                    for t in n.targets if isinstance(t, ast.Name)}
+
+    def guards(text):
+        return "readonly.inputs_hidden(" in text or any(name in text.split() or f"not {name}" in text
+                                                        or f"if {name}" in text for name in hidden_names)
+
+    problems, found = [], 0
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
+        is_widget = (isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id == "st"
+                     and name in INPUT_WIDGETS) or name in _INPUT_HELPERS
+        if not is_widget:
+            continue
+        found += 1
+        cur, ok = node, False
+        while cur is not fn and not ok:
+            parent = parents[cur]
+            if isinstance(parent, ast.If) and cur in parent.body and guards(ast.unparse(parent.test)):
+                ok = True
+            elif isinstance(parent, ast.For) and cur in parent.body and guards(ast.unparse(parent.iter)):
+                ok = True
+            cur = parent
+        if not ok:
+            problems.append(f"{fn_name}:{node.lineno} 的 {name} 不在 inputs_hidden 條件之下")
+    if not found:
+        problems.append(f"{fn_name} 找不到任何輸入元件")
+    return problems
+
+
+@pytest.mark.parametrize("page, fn_name", _GUARDED_RENDERERS)
+def test_input_widgets_sit_under_inputs_hidden(page, fn_name):
+    source = (ROOT / "ui_v2" / page / "page.py").read_text(encoding="utf-8")
+    assert _input_guard_problems(source, fn_name) == []
+
+
+def test_input_guard_detector_catches_unguarded_widget():
+    """負控（現編程式碼，不落檔）。"""
+    ok = ("def f(block):\n    if not readonly.inputs_hidden(block):\n        st.text_input('a')\n")
+    assert _input_guard_problems(ok, "f") == []
+    ok2 = ("def f(block):\n    hidden = readonly.inputs_hidden(block)\n"
+           "    for x in () if hidden else block['inputs']:\n        _text_input(x)\n")
+    assert _input_guard_problems(ok2, "f") == []
+    bad = "def f(block):\n    st.number_input('a')\n"
+    assert _input_guard_problems(bad, "f")
+    bad2 = ("def f(block):\n    if not readonly.inputs_hidden(block):\n        pass\n    st.multiselect('a')\n")
+    assert _input_guard_problems(bad2, "f")
