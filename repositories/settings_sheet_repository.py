@@ -158,6 +158,25 @@ class SettingsSheetError(Exception):
 _clock = time.monotonic
 
 
+READ_ONLY_SECRET_KEY = "UI_V2_READ_ONLY"
+_TRUTHY_READ_ONLY = frozenset({"1", "true", "yes", "on"})
+
+
+def is_read_only() -> bool:
+    """ui_v2 是否唯讀（`UI_V2_READ_ONLY` secret／環境變數）。
+
+    只有明確真值字串（1／true／yes／on，大小寫不分、去前後空白）才回 True；未設定、空字串、
+    無法辨識一律回 False。⚠️ **False 是現況，不是安全預設**；唯讀化的時點待客戶裁示，本函式只提供
+    「可關」的機制，不代表已關閉。
+    """
+    raw = get_secret(READ_ONLY_SECRET_KEY, None)
+    if isinstance(raw, bool):          # secrets.toml 寫 `= true`
+        return raw
+    if isinstance(raw, int):           # secrets.toml 寫 `= 1`；其他整數為假
+        return raw == 1
+    return isinstance(raw, str) and raw.strip().lower() in _TRUTHY_READ_ONLY
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 

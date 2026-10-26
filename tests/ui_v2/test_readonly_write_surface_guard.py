@@ -144,14 +144,14 @@ def fake_store(monkeypatch):
 
 def _set_flag(monkeypatch, value):
     monkeypatch.setattr(
-        ss, "get_secret",
-        lambda key, default=None: value if key == ss.READ_ONLY_SECRET_KEY else default)
+        ss.store, "get_secret",
+        lambda key, default=None: value if key == ss.store.READ_ONLY_SECRET_KEY else default)
 
 
 @pytest.mark.parametrize("flag", ["1", "true", " TRUE ", "Yes", "on"])
 def test_read_only_true_short_circuits(monkeypatch, fake_store, flag):
     _set_flag(monkeypatch, flag)
-    assert ss.is_read_only() is True
+    assert ss.store.is_read_only() is True
     out = ss.save_setting_for_page("k", "5", "int", {})
     assert out["status"] == "read_only" and out["key"] == "k" and out["message"]
     assert fake_store.calls == 0
@@ -160,7 +160,7 @@ def test_read_only_true_short_circuits(monkeypatch, fake_store, flag):
 @pytest.mark.parametrize("flag", [True, 1])
 def test_read_only_non_string_true(monkeypatch, fake_store, flag):
     _set_flag(monkeypatch, flag)
-    assert ss.is_read_only() is True
+    assert ss.store.is_read_only() is True
     assert ss.save_setting_for_page("k", "5", "int", {})["status"] == "read_only"
     assert fake_store.calls == 0
 
@@ -168,13 +168,13 @@ def test_read_only_non_string_true(monkeypatch, fake_store, flag):
 @pytest.mark.parametrize("flag", [False, 0, 2, -1, 1.0, ["1"]])
 def test_read_only_non_string_false(monkeypatch, fake_store, flag):
     _set_flag(monkeypatch, flag)
-    assert ss.is_read_only() is False
+    assert ss.store.is_read_only() is False
 
 
 @pytest.mark.parametrize("flag", ["", "0", "false", "maybe", None])
 def test_read_only_false_keeps_current_path(monkeypatch, fake_store, flag):
     _set_flag(monkeypatch, flag)
-    assert ss.is_read_only() is False
+    assert ss.store.is_read_only() is False
     out = ss.save_setting_for_page("k", "5", "int", {})
     assert out["status"] == "saved"
     assert fake_store.calls == 1

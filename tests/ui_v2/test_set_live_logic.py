@@ -338,7 +338,7 @@ def test_存檔成功_已存檔_讀回新值(env):
 
 def test_存檔_唯讀開關擋下_不再靜默_顯示原因_輸入留著_不印可能已寫入(env, monkeypatch):
     S.save_setting_for_page("set_max_age_days", "14", "int", [])
-    monkeypatch.setattr(S, "is_read_only", lambda: True)
+    monkeypatch.setattr(S.store, "is_read_only", lambda: True)
     result = _save(env, "set_max_age_days", "21", "int")
     assert result["status"] == "read_only" and result["message"]
     _d, model = _page({"set_max_age_days": result})

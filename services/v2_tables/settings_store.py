@@ -58,7 +58,6 @@ import math
 from datetime import date
 from typing import Callable, Optional
 
-from infra.config import get_secret
 from repositories import settings_sheet_repository as store
 from repositories.macro.fred_vintage import fetch_fred_vintages
 from repositories.macro.yf import fetch_yf_close
@@ -255,24 +254,7 @@ def save_user_setting(setting_key: str, setting_value: Optional[str], value_kind
                                    mask=masker(secret_values))
 
 
-READ_ONLY_SECRET_KEY = "UI_V2_READ_ONLY"
-_TRUTHY_READ_ONLY = frozenset({"1", "true", "yes", "on"})
 READ_ONLY_MESSAGE = "新介面目前為唯讀模式，設定未儲存。"
-
-
-def is_read_only() -> bool:
-    """ui_v2 是否唯讀（`UI_V2_READ_ONLY` secret／環境變數）。
-
-    只有明確真值字串（1／true／yes／on，大小寫不分、去前後空白）才回 True；未設定、空字串、
-    無法辨識一律回 False。⚠️ **False 是現況，不是安全預設**；唯讀化的時點待客戶裁示，本函式只提供
-    「可關」的機制，不代表已關閉。
-    """
-    raw = get_secret(READ_ONLY_SECRET_KEY, None)
-    if isinstance(raw, bool):          # secrets.toml 寫 `= true`
-        return raw
-    if isinstance(raw, int):           # secrets.toml 寫 `= 1`；其他整數為假
-        return raw == 1
-    return isinstance(raw, str) and raw.strip().lower() in _TRUTHY_READ_ONLY
 
 
 def save_setting_for_page(setting_key: str, setting_value: Optional[str], value_kind: Optional[str],
@@ -283,10 +265,10 @@ def save_setting_for_page(setting_key: str, setting_value: Optional[str], value_
     失敗時帶 `code`、`http_status`、`hint`、`remaining_sec`、`client_email`（`50` 第 8 節的 403／404 提示用；
     `client_email` 依 ACCEPTANCE 7.2 丙不遮）。寫表以外的例外照樣往上拋，不吞。
 
-    唯讀開關（`is_read_only()`）為 True 時最先短路：不檢查、不呼叫任何 repository，回
+    唯讀開關（L1 `store.is_read_only()`）為 True 時最先短路：不檢查、不呼叫任何 repository，回
     `{"status": "read_only", "key", "message"}`（`read_only` 不是 `saved`，呼叫端一律視為未儲存）。
     """
-    if is_read_only():
+    if store.is_read_only():
         return {"status": "read_only", "key": setting_key, "message": READ_ONLY_MESSAGE}
     try:
         row = save_user_setting(setting_key, setting_value, value_kind, secret_values)
