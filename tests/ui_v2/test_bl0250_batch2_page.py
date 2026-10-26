@@ -98,7 +98,10 @@ def test_EXP_對照句不再重複標記_稽核等式不上畫面():
 
 def test_ALO_說明行與欄名():
     joined = _joined("alo", "正常")
-    assert "目標在這裡輸入；對照與試算在上方「關鍵數字」。" in joined
+    # ~~"目標在這裡輸入；對照與試算在上方「關鍵數字」。"~~ → 2026-10-26（J-14 精神；有意識的行為變更，不是漏刪）：
+    # 正式模式 `ALO-1` 輸入欄不畫，「目標在這裡輸入；」那半句拿掉（`ui_v2/readonly.py::PHASE1_HIDDEN_INPUT_TEXT`）。
+    assert "對照與試算在上方「關鍵數字」。" in joined
+    assert "目標在這裡輸入" not in joined
     assert "以下依序" not in joined
     assert "項目 當前值 最後修改時間" in joined
 
