@@ -241,6 +241,8 @@ def page_set() -> None:
         # ⚠️ 多頁預覽只有在 Google 導回的網址落在設定頁（`/set`）時才會處理 OAuth callback；導回落在別頁
         # （例如預設首頁）時，那一頁不處理 code／state，登入不會完成。部署的 redirect_uri 要指向設定頁網址。
         login_live=set_source.login_live,
+        # 2026-10-26 批 3b-3：試算表選擇與「使用這一本」，與 `ui_v2/app_set_live.py` 同名參數、同一物件（守衛同上）。
+        picker_live=set_source.picker_live,
     )
 
 

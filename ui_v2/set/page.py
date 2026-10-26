@@ -562,6 +562,33 @@ def _render_login(login_live) -> None:
                           args=(button["action"], *((button["arg"],) if "arg" in button else ())))
 
 
+_PICKER_WIDGET_KEY = "set_picker_select"   # 與 `source._KEY_PICKER_WIDGET` 同值（測試鎖定）
+
+
+def _pick_changed(act, key) -> None:
+    """下拉選了一本：把選到的 id 交給動作（來源層只收畫面清單內的 id，且只設 Pending）。"""
+    act("select", st.session_state.get(key))
+
+
+def _render_picker(picker_live, data) -> None:
+    """「試算表連線」卡（批 3b-3）：只畫 `live.picker_view` 給的字、選項與鈕；未正式登入時整張不畫。
+    選中只是待確認；［使用這一本］才驗證，其 `arg` 綁定畫面上顯示的待確認試算表 id。沒有任何「清除使用中」的控制項。"""
+    view = live.picker_view(data)
+    if view["state"] == "hidden":
+        return
+    with st.expander(live.PICKER_CARD_TITLE, expanded=True):
+        _lines(view["lines"])
+        if view["options"]:
+            ids = [o["id"] for o in view["options"]]
+            labels = {o["id"]: o["label"] for o in view["options"]}
+            st.selectbox(live.PICKER_SELECT_LABEL, ids, index=view["selected"], format_func=labels.__getitem__,
+                         placeholder=live.PICKER_PLACEHOLDER, key=_PICKER_WIDGET_KEY,
+                         on_change=_pick_changed, args=(picker_live["act"], _PICKER_WIDGET_KEY))
+        for button in view["buttons"]:
+            st.button(button["label"], key=f"set_picker_{button['action']}", on_click=picker_live["act"],
+                      args=(button["action"], *((button["arg"],) if "arg" in button else ())))
+
+
 def _render_set0_nav() -> None:
     """`SET-0` 燈旁那一枚 `導覽`（之八其二 (b-1) 第 2 條）：同頁錨點連結，只把畫面捲到 ④「操作」的 `SET-5`。
     純 HTML 錨點 —— 不是 `st.button`（按下會重跑整頁、重讀設定試算表），不讀也不寫任何資料表，
@@ -617,7 +644,7 @@ _RENDERERS = {
 }
 
 
-def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None, pages=None, login_live=None) -> None:
+def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None, pages=None, login_live=None, picker_live=None) -> None:
     """畫整頁。
 
     三個參數都不傳（None）時行為與加這些參數之前完全相同：照舊以 ?scenario= 挑 fixtures 情境。
@@ -647,6 +674,8 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
             raise ValueError("pages 要與 load_live 一起傳")
         if login_live is not None:
             raise ValueError("login_live 要與 load_live 一起傳")
+        if picker_live is not None:
+            raise ValueError("picker_live 要與 load_live 一起傳")
         scenario = _pick_scenario()
         save_failed = _pick_save_failed()
         model = logic.build_page_model(fixtures.scenario_with(scenario, save_failed=save_failed))
@@ -720,8 +749,13 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         _render_set0_nav()
 
     _html(f'<div class="set-layer-label">{label2}</div>')
+    # 選本資料要在登入卡之前讀：列清單／驗證遇到登入失效會清整個 session 並把代號轉給登入卡的提示欄，
+    # 登入卡晚於它讀狀態，才不會在同一次畫面上還說「已登入」。
+    picker_data = picker_live["load"]() if picker_live is not None else None
     if login_live is not None:
         _render_login(login_live)   # 65 第 A.2、C 節：第二層「關鍵數字」最上面的「Google 帳號」卡
+    if picker_live is not None:
+        _render_picker(picker_live, picker_data)   # 65 第 E 節：登入後才出現的「試算表連線」卡（選本 → 待確認 → 使用這一本）
     with st.container(key="set_layer2"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
             with column:

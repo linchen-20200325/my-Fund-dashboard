@@ -987,3 +987,152 @@ def login_view(login_input) -> dict:
         return view("logged_out", notice_lines, [_login_button("login", LOGIN_BUTTON_RELOGIN, url)], notice)
     return view("logged_out", [TEXT_LOGIN_LOGGED_OUT, TEXT_LOGIN_LOGGED_OUT_NOTE],
                 [_login_button("login", LOGIN_BUTTON_LOGIN, url)], None)
+
+
+# ───────────────────────── 試算表選擇與「使用這一本」（批 3b-3；`docs/v2/65_set_wireframe_and_cap_gate_01_02.md` 第 E 節） ─────────────────────────
+#
+# 純函式讀模型：輸入是 `source.picker_load()` 交來的純 dict，輸出「畫哪幾行字、下拉有哪幾個選項、哪幾枚鈕」。
+# 規則（客戶已核准）：只在「正式登入（已確認）」後出現；候選只來自 L2 `list_for_picker` 的清單（登入帳號可存取的試算表），
+# 不猜、不 fallback、不補任何預設；選中只是「待確認（尚未使用）」，按［使用這一本］驗證成功才是「使用中」；
+# 失敗時「使用中」永遠取自當下狀態（舊的那一本），不取自這一次嘗試的結果；沒有任何「清除使用中」的控制項。
+# 文案：標〔65〕者逐字取自 65 第 E 節；標 NEW 者 65 沒有逐字定義，待客戶審字。
+
+PICKER_CARD_TITLE = "試算表連線"                          # 〔65〕第 A 節卡名
+PICKER_SELECT_LABEL = "選擇 Google Sheet"                  # 〔65〕E 節下拉標題
+TEXT_PICKER_ACTIVE = "使用中：{name}（{sheet_id}）"          # 客戶指定字樣「使用中」＋顯示名稱與 ID（不顯示任何權杖）
+TEXT_PICKER_ACCOUNT = "帳號：{email}"                       # NEW 待客戶審字
+TEXT_PICKER_NO_ACTIVE = "⬜ 尚未選定試算表"                   # 〔65〕第 4 節
+TEXT_PICKER_PENDING = "待確認（尚未使用）：{name}"            # 客戶指定字樣「待確認（尚未使用）」
+TEXT_PICKER_STILL_ACTIVE = "目前使用中仍是：{name}（未變更）"  # 〔65〕E 節失敗線框
+TEXT_PICKER_SWITCHED = "◆ 已切換為：{name}"                  # 〔65〕E 節成功線框
+TEXT_PICKER_EMPTY = "⬜ 沒有可選的試算表"                      # NEW 待客戶審字（客戶指定句型「⬜ 無法判定／沒有可選的試算表」）
+TEXT_PICKER_EMPTY_NOTE = "這個帳號目前沒有可列出的試算表"      # 〔65〕E-4
+TEXT_PICKER_UNKNOWN = "⬜ 無法判定"                           # 〔65〕E-8
+TEXT_PICKER_UNKNOWN_NOTE = "讀不到試算表清單"                  # NEW 待客戶審字
+TEXT_PICKER_LIST_FAILED = "⛔ 列出試算表失敗"                  # 〔65〕E-7
+TEXT_PICKER_LIST_DENIED = "⛔ 這個帳號沒有列出試算表的權限"      # 〔65〕E-5
+TEXT_PICKER_USE_DENIED = "⛔ 無權限：切換沒有完成。"            # 〔65〕E 節失敗線框
+TEXT_PICKER_USE_NOT_FOUND = "⛔ 找不到：切換沒有完成。"          # NEW 待客戶審字（65 只列「⛔ 找不到」）
+TEXT_PICKER_USE_FAILED = "⛔ 驗證失敗：切換沒有完成。"           # NEW 待客戶審字（65 只列「⛔ 驗證失敗」）
+TEXT_PICKER_SELECT_NOT_FOUND = "⛔ 找不到這本試算表"             # NEW 待客戶審字
+TEXT_PICKER_UNKNOWN_USE_NOTE = "切換沒有完成，原因讀不到"        # NEW 待客戶審字（「使用這一本」失敗、分不出原因）
+TEXT_PICKER_UNKNOWN_SELECT_NOTE = "選取沒有完成，原因讀不到"     # NEW 待客戶審字（選本失敗、分不出原因）
+PICKER_PLACEHOLDER = "請選擇試算表"                           # NEW 待客戶審字
+PICKER_ACTIVE_MARK = "（使用中）"                             # 〔65〕E 節「目前使用中」的簡寫；NEW 待客戶審字
+PICKER_BUTTON_USE = "使用這一本"                              # 〔65〕
+PICKER_BUTTON_RELIST = "重新列出"                             # NEW 待客戶審字
+
+# 畫面層與來源層共用的動作代號（白名單）。
+PICKER_ACTIONS = ("select", "use", "relist")
+
+_PICKER_ID_TAIL = 6
+
+
+def _picker_str(value):
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _picker_sheets(listing) -> list:
+    """清單 → 乾淨的 `[{id, name}]`（只收字串 id；名稱缺就用 id；同 id 只留第一筆）。清單不是成功結果 → 空。"""
+    if not (isinstance(listing, dict) and listing.get("ok") is True and isinstance(listing.get("sheets"), list)):
+        return []
+    seen, out = set(), []
+    for item in listing["sheets"]:
+        sid = _picker_str(item.get("id")) if isinstance(item, dict) else None
+        if sid is None or sid in seen:
+            continue
+        seen.add(sid)
+        out.append({"id": sid, "name": _picker_str(item.get("name")) or sid})
+    return out
+
+
+def _picker_label(sheet: dict, active_id) -> str:
+    tail = sheet["id"][-_PICKER_ID_TAIL:]
+    mark = PICKER_ACTIVE_MARK if sheet["id"] == active_id else ""
+    return f"{sheet['name']}（…{tail}）{mark}"
+
+
+def picker_error_lines(code, context: str) -> list:
+    """錯誤代號 → 畫面字（只比對九個代號之一，不比對例外字串；未知代號落「⬜ 無法判定」，不當成功）。
+    `context` ∈ list（列清單）／select（選本）／use（使用這一本）。"""
+    if code == _ERR_AUTH_EXPIRED:
+        return [TEXT_LOGIN_EXPIRED, TEXT_LOGIN_EXPIRED_NOTE]
+    if code == _ERR_AUTH_REQUIRED:
+        return [TEXT_LOGIN_LOGGED_OUT, TEXT_LOGIN_LOGGED_OUT_NOTE]
+    if code == _ERR_PERMISSION:
+        return [TEXT_PICKER_LIST_DENIED if context == "list" else TEXT_PICKER_USE_DENIED]
+    if code == "SHEET_NOT_FOUND":
+        return [TEXT_PICKER_SELECT_NOT_FOUND if context == "select" else TEXT_PICKER_USE_NOT_FOUND]
+    if code in ("SCHEMA_INVALID",) + _ERR_EXCHANGE:
+        return [TEXT_PICKER_LIST_FAILED if context == "list" else TEXT_PICKER_USE_FAILED]
+    note = {"use": TEXT_PICKER_UNKNOWN_USE_NOTE, "select": TEXT_PICKER_UNKNOWN_SELECT_NOTE}.get(context,
+                                                                                               TEXT_PICKER_UNKNOWN_NOTE)
+    return [TEXT_PICKER_UNKNOWN, note]   # 不把「使用這一本」的失敗說成「讀不到試算表清單」
+
+
+def picker_view(picker_input) -> dict:
+    """「試算表連線」卡的讀模型。
+
+    `picker_input`：`{"status": personal_session.status() 的 dict 或 None, "list": 清單結果（`{"ok": True, "sheets": [...]}` 或
+    `{"ok": False, "error_code": ...}`）或 None, "notice": 上一個動作留下的 `{"kind", "code", "name"}` 或 None}`。
+    回傳 `{"state", "lines", "options", "selected", "buttons"}`：`state` ∈ hidden／ready／empty／list_error／unknown。
+    `options` 每項 `{"id", "label"}`，只來自清單；`selected` 是待確認那一本在 `options` 內的位置（沒有或不在清單內 → None）；
+    `buttons` 每枚 `{"action", "label"}`，［使用這一本］另帶 `"arg"`＝畫面上顯示的待確認試算表 id。
+    未正式登入（含待確認登入、未登入、讀不到狀態）一律 hidden：沒有任何輸出可畫。
+    """
+    inp = picker_input if isinstance(picker_input, dict) else {}
+    status = inp.get("status")
+
+    def view(state, lines=(), options=(), selected=None, buttons=()):
+        return {"state": state, "lines": list(lines), "options": list(options), "selected": selected,
+                "buttons": list(buttons)}
+
+    if not (isinstance(status, dict) and status.get("login_state") == "logged_in"):
+        return view("hidden")
+
+    active = status.get("active_sheet") if isinstance(status.get("active_sheet"), dict) else None
+    active_id = _picker_str(active.get("id")) if active else None
+    active_name = (_picker_str(active.get("name")) or active_id) if active_id else None
+    pend = status.get("pending_sheet") if isinstance(status.get("pending_sheet"), dict) else None
+    pend_id = _picker_str(pend.get("id")) if pend else None
+    pend_name = (_picker_str(pend.get("name")) or pend_id) if pend_id else None
+
+    notice = inp.get("notice") if isinstance(inp.get("notice"), dict) else None
+    lines: list = []
+    if notice and notice.get("kind") == "use_ok" and active_id and _picker_str(notice.get("name")):
+        lines.append(TEXT_PICKER_SWITCHED.format(name=active_name))   # 名稱取當下狀態（Active），不取回傳值
+    elif notice and notice.get("kind") in ("use_fail", "select_fail"):
+        context = "use" if notice["kind"] == "use_fail" else "select"
+        lines += picker_error_lines(notice.get("code"), context)
+        if context == "use" and active_id:   # 失敗維持舊 Active：名稱取自當下狀態
+            lines.append(TEXT_PICKER_STILL_ACTIVE.format(name=active_name))
+    if active_id:
+        lines.append(TEXT_PICKER_ACTIVE.format(name=active_name, sheet_id=active_id))
+        email = _clean_email(status.get("email"))
+        if email:
+            lines.append(TEXT_PICKER_ACCOUNT.format(email=email))
+    else:
+        lines.append(TEXT_PICKER_NO_ACTIVE)
+
+    buttons: list = []
+
+    listing = inp.get("list")
+    relist = {"action": "relist", "label": PICKER_BUTTON_RELIST}
+    # 待確認那一本只在它「就在畫面列出的清單內」時才顯示與給［使用這一本］：清單失敗／重列後不含它／空清單 → 不給
+    # （fail closed：不對一本畫面上看不到的試算表發出驗證）。
+    if not isinstance(listing, dict):
+        return view("unknown", lines + [TEXT_PICKER_UNKNOWN, TEXT_PICKER_UNKNOWN_NOTE], buttons=[relist])
+    if listing.get("ok") is not True:
+        code = listing.get("error_code")
+        return view("list_error", lines + picker_error_lines(code if isinstance(code, str) else None, "list"),
+                    buttons=[relist])
+    sheets = _picker_sheets(listing)
+    if not sheets:   # API 成功但清單為零（或全是壞項）：照實說沒有可選的，不補任何預設
+        return view("empty", lines + [TEXT_PICKER_EMPTY, TEXT_PICKER_EMPTY_NOTE], buttons=[relist])
+    options = [{"id": s["id"], "label": _picker_label(s, active_id)} for s in sheets]
+    ids = [o["id"] for o in options]
+    selected = ids.index(pend_id) if pend_id in ids else None
+    if selected is not None and pend_id != active_id:
+        lines.append(TEXT_PICKER_PENDING.format(name=pend_name))
+        buttons.append({"action": "use", "label": PICKER_BUTTON_USE, "arg": pend_id})   # 綁定畫面上顯示的待確認那一本
+    return view("ready", lines, options, selected, buttons + [relist])
