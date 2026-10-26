@@ -146,12 +146,19 @@ def test_convenience_fns_thread_oauth(monkeypatch):
 
 # ── pool_backend_status:UI 用來誠實提示落到哪個後端(§1 防靜默存本地)──────
 def test_pool_backend_status(monkeypatch):
+    # 2026-10-26 J-7:選股池無寫死預設本 → 本測試(驗 SA/OAuth 優先序)給一把假的 sheet id。
+    monkeypatch.setattr(P, "_pool_sheet_id", lambda: "FAKE_POOL_BOOK")
     monkeypatch.setattr(P, "_sa_present", lambda: True)
     assert P.pool_backend_status(None) == "service_account"        # SA 在 → 永久
     assert P.pool_backend_status(object()) == "service_account"    # SA 優先(即便有 OAuth)
     monkeypatch.setattr(P, "_sa_present", lambda: False)
     assert P.pool_backend_status(object()) == "oauth"              # SA 缺 + OAuth → 永久(雲端)
     assert P.pool_backend_status(None) == "local"                  # 兩者皆無 → 本地暫存(UI 須警告)
+    # POOL_SHEET_ID 未設定 → 不論憑證,一律 "local"(與 get_pool_store 落本地一致)
+    monkeypatch.setattr(P, "_pool_sheet_id", lambda: "")
+    monkeypatch.setattr(P, "_sa_present", lambda: True)
+    assert P.pool_backend_status(None) == "local"
+    assert P.pool_backend_status(object()) == "local"
 
 
 # ── headless 預設(不傳)→ oauth_client=None(零 regression)──────

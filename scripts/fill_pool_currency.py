@@ -12,7 +12,7 @@ exit:缺 SA/GS 未啟用 → 2;讀取失敗 → 1;部分寫入失敗 → 1;成�
 
 ── GitHub repo secrets(同 weekly_nav_backfill)──
     google_service_account = SA 完整 JSON(須為選股池 Sheet 編輯者)
-    POOL_SHEET_ID          = (選填)選股池目標本;未設走程式 baked 預設
+    POOL_SHEET_ID          = 選股池目標本(必填;2026-10-26 起無寫死預設,未設 = GS 未啟用 → exit 2)
 先 dry-run 驗證(不寫入):python scripts/fill_pool_currency.py --dry-run
 """
 from __future__ import annotations

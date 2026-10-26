@@ -2,7 +2,7 @@ name: "補選股池 currency(一次性,手動)"
 
 # 用基金名判計價幣,補選股池空白 currency 欄。**只手動觸發**(一次性維護,無排程)。
 # 預設 dry_run=true(只列出、不寫入);確認清單無誤後,再跑一次 dry_run=false 實寫。
-# 需 GitHub repo secrets:GOOGLE_SERVICE_ACCOUNT(須為選股池 Sheet 編輯者)+(選填)POOL_SHEET_ID。
+# 需 GitHub repo secrets:GOOGLE_SERVICE_ACCOUNT(須為選股池 Sheet 編輯者)+ POOL_SHEET_ID(2026-10-26 起必填:程式不再有寫死的預設本)。
 on:
   workflow_dispatch:
     inputs:

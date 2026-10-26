@@ -31,6 +31,19 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
+      # ── 選股池設定檢查（2026-10-26，CLAUDE.md §1 Fail Loud）──────────────────
+      # 選股池自 2026-10-26 起沒有寫死的預設試算表（裁示第 9 節 J-7）。POOL_SHEET_ID 沒設時，
+      # 程式會把選股池當成「未設定」→ 讀到空池且不報錯。排程不得在這種狀態下靜默跑完，
+      # 所以先在這裡明確失敗（下方 if: failure() 的 LINE 推播會照常通知）。
+      - name: 檢查 POOL_SHEET_ID 已設定（未設定即失敗，不靜默讀空池）
+        env:
+          POOL_SHEET_ID: ${{ secrets.POOL_SHEET_ID }}
+        run: |
+          if [ -z "$(printf '%s' "$POOL_SHEET_ID" | tr -d '[:space:]')" ]; then
+            echo "::error::GitHub secret POOL_SHEET_ID 未設定或空白：選股池沒有目標試算表，本排程中止（不讀空池）。"
+            exit 1
+          fi
+          echo "POOL_SHEET_ID 已設定。"
       - name: Run weekly NAV backfill (持倉 ∪ 選股池 → nav_history)
         # 排程時 inputs.dry_run 為空 → 不加旗標 → **實抓實寫**;手動 dispatch 填 true 才 --dry-run。
         env:
@@ -40,6 +53,8 @@ jobs:
           # 讀持倉/選股池:優先 POLICY_SHEET_ID(App 寫這本的 _fund_pool),退 macro_weights。
           POLICY_SHEET_ID: ${{ secrets.POLICY_SHEET_ID }}
           macro_weights_sheet_id: ${{ secrets.MACRO_WEIGHTS_SHEET_ID }}
+          # 選股池目標本(list_pool 讀這把)。2026-10-26 起程式無寫死預設本:未設 → 選股池視為未設定。
+          POOL_SHEET_ID: ${{ secrets.POOL_SHEET_ID }}
           # 選填:美國 IP 抓不到 MoneyDJ 時走 NAS 代理。
           PROXY_URL: ${{ secrets.PROXY_URL }}
         run: >

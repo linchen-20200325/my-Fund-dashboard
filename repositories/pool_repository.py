@@ -2,8 +2,8 @@
 
 使用者維護的「選股池」= 一組候選基金,供換股顧問配對。雙後端(仿 ~~auto_search_store~~ —— 該模組已於 2026-08-31 因 production 0 caller 整檔刪除,此處僅存設計淵源;同型現例見 `repositories/portfolio_perf_repository.py`):
 - **Google Sheets**(secrets 有設 → 主):worksheet `_fund_pool`,跨裝置同步、Cloud reboot 不掉。
-  v19.472:目標 Sheet 改成**獨立一本**(`POOL_SHEET_ID` secret → baked `_POOL_SHEET_ID_DEFAULT`,
-  見 `_pool_sheet_id`)—— user 2026-08-18「基金要另一本,不能共上方(持倉)的 id」。**不再共用
+  v19.472:目標 Sheet 改成**獨立一本**(`POOL_SHEET_ID` secret,見 `_pool_sheet_id`;
+  2026-10-26 起不再有寫死的預設本,secret 缺／空白 = 未設定)—— user 2026-08-18「基金要另一本,不能共上方(持倉)的 id」。**不再共用
   `POLICY_SHEET_ID`**。仍用 Service Account(App + headless cron 共讀同表);**SA 須被加為該
   Sheet 編輯者**(同 NAV 自動累積的分享動作)。
 - **本地 JSON**(無 GS → fallback):`cache/fund_pool/pool.json`(Cloud FS ephemeral,dev/離線用)。
@@ -33,10 +33,11 @@ _HEADERS = ["code", "name", "category", "type_override", "note", "added_at", "st
             "isin", "currency", "morningstar_secid"]
 _CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "fund_pool"
 _LOCAL_FILE = "pool.json"
-# v19.472:選股池「另一本」Sheet 的 baked 預設(user 2026-08-18 指定,與持倉 POLICY_SHEET_ID
-#   **不同本**)。secret `POOL_SHEET_ID` 可覆蓋;baked 讓 Cloud 重開不掉(§1 主後端明確)。
-#   ⚠️ Service Account 信箱須被加為這本 Sheet 的「編輯者」,寫入才成功。
-_POOL_SHEET_ID_DEFAULT = "1bxzejYaS8-yw1fK2pKecG_jGLVJDc4uF8vuSEP-Dw9E"
+# 2026-10-26 客戶裁示(`docs/evidence/decisions/2026-10-26_ui_v2_implementation_security_gate_decisions.md`
+#   第 9 節 J-7):原本寫死在這裡的選股池預設 Sheet ID 屬「隱式 fallback」,已整條移除(有意識的
+#   政策變更,不是漏刪;決策者:客戶)。現行:只認 secret `POOL_SHEET_ID`,缺／空白 → 未設定。
+#   舊寫死預設的用意(Cloud 重開不掉、主後端明確)仍然成立;被權衡掉的是「secret 沒設也偷偷連到
+#   某一本」—— 使用者分不出讀到的是不是自己的那本。
 _VALID_TYPES = ("震盪", "成長", "")     # 空 = 自動判定
 # 狀態機合法值(本地定義,不 import L2 switch_state_machine,守 §8.2 不上行依賴)
 _VALID_STATUSES = ("WATCHING", "TRIGGERED", "HOLDING", "CLOSED")
@@ -167,17 +168,27 @@ class LocalJsonPoolStore:
 # ───────────────────────── Google Sheets 後端 ─────────────────────────
 
 def _pool_sheet_id() -> str:
-    """選股池目標 Sheet ID:**優先 secret `POOL_SHEET_ID`**,無則回退 baked
-    `_POOL_SHEET_ID_DEFAULT`(user 2026-08-18 指定的那本)。
+    """選股池目標 Sheet ID:**只認 secret `POOL_SHEET_ID`**;缺／空白 → 回 `""`(未設定)。
+
+    2026-10-26 客戶裁示(J-7):移除寫死的預設本,不退回任何其他 ID(也不退回持倉
+    `POLICY_SHEET_ID`)。回 `""` 時 `GoogleSheetsPoolStore.is_available()` 為 False、
+    `pool_backend_status()` 回 `"local"`、`pool_sheet_configured()` 回 False ——
+    呼叫端走既有的「未設定雲端來源」路徑。
 
     v19.472(user 2026-08-18「基金要另一本,不能共上方的 id」):選股池改存**獨立一本**
-    Google Sheet,**不再共用持倉 `POLICY_SHEET_ID`**(避免動到持倉那本)。baked 預設讓
-    Cloud 重開不掉(§1 主後端明確);要換本 → 設 `POOL_SHEET_ID` secret 覆蓋。仍走
+    Google Sheet,**不再共用持倉 `POLICY_SHEET_ID`**(避免動到持倉那本)。仍走
     Service Account(App + headless cron 共讀同一張表);⚠️ SA 信箱須被加為該 Sheet 編輯者。
     """
     from infra.config import get_secret
-    return (str(get_secret("POOL_SHEET_ID") or "").strip()
-            or _POOL_SHEET_ID_DEFAULT)
+    return str(get_secret("POOL_SHEET_ID") or "").strip()
+
+
+def pool_sheet_configured() -> bool:
+    """secret `POOL_SHEET_ID` 是否有明確設定(非空白)。偵測失敗 → False(視為未設定)。"""
+    try:
+        return bool(_pool_sheet_id())
+    except Exception:  # noqa: BLE001 — 讀 secret 失敗 = 未設定(不猜、不退預設)
+        return False
 
 
 def _sa_present() -> bool:
@@ -210,8 +221,8 @@ def _sa_present() -> bool:
 def _gs_enabled() -> bool:
     """選股池 GS 後端是否可用:SA 憑證(含 client_email)+ 目標 sheet id 都在。
 
-    v19.472:目標 sheet 改 `POOL_SHEET_ID` → baked 預設(見 `_pool_sheet_id`),故 sheet id
-    恆非空 → **SA 為唯一 gate**(有 SA 就走 GS,寫進獨立選股池那本)。偵測失敗 → False → 走本地。
+    2026-10-26 起 sheet id 只來自 secret `POOL_SHEET_ID`(無寫死預設),故 **SA 與 sheet id
+    兩者都要在**;任一缺 → False → 走本地(未設定雲端)。偵測失敗 → False。
     """
     try:
         return bool(_sa_present() and _pool_sheet_id())
@@ -220,8 +231,7 @@ def _gs_enabled() -> bool:
 
 
 def _get_sheet(oauth_client=None):
-    """開啟選股池目標 Sheet(v19.472:`POOL_SHEET_ID` secret → baked `_POOL_SHEET_ID_DEFAULT`,
-    獨立一本、不共用持倉)。
+    """開啟選股池目標 Sheet(`POOL_SHEET_ID` secret,獨立一本、不共用持倉;2026-10-26 起無寫死預設)。
 
     **憑證優先序(v19.508 手機友善)**:
       1. **Service Account**(App + headless cron 共用;SA 信箱須為該 Sheet 編輯者)。
@@ -235,8 +245,8 @@ def _get_sheet(oauth_client=None):
     session_state,守 §8.2 硬規則;pool_repository 為 EX-CRUD-1 允許 UI 直呼)。
     """
     sheet_id = _pool_sheet_id()
-    if not sheet_id:   # baked 預設非空 → 正常不會到這;防禦某人把預設清空 + 沒設 secret
-        raise KeyError("選股池 GS 需要 POOL_SHEET_ID secret 或 _POOL_SHEET_ID_DEFAULT(§1)")
+    if not sheet_id:   # 未設定 POOL_SHEET_ID(get_pool_store 不會走到這;直呼者 fail loud)
+        raise KeyError("選股池 GS 需要 POOL_SHEET_ID secret(未設定;§1,不退回任何預設本)")
     # ── 1) Service Account 優先(不變:App + cron 共讀同表)──
     if _sa_present():
         from infra.config import require_secret
@@ -333,8 +343,8 @@ class GoogleSheetsPoolStore:
         self._oauth_client = oauth_client
 
     def is_available(self) -> bool:
-        # v19.508:SA **或** 注入的使用者 OAuth client 任一在 → GS 可用
-        # (sheet id 恆 baked 非空)。原僅 `_gs_enabled()`(SA-only)。
+        # v19.508:SA **或** 注入的使用者 OAuth client 任一在 → GS 可用;
+        # 2026-10-26 起另需 `POOL_SHEET_ID` 有設(無寫死預設)。原僅 `_gs_enabled()`(SA-only)。
         return bool((_sa_present() or self._oauth_client is not None) and _pool_sheet_id())
 
     def _ws(self, *, for_write: bool = False):
@@ -486,10 +496,15 @@ def pool_backend_status(oauth_client=None) -> str:
     """回報 `get_pool_store(oauth_client)` 會落到哪個後端,供 UI 誠實提示(§1 不靜默):
       - `"service_account"`:SA 在 → 永久保存(App + cron 共用)。
       - `"oauth"`:SA 缺、但有注入使用者 OAuth → 用登入者身分永久保存到雲端。
-      - `"local"`:兩者皆無 → **只存本地暫存,Cloud 重開會消失**(UI 須大聲警告)。
+      - `"local"`:兩者皆無,**或 `POOL_SHEET_ID` 未設定** → **只存本地暫存,Cloud 重開會消失**
+        (UI 須大聲警告)。
 
     v19.508:防「OAuth 取不到 → 靜默落本地 → 顯示成功 → 重開消失」的 §1 破口。純函式、可單測。
+    2026-10-26(J-7 移除寫死預設本):sheet id 未設定時 `get_pool_store` 會落本地,本函式
+    必須同步回 `"local"` —— 否則會出現「回報雲端、實際寫本地」的同一個破口。
     """
+    if not pool_sheet_configured():
+        return "local"
     if _sa_present():
         return "service_account"
     if oauth_client is not None:
@@ -567,6 +582,8 @@ def _pool_backoff_ident(oauth_client=None) -> "tuple[str, str]":
     `infra/gspread_retry.py` 檔尾「actor(憑證身分)為什麼只有兩個值」。
     """
     try:
+        if not _pool_sheet_id():   # 未設定 POOL_SHEET_ID → 走本地 JSON,沒有來源可退避
+            return ("", "")
         if _sa_present():
             return ("sa", _pool_sheet_id())
         if oauth_client is not None:
