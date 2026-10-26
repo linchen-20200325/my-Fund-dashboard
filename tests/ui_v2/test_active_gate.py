@@ -115,11 +115,21 @@ def test_其餘失敗碼_走既有持倉讀取失敗路徑_訊息是固定字面
     assert out["dataset"]["holding"] == []   # 讀不到不是 0 列正常資料；錯誤訊息並存，畫面走既有失敗畫法
 
 
-def test_補充分頁標頭不符_照舊走PolicySupplementError路徑(build_source):
+@pytest.mark.parametrize("reason", sorted(active_gate.SCHEMA_REASON_TEXT))
+def test_SCHEMA_INVALID細分原因_各有固定句_不帶儲存格原文(build_source, reason):
+    from services.v2_tables import alo_holdings
+
     page, make = build_source
-    source = make(sup.PolicySupplementError("標頭與規格不符：分頁 _持倉補充", code="header_mismatch"))
-    out = source.load_live()
-    assert "標頭與規格不符" in out["dataset"]["errors"]["holding"]
+    source = make(alo_holdings.ActiveSourceError(ec.SCHEMA_INVALID, reason, "_持倉補充"))
+    errors = source.load_live()["dataset"]["errors"]
+    assert errors["holding"] == active_gate.SCHEMA_REASON_TEXT[reason] == active_gate.failure_text(ec.SCHEMA_INVALID, reason)
+
+
+def test_全部保單分頁標頭壞_不說缺少保單分頁():
+    assert "缺少保單分頁" not in active_gate.failure_text(ec.SCHEMA_INVALID, "policy_header")
+    assert "缺少保單分頁" in active_gate.failure_text(ec.SCHEMA_INVALID, "no_policy_tab")
+    assert active_gate.failure_text(ec.SCHEMA_INVALID) == active_gate.FAILURE_TEXT["SCHEMA_INVALID"]
+    assert active_gate.failure_text(ec.UPSTREAM_ERROR, "policy_header") == active_gate.FAILURE_TEXT["UPSTREAM_ERROR"]
 
 
 # ═══════════════════════ AppTest：沒有 Active 的畫面（正式入口，真的 L2） ═══════════════════════
@@ -170,6 +180,12 @@ def test_沒有Active_總表記尚未設定_不記取數失敗也不記沒有異
     rec = at.session_state[page_health.STATE_KEY][slug]
     assert rec["page_failure"] is None and not rec.get("collect_error")
     assert [(i["kind"], i["key"]) for i in rec["items"]] == [(page_health.KIND_UNCONFIGURED, active_gate.UNCONFIGURED_KEY)]
+    # 擋主要原因（值讀不到）：不落在「只影響比較值」（順位 6）
+    item = rec["items"][0]
+    assert page_health.blocks_main(item) and not page_health.only_compare_unconfigured(rec["items"])
+    main = page_health.main_reason(rec["items"])
+    assert main == page_health.TEXT_MAIN_UNCONFIGURED.format(key=active_gate.UNCONFIGURED_KEY)
+    assert "只影響比較值" not in main
 
 
 @pytest.mark.slow

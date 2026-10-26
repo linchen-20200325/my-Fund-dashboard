@@ -157,10 +157,7 @@ def load_live() -> dict:
         if active_gate.is_no_active(exc.code):
             raise active_gate.NoActiveSource(exc.code) from None   # 沒有 Active：整頁「⬜ 尚未選定持倉資料來源」，不是錯誤
         tables = None
-        errors.update(live.tables_failed_together(active_gate.failure_text(exc.code)))
-    except alo_holdings.PolicySupplementError as exc:
-        tables = None
-        errors.update(live.tables_failed_together(str(exc)))   # 已由 L1 經 L2 的 mask 遮過
+        errors.update(live.tables_failed_together(active_gate.failure_text(exc.code, exc.reason)))
 
     # ── user_setting ──
     try:

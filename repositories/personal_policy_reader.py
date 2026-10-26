@@ -38,6 +38,8 @@ from shared import ui_v2_error_codes as ec
 
 ACTOR = "oauth"
 CACHE_TTL_SEC = 60
+CACHE_MAX_ENTRIES = 16     # 上限：寫入時先清過期、再超過就丟最舊的（不讓長時間多帳號使用把記憶體撐大）
+BATCH_RANGES_MAX = 20      # `values:batchGet` 一次最多帶幾個分頁（分頁很多時分批請求，不一次塞成超長網址）
 CACHE_PROXY_NAME = "_PERSONAL_POLICY_CACHE"
 _WHAT = "workbook_values"
 
@@ -57,11 +59,32 @@ def cache_key(account_sub: str, sheet_id: str, what: str = _WHAT) -> tuple:
     return (account_sub.strip(), sheet_id, what)
 
 
+def drop_account(account_sub: str) -> None:
+    """丟掉某個帳號的全部快取（登出、換帳號、確認新登入、AUTH_EXPIRED 清 session 時由 L2 呼叫）。"""
+    if not isinstance(account_sub, str) or not account_sub.strip():
+        return
+    sub = account_sub.strip()
+    with _CACHE_LOCK:
+        for key in [k for k in _CACHE if k[0] == sub]:
+            del _CACHE[key]
+
+
 def clear_cache() -> None:
     global _CACHE_GEN
     with _CACHE_LOCK:
         _CACHE_GEN += 1
         _CACHE.clear()
+
+
+class PersonalSchemaError(drive.PersonalDriveError):
+    """`SCHEMA_INVALID` 的細分原因（仍是同一個 code，**不新增 code**）：`reason` ∈
+    `no_policy_tab`（沒有任何保單分頁）／`policy_header`（所有保單分頁標頭都壞）／`supplement_header`
+    （補充分頁標頭與規格不符；`tab` ＝ 該分頁名，是本檔常數、不是儲存格內容）。
+    ⛔ 不帶試算表儲存格原文：標頭原文可能是使用者資料，不上畫面、不進例外。"""
+
+    def __init__(self, reason: str, tab: str | None = None) -> None:
+        super().__init__(ec.SCHEMA_INVALID)
+        self.reason, self.tab = reason, tab
 
 
 class _CacheProxy:
@@ -108,7 +131,7 @@ def _check_target(target: Any) -> tuple:
     sheet_id, token = target
     if not isinstance(token, str) or not token.strip():
         raise drive.PersonalDriveError(ec.AUTH_REQUIRED)
-    if not isinstance(sheet_id, str) or not drive._SHEET_ID_RE.match(sheet_id):
+    if not isinstance(sheet_id, str) or not drive._SHEET_ID_RE.fullmatch(sheet_id):
         raise drive.PersonalDriveError(ec.SHEET_NOT_FOUND)
     return sheet_id, token
 
@@ -133,19 +156,21 @@ def _fetch_values(token: str, sheet_id: str) -> dict:
     titles = _titles(token, sheet_id)
     wanted = [t for t in titles if _is_policy_tab(t) or t in (sup.TAB_HOLDING_SUPPLEMENT, sup.TAB_POLICY_PROFILE)]
     if not any(_is_policy_tab(t) for t in wanted):
-        raise drive.PersonalDriveError(ec.SCHEMA_INVALID)   # 沒有任何保單分頁：不是「空持倉」，是來源不符
-    data = drive._get_json(
-        token, f"{drive.SHEETS_URL}/{sheet_id}/values:batchGet",
-        {"ranges": [sup._a1_tab(t) for t in wanted], "valueRenderOption": "FORMATTED_VALUE"})
-    ranges = data.get("valueRanges")
-    if not isinstance(ranges, list) or len(ranges) != len(wanted):
-        raise drive.PersonalDriveError(ec.UPSTREAM_ERROR)
+        raise PersonalSchemaError("no_policy_tab")   # 沒有任何保單分頁：不是「空持倉」，是來源不符
     out = {}
-    for title, block in zip(wanted, ranges):
-        rows = block.get("values", []) if isinstance(block, dict) else None
-        if not isinstance(rows, list):
+    for start in range(0, len(wanted), BATCH_RANGES_MAX):
+        chunk = wanted[start:start + BATCH_RANGES_MAX]
+        data = drive._get_json(
+            token, f"{drive.SHEETS_URL}/{sheet_id}/values:batchGet",
+            {"ranges": [sup._a1_tab(t) for t in chunk], "valueRenderOption": "FORMATTED_VALUE"})
+        ranges = data.get("valueRanges")
+        if not isinstance(ranges, list) or len(ranges) != len(chunk):
             raise drive.PersonalDriveError(ec.UPSTREAM_ERROR)
-        out[title] = [[("" if c is None else str(c)) for c in r] for r in rows if isinstance(r, list)]
+        for title, block in zip(chunk, ranges):
+            rows = block.get("values", []) if isinstance(block, dict) else None
+            if not isinstance(rows, list):
+                raise drive.PersonalDriveError(ec.UPSTREAM_ERROR)
+            out[title] = [[("" if c is None else str(c)) for c in r] for r in rows if isinstance(r, list)]
     return out
 
 
@@ -161,24 +186,28 @@ def _cached_values(target: tuple, account_sub: str) -> dict:
     values = _fetch_values(token, sheet_id)
     with _CACHE_LOCK:
         if _CACHE_GEN == generation:   # 讀取期間被清過的結果不存
-            _CACHE[key] = (_clock(), copy.deepcopy(values))
+            stamp = _clock()
+            for k in [k for k, v in _CACHE.items() if stamp - v[0] >= CACHE_TTL_SEC]:
+                del _CACHE[k]    # 寫入時順手清過期的
+            while len(_CACHE) >= CACHE_MAX_ENTRIES:
+                del _CACHE[min(_CACHE, key=lambda k: _CACHE[k][0])]   # 超過上限丟最舊的
+            _CACHE[key] = (stamp, copy.deepcopy(values))
     return values
 
 
 def _records(rows: list) -> list:
-    """第 1 列＝欄名；之後每列一筆 dict（缺的補空字串、多的丟掉）。標頭有空白或重複 → ValueError。"""
+    """與服務帳戶路徑（逐列讀取整張分頁的既有做法）同一個邊界行為：所有列先補空字串到**最寬那一列**的寬度（含標頭列），
+    之後標頭有重複（含兩個以上補出來的空欄名）→ ValueError（對應舊路徑的標頭例外）；
+    只有一個空欄名則照收（欄名 `""`，下游以名稱取欄，不會用到）。多出標頭的資料欄因此會讓標頭多出空欄名，
+    ≥2 個就是重複 → 該分頁略過（與舊路徑一致，不靜默丟資料欄）。等價由 `tests/test_personal_policy_reader.py` 逐案比對。"""
     if not rows:
         return []
-    header = [c for c in rows[0]]
-    while header and header[-1] == "":
-        header.pop()
-    if not header or any(not h.strip() for h in header) or len(set(header)) != len(header):
+    width = max(len(r) for r in rows)
+    padded = [list(r) + [""] * (width - len(r)) for r in rows]
+    header = padded[0]
+    if len(set(header)) != len(header):
         raise ValueError(sup.HEADER_ERROR_TEXT)
-    out = []
-    for row in rows[1:]:
-        cells = list(row) + [""] * (len(header) - len(row))
-        out.append(dict(zip(header, cells[:len(header)])))
-    return out
+    return [dict(zip(header, r)) for r in padded[1:]]
 
 
 def load_workbook_tables(target: tuple, *, account_sub: str, mask) -> dict:
@@ -187,8 +216,8 @@ def load_workbook_tables(target: tuple, *, account_sub: str, mask) -> dict:
     - `policy`：同 `policy_supplement_repository.load_policy_holding_rows`（`rows`、`skipped_tabs`、
       `invest_twd_parse_errors`、`read_estimate`）；
     - `supplement`：同 `load_supplement_tabs`（`{分頁名: {"records","bad_rows","blank_rows","tab_missing"}}`）。
-    失敗：`PersonalDriveError`（九 code 之一）；補充分頁標頭不符 → `PolicySupplementError(code="header_mismatch")`
-    （訊息經 `mask`）。所有保單分頁都讀不成（標頭壞）→ `PersonalDriveError(SCHEMA_INVALID)`，不回空表。
+    失敗：`PersonalDriveError`（九 code 之一）；補充分頁標頭不符 → `PersonalSchemaError("supplement_header")`（SCHEMA_INVALID，不帶標頭原文）。所有保單分頁都讀不成（標頭壞）→
+    `PersonalSchemaError("policy_header")`，不回空表。
     """
     values = _cached_values(target, account_sub)
     rows, skipped, parse_errors, tab_count = [], [], [], 0
@@ -205,15 +234,23 @@ def load_workbook_tables(target: tuple, *, account_sub: str, mask) -> dict:
         rows.extend(tab_rows)
         parse_errors.extend(tab_errors)
     if tab_count and len(skipped) == tab_count:
-        raise drive.PersonalDriveError(ec.SCHEMA_INVALID)
+        raise PersonalSchemaError("policy_header")
     names = (sup.TAB_HOLDING_SUPPLEMENT, sup.TAB_POLICY_PROFILE)
     for name in names:
         if values.get(name):
-            sup._check_header(name, values[name], mask=mask)
+            try:
+                sup._check_header(name, values[name], mask=mask)
+            except sup.PolicySupplementError:
+                failed = name
+            else:
+                continue
+            raise PersonalSchemaError("supplement_header", failed) from None   # 不帶標頭原文（可能是使用者資料）
     supplement = {name: sup._reduce(name, values.get(name)) for name in names}
     return {
         "actor": ACTOR,
         "policy": {"rows": rows, "skipped_tabs": skipped, "invest_twd_parse_errors": parse_errors,
-                   "read_estimate": {"tab_count": tab_count, "requests_per_load": 2, "actor": ACTOR}},
+                   "read_estimate": {"tab_count": tab_count, "actor": ACTOR,
+                          "requests_per_load": 1 + -(-(tab_count + len([n for n in names if values.get(n) is not None]))
+                                                     // BATCH_RANGES_MAX)}},
         "supplement": supplement,
     }

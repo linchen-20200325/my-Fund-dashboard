@@ -63,9 +63,7 @@ def load_live() -> dict:
     except alo_holdings.ActiveSourceError as exc:
         if active_gate.is_no_active(exc.code):
             raise active_gate.NoActiveSource(exc.code) from None   # 沒有 Active：整頁「⬜ 尚未選定持倉資料來源」，不是錯誤
-        holding_error = mask(active_gate.failure_text(exc.code))   # 其餘九 code 之一：走既有持倉讀取失敗路徑
-    except alo_holdings.PolicySupplementError as exc:   # 補充分頁標頭不符（訊息已遮蔽）
-        holding_error = mask(str(exc))
+        holding_error = mask(active_gate.failure_text(exc.code, exc.reason))   # 其餘九 code 之一：走既有持倉讀取失敗路徑
 
     settings = settings_error = None
     try:

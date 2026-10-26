@@ -487,8 +487,10 @@ class ActiveSourceError(Exception):
     """`load_alo_tables_active` 專用：Active Sheet 路徑失敗，只帶九個 error code 之一（`shared/ui_v2_error_codes.py`），
     不含 token、不含上游原文。UI 以 `code` 比對，不比對例外字串（J-9）。"""
 
-    def __init__(self, code: str):
+    def __init__(self, code: str, reason: str | None = None, tab: str | None = None):
         self.code = code
+        # `SCHEMA_INVALID` 的細分原因（`personal_policy_reader.PersonalSchemaError.reason`）；仍是同一個 code，不新增 code。
+        self.reason, self.tab = reason, tab
         super().__init__(code)
 
 
@@ -502,18 +504,21 @@ def load_alo_tables_active(state, secret_values) -> dict:
     - 讀取走 L1 `personal_policy_reader.load_workbook_tables`（token 只在 Authorization header；快取鍵含 account_sub）。
     - 之後與 `load_alo_tables` 同一條：`build_alo_tables`（本檔，**計算規則一個字未動**，只換原始表的來源）。
     - `mask` 把呼叫端給的秘密值**加上本次 access token** 一起遮（呼叫端的秘密值清單不含新 session 的 token）。
-    `PolicySupplementError`（補充分頁標頭不符）與 `HoldingIdCollision` 照舊往上拋。
+    補充分頁標頭不符 → `ActiveSourceError(SCHEMA_INVALID, reason="supplement_header")`（不帶標頭原文，標頭可能是使用者資料）。
+    `HoldingIdCollision` 照舊往上拋。
     回傳比 `load_alo_tables` 多一個 `actor`（＝`"oauth"`，來源標示）。
     """
-    code = None
+    code = reason = tab = None
     try:
         sheet_id, token, account_sub = personal_session.access_target(state)
         mask = masker(list(secret_values) + [token])
         bundle = personal_repo.load_workbook_tables((sheet_id, token), account_sub=account_sub, mask=mask)
     except (personal_session.PersonalSessionError, personal_drive.PersonalDriveError) as exc:
-        code = exc.code
+        code, reason, tab = exc.code, getattr(exc, "reason", None), getattr(exc, "tab", None)
     if code is not None:
-        raise ActiveSourceError(code) from None
+        # 讀 Google 回 AUTH_EXPIRED：死 token 不可再用 → 清 session（同 `list_for_picker`／`use_pending`）
+        personal_session.handle_read_error(state, code)
+        raise ActiveSourceError(code, reason, tab) from None
     policy = bundle["policy"]
     out = build_alo_tables(policy["rows"], bundle["supplement"], skipped_tabs=policy["skipped_tabs"],
                            invest_twd_parse_errors=policy["invest_twd_parse_errors"])

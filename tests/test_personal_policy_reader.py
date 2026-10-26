@@ -16,6 +16,7 @@ import ast
 import pathlib
 import re
 import sys
+import types
 
 import pytest
 
@@ -61,10 +62,12 @@ class _Resp:
 class Net:
     """`requests.get` 替身：依 token 回不同的活頁簿（證明快取沒有串帳號）；記每一次呼叫。"""
 
-    def __init__(self, by_token, status=200):
-        self.by_token, self.status, self.calls = by_token, status, []
+    def __init__(self, by_token, status=200, on_call=None):
+        self.by_token, self.status, self.calls, self.on_call = by_token, status, [], on_call
 
     def __call__(self, url, params=None, headers=None, timeout=None, allow_redirects=None):
+        if self.on_call:
+            self.on_call()
         self.calls.append({"url": url, "params": params, "headers": dict(headers or {}), "allow_redirects": allow_redirects})
         if self.status != 200:
             return _Resp(self.status, {})
@@ -120,7 +123,7 @@ def test_沒有保單分頁_是SCHEMA_INVALID_不是空持倉(monkeypatch):
     _use(monkeypatch, Net({TOKEN_A: book}))
     with pytest.raises(drive.PersonalDriveError) as e:
         _load(SUB_A, TOKEN_A)
-    assert e.value.code == ec.SCHEMA_INVALID
+    assert e.value.code == ec.SCHEMA_INVALID and e.value.reason == "no_policy_tab"
 
 
 def test_保單分頁標頭壞_該分頁略過並列出_全壞則SCHEMA_INVALID(monkeypatch):
@@ -135,7 +138,7 @@ def test_保單分頁標頭壞_該分頁略過並列出_全壞則SCHEMA_INVALID(
     _use(monkeypatch, Net({TOKEN_A: only_bad}))
     with pytest.raises(drive.PersonalDriveError) as e:
         _load(SUB_A, TOKEN_A)
-    assert e.value.code == ec.SCHEMA_INVALID
+    assert e.value.code == ec.SCHEMA_INVALID and e.value.reason == "policy_header"   # 不是「缺少保單分頁」
 
 
 @pytest.mark.parametrize("status,code", [(401, ec.AUTH_EXPIRED), (403, ec.PERMISSION_DENIED), (404, ec.SHEET_NOT_FOUND),
@@ -281,15 +284,20 @@ def test_網路例外_訊息與例外鏈不含token(monkeypatch, failure):
     assert e.value.code in (ec.NETWORK_ERROR, ec.UPSTREAM_ERROR)
 
 
-def test_L2把token加進遮蔽清單(monkeypatch):
-    """補充分頁標頭不符的訊息帶試算表原文；原文若含 token，L2 的 mask 要遮掉（呼叫端的秘密值清單不含新 session 的 token）。"""
+def test_補充分頁標頭不符_不把儲存格原文帶上畫面_也不帶token(monkeypatch):
+    """標頭原文可能是使用者資料（或含 token）：Active 路徑不得把它放進例外／訊息，只回固定細分原因。"""
+    secret_cell = f"類別{TOKEN_A}-使用者自填"
     book = _workbook()
-    book["_持倉補充"] = [SUPP_HEADER[:-1] + [f"類別{TOKEN_A}"], book["_持倉補充"][1]]
+    book["_持倉補充"] = [SUPP_HEADER[:-1] + [secret_cell], book["_持倉補充"][1]]
     _use(monkeypatch, Net({TOKEN_A: book}))
     monkeypatch.setattr(personal_session, "access_target", lambda state: (SHEET, TOKEN_A, SUB_A))
-    with pytest.raises(sup.PolicySupplementError) as e:
+    with pytest.raises(alo_holdings.ActiveSourceError) as e:
         alo_holdings.load_alo_tables_active({}, [])
-    assert TOKEN_A not in str(e.value)
+    err = e.value
+    assert err.code == ec.SCHEMA_INVALID and err.reason == "supplement_header" and err.tab == sup.TAB_HOLDING_SUPPLEMENT
+    for text in (str(err), repr(err), repr(err.args)):
+        assert TOKEN_A not in text and "使用者自填" not in text
+    assert err.__cause__ is None and err.__suppress_context__
 
 
 def test_L2失敗只帶code(monkeypatch):
@@ -327,10 +335,11 @@ def test_只有該有的模組import_personal_session():
     assert owners == ["services/v2_tables/alo_holdings.py", "ui_v2/set/source.py"], owners
 
 
-def test_只有alo_holdings與drive_import_personal_policy_reader():
+def test_只有alo_holdings與personal_session_import_personal_policy_reader():
     owners = sorted(str(p.relative_to(_ROOT)).replace("\\", "/") for p in _py_files()
                     if "repositories.personal_policy_reader" in _imports(p))
-    assert owners == ["services/v2_tables/alo_holdings.py"], owners
+    # `personal_session` 只為登出／換帳號／AUTH_EXPIRED 時丟掉該帳號的快取（`drop_account`）
+    assert owners == ["services/v2_tables/alo_holdings.py", "services/v2_tables/personal_session.py"], owners
 
 
 def test_hld_alo的source與page_不直接碰個人憑證或兩條L1讀取():
@@ -355,3 +364,195 @@ def test_production中呼叫服務帳戶那條load_alo_tables的檔_恰為settin
                      if re.search(r"\bload_alo_tables\s*\(", re.sub(r"#.*", "", p.read_text(encoding="utf-8")))
                      and p.name != "alo_holdings.py")
     assert callers == ["services/v2_tables/settings_store.py"], callers
+
+
+# ═══════════════════════ 批 3b-4 稽核回修 ═══════════════════════
+
+def _session_state(sub=SUB_A):
+    from infra import personal_oauth as po
+    from shared.personal_oauth_keys import KEY_ACCOUNT_SUB, KEY_TOKENS
+
+    return {KEY_TOKENS: {"access_token": TOKEN_A}, KEY_ACCOUNT_SUB: sub, po.SESSION_PREFIX + "extra": 1}
+
+
+def _expired_run(monkeypatch, state):
+    _use(monkeypatch, Net({TOKEN_A: _workbook()}))
+    _load(SUB_A, TOKEN_A)    # 先讀成功一次，快取裡有 A 的內容
+    assert any(k[0] == SUB_A for k in reader._CACHE)
+    _use(monkeypatch, Net({TOKEN_A: _workbook()}, status=401))
+    reader.clear_cache()      # 讓下面那次一定走網路（401）
+    monkeypatch.setattr(personal_session, "access_target", lambda st: (SHEET, TOKEN_A, SUB_A))
+    with pytest.raises(alo_holdings.ActiveSourceError) as e:
+        alo_holdings.load_alo_tables_active(state, [])
+    assert e.value.code == ec.AUTH_EXPIRED
+
+
+def test_讀Google回AUTH_EXPIRED_清整個session_死token不再被重用(monkeypatch):
+    from infra import personal_oauth as po
+
+    state = _session_state()
+    _expired_run(monkeypatch, state)
+    assert not [k for k in state if isinstance(k, str) and k.startswith(po.SESSION_PREFIX)], state
+
+
+def test_變異檢查_不清session_上一條就會紅(monkeypatch):
+    from infra import personal_oauth as po
+
+    monkeypatch.setattr(personal_session, "handle_read_error", lambda state, code: None)
+    state = _session_state()
+    _expired_run(monkeypatch, state)
+    with pytest.raises(AssertionError):
+        assert not [k for k in state if isinstance(k, str) and k.startswith(po.SESSION_PREFIX)]
+
+
+def test_AUTH_EXPIRED_同時丟掉該帳號的讀取快取(monkeypatch):
+    _use(monkeypatch, Net({TOKEN_A: _workbook()}))
+    _load(SUB_A, TOKEN_A)
+    assert any(k[0] == SUB_A for k in reader._CACHE)
+    personal_session.handle_read_error(_session_state(), ec.AUTH_EXPIRED)
+    assert not any(k[0] == SUB_A for k in reader._CACHE)
+    # 其他 code 不動
+    _load(SUB_A, TOKEN_A)
+    personal_session.handle_read_error(_session_state(), ec.UPSTREAM_ERROR)
+    assert any(k[0] == SUB_A for k in reader._CACHE)
+
+
+@pytest.mark.parametrize("action", ["logout", "switch_account", "confirm_login"])
+def test_登出_換帳號_確認新登入_丟掉舊帳號快取_不動別的帳號(monkeypatch, action):
+    _use(monkeypatch, Net({TOKEN_A: _workbook(), TOKEN_B: _workbook()}))
+    _load(SUB_A, TOKEN_A)
+    _load(SUB_B, TOKEN_B)
+    ok = types.SimpleNamespace(revoke_confirmed=True)
+    monkeypatch.setattr(personal_session.po, "logout", lambda st: ok)
+    monkeypatch.setattr(personal_session.po, "begin_account_switch",
+                        lambda st: {"authorize_url": "https://accounts.google.com/x", "logout": ok})
+    monkeypatch.setattr(personal_session.po, "confirm_pending_login", lambda st: {"email": "a@b.c"})
+    getattr(personal_session, action)(_session_state(SUB_A))
+    subs = {k[0] for k in reader._CACHE}
+    assert SUB_A not in subs and SUB_B in subs
+
+
+def test_快取_寫入時清過期_並有大小上限(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(reader, "_clock", lambda: clock[0])
+    net = Net({f"t{i}": _workbook() for i in range(40)})
+    _use(monkeypatch, net)
+    for i in range(40):
+        reader.load_workbook_tables((SHEET, f"t{i}"), account_sub=f"s{i}", mask=lambda s: s)
+        clock[0] += 1
+        assert len(reader._CACHE) <= reader.CACHE_MAX_ENTRIES
+    assert len(reader._CACHE) == reader.CACHE_MAX_ENTRIES
+    assert ("s39", SHEET, reader._WHAT) in reader._CACHE and ("s0", SHEET, reader._WHAT) not in reader._CACHE   # 丟最舊
+    clock[0] += reader.CACHE_TTL_SEC + 1       # 全部過期；下一次寫入把它們清掉
+    reader.load_workbook_tables((SHEET, "t0"), account_sub="fresh", mask=lambda s: s)
+    assert [k[0] for k in reader._CACHE] == ["fresh"]
+
+
+def test_sheet_id驗證用fullmatch_尾端換行不放行(monkeypatch):
+    _use(monkeypatch, lambda *a, **k: pytest.fail("不得發請求"))
+    with pytest.raises(drive.PersonalDriveError) as e:
+        reader.load_workbook_tables((SHEET + "\n", TOKEN_A), account_sub=SUB_A, mask=lambda s: s)
+    assert e.value.code == ec.SHEET_NOT_FOUND
+
+
+def test_命中與存入都交深拷貝_呼叫端改不到快取(monkeypatch):
+    net = Net({TOKEN_A: _workbook()})
+    _use(monkeypatch, net)
+    first = reader._cached_values((SHEET, TOKEN_A), SUB_A)    # 未命中：存入的必須是副本
+    first["P-001"][0][0] = "被呼叫端改過"
+    second = reader._cached_values((SHEET, TOKEN_A), SUB_A)   # 命中：交出的必須是副本
+    assert second["P-001"][0][0] == POLICY_HEADER[0]
+    second["P-001"][0][0] = "又被改過"
+    third = reader._cached_values((SHEET, TOKEN_A), SUB_A)
+    assert third["P-001"][0][0] == POLICY_HEADER[0]
+    assert len(net.calls) == 2
+
+
+def test_世代守衛_讀取期間被清過的結果不存快取(monkeypatch):
+    net = Net({TOKEN_A: _workbook()}, on_call=reader.clear_cache)   # 每個請求發出時快取被清一次
+    _use(monkeypatch, net)
+    _load(SUB_A, TOKEN_A)
+    assert reader._CACHE == {}
+    n = len(net.calls)
+    _load(SUB_A, TOKEN_A)
+    assert len(net.calls) == 2 * n    # 沒被存 → 第二次重打
+
+
+def test_分頁很多_batchGet分批_每批不超過上限(monkeypatch):
+    book = {f"P-{i:03d}": [POLICY_HEADER, [f"P-{i:03d}", f"F{i:04d}", "基金", "USD", "core", "1000", "", "1", "1", "30"]]
+            for i in range(45)}
+    book["_持倉補充"] = [SUPP_HEADER]
+    book["_保單資料"] = [PROFILE_HEADER]
+    net = Net({TOKEN_A: book})
+    _use(monkeypatch, net)
+    out = _load(SUB_A, TOKEN_A)
+    assert len(out["policy"]["rows"]) == 45 and out["policy"]["skipped_tabs"] == []
+    batches = [c for c in net.calls if c["url"].endswith("values:batchGet")]
+    assert len(batches) == 3 and all(len(c["params"]["ranges"]) <= reader.BATCH_RANGES_MAX for c in batches)
+    assert sum(len(c["params"]["ranges"]) for c in batches) == 47
+    assert out["policy"]["read_estimate"]["requests_per_load"] == len(net.calls) == 4
+
+
+# ═══════════════════════ 與服務帳戶路徑（gspread get_all_records）的邊界行為等價 ═══════════════════════
+
+def _pad(vals):
+    w = max((len(r) for r in vals), default=0)
+    return [list(r) + [""] * (w - len(r)) for r in vals]
+
+
+class _FakeWS:
+    title = "T"
+
+    def __init__(self, vals):
+        self.vals = vals
+
+    def get(self, value_render_option=None, pad_values=True):
+        return _pad(self.vals) if self.vals else [[]]
+
+    from gspread.worksheet import Worksheet as _W
+    get_all_records = _W.get_all_records
+
+
+def _old(vals):
+    try:
+        raw = sup._fetch_policy_tab(_FakeWS(vals))
+    except Exception:  # noqa: BLE001 —— gspread 的標頭例外與新路徑的 ValueError 都算「該分頁略過」
+        return "ERR"
+    return sup._process_policy_tab("T", raw)
+
+
+def _new(vals):
+    try:
+        raw = reader._records([[("" if c is None else str(c)) for c in r] for r in vals])
+    except ValueError:
+        return "ERR"
+    return sup._process_policy_tab("T", raw)
+
+
+_H = ["policy_id", "fund_url", "fund_code", "invest_twd", "policy_tier", "units"]
+_EQUIV = {
+    "basic": [_H, ["P1", "u1", "FC1", "1,000", "core", "10.5"], ["P1", "u1", "FC1", "500", "", "3"]],
+    "short rows": [_H, ["P1", "u1"], [], ["P2", "u2", "F2", "abc"]],
+    "invest bad": [_H, ["P1", "u1", "F", "1e3"], ["P1", "u2", "F", "1,00,0"], ["P1", "u3", "F", ""],
+                   ["P1", "u4", "F", "1000.0"], ["P1", "u5", "F", "NT$5"]],
+    "one extra data column": [_H + [""], ["P1", "u", "F", "1", "", "1", "note"]],
+    "two extra data columns": [_H, ["P1", "u", "F", "1", "", "1", "n1", "n2"]],
+    "one extra data column no header pad": [_H, ["P1", "u", "F", "1", "", "1", "n1"]],
+    "interior blank header": [_H[:3] + [""] + _H[3:], ["P1", "u", "F", "x", "1", "c", "1"]],
+    "dup header": [_H + ["fund_code"], ["P1", "u", "F", "1", "", "1", "x"]],
+    "header only": [_H],
+    "empty": [],
+    "zh headers": [["保單編號", "基金連結", "基金代號", "淨投資金額"], ["P1", "u", "F", "2,000"]],
+    "leading blank row0": [[], ["P1", "u"]],
+    "both invest cols": [_H + ["淨投資金額"], ["P1", "u", "F", "1", "", "1", "999"]],
+}
+
+
+@pytest.mark.parametrize("name", sorted(_EQUIV))
+def test_新舊解析等價_標頭邊界(name):
+    assert repr(_old(_EQUIV[name])) == repr(_new(_EQUIV[name])), name
+
+
+def test_新舊解析等價_兩個以上補出來的空欄名是重複_該分頁略過_不靜默丟資料欄():
+    assert _old(_EQUIV["two extra data columns"]) == "ERR" == _new(_EQUIV["two extra data columns"])
+    assert _old(_EQUIV["interior blank header"]) != "ERR" and _new(_EQUIV["interior blank header"]) != "ERR"

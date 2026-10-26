@@ -48,6 +48,13 @@ FAILURE_TEXT = {
 }
 # 不在上表的 code（`AUTH_STATE_INVALID`，或未知）：只講事實，不編原因。
 FAILURE_TEXT_DEFAULT = "無法讀取所選的持倉資料來源"
+# `SCHEMA_INVALID` 的細分（同一個 code，不新增 code）：`reason` → 固定句。標頭原文可能是使用者資料，**不上畫面**。
+# `no_policy_tab` 沿用上表 `SCHEMA_INVALID` 那句（缺少保單分頁）；其餘兩句是新增，待客戶確認用字。
+SCHEMA_REASON_TEXT = {
+    "no_policy_tab": FAILURE_TEXT["SCHEMA_INVALID"],
+    "policy_header": "保單分頁的標頭不符（第 1 列有空白或重複的欄位）",
+    "supplement_header": "補充分頁的標頭與規格不符",
+}
 
 
 class NoActiveSource(Exception):
@@ -62,7 +69,9 @@ def is_no_active(code) -> bool:
     return code in NO_ACTIVE_CODES
 
 
-def failure_text(code) -> str:
+def failure_text(code, reason=None) -> str:
+    if code == "SCHEMA_INVALID" and reason in SCHEMA_REASON_TEXT:
+        return SCHEMA_REASON_TEXT[reason]
     return FAILURE_TEXT.get(code, FAILURE_TEXT_DEFAULT)
 
 
@@ -79,7 +88,10 @@ def render_no_active(slug: str, *, title: str, answers: str, title_class: str, s
     if slug in page_health.PAGE_NAMES:
         page_health.record(
             st.session_state, slug,
-            [page_health.make_item(page_health.KIND_UNCONFIGURED, UNCONFIGURED_KEY, (), lamp=True, order=0)],
+            [page_health.make_item(
+                page_health.KIND_UNCONFIGURED, UNCONFIGURED_KEY,
+                # 讓值讀不到（整頁沒有持倉資料）→ 擋主要原因，不落在「只影響比較值」（順位 6）
+                [page_health.affected(UNCONFIGURED_KEY, "", unreadable=True)], lamp=True, order=0)],
             as_of=None, now=datetime.now(timezone.utc))
     st.markdown(f'<div class="{_esc(title_class)}">{_esc(title)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="{_esc(sub_class)}">{_esc(answers)}</div>', unsafe_allow_html=True)

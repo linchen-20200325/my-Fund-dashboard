@@ -203,12 +203,15 @@ def test_秘密值在L3讀好再傳進L2(wired):
 
 
 def test_持倉與設定讀取失敗_各進對應錯誤_訊息經遮蔽(wired):
-    wired["tables"] = source.alo_holdings.PolicySupplementError(f"上游 503 {_SECRET}", code="api")
+    # 批 3b-4：持倉（Active 路徑）失敗只帶 code，畫面字是固定句，不含任何原文；設定讀取失敗照舊遮蔽原文。
+    wired["tables"] = source.alo_holdings.ActiveSourceError("UPSTREAM_ERROR")
     wired["settings"] = source.settings_store.SettingsSheetError(f"讀不到設定 {_SECRET}", code="api")
     errors = source.load_live()["dataset"]["errors"]
     assert set(errors) == {"holding", "user_setting"}
+    assert errors["holding"] == source.active_gate.failure_text("UPSTREAM_ERROR")
     for value in errors.values():
-        assert _SECRET not in value and source.masking.MASK in value
+        assert _SECRET not in value
+    assert source.masking.MASK in errors["user_setting"]
 
 
 def test_淨值取數失敗訊息經遮蔽(wired):

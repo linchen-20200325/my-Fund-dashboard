@@ -330,7 +330,7 @@ def test_淨值扣下清單與hld同一份_不含input_conflict():
 
 
 def test_dataset的errors鍵一律在build_page_model認得的那一組裡(wired):
-    wired["tables"] = source.alo_holdings.PolicySupplementError("上游 503", code="api")
+    wired["tables"] = source.alo_holdings.ActiveSourceError("UPSTREAM_ERROR")
     wired["settings"] = source.settings_store.SettingsSheetError("讀不到設定", code="api")
     wired["indicators"] = source.settings_store.SettingsSheetError("讀不到市場指標", code="api")
     errors = source.load_live()["dataset"]["errors"]
@@ -342,9 +342,11 @@ def test_dataset的errors鍵一律在build_page_model認得的那一組裡(wired
 
 def test_holding與policy同時失敗_兩個鍵一起標(wired):
     """示範模式把兩者當可獨立失敗的鍵，正式模式它們是同一次呼叫的產物 —— 分不開就不假裝分得開。"""
-    wired["tables"] = source.alo_holdings.PolicySupplementError("上游 503", code="api")
+    wired["tables"] = source.alo_holdings.ActiveSourceError("UPSTREAM_ERROR")
     out = source.load_live()
-    assert out["dataset"]["errors"] == {"holding": "上游 503", "policy": "上游 503"}
+    # 批 3b-4：Active 路徑的失敗只帶 code，畫面字是固定句（`active_gate.failure_text`），不帶任何上游／儲存格原文
+    fixed = source.active_gate.failure_text("UPSTREAM_ERROR")
+    assert out["dataset"]["errors"] == {"holding": fixed, "policy": fixed}
     assert out["dataset"]["holding"] == [] and out["dataset"]["policy"] == []
     # 其餘兩張表照常交出來
     assert out["dataset"]["market_indicator"] == [_MI_ROW]
@@ -389,7 +391,7 @@ def test_設定值壞掉_走取數失敗那條路_不畫成尚未設定(wired):
 
 
 def test_三張表全失敗也畫得完(wired):
-    wired["tables"] = source.alo_holdings.PolicySupplementError("上游 503", code="api")
+    wired["tables"] = source.alo_holdings.ActiveSourceError("UPSTREAM_ERROR")
     wired["settings"] = source.settings_store.SettingsSheetError("讀不到設定", code="api")
     wired["indicators"] = source.settings_store.SettingsSheetError("讀不到市場指標", code="api")
     out = source.load_live()
