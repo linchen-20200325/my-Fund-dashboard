@@ -615,7 +615,10 @@ def test_S6a第四輪_門檻改了按套用_HLD1跟著新門檻重算(live_mode)
         assert page._esc(text) not in blob, text
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# ~~[False, True]~~ → 2026-10-26（J-14 精神；有意識的行為變更，不是漏刪）：正式模式第一階段 `HLD-4` 輸入欄不畫
+# （`ui_v2/readonly.py::PHASE1_HIDDEN_INPUT_CODES`），正式模式沒有欄位可改；「零枚」見
+# `tests/ui_v2/test_readonly_write_surface_guard.py::test_live_renderer_draws_zero_inputs_after_strip`。只留示範模式。
+@pytest.mark.parametrize("live_mode", [False])
 def test_S6a第四輪_只改欄位不按套用_摘要與各塊都不動(live_mode):
     """紅隊 M1：只改日期（與門檻）、還沒按「套用」，HLD-4 摘要不能先變成新區間。"""
     at = _apply_run(live_mode)

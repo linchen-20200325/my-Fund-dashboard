@@ -63,3 +63,29 @@ def test_set_page_has_no_set4_block(name):
     titles = [e.label for e in at.expander]
     assert not [t for t in titles if t.startswith("參數編輯")], titles
     assert [t for t in titles if t.startswith("規則參數卡")], titles   # 目前設定值照舊唯讀呈現（SET-3）
+
+
+# 2026-10-26（J-14 精神）：存檔鈕拿掉後已不影響本次畫面結果的輸入元件，正式模式畫面上一枚都沒有
+# （`ui_v2/readonly.py::PHASE1_HIDDEN_INPUT_CODES`；模型層、執行期記錄器與 AST 守衛見 `test_readonly_write_surface_guard.py`）。
+# 保留的輸入：`ALO-3` 試算（`live_alo_scenario_*`）、`EXP-3`／`EXP-6` 的「對照」多選（`exp2live_pick_compare`）。
+_HIDDEN_KEYS = {
+    "mkt": lambda k: k in ("mkt4_days", "mkt4_baseline", "mkt5_pick"),
+    "hld": lambda k: k.startswith("hld4_"),
+    "exp": lambda k: k.startswith(("exp1live_", "exp4live_")) or k == "exp2live_pick_watch",
+    "alo": lambda k: k.startswith(("live_alo_target_", "live_alo_bucket_name_"))
+    or k in ("live_alo_basis", "live_alo_tolerance_pp"),
+}
+
+
+def _input_keys(at):
+    out = []
+    for kind in ("text_input", "number_input", "date_input", "multiselect", "checkbox", "selectbox", "radio"):
+        out += [w.key for w in getattr(at, kind) if w.key]
+    return out
+
+
+@pytest.mark.parametrize("page, name", [(p, n) for p, n in _CASES if p in _HIDDEN_KEYS])
+def test_live_page_has_no_dead_inputs(page, name):
+    at = _run(page, name)
+    keys = _input_keys(at)
+    assert not [k for k in keys if _HIDDEN_KEYS[page](k)], keys
