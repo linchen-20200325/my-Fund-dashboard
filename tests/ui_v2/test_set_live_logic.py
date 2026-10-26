@@ -65,7 +65,10 @@ def test_FRED金鑰_重新取數從secrets讀好交給L2(monkeypatch):
                         lambda values, **kw: (seen.update(nav=kw) or fake))
     source.refetch(mi.SOURCE_TIER)
     source.refetch(S.nav_dividend.SOURCE_TIER_NAV)
-    assert seen == {"mi": {"fred_api_key": KEY}, "nav": {}}
+    # ~~assert seen == {"mi": {"fred_api_key": KEY}, "nav": {}}~~ → 2026-10-26 裁示第 6 節：兩層都多交本次工作階段的
+    # `runtime`（同一份，放在 session）；金鑰只交市場指標層這一條不變。
+    runtime = S.session_runtime(source.st.session_state)
+    assert seen == {"mi": {"fred_api_key": KEY, "runtime": runtime}, "nav": {"runtime": runtime}}
 
 
 @pytest.fixture
@@ -104,6 +107,12 @@ def _vix(values=(17.0, 18.5), dates=("2026-09-22", "2026-09-23")):
 
 def _stub_fetch(monkeypatch, series=None, error=None):
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", lambda ticker, *a, **k: (series, error))
+
+
+def _rt():
+    """本次工作階段的取數紀錄（2026-10-26 裁示第 6 節：重新取數不寫試算表，記在 `st.session_state`）。
+    ~~讀回試算表 `S.load_fetch_log([])`~~ → 讀 `source.st.session_state` 裡那一份（有意識的行為變更，不是漏刪）。"""
+    return S.session_runtime(source.st.session_state)
 
 
 def _page(save_results=None):
@@ -477,7 +486,7 @@ def test_取數回空_結果行(env, monkeypatch):
     _stub_fetch(monkeypatch, pd.Series([], dtype=float), None)
     result = source.refetch("市場指標")
     assert _lines(result) == ["取數完成：市場指標，回應為空"]
-    log = S.load_fetch_log([])["rows"][-1]
+    log = _rt().load_fetch_log()["rows"][-1]
     assert log["outcome"] == "ok" and log["row_count"] == 0
 
 
@@ -485,7 +494,7 @@ def test_取數失敗_遮蔽後與fetch_log_message逐字相同_畫面同一份(
     _stub_fetch(monkeypatch, None, f"HTTPSConnectionPool: /chart?api_key={KEY} refused")
     result = source.refetch("市場指標")
     lines = _lines(result)
-    stored = S.load_fetch_log([])["rows"][-1]["message"]
+    stored = _rt().load_fetch_log()["rows"][-1]["message"]
     assert lines == ["⛔ 取數失敗：" + stored, live.MASKED_NOTE]                      # `44` SET-5 判準
     assert KEY not in "".join(lines) and MASK in stored
     _d, model = _page()
@@ -501,47 +510,58 @@ def test_部分失敗_寫表主鍵矛盾_失敗行照fetch_log(env, monkeypatch)
     source.refetch("市場指標")
     _stub_fetch(monkeypatch, _vix(values=(99.0, 18.5)))
     result = source.refetch("市場指標")
-    stored = S.load_fetch_log([])["rows"][-1]["message"]
+    stored = _rt().load_fetch_log()["rows"][-1]["message"]
     assert result["log_message"] == stored and "主鍵矛盾 1 筆" in stored
     assert _lines(result) == ["⛔ 取數失敗：" + stored]
 
 
-def test_寫表失敗_取數紀錄寫入失敗並列(env, monkeypatch):
+# ~~test_寫表失敗_取數紀錄寫入失敗並列／test_取數紀錄寫不進去_成功行不說結果記在取數紀錄（stage 參數化）／
+#   test_開始紀錄寫不進去_真的取數成功時_成功行只印前半／test_開始紀錄寫不進去_仍顯示取數結果並列寫入失敗~~
+# → 2026-10-26 客戶裁示第 6 節（Google Sheet 零寫入；有意識的行為變更，不是漏刪）：取數紀錄改記在本次工作階段，
+#   「取數紀錄寫入失敗」與「成功行只印前半」不可能發生（`live.TEXT_DONE_NOT_LOGGED`／`TEXT_LOG_WRITE_FAILED` 已移除）。
+#   改守：試算表寫入會失敗時，重新取數照常完成、結果記在取數紀錄、試算表零寫入。
+def test_試算表寫入會失敗_重新取數照常完成_試算表零寫入(env, monkeypatch):
     _stub_fetch(monkeypatch, _vix())
     env.fail_next("append_rows", ConnectionError(f"reset by peer {SHEET}"), title="market_indicator", times=4)
+    env.fail_next("append_rows", ConnectionError("boom"), title="fetch_log_open", times=4)
     result = source.refetch("市場指標")
-    assert result["stage"] == "fetch_log"
-    lines = _lines(result)
-    assert lines[0].startswith("⛔ 取數失敗：market_indicator 寫入失敗：") and MASK in lines[0]
-    assert lines[1] == live.MASKED_NOTE
-    assert lines[2].startswith("⛔ 取數紀錄寫入失敗：") and SHEET not in lines[2]
+    assert result["stage"] == "done" and result["message"] is None and result["ok"] is True
+    assert _lines(result) == ["取數完成：市場指標，取回 2 列；結果記在取數紀錄（層 4）"]
+    assert env.writes() == [] and _rt().load_fetch_log()["rows"][-1]["outcome"] == "ok"
 
 
-@pytest.mark.parametrize("stage", ["fetch_log_open", "fetch_log"])
-def test_取數紀錄寫不進去_成功行不說結果記在取數紀錄(stage):
+def test_結果行不再有取數紀錄寫入失敗這一態():
+    assert not hasattr(live, "TEXT_DONE_NOT_LOGGED") and not hasattr(live, "TEXT_LOG_WRITE_FAILED")
     result = {"tier": "市場指標", "fetched": 3, "log_message": None, "masked_errors": {}, "empty": {},
-              "stage": stage, "message": "boom", "ok": False}
+              "stage": "done", "message": None, "ok": True}
     assert [n["text"] for n in live.refetch_result_lines(result, MASK)] == [
-        "取數完成：市場指標，取回 3 列", "⛔ 取數紀錄寫入失敗：boom"]
+        "取數完成：市場指標，取回 3 列；結果記在取數紀錄（層 4）"]
 
 
-def test_開始紀錄寫不進去_真的取數成功時_成功行只印前半(env, monkeypatch):
+def test_重新取數後_SET1_SET2_SET6標本次工作階段來源_試算表零寫入(env, monkeypatch):
     _stub_fetch(monkeypatch, _vix())
-    env.fail_next("append_rows", ConnectionError("boom"), title="fetch_log_open", times=4)
-    result = source.refetch("市場指標")
-    lines = _lines(result)
-    assert lines[0] == "取數完成：市場指標，取回 2 列" and "取數紀錄（層 4）" not in "".join(lines)
-    assert lines[1].startswith("⛔ 取數紀錄寫入失敗：")
+    _d, before = _page()
+    assert live.TEXT_RUNTIME_SOURCE not in _strings(before)
+    source.refetch("市場指標")
+    data, model = _page()
+    assert data["notes"]["runtime"] == {"fetch_log": True, "market_indicator": True}
+    for code in ("SET-1", "SET-2", "SET-6"):
+        assert live.TEXT_RUNTIME_SOURCE in _b(model, code)["detail_lines"], code
+    assert [r["indicator_key"] for r in data["dataset"]["market_indicator"]] == ["vol_index", "vol_index"]
+    assert env.writes() == []
 
 
-def test_開始紀錄寫不進去_仍顯示取數結果並列寫入失敗(env, monkeypatch):
-    _stub_fetch(monkeypatch, None, "HTTP 503 upstream")
-    env.fail_next("append_rows", ConnectionError("boom"), title="fetch_log_open", times=4)
-    result = source.refetch("市場指標")
-    assert result["log_message"] is None and result["stage"] == "fetch_log_open"
-    lines = _lines(result)
-    assert lines[0] == "⛔ 取數失敗：vol_index: HTTP 503 upstream"
-    assert lines[1].startswith("⛔ 取數紀錄寫入失敗：")
+def test_讀試算表取數紀錄失敗_有本次工作階段紀錄時優先用它(env, monkeypatch):
+    _stub_fetch(monkeypatch, _vix())
+    source.refetch("市場指標")
+
+    def broken(values):
+        raise S.SettingsSheetError("讀不到", code="api")
+    monkeypatch.setattr(source.settings_store, "load_fetch_log", broken)
+    data, model = _page()
+    assert "fetch_log" not in data["dataset"]["errors"]
+    assert [r["outcome"] for r in data["dataset"]["fetch_log"]] == ["ok"]
+    assert live.TEXT_RUNTIME_SOURCE in _b(model, "SET-6")["detail_lines"]
 
 
 def test_未接上的層級_source直接拒絕():
@@ -794,8 +814,10 @@ def test_淨值文案逐字_客戶2026_10_09核准():
     assert live.TEXT_PENDING_DIVIDEND == "配息尚未接取數來源；淨值即時取得"
     # ~~「set 頁」~~ → 「本頁」（BL-0250 批次 1，`DEC-2026-10-19-04`；有意識的更正，不是漏刪；其餘字一字未改）。
     assert live.TEXT_NAV_TIME_SCOPE == "這個時間是本頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間"
-    assert live.TEXT_SET5_NOTE == ("目前市場指標與淨值可以重新取數。市場指標取回的列存進設定試算表，"
-                                   "市場總覽頁不會因此重新整理；淨值只取持倉基金，除了記一筆取數紀錄，不寫入任何表。")
+    # ~~「市場指標取回的列存進設定試算表……除了記一筆取數紀錄，不寫入任何表」~~ → 2026-10-26 客戶裁示第 6 節
+    # （Google Sheet 零寫入；有意識的更正，不是漏刪）：結果只留在本次工作階段。
+    assert live.TEXT_SET5_NOTE == ("目前市場指標與淨值可以重新取數。結果與取數紀錄只留在本次工作階段，不存入試算表；"
+                                   "市場總覽頁不會因此重新整理；淨值只取持倉基金。")
     assert not hasattr(live, "TEXT_PENDING_NAV_DIVIDEND")      # 舊句不再有任何地方印
 
 
@@ -827,7 +849,7 @@ def test_淨值層_ok之後再失敗_SET1仍顯示ok那筆時間_SET2顯示失�
     _stub_nav(monkeypatch, {_NAV_A: (None, f"HTTP 503 /nav?api_key={KEY}")})
     _clock(monkeypatch, "2026-09-25T05:00:00Z")
     result = source.refetch("淨值")
-    stored = S.load_fetch_log([])["rows"][-1]["message"]
+    stored = _rt().load_fetch_log()["rows"][-1]["message"]
     assert _lines(result) == ["⛔ 取數失敗：" + stored, live.MASKED_NOTE]
     assert stored.startswith(f"{_NAV_A}: HTTP 503") and KEY not in stored and MASK in stored
     monkeypatch.setattr(source, "_now_utc", lambda: "2026-09-26T04:00:00Z")
@@ -848,7 +870,7 @@ def test_淨值層_只有失敗紀錄_SET1為取數失敗_不是資料未備_不
     source.refetch("淨值")
     _d, model = _page()
     nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
-    log = [r for r in S.load_fetch_log([])["rows"] if r["source_tier"] == "淨值"][-1]
+    log = [r for r in _rt().load_fetch_log()["rows"] if r["source_tier"] == "淨值"][-1]
     assert log["outcome"] == "failed"
     assert nav["_failed"] is True and nav["at_text"] == f"⛔ 取數失敗：{log['message']}"
     assert [b["text"] for b in nav["badges"]] == ["取數失敗"]
@@ -868,7 +890,7 @@ def test_淨值層_持倉為空_結果行回應為空_fetch_log記ok_0列(env, m
     _stub_nav(monkeypatch, {})
     result = source.refetch("淨值")
     assert _lines(result) == ["取數完成：淨值，回應為空"]
-    log = S.load_fetch_log([])["rows"][-1]
+    log = _rt().load_fetch_log()["rows"][-1]
     assert log["source_tier"] == "淨值" and log["outcome"] == "ok" and log["row_count"] == 0
 
 
@@ -911,7 +933,7 @@ def test_淨值時間_兩筆ok取較新_0列的ok與失敗都不算():
 def test_淨值層_持倉為空的ok_SET1不印時間也不印新句(env, monkeypatch):
     _stub_nav(monkeypatch, {})
     source.refetch("淨值")
-    assert S.load_fetch_log([])["rows"][-1]["row_count"] == 0
+    assert _rt().load_fetch_log()["rows"][-1]["row_count"] == 0
     _d, model = _page()
     nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
     assert nav["at_text"] == "⬜" and nav["badges"][0]["text"] == "資料未備" and nav["note_lines"] == []
@@ -1002,10 +1024,10 @@ def test_M1_2_即時失敗退回預存_舊值照交_本次failed含原文已遮�
     source.refetch("淨值")                                          # 先有一次真正成功
     _l1(monkeypatch, cached=[_NAV_A], secret=KEY)
     _clock(monkeypatch, "2026-09-25T05:00:00Z")
-    out = S.refetch_nav([KEY])
+    out = S.refetch_nav([KEY], runtime=_rt())
     assert len(out["table"]["rows"]) == 12                           # 舊值照常交給呼叫端（hld 用的同一支；2026-10-13 替身 2→12 筆）
     assert out["table"]["provenance"][_NAV_A]["cache_fallback"] is True
-    log = S.load_fetch_log([])["rows"][-1]
+    log = _rt().load_fetch_log()["rows"][-1]
     assert log["outcome"] == "failed" and log["row_count"] is None
     assert log["message"].startswith(f"{_NAV_A}: ") and "ConnectionError: proxy" in log["message"]
     assert KEY not in log["message"] and MASK in log["message"]
@@ -1016,8 +1038,8 @@ def test_M1_2_即時失敗退回預存_舊值照交_本次failed含原文已遮�
 
 def test_M1_3_部分基金失敗_整筆failed_逐檔原文(env, monkeypatch):
     _l1(monkeypatch, live_ok=[_NAV_A], cached=[_NAV_B], holding=[_NAV_A, _NAV_B, "ZZNAVTESTC3"])
-    S.refetch_nav([])
-    log = S.load_fetch_log([])["rows"][-1]
+    S.refetch_nav([], runtime=_rt())
+    log = _rt().load_fetch_log()["rows"][-1]
     assert log["outcome"] == "failed"
     msg = log["message"]
     assert f"{_NAV_A}: " not in msg                                  # 即時成功那一檔不列
@@ -1034,7 +1056,7 @@ def test_M1_4_全部即時失敗_不產生假的最新成功時間(env, monkeypa
     _clock(monkeypatch, "2026-09-25T05:00:00Z")
     result = source.refetch("淨值")
     assert _lines(result)[0].startswith("⛔ 取數失敗：")
-    assert [r["outcome"] for r in S.load_fetch_log([])["rows"]] == ["failed"]
+    assert [r["outcome"] for r in _rt().load_fetch_log()["rows"]] == ["failed"]
     nav = _set1_nav(monkeypatch)
     # 客戶 2026-10-18 裁示 BL-0373：只有失敗紀錄 ＝ 取數失敗（⛔），不是資料未備；照舊不產生假的最新成功時間。
     assert nav["_failed"] is True and nav["at_text"].startswith("⛔ 取數失敗：")
@@ -1049,11 +1071,11 @@ def test_M1_5_兩檔以上即時全敗退回預存_整筆failed_每檔各一段�
     source.refetch("淨值")                                          # 先有一次真正成功
     _l1(monkeypatch, cached=[_NAV_A, _NAV_B], secret=KEY)           # 兩檔皆即時全敗、皆退回預存
     _clock(monkeypatch, "2026-09-25T05:00:00Z")
-    out = S.refetch_nav([KEY])
+    out = S.refetch_nav([KEY], runtime=_rt())
     prov = out["table"]["provenance"]
     assert prov[_NAV_A]["cache_fallback"] is True and prov[_NAV_B]["cache_fallback"] is True
     assert len(out["table"]["rows"]) == 24                           # 兩檔舊值照常交給呼叫端（2026-10-13 替身 2→12 筆）
-    log = S.load_fetch_log([])["rows"][-1]
+    log = _rt().load_fetch_log()["rows"][-1]
     assert log["outcome"] == "failed" and log["row_count"] is None
     msg = log["message"]
     assert msg == out["persist"]["log_message"]

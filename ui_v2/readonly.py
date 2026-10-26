@@ -10,7 +10,9 @@
 - `SET-4` 參數編輯塊整塊不畫 —— 見 `visible_codes`。
 
 不管：示範模式（fixtures，寫的是 in-memory 替身、不碰 Google Sheet）、`st.download_button`（本機下載）、
-`SET-5`「重新取數」（`_writes` 是 `fetch_log`，另一批處理）。
+`SET-5`「重新取數」（~~`_writes` 是 `fetch_log`，另一批處理~~ → 2026-10-26 裁示第 6 節已處理：取數紀錄改記在本次工作階段，
+不寫任何 Google Sheet，見 `services/v2_tables/settings_store.py::RuntimeFetchStore`；按鈕照畫，它的 `_writes` 指的是
+取數紀錄這張表的概念，現在只在記憶體）。
 
 第二道防線在 L2／L1：`services/v2_tables/settings_store.py::save_setting_for_page` 在
 `repositories/settings_sheet_repository.py::is_read_only()`（第一階段恆為 True）時短路回 `read_only`。

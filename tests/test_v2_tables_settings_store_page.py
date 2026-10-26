@@ -203,8 +203,9 @@ def test_重新取數_真的清掉fetch_yf_close的快取(monkeypatch):
     from repositories.macro import yf
     yf.fetch_yf_close._cache_dict[(("^VIX", "2y", "1d"), ())] = (9e18, "舊的")
     # 2026-10-13：`refetch_market_indicator` 多傳 `fred_api_key`，替身照收（狀態更新，不是漏刪）
+    # 2026-10-26：多傳 `runtime`（本次工作階段的取數紀錄，裁示第 6 節），替身照收（狀態更新，不是漏刪）
     monkeypatch.setattr(S, "run_market_indicator_fetch",
-                        lambda values, build=None, fred_api_key=None: {"persist": {}, "table": {}})
+                        lambda values, runtime=None, build=None, fred_api_key=None: {"persist": {}, "table": {}})
     S.refetch_market_indicator([SECRET])
     assert (("^VIX", "2y", "1d"), ()) not in yf.fetch_yf_close._cache_dict
 

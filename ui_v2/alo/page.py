@@ -692,6 +692,8 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
             model = live.apply_live_notes(
                 logic.build_page_model(dataset),
                 wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
+                # 2026-10-26 裁示第 6 節：用到本次工作階段重新取數的匯率列 → `ALO-2` 標來源
+                runtime_source=bool(live_input["notes"].get("runtime_market_indicator")),
             )
             # BL-0250 批次 1：`ALO-6` 佔比與表尾合計改百分比（只換顯示字串；`live.alo6_as_percent`）。
             model = live.alo6_as_percent(model)

@@ -50,7 +50,11 @@ GSPREAD_WRITE_AMBIGUOUS = frozenset({"update", "clear"})
 _GSPREAD_RECEIVER_HINTS = ("sheet", "ws", "worksheet", "spreadsheet", "gc", "gspread")
 
 # 白名單（repo 相對路徑，posix）。L1 repository 不在掃描目錄內，不用列。
-GSPREAD_WRITE_ALLOWLIST = frozenset({"services/v2_tables/settings_store.py"})
+# ~~GSPREAD_WRITE_ALLOWLIST = frozenset({"services/v2_tables/settings_store.py"})~~
+# → 2026-10-26 客戶裁示第 6 節（Google Sheet 零寫入、不建立診斷寫入例外；有意識的收緊，不是漏刪）：清空。
+#   `settings_store.py` 從來沒有直接呼叫 gspread（它經 L1 寫），所以它的 Google Sheet 寫入改由下方
+#   「L1 寫入函式呼叫」守衛鎖（`test_no_settings_sheet_l1_write_calls`）。
+GSPREAD_WRITE_ALLOWLIST = frozenset()
 
 
 def _files():
@@ -112,6 +116,133 @@ def test_gspread_write_calls_only_in_allowlist():
                         attr in GSPREAD_WRITE_AMBIGUOUS and any(h in recv for h in _GSPREAD_RECEIVER_HINTS)):
                     hits.append(f"{rel}:{node.lineno} .{attr}(")
     assert not hits, "白名單外的 gspread 寫入呼叫：\n" + "\n".join(hits)
+
+
+# ───────── 2026-10-26 裁示第 6 節：ui_v2／services/v2_tables 不得呼叫設定試算表 L1 的寫入函式 ─────────
+# L1 寫入函式名單不手抄：讀 `repositories/settings_sheet_repository.py`，凡函式本體以 `_run(..., write=True)` 打上游者即是
+# （L1 日後新增寫入函式自動納入），另加兩個私有寫入輔助。下限釘住現有四個，名單縮水（偵測失效）就紅。
+L1_SETTINGS_MODULE = "repositories.settings_sheet_repository"
+_L1_PRIVATE_WRITERS = frozenset({"_run", "_append", "_worksheet_for_append"})
+_L1_KNOWN_WRITERS = frozenset({"save_user_setting", "open_fetch_log", "close_fetch_log", "append_market_indicator"})
+
+
+def _l1_write_functions():
+    tree = _tree(ROOT / "repositories" / "settings_sheet_repository.py")
+    out = set()
+    for fn in tree.body:
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        for node in ast.walk(fn):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_run"
+                    and any(k.arg == "write" and isinstance(k.value, ast.Constant) and k.value.value is True
+                            for k in node.keywords)):
+                out.add(fn.name)
+    return frozenset(out) | _L1_PRIVATE_WRITERS
+
+
+def _l1_aliases(tree):
+    """本檔把 L1 設定試算表模組叫做什麼（`from repositories import settings_sheet_repository as store` 之類）。"""
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "repositories":
+            names |= {a.asname or a.name for a in node.names if a.name == "settings_sheet_repository"}
+        elif isinstance(node, ast.Import):
+            names |= {a.asname or a.name for a in node.names if a.name == L1_SETTINGS_MODULE}
+    return names
+
+
+def _short_circuit_index(fn):
+    """`if store.is_read_only(): return ...` 在函式本體的第幾句（沒有 → None）。"""
+    for i, stmt in enumerate(fn.body):
+        if (isinstance(stmt, ast.If) and "is_read_only()" in ast.unparse(stmt.test)
+                and stmt.body and isinstance(stmt.body[-1], ast.Return)):
+            return i
+    return None
+
+
+def _l1_write_problems(source: str, rel: str, writers) -> list:
+    """一個檔裡對 L1 寫入函式的違規呼叫／import。唯二放行（休眠的 `user_setting` 存檔路徑，且只在 settings_store）：
+    (1) `store.save_user_setting(...)` 只能出現在 L2 同名函式 `save_user_setting` 本體；
+    (2) L2 `save_user_setting(...)` 只能由 `save_setting_for_page` 在 `is_read_only()` 短路**之後**呼叫。"""
+    tree = ast.parse(source)
+    aliases = _l1_aliases(tree)
+    parents = _parents(tree)
+    problems = []
+
+    def enclosing_fn(node):
+        while node in parents:
+            node = parents[node]
+            if isinstance(node, ast.FunctionDef):
+                return node
+        return None
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == L1_SETTINGS_MODULE:
+            for a in node.names:
+                if a.name in writers:
+                    problems.append(f"{rel}:{node.lineno} from {node.module} import {a.name}")
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        fn = enclosing_fn(node)
+        if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id in aliases \
+                and f.attr in writers:
+            ok = (rel == "services/v2_tables/settings_store.py" and f.attr == "save_user_setting"
+                  and fn is not None and fn.name == "save_user_setting")
+            if not ok:
+                problems.append(f"{rel}:{node.lineno} 呼叫 L1 寫入 {f.value.id}.{f.attr}(")
+        elif isinstance(f, ast.Attribute) and f.attr == "save_user_setting":
+            problems.append(f"{rel}:{node.lineno} 經別的模組呼叫 save_user_setting（{ast.unparse(f)}）")
+        elif isinstance(f, ast.Name) and f.id == "save_user_setting":
+            gate = _short_circuit_index(fn) if fn is not None else None
+            top = node
+            while fn is not None and parents.get(top) is not fn:
+                top = parents[top]
+            ok = (rel == "services/v2_tables/settings_store.py" and fn is not None
+                  and fn.name == "save_setting_for_page" and gate is not None
+                  and fn.body.index(top) > gate)
+            if not ok:
+                problems.append(f"{rel}:{node.lineno} save_user_setting 不在 is_read_only 短路之後")
+    return problems
+
+
+def test_l1_write_function_list_is_derived_and_complete():
+    writers = _l1_write_functions()
+    assert _L1_KNOWN_WRITERS <= writers, writers
+    assert not ({"new_fetch_log_open", "fetch_log_row", "merge_market_indicator", "load_fetch_log",
+                 "load_market_indicator", "load_user_settings"} & writers)
+
+
+def test_no_settings_sheet_l1_write_calls():
+    """2026-10-26 裁示第 6 節：SET-5 重新取數零寫入 —— ui_v2／services/v2_tables 不得呼叫 `open_fetch_log`、
+    `close_fetch_log`、`append_market_indicator` 等；`save_user_setting` 只留休眠路徑（見 `_l1_write_problems`）。"""
+    writers = _l1_write_functions()
+    hits = []
+    for path in _files():
+        rel = path.relative_to(ROOT).as_posix()
+        hits += _l1_write_problems(path.read_text(encoding="utf-8"), rel, writers)
+    assert not hits, "設定試算表 L1 寫入呼叫：\n" + "\n".join(hits)
+
+
+def test_l1_write_detector_catches_synthetic_violations():
+    """負控（現編程式碼，不落檔）：把任一寫入加回、或把存檔移到短路之前，偵測器就抓得到。"""
+    writers = _l1_write_functions()
+    rel = "services/v2_tables/settings_store.py"
+    head = "from repositories import settings_sheet_repository as store\n"
+    ok = (head + "def save_user_setting(k):\n    return store.save_user_setting(k)\n"
+          "def save_setting_for_page(k):\n    if store.is_read_only():\n        return 1\n"
+          "    return save_user_setting(k)\n")
+    assert _l1_write_problems(ok, rel, writers) == []
+    for bad in ("def refetch(x):\n    store.open_fetch_log('市場指標', mask=x)\n",
+                "def refetch(x):\n    store.close_fetch_log({}, outcome='ok', row_count=0, message=None, mask=x)\n",
+                "def refetch(x):\n    store.append_market_indicator([], mask=x)\n",
+                "def other(k):\n    return store.save_user_setting(k)\n"):
+        assert _l1_write_problems(head + bad, rel, writers), bad
+    early = ok.replace("    if store.is_read_only():\n        return 1\n    return save_user_setting(k)\n",
+                       "    save_user_setting(k)\n    if store.is_read_only():\n        return 1\n")
+    assert _l1_write_problems(early, rel, writers)
+    assert _l1_write_problems("from repositories.settings_sheet_repository import open_fetch_log\n", rel, writers)
+    assert _l1_write_problems("import x\nx.settings_store.save_user_setting(1)\n", "ui_v2/a.py", writers)
 
 
 def test_detectors_catch_synthetic_violations():

@@ -451,7 +451,25 @@ def _drop_dev_notes(node):
     return node
 
 
-def apply_live_notes(model: dict, *, wired_keys=()) -> dict:
+# 2026-10-26 客戶裁示第 6 節：`ALO-2` 用到 set 頁本次工作階段重新取數的匯率列（記憶體，未存入試算表）時，說明行加這一句標來源
+# （與 `ui_v2/set/live.py::TEXT_RUNTIME_SOURCE` 同一句；兩頁不互相 import，由測試比對）。
+TEXT_RUNTIME_SOURCE = "含本次工作階段取數，未存入試算表"
+
+
+def merge_runtime_indicators(sheet_rows, runtime_rows) -> tuple:
+    """試算表上的 `market_indicator` 列 ＋ 本次工作階段的列（同主鍵以本次為準）→ `(rows, 用到本次工作階段的匯率列與否)`。
+    本頁只用匯率鍵（`logic.FX_KEY_PREFIX` 開頭），所以「用到」只看匯率鍵。"""
+    def pk(row):
+        return (row["indicator_key"], row["obs_date"], row["release_date"])
+
+    runtime = [dict(r) for r in runtime_rows]
+    keys = {pk(r) for r in runtime}
+    rows = [dict(r) for r in sheet_rows if pk(r) not in keys] + runtime
+    used = any(r["indicator_key"].startswith(logic.FX_KEY_PREFIX) for r in runtime)
+    return rows, used
+
+
+def apply_live_notes(model: dict, *, wired_keys=(), runtime_source=False) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的三件事：
 
     1. 頁首的示意行不印（`hint_note` 清空；`page.py` 正式模式那一支也不印它）；
@@ -467,6 +485,10 @@ def apply_live_notes(model: dict, *, wired_keys=()) -> dict:
     wired = frozenset(wired_keys)
     out = _replace_exact(_drop_dev_notes(_strip_hint(copy.deepcopy(model))), LIVE_TEXT_EDITS)
     out["hint_note"] = ""
+    if runtime_source:   # 2026-10-26 裁示第 6 節：標來源（見 `TEXT_RUNTIME_SOURCE`）
+        for block in out["blocks"]:
+            if block.get("code") == "ALO-2":
+                block["detail_lines"] = list(block.get("detail_lines") or ()) + [TEXT_RUNTIME_SOURCE]
     for button in _walk_buttons(out["blocks"]):
         if not button["_writes"]:      # `logic._BUTTON_WRITES`：只有「存檔」會寫 user_setting
             continue
