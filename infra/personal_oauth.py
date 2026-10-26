@@ -41,7 +41,22 @@ Streamlit 的 OAuth 整頁導回（Google → redirect_uri）會建立**新的**
 - Google 回傳的 granted scope 只要含四項最小 scope 以外的任何權限，或回應根本沒帶
   scope 欄位（無法確認）→ 拒絕登入：嘗試 revoke 該 token、清 session、拋 `PERMISSION_DENIED`。
 - 帳號身分不用未驗簽的 id_token；exchange 成功後以 access token 呼叫 Google OpenID
-  userinfo endpoint，要求 `sub`、`email`、`email_verified is True`，否則清 session 並拋錯。
+  userinfo endpoint，要求 `sub`、`email`、`email_verified is True`，否則 revoke 新 token 並拋錯。
+- 缺少四項中任何一項必要 scope 同樣拒絕（revoke＋`PERMISSION_DENIED`）。
+
+────────────────────────────────────────────────────────────────────────
+待確認登入（資安稽核 A1／A2／B1，總管 2026-10-26 裁定）
+────────────────────────────────────────────────────────────────────────
+pending store 必須跨 session（導回會建立新 session），所以「持有效 state＋code 的人」
+可以在別人的 session 完成 callback（login CSRF／授權碼注入）。緩解：
+- callback 成功**不直接啟用**：tokens 與 userinfo 身分先存成「待確認登入」
+  （`KEY_PENDING_LOGIN`，TTL `PENDING_LOGIN_TTL_SEC`）。`get_tokens`／`ensure_fresh`
+  一律看不到待確認的 token。
+- `confirm_pending_login` 才升為正式登入（若有舊正式登入，先 revoke 舊 token 再替換）；
+  `reject_pending_login` revoke 並清除；過期自動 revoke＋清除。
+- callback 先驗 state，失敗即拋、**不碰 session**；新登入被拒（scope／身分）時只 revoke
+  新 token、清掉待確認登入，不動既有正式登入（不能被拿來強制登出）。
+- 同一 session 重複 `begin_authorization` 會重用尚未過期的 pending state（per-session 上限 1）。
 """
 from __future__ import annotations
 
@@ -84,6 +99,7 @@ SECRETS_SECTION: str = "google_oauth"
 PENDING_TTL_SEC: int = 600
 PENDING_MAX: int = 1000
 TOKEN_REFRESH_LEEWAY_SEC: int = 60
+PENDING_LOGIN_TTL_SEC: int = 300
 
 HTTP_TIMEOUT_SEC: int = 15
 REVOKE_TIMEOUT_SEC: int = 10
@@ -106,6 +122,11 @@ KEY_GRANTED_SCOPES: str = SESSION_PREFIX + "granted_scopes"
 #: Active 邏輯由後續批次實作。
 KEY_ACTIVE_SHEET: str = SESSION_PREFIX + "active_sheet"
 KEY_PENDING_SHEET: str = SESSION_PREFIX + "pending_sheet"
+#: 本 session 已登記、尚未用掉的 OAuth state（B1：per-session 重用，不重複登記）。
+KEY_AUTH_PENDING_STATE: str = SESSION_PREFIX + "pending_state"
+KEY_AUTH_PENDING_EXPIRES: str = SESSION_PREFIX + "pending_state_expires_at"
+#: 待確認登入（A1）：{"tokens", "sub", "email", "expires_at"}。get_tokens 不讀這個 key。
+KEY_PENDING_LOGIN: str = SESSION_PREFIX + "pending_login"
 
 SESSION_KEYS: tuple[str, ...] = (
     KEY_TOKENS,
@@ -114,6 +135,9 @@ SESSION_KEYS: tuple[str, ...] = (
     KEY_GRANTED_SCOPES,
     KEY_ACTIVE_SHEET,
     KEY_PENDING_SHEET,
+    KEY_AUTH_PENDING_STATE,
+    KEY_AUTH_PENDING_EXPIRES,
+    KEY_PENDING_LOGIN,
 )
 
 
@@ -214,6 +238,21 @@ def consume_pending(state: Any, now: float | None = None) -> str:
     return verifier
 
 
+def _peek_pending(state: str, ts: float) -> str | None:
+    """不消耗地讀出仍有效的 verifier（僅供同 session 重用授權網址）。"""
+    with _PENDING_LOCK:
+        entry = _PENDING.get(state)
+    if entry is None or entry[1] <= ts:
+        return None
+    return entry[0]
+
+
+def _discard_pending(state: Any) -> None:
+    if isinstance(state, str) and state:
+        with _PENDING_LOCK:
+            _PENDING.pop(state, None)
+
+
 def pending_count() -> int:
     """目前 pending 筆數（診斷／測試用；不揭露內容）。"""
     with _PENDING_LOCK:
@@ -272,13 +311,29 @@ def build_authorize_url(cfg: ClientConfig, state: str, code_challenge: str) -> s
     return f"{GOOGLE_AUTH_URL}?{urllib.parse.urlencode(params)}"
 
 
-def begin_authorization(now: float | None = None) -> dict[str, str]:
-    """開始一次登入：讀 client 設定 → 登記 pending → 回傳 {authorize_url, state}。
+def begin_authorization(
+    session_state: MutableMapping, now: float | None = None
+) -> dict[str, str]:
+    """開始一次登入：讀 client 設定 → 登記（或重用）pending → 回傳 {authorize_url, state}。
 
+    同一 session 若已有未過期、且仍在 store 內的 pending state → 重用，不新登記（B1）。
     code_verifier 不回傳給呼叫端（只留在 pending store）。
     """
+    ts = _now(now)
     cfg = load_client_config()
-    state, verifier = register_pending(now)
+    prev_state = session_state.get(KEY_AUTH_PENDING_STATE)
+    prev_exp = session_state.get(KEY_AUTH_PENDING_EXPIRES)
+    if (isinstance(prev_state, str) and prev_state
+            and isinstance(prev_exp, (int, float)) and ts < prev_exp):
+        verifier = _peek_pending(prev_state, ts)
+        if verifier is not None:
+            return {
+                "authorize_url": build_authorize_url(cfg, prev_state, code_challenge_s256(verifier)),
+                "state": prev_state,
+            }
+    state, verifier = register_pending(ts)
+    session_state[KEY_AUTH_PENDING_STATE] = state
+    session_state[KEY_AUTH_PENDING_EXPIRES] = ts + PENDING_TTL_SEC
     return {
         "authorize_url": build_authorize_url(cfg, state, code_challenge_s256(verifier)),
         "state": state,
@@ -356,12 +411,27 @@ def _normalize_token_payload(payload: dict[str, Any], now: float) -> dict[str, A
 _ALLOWED_SCOPES: frozenset[str] = frozenset(PERSONAL_OAUTH_SCOPES)
 
 
-def _excess_scopes(tokens: Mapping[str, Any]) -> list[str] | None:
-    """回傳超出四項最小 scope 的權限清單；scope 欄位缺失／非字串 → None（無法確認）。"""
+def _scope_problem(tokens: Mapping[str, Any]) -> str | None:
+    """回傳拒絕理由；授權範圍恰為四項最小 scope 時回 None。
+
+    scope 欄位缺失／非字串／空 → 無法確認（拒絕）；多出任何權限 → 拒絕；缺任何一項 → 拒絕。
+    """
     scope = tokens.get("scope")
     if not isinstance(scope, str) or not scope.strip():
-        return None
-    return sorted(set(scope.split()) - _ALLOWED_SCOPES)
+        return "無法確認 Google 授權範圍，為確保唯讀已拒絕登入"
+    granted = set(scope.split())
+    excess = sorted(granted - _ALLOWED_SCOPES)
+    if excess:
+        return "Google 授權範圍超出唯讀（多了：" + "、".join(excess) + "），已拒絕登入"
+    missing = sorted(_ALLOWED_SCOPES - granted)
+    if missing:
+        return "Google 授權範圍缺少必要的唯讀權限（缺：" + "、".join(missing) + "），已拒絕登入"
+    return None
+
+
+def _token_to_revoke(tokens: Mapping[str, Any]) -> str | None:
+    t = tokens.get("refresh_token") or tokens.get("access_token")
+    return t if isinstance(t, str) and t else None
 
 
 def _revoke_token(token: str) -> LogoutResult:
@@ -382,23 +452,11 @@ def _revoke_token(token: str) -> LogoutResult:
     return LogoutResult(True, False, ec.UPSTREAM_ERROR)
 
 
-def _reject_scope_if_excess(session_state: MutableMapping, tokens: Mapping[str, Any]) -> None:
-    """授權範圍超出唯讀或無法確認 → revoke 該 token、清 session、拋 `PERMISSION_DENIED`。"""
-    excess = _excess_scopes(tokens)
-    if excess is not None and not excess:
-        return
-    token = tokens.get("refresh_token") or tokens.get("access_token")
-    if isinstance(token, str) and token:
-        _revoke_token(token)
-    clear_session(session_state)
-    if excess is None:
-        raise PersonalOAuthError(
-            ec.PERMISSION_DENIED, "無法確認 Google 授權範圍，為確保唯讀已拒絕登入"
-        )
-    raise PersonalOAuthError(
-        ec.PERMISSION_DENIED,
-        "Google 授權範圍超出唯讀（多了：" + "、".join(excess) + "），已拒絕登入",
-    )
+def _revoke_tokens(tokens: Mapping[str, Any]) -> LogoutResult:
+    token = _token_to_revoke(tokens)
+    if token is None:
+        return LogoutResult(revoke_attempted=False, revoke_confirmed=False)
+    return _revoke_token(token)
 
 
 def fetch_verified_identity(access_token: str) -> tuple[str, str]:
@@ -461,21 +519,99 @@ def exchange_code(code: Any, state: Any, now: float | None = None) -> dict[str, 
 
 def complete_authorization(
     session_state: MutableMapping, code: Any, state: Any, now: float | None = None
-) -> dict[str, Any]:
-    """callback 完整流程：清掉本 session 舊登入 → exchange → 寫入 namespaced session。
+) -> dict[str, str]:
+    """callback：驗 state → exchange → scope 檢查 → userinfo 身分 → 存成「待確認登入」。
 
-    exchange 之後依序：授權範圍檢查（超出唯讀即拒絕）→ userinfo 驗證帳號身分 → 才寫入。
-    失敗時本 session 不留任何登入狀態（不沿用舊 token）。
+    - state 不合法／exchange 失敗 → 直接拋錯，**不碰 session**（A2）。
+    - scope 不合（多、缺、無法確認）→ revoke 新 token、清掉待確認登入、拋 `PERMISSION_DENIED`。
+    - 身分驗證失敗 → revoke 新 token、清掉待確認登入、拋對應錯誤。
+    - 上述拒絕都**不動既有正式登入**（不能被拿來強制登出）。
+    - 成功 → **不啟用**，只存待確認登入（TTL `PENDING_LOGIN_TTL_SEC`），回傳 {"sub", "email"}；
+      不回傳 token。須由 `confirm_pending_login` 確認後才成為正式登入（A1）。
     """
+    ts = _now(now)
+    tokens = exchange_code(code, state, ts)
+    problem = _scope_problem(tokens)
+    if problem is not None:
+        _revoke_tokens(tokens)
+        _drop_pending_login(session_state)
+        raise PersonalOAuthError(ec.PERMISSION_DENIED, problem)
+    try:
+        sub, email = fetch_verified_identity(tokens["access_token"])
+    except PersonalOAuthError:
+        _revoke_tokens(tokens)
+        _drop_pending_login(session_state)
+        raise
+    _drop_pending_login(session_state)  # 取代舊的待確認登入時一律 revoke
+    session_state[KEY_PENDING_LOGIN] = {
+        "tokens": dict(tokens),
+        "sub": sub,
+        "email": email,
+        "expires_at": ts + PENDING_LOGIN_TTL_SEC,
+    }
+    return {"sub": sub, "email": email}
+
+
+def _drop_pending_login(session_state: MutableMapping) -> LogoutResult:
+    """revoke 待確認登入的 token 並移除該 key；沒有待確認登入時不做事。"""
+    pending = session_state.get(KEY_PENDING_LOGIN)
+    if KEY_PENDING_LOGIN in session_state:
+        del session_state[KEY_PENDING_LOGIN]
+    if isinstance(pending, Mapping) and isinstance(pending.get("tokens"), Mapping):
+        return _revoke_tokens(pending["tokens"])
+    return LogoutResult(revoke_attempted=False, revoke_confirmed=False)
+
+
+def get_pending_login(session_state: MutableMapping, now: float | None = None) -> dict[str, Any] | None:
+    """待確認登入的身分資訊（{"sub", "email", "expires_at"}，不含 token）。
+
+    已過期 → 自動 revoke＋清除並回 None。
+    """
+    pending = session_state.get(KEY_PENDING_LOGIN)
+    if not isinstance(pending, Mapping):
+        return None
+    exp = pending.get("expires_at")
+    if not isinstance(exp, (int, float)) or exp <= _now(now):
+        _drop_pending_login(session_state)
+        return None
+    return {"sub": pending.get("sub"), "email": pending.get("email"), "expires_at": exp}
+
+
+def confirm_pending_login(session_state: MutableMapping, now: float | None = None) -> dict[str, str]:
+    """把待確認登入升為正式登入，回傳 {"sub", "email"}。
+
+    ⚠️ UI 契約：呼叫前，Settings UI **必須**讓使用者看見待確認的 email
+    （例如「以 <email> 登入？［確認］［取消］」），並由使用者**明確按下確認**才可呼叫。
+    不得自動呼叫 —— 這是抵擋 login CSRF／授權碼注入的唯一關卡（A1）。
+
+    沒有待確認登入或已過期 → `AUTH_STATE_INVALID`（過期者先 revoke＋清除）。
+    若本 session 已有正式登入 → 先 revoke 舊 token，再清除本 namespace（含 Active／Pending
+    Sheet）並換上新登入；不沿用舊 Active 驗證狀態。
+    """
+    ts = _now(now)
+    pending = session_state.get(KEY_PENDING_LOGIN)
+    if not isinstance(pending, Mapping) or not isinstance(pending.get("tokens"), Mapping):
+        raise PersonalOAuthError(ec.AUTH_STATE_INVALID, "沒有待確認的登入，請重新登入")
+    exp = pending.get("expires_at")
+    if not isinstance(exp, (int, float)) or exp <= ts:
+        _drop_pending_login(session_state)
+        raise PersonalOAuthError(ec.AUTH_STATE_INVALID, "登入確認已逾時，請重新登入")
+    tokens = dict(pending["tokens"])
+    sub, email = pending.get("sub"), pending.get("email")
+    del session_state[KEY_PENDING_LOGIN]
+    old = get_tokens(session_state)
+    if old is not None:
+        _revoke_tokens(old)
     clear_session(session_state)
-    tokens = exchange_code(code, state, now)
-    _reject_scope_if_excess(session_state, tokens)
-    # 開頭已 clear_session，且到這行之前沒有寫入任何 key → 身分驗證失敗時 session 本來就是乾淨的
-    sub, email = fetch_verified_identity(tokens["access_token"])
     store_tokens(session_state, tokens)
     session_state[KEY_ACCOUNT_SUB] = sub
     session_state[KEY_ACCOUNT_EMAIL] = email
-    return tokens
+    return {"sub": sub, "email": email}
+
+
+def reject_pending_login(session_state: MutableMapping) -> LogoutResult:
+    """使用者取消：revoke 待確認登入的 token 並清除；不動既有正式登入。"""
+    return _drop_pending_login(session_state)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -548,7 +684,11 @@ def ensure_fresh(session_state: MutableMapping, now: float | None = None) -> dic
     new_tokens.setdefault("refresh_token", rt)  # Google 續期通常不回新的 refresh_token
     if not (isinstance(new_tokens.get("scope"), str) and new_tokens["scope"].strip()):
         new_tokens["scope"] = tokens.get("scope", "")  # 續期回應未帶 scope → 沿用登入時已驗過的
-    _reject_scope_if_excess(session_state, new_tokens)
+    problem = _scope_problem(new_tokens)
+    if problem is not None:
+        _revoke_tokens(new_tokens)
+        clear_session(session_state)
+        raise PersonalOAuthError(ec.PERMISSION_DENIED, problem)
     store_tokens(session_state, new_tokens)
     return new_tokens
 
@@ -568,14 +708,14 @@ class LogoutResult:
 def logout(session_state: MutableMapping) -> LogoutResult:
     """先嘗試 revoke（refresh_token 優先，否則 access_token），**不論成敗**都清 session。
 
+    同時 revoke 待確認登入（若有）、作廢本 session 尚未使用的 pending state。
+
     revoke 失敗不拋例外，只回傳結果，讓 UI 顯示「已在本機登出，Google 端撤銷未確認」。
     """
     try:
-        tokens = get_tokens(session_state) or {}
-        token = tokens.get("refresh_token") or tokens.get("access_token")
-        if not isinstance(token, str) or not token:
-            return LogoutResult(revoke_attempted=False, revoke_confirmed=False)
-        return _revoke_token(token)
+        _discard_pending(session_state.get(KEY_AUTH_PENDING_STATE))
+        _drop_pending_login(session_state)  # _revoke_token 不拋例外；本機清除由 finally 保證
+        return _revoke_tokens(get_tokens(session_state) or {})
     finally:
         clear_session(session_state)
 
@@ -585,5 +725,5 @@ def begin_account_switch(
 ) -> dict[str, Any]:
     """切換帳號 ＝ logout（含清 Active／Pending）→ 開始新的授權。不沿用舊 token。"""
     result = logout(session_state)
-    start = begin_authorization(now)
+    start = begin_authorization(session_state, now)
     return {"logout": result, **start}

@@ -111,7 +111,7 @@ def test_scopes_exactly_four_readonly():
 
 
 def test_authorize_url_params_and_pkce():
-    start = po.begin_authorization(now=1000)
+    start = po.begin_authorization({}, now=1000)
     q = urllib.parse.parse_qs(urllib.parse.urlparse(start["authorize_url"]).query)
     assert "include_granted_scopes" not in q
     assert q["code_challenge_method"] == ["S256"]
@@ -182,7 +182,7 @@ def test_client_config_from_secrets_only(monkeypatch):
     seen = []
     monkeypatch.setattr(po, "get_secret", lambda key, default=None: (seen.append(key), None)[1])
     with pytest.raises(po.PersonalOAuthError) as ei:
-        po.begin_authorization()
+        po.begin_authorization({})
     assert ei.value.code == ec.UNAVAILABLE
     assert seen == ["google_oauth"]
     assert po.pending_count() == 0
@@ -206,7 +206,12 @@ def test_exchange_success_sends_verifier(monkeypatch):
     calls = _set_post(monkeypatch, lambda url, **kw: FakeResp(200, _ok_token()))
     gcalls = _set_get(monkeypatch, lambda url, **kw: FakeResp(200, dict(GOOD_ID)))
     sess = dict(OLD_KEYS)
-    tokens = po.complete_authorization(sess, code="C", state=s, now=100)
+    out = po.complete_authorization(sess, code="C", state=s, now=100)
+    assert out == {"sub": "1234", "email": "a@example.com"}  # 只回身分，不回 token
+    assert po.get_tokens(sess) is None  # 待確認登入不可用（A1）
+    assert po.get_pending_login(sess, now=100)["email"] == "a@example.com"
+    assert "tokens" not in po.get_pending_login(sess, now=100)
+    po.confirm_pending_login(sess, now=101)
     assert gcalls[0][0] == po.GOOGLE_USERINFO_URL == "https://openidconnect.googleapis.com/v1/userinfo"
     assert gcalls[0][1]["headers"]["Authorization"] == "Bearer AT"
     assert gcalls[0][1]["timeout"] == po.HTTP_TIMEOUT_SEC
@@ -216,7 +221,7 @@ def test_exchange_success_sends_verifier(monkeypatch):
     assert kw["data"]["code_verifier"] == v
     assert kw["data"]["grant_type"] == "authorization_code"
     assert kw["timeout"] == po.HTTP_TIMEOUT_SEC
-    assert tokens["expires_at"] == 3700
+    assert sess[po.KEY_TOKENS]["expires_at"] == 3700
     assert sess[po.KEY_TOKENS]["access_token"] == "AT"
     for k, val in OLD_KEYS.items():
         assert sess[k] == val
@@ -265,11 +270,28 @@ def test_exchange_bad_state_no_network(monkeypatch):
     assert ei.value.code == ec.AUTH_STATE_INVALID
 
 
-def test_failed_callback_leaves_no_login(monkeypatch):
-    sess = {po.KEY_TOKENS: {"access_token": "PREV", "expires_at": 9e9}}
-    with pytest.raises(po.PersonalOAuthError):
-        po.complete_authorization(sess, code="C", state="unknown")
-    assert po.get_tokens(sess) is None
+@pytest.mark.parametrize("state", ["forged", None, ""])
+def test_forged_state_does_not_touch_session(state):
+    """A2：偽造 state 不得改動 session（不能被拿來強制登出），也不發任何請求。"""
+    sess = {po.KEY_TOKENS: {"access_token": "PREV", "expires_at": 9e9}, po.KEY_ACTIVE_SHEET: "S"}
+    before = {k: (dict(v) if isinstance(v, dict) else v) for k, v in sess.items()}
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.complete_authorization(sess, code="C", state=state)
+    assert ei.value.code == ec.AUTH_STATE_INVALID
+    assert sess == before
+
+
+def test_exchange_400_not_invalid_grant_is_upstream(monkeypatch):
+    s, _ = po.register_pending(now=0)
+    _set_post(monkeypatch, lambda url, **kw: FakeResp(400, {"error": "invalid_request"}))
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.exchange_code("C", s, now=0)
+    assert ei.value.code == ec.UPSTREAM_ERROR
+
+
+def test_pkce_rfc7636_appendix_b_vector():
+    assert po.code_challenge_s256("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") \
+        == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
 
 
 # ── Logout ─────────────────────────────────────────────────────────────
@@ -334,8 +356,10 @@ def test_account_switch_drops_old_token(monkeypatch):
     _set_post(monkeypatch, lambda url, **kw: FakeResp(200, {}))
     s = _logged_in()
     out = po.begin_account_switch(s, now=0)
-    _assert_cleared(s)
     assert po.get_tokens(s) is None
+    assert [k for k in s if k.startswith(po.SESSION_PREFIX)] == [
+        po.KEY_AUTH_PENDING_STATE, po.KEY_AUTH_PENDING_EXPIRES]
+    assert s[po.KEY_AUTH_PENDING_STATE] == out["state"]
     assert out["state"] in po._PENDING
     assert "authorize_url" in out and out["logout"].revoke_confirmed
 
@@ -509,6 +533,8 @@ def test_error_messages_do_not_leak_secret(monkeypatch):
     " ".join(po.PERSONAL_OAUTH_SCOPES) + " https://www.googleapis.com/auth/drive.file",
     None,
     "",
+    "openid https://www.googleapis.com/auth/userinfo.email",
+    " ".join(x for x in po.PERSONAL_OAUTH_SCOPES if "spreadsheets" not in x),
 ])
 def test_excess_or_missing_scope_rejected(monkeypatch, scope):
     s, _ = po.register_pending(now=0)
@@ -519,22 +545,147 @@ def test_excess_or_missing_scope_rejected(monkeypatch, scope):
         tok["scope"] = scope
     calls = _set_post(monkeypatch, lambda url, **kw: FakeResp(200, tok) if url == po.GOOGLE_TOKEN_URL else FakeResp(200, {}))
     sess = dict(OLD_KEYS)
+    sess[po.KEY_PENDING_LOGIN] = {"tokens": {"access_token": "OLDPENDING"}, "sub": "x", "email": "x", "expires_at": 9e9}
     with pytest.raises(po.PersonalOAuthError) as ei:
         po.complete_authorization(sess, code="C", state=s, now=0)
     assert ei.value.code == ec.PERMISSION_DENIED
     assert "唯讀" in ei.value.message
-    revokes = [c for c in calls if c[0] == po.GOOGLE_REVOKE_URL]
-    assert revokes and revokes[0][1]["data"] == {"token": "RT"}
+    revoked = [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL]
+    assert "RT" in revoked and "OLDPENDING" in revoked
     _assert_cleared(sess)
 
 
-def test_scope_subset_accepted(monkeypatch):
+def test_missing_scope_message_names_it(monkeypatch):
     s, _ = po.register_pending(now=0)
-    _set_post(monkeypatch, lambda url, **kw: FakeResp(200, _ok_token(scope="openid https://www.googleapis.com/auth/userinfo.email")))
-    _set_get(monkeypatch, lambda url, **kw: FakeResp(200, dict(GOOD_ID)))
-    sess = {}
-    po.complete_authorization(sess, code="C", state=s, now=0)
+    tok = _ok_token(scope="openid https://www.googleapis.com/auth/userinfo.email "
+                          "https://www.googleapis.com/auth/drive.metadata.readonly")
+    _set_post(monkeypatch, lambda url, **kw: FakeResp(200, tok) if url == po.GOOGLE_TOKEN_URL else FakeResp(200, {}))
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.complete_authorization({}, code="C", state=s, now=0)
+    assert ei.value.code == ec.PERMISSION_DENIED
+    assert "spreadsheets.readonly" in ei.value.message
+
+
+def test_rejected_new_login_keeps_formal_login(monkeypatch):
+    """新登入被拒（scope）只 revoke 新 token，不動既有正式登入（A2：不可被拿來強制登出）。"""
+    s, _ = po.register_pending(now=0)
+    tok = _ok_token(scope="openid")
+    calls = _set_post(monkeypatch, lambda url, **kw: FakeResp(200, tok) if url == po.GOOGLE_TOKEN_URL else FakeResp(200, {}))
+    sess = _logged_in()
+    with pytest.raises(po.PersonalOAuthError):
+        po.complete_authorization(sess, code="C", state=s, now=0)
     assert po.get_tokens(sess)["access_token"] == "AT"
+    assert sess[po.KEY_ACTIVE_SHEET] == "sheet-A"
+    assert [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == ["RT"]
+
+
+# ── 待確認登入（A1）────────────────────────────────────────────────────
+def _pending(monkeypatch, sess, now=0):
+    s, _ = po.register_pending(now=now)
+    calls = _set_post(monkeypatch, lambda url, **kw: FakeResp(200, _ok_token(access_token="NEWAT", refresh_token="NEWRT"))
+                      if url == po.GOOGLE_TOKEN_URL else FakeResp(200, {}))
+    _set_get(monkeypatch, lambda url, **kw: FakeResp(200, dict(GOOD_ID)))
+    po.complete_authorization(sess, code="C", state=s, now=now)
+    return calls
+
+
+def test_pending_login_not_usable_until_confirm(monkeypatch):
+    sess = {}
+    _pending(monkeypatch, sess)
+    assert po.get_tokens(sess) is None
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.ensure_fresh(sess, now=1)
+    assert ei.value.code == ec.AUTH_REQUIRED
+    assert po.confirm_pending_login(sess, now=10) == {"sub": "1234", "email": "a@example.com"}
+    assert po.get_tokens(sess)["access_token"] == "NEWAT"
+    assert po.KEY_PENDING_LOGIN not in sess
+    assert sess[po.KEY_ACCOUNT_SUB] == "1234"
+
+
+def test_confirm_replaces_old_login_with_revoke(monkeypatch):
+    sess = _logged_in()
+    calls = _pending(monkeypatch, sess)
+    assert po.get_tokens(sess)["access_token"] == "AT"  # 確認前舊登入不變
+    po.confirm_pending_login(sess, now=10)
+    revoked = [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL]
+    assert revoked == ["RT"]
+    assert po.get_tokens(sess)["access_token"] == "NEWAT"
+    assert po.KEY_ACTIVE_SHEET not in sess and po.KEY_PENDING_SHEET not in sess
+
+
+def test_reject_pending_login_revokes(monkeypatch):
+    sess = _logged_in()
+    calls = _pending(monkeypatch, sess)
+    r = po.reject_pending_login(sess)
+    assert r.revoke_confirmed
+    assert [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == ["NEWRT"]
+    assert po.KEY_PENDING_LOGIN not in sess
+    assert po.get_tokens(sess)["access_token"] == "AT"
+
+
+def test_pending_login_expiry_revokes(monkeypatch):
+    sess = {}
+    calls = _pending(monkeypatch, sess, now=0)
+    assert po.get_pending_login(sess, now=po.PENDING_LOGIN_TTL_SEC + 1) is None
+    assert po.KEY_PENDING_LOGIN not in sess
+    assert [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == ["NEWRT"]
+
+
+def test_confirm_after_expiry_rejected(monkeypatch):
+    sess = {}
+    calls = _pending(monkeypatch, sess, now=0)
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.confirm_pending_login(sess, now=po.PENDING_LOGIN_TTL_SEC + 1)
+    assert ei.value.code == ec.AUTH_STATE_INVALID
+    assert po.get_tokens(sess) is None and po.KEY_PENDING_LOGIN not in sess
+    assert [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == ["NEWRT"]
+
+
+def test_confirm_without_pending():
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.confirm_pending_login({})
+    assert ei.value.code == ec.AUTH_STATE_INVALID
+
+
+def test_logout_revokes_pending_login(monkeypatch):
+    sess = _logged_in()
+    calls = _pending(monkeypatch, sess)
+    po.logout(sess)
+    revoked = [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL]
+    assert set(revoked) == {"NEWRT", "RT"}
+    _assert_cleared(sess)
+
+
+# ── per-session pending state（B1）─────────────────────────────────────
+def test_begin_reuses_session_state():
+    sess = {}
+    a = po.begin_authorization(sess, now=0)
+    b = po.begin_authorization(sess, now=10)
+    assert a == b and po.pending_count() == 1
+    po.begin_authorization({}, now=10)  # 另一個 session 另登記
+    assert po.pending_count() == 2
+
+
+def test_begin_new_state_when_consumed_or_expired():
+    sess = {}
+    a = po.begin_authorization(sess, now=0)
+    po.consume_pending(a["state"], now=1)
+    b = po.begin_authorization(sess, now=2)
+    assert b["state"] != a["state"]
+    c = po.begin_authorization(sess, now=2 + po.PENDING_TTL_SEC + 1)
+    assert c["state"] != b["state"]
+
+
+def test_begin_reuse_and_cap(monkeypatch):
+    monkeypatch.setattr(po, "PENDING_MAX", 2)
+    sess = {}
+    po.begin_authorization(sess, now=0)
+    po.begin_authorization({}, now=0)
+    po.begin_authorization(sess, now=1)  # 重用，不受滿額影響
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.begin_authorization({}, now=1)
+    assert ei.value.code == ec.UNAVAILABLE
+    assert po.pending_count() == 2
 
 
 # ── 帳號身分（總管裁定 4）──────────────────────────────────────────────
@@ -551,14 +702,18 @@ def test_scope_subset_accepted(monkeypatch):
 ])
 def test_identity_required(monkeypatch, get_fn, code):
     s, _ = po.register_pending(now=0)
-    _set_post(monkeypatch, lambda url, **kw: FakeResp(200, _ok_token()))
     _set_get(monkeypatch, get_fn)
+    calls = []
+    monkeypatch.setattr(po.requests, "post", lambda url, **kw: (
+        calls.append((url, kw)) or (FakeResp(200, _ok_token()) if url == po.GOOGLE_TOKEN_URL else FakeResp(200, {}))))
     sess = dict(OLD_KEYS)
     sess[po.KEY_TOKENS] = {"access_token": "PREV", "expires_at": 9e9}
     with pytest.raises(po.PersonalOAuthError) as ei:
         po.complete_authorization(sess, code="C", state=s, now=0)
     assert ei.value.code == code
-    _assert_cleared(sess)
+    assert [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == ["RT"]
+    assert po.KEY_PENDING_LOGIN not in sess
+    assert po.get_tokens(sess)["access_token"] == "PREV"  # 既有正式登入不動
 
 
 def test_no_id_token_parsing():
