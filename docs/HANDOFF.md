@@ -6,14 +6,14 @@
 > 文中若引「約 :N」行號，以 `git show d5d391b:<path>` 讀（本批合併後交接本等檔的行號已因指標行而位移）。
 
 > **⏯ Resume Checkpoint**（規則：`PROJECT_RULES.md` 第 6 節 6.1.2，`DEC-2026-10-26-02`；**總管提供、合併前會再更新**；接手先依該節恢復流程比對 GitHub，不一致以 GitHub 為準）
-> - **last checkpoint**：2026-10-26（總管提供）
-> - **latest verified main**：`498494ee`（#1061 已合併）
+> - **last checkpoint**：2026-10-26T05:43Z（`date -u` 實測）
+> - **latest verified main**：`95a0a8ae`（#1062 已合併）
 > - **current branch／PR**：本 PR（`docs/resume-checkpoint-20261026`；PR 號以 GitHub 為準）
-> - **in-flight PR**：#1062（客戶裁示 evidence 文件，CI 進行中）；#1063（`feat/ui-v2-default-readonly-20261026`：預設唯讀、五頁移除存檔鈕、SET-4 不顯示；獨立稽核進行中；未含 SET-5 零寫入）；#1064（`feat/ui-v2-oauth-foundation-20261026`：`infra/personal_oauth.py` 最小唯讀 scope、state fail-closed、PKCE S256、待確認登入、revoke；資安 2 組稽核多輪修補中，最後一項低嚴重度修補進行中）
-> - **current task**：新 B UI Implementation／Security Gate 實作（依 #1062 裁示順序，`DEC-2026-10-26-03`）
-> - **completed in this batch**：本 PR 落盤 `DEC-2026-10-26-02`／`-03`、本區塊、`docs/DECISIONS.md` 第五節標題恢復
+> - **in-flight PR**：#1063（`feat/ui-v2-default-readonly-20261026`：預設唯讀、五頁移除存檔鈕、SET-4 不顯示；獨立稽核進行中；未含 SET-5 零寫入）；#1064（`feat/ui-v2-oauth-foundation-20261026`：`infra/personal_oauth.py` 最小唯讀 scope、state fail-closed、PKCE S256、待確認登入、revoke；資安 2 組稽核多輪修補中，最後一項低嚴重度修補進行中）
+> - **current task**：新 B UI Implementation／Security Gate 實作（依 #1062 裁示順序，`DEC-2026-10-26-03`；evidence 已在 main）
+> - **completed in this batch**：本 PR 落盤 `DEC-2026-10-26-02`／`-03`、本區塊、`docs/DECISIONS.md` 第五節標題恢復與 J-14 補記段移回 `DEC-2026-10-25-04`
 > - **exact stopping point**：#1063、#1064 等待稽核／CI 後 Auto-Ship
-> - **next single action**：合併 #1062／#1063／#1064 後，開**批次 2b**：SET-5 Google Sheet 零寫入（停寫 `fetch_log`／`fetch_log_open`／`market_indicator`，改 session／runtime；alo 與 set 的讀取端優先讀 runtime 結果）＋處理已無作用但仍顯示的輸入欄（mkt／hld／exp）
+> - **next single action**：合併 #1063／#1064 後，開**批次 2b**：SET-5 Google Sheet 零寫入（停寫 `fetch_log`／`fetch_log_open`／`market_indicator`，改 session／runtime；alo 與 set 的讀取端優先讀 runtime 結果）＋處理已無作用但仍顯示的輸入欄（mkt／hld／exp）
 > - **後續**：批次 3 Active Sheet runtime SSOT＋consumer wiring＋移除 `POOL_SHEET_ID` baked default＋Settings UI（登入需顯示 email 並明確確認）；批次 4 error taxonomy＋no-active UX；批次 5 文件同步
 > - **tests／CI**：各 in-flight PR 以 GitHub check-run 逐條 `conclusion` 為準；本區塊不代為宣稱
 > - **unresolved true Stop Gates**：無（相關資安取捨已由 #1062 裁示）
