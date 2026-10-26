@@ -40,7 +40,7 @@ PHASE1_TEXT_REWRITES = (
     ("未存檔：勾選與已存清單不同，存檔後下一次重新載入才生效", "勾選與已存清單不同"),   # `live.TEXT_UNSAVED_PICKS`
     # hld
     ("；存檔後，下一次重新載入時生效。", "。"),                          # `live.TEXT_APPLY_NOT_SHOWN`
-    ("「存檔」只寫使用者設定，", ""),                                  # `logic.HLD4_SAVE_SCOPE_NOTE`
+    ("「存檔」只寫使用者設定，", "本頁"),                                  # `logic.HLD4_SAVE_SCOPE_NOTE`
     # alo
     ("；這裡的存檔只存比重基準與類別名稱", ""),                          # `live.TEXT_ALO4_SHEETS`
     # exp
@@ -48,7 +48,7 @@ PHASE1_TEXT_REWRITES = (
     ("未存檔：欄位勾選或排序欄位與已存值不同，存檔後下一次重新載入才生效",
      "欄位勾選或排序欄位與已存值不同"),                                # `live.TEXT_UNSAVED_EXP4`
     ("欄位勾選與排序欄位改了要按「存檔」，下一次重新載入才生效：", ""),     # `logic.TEXT_EXP4_LIVE`
-    ("；「存檔」只寫 使用者設定，不寫入 持倉、保單、淨值、配息", ""),        # `EXP-4` 說明行（plain 換字後）
+    ("；「存檔」只寫 使用者設定，不寫入 持倉、保單、淨值、配息", "；本頁不寫入 持倉、保單、淨值、配息"),        # `EXP-4` 說明行（plain 換字後）
 )
 
 

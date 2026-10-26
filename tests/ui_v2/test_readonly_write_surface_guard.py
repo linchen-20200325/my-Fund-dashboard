@@ -301,13 +301,13 @@ _REWRITE_SOURCES = [
     ("mkt", "MKT-5", mkt_live.TEXT_UNSAVED_PICKS, "勾選與已存清單不同"),
     ("hld", "HLD-4", hld_live.TEXT_APPLY_NOT_SHOWN, "畫面上的結果只讀已存的設定。"),
     ("hld", "HLD-4", hld_logic.HLD4_SAVE_SCOPE_NOTE,
-     "不寫持倉、保單、淨值、配息四張表任何一張，也不代你填任何值、不把空欄補成任何候選值。"),
+     "本頁不寫持倉、保單、淨值、配息四張表任何一張，也不代你填任何值、不把空欄補成任何候選值。"),
     ("alo", "ALO-4", alo_live.TEXT_ALO4_SHEETS, "類別在 Sheets 維護"),
     ("exp", "EXP-1", exp_logic.TEXT_UNSAVED_RULES, "條件列與已存值不同"),
     ("exp", "EXP-4", exp_live.TEXT_UNSAVED_EXP4, "欄位勾選或排序欄位與已存值不同"),
     ("exp", "EXP-4", exp_logic.LIVE_DEV_NOTE_EDITS[exp_logic.TEXT_EXP4_LIVE], None),
     ("exp", "EXP-4", "本塊不提供推薦欄位組合；「存檔」只寫 user_setting，不寫入 holding、policy、nav、dividend（G1†）。",
-     None),
+     "本塊不提供推薦欄位組合；本頁不寫入 持倉、保單、淨值、配息。"),
 ]
 
 
