@@ -549,7 +549,7 @@
 |---|---|---|---|---|---|
 | 1 | OAuth scopes | `infra/oauth.py::GOOGLE_OAUTH_SCOPES` 五項：`spreadsheets`、`drive.file`、`drive.metadata.readonly`、`openid`、`userinfo.email`；`build_authorize_url` 帶 `access_type=offline`、`prompt=select_account consent`、`include_granted_scopes=true` | J-1（收窄；`include_granted_scopes` 是否保留；既有已授予範圍如何處理）；`DEC-2026-10-25-02` (5)（現行 scope 高於所需，只標「實作時需 Security／Scope Decision Gate」）；護欄 4（`DEC-2026-10-17-03`）；BL-0392 | 否—資安 Stop Gate（J-1，需 2 組獨立稽核） | 65 J-1 標資安 2 組；改 scope 另需 J-11 護欄 4 的放寬裁示（客戶裁示＋資安 2 組） |
 | 2 | callback／redirect | `ui/helpers/io/oauth_state.py::handle_oauth_callback`；state 存 `st.session_state["_oauth_state"]`（`get_login_state`／`infra/oauth.py::generate_state`）；`_should_reject_oauth_code` 只在本 session 有 expected 且與回傳 state 不符時拒絕，expected 為 `None`（session 於導回時遺失）一律放行（其 docstring 自述為 v19.305 可用性取捨）；`redirect_uri`／client 設定來自 `_resolve_oauth_cfg`：secrets `google_oauth`，缺則 `st.session_state["custom_oauth_cfg"]`（舊 UI in-app 設定；`ui/helpers/portfolio/policy_admin_section.py` 寫入，含 client secret）；非測試程式搜尋 `pkce`、`code_verifier`、`code_challenge` **0 命中** | J-2（session 遺失時是否放行 state 檢查；OAuth client 設定只准來自部署 secrets）；`DEC-2026-10-25-02` (6)（不得改 callback）；護欄 4 | 否—資安 Stop Gate（J-2，需 2 組獨立稽核） | 65 J-2 標資安 2 組 |
-| 3 | credential storage | OAuth token 整包（access／refresh／id_token／`expires_at`）存 `st.session_state["gsheet_tokens"]`，email 存 `gsheet_email`；`ui/helpers/io/oauth_state.py::_get_oauth_client` 刷新後回寫同一 key；`ui_v2` 讀 `gsheet_tokens` 只用於遮蔽（`services/v2_tables/masking.py::MASKED_TOKEN_FIELDS`、各頁 `source.py::_secret_values`），`ui_v2` 沒有登入元件；服務帳戶憑證只來自 secret `google_service_account`。以 `refresh_token` 搜尋非測試程式，未見寫檔或寫 Sheet 的保存路徑（只以該字串範圍為限，不外推） | J-3（權杖存放）；`DEC-2026-10-25-02` (6)（不得改 credential storage、secrets、token persistence）；J-11 | 否—資安 Stop Gate（J-3，需 2 組獨立稽核） | 65 J-3 標資安 2 組 |
+| 3 | credential storage | OAuth token 整包（access／refresh／id_token／`expires_at`）存 `st.session_state["gsheet_tokens"]`，email 存 `gsheet_email`；`ui/helpers/io/oauth_state.py::_get_oauth_client` 刷新後回寫同一 key；`ui_v2` 讀 `gsheet_tokens` 只用於遮蔽（`services/v2_tables/masking.py::MASKED_TOKEN_FIELDS`、各頁 `source.py::_secret_values`），`ui_v2` 沒有登入元件；服務帳戶憑證只來自 secret `google_service_account`。以 `refresh_token` 搜尋非測試程式，命中位置為 `infra/oauth.py`（取得、續期、組憑證）、`repositories/policy/_helpers.py`（docstring）、`services/v2_tables/masking.py`（遮蔽欄名），未見寫檔或寫 Sheet 的保存路徑（只以該字串範圍為限，不外推） | J-3（權杖存放）；`DEC-2026-10-25-02` (6)（不得改 credential storage、secrets、token persistence）；J-11 | 否—資安 Stop Gate（J-3，需 2 組獨立稽核） | 65 J-3 標資安 2 組 |
 | 4 | token persistence | 權杖只在 session_state，程式內沒有跨 session 保存；`infra/oauth.py::ensure_fresh_tokens` 以 refresh_token 於過期前續期；Streamlit Cloud 整頁導向 Google 再導回會重建 session，`_should_reject_oauth_code` 的 docstring 記載過因此造成的無限登入迴圈事故；`infra/cache.py::_GLOBAL_REFRESH_KEEP_KEYS` 把 `gsheet_tokens`、`policy_sheet_id`、`active_policy_id` 列為全域重整時保留的 session key | J-3（「只在本次 session，或跨重新整理保存」）；J-10；`DEC-2026-10-25-02` (6) | 否—資安 Stop Gate（J-3，需 2 組獨立稽核） | 65 J-3 標資安 2 組 |
 | 5 | revoke／logout | 舊 UI 登出：`ui/sidebar.py` 登出鈕只對 session_state 逐一 pop `gsheet_tokens`、`gsheet_email`、`_oauth_state`、`active_policy_id`；`policy_sheet_id` 不在其中。非測試程式搜尋 `revoke`（不分大小寫）**0 命中**（沒有任何向 Google 撤銷權杖的呼叫）；`ui_v2` 無登出元件 | J-3（登出是否向 Google 撤銷）；第 D 節 D-5（清除範圍）；CAP-SET-02；CAP-SET-10（`DEC-2026-10-25-04`：不新增清除 Active 的獨立操作，登出／切換帳號後依「未驗證／尚未選定」規則） | 否—資安 Stop Gate（J-3，需 2 組獨立稽核） | 65 J-3 標資安 2 組 |
 | 6 | account switch | `build_authorize_url` 的 `prompt=select_account consent` 會強制出帳號選擇器；`handle_oauth_callback` 只在 session 尚無 `gsheet_tokens` 時換碼；舊 UI 沒有獨立「切換帳號」流程，等同登出再登入；`ui_v2` 無任何 OAuth 或切換元件 | `DEC-2026-10-25-02` (1)(2)（切換帳號是產品方向）；65 第 D 節流程；J 表沒有專屬一列，實作牽涉 J-1、J-2、J-3、J-10 | 待規則推導／協作助手判斷 | 本表不判；J 表無專屬稽核等級，是否分屬 J-1～J-3、J-10 各自的資安 2 組稽核，待協作助手判斷 |
@@ -566,6 +566,7 @@
 
 - **`SET-5`「重新取數」與 `DEC-2026-10-25-04`「第一階段全部唯讀、不寫任何 Google Sheet」是否衝突，沒有任何文件裁示。** 兩邊字面：(1) 本檔第 K 節 `SET-5` 列判「**保留**」，另加［重新讀取連線狀態］一顆（Q3）；現行 `SET-5` 取數後會寫 `market_indicator`、`fetch_log`、`fetch_log_open`（`services/v2_tables/settings_store.py::refetch_market_indicator`、`refetch_nav`，見上表第 14 列）。(2) `DEC-2026-10-25-04` (3) 與 J-6：新 B UI 第一階段「不得經新 B UI 寫入設定試算表、持倉／保單試算表、選股池或任何 Google Sheet 資料」，且「與現行 44／50／其他 SSOT 衝突者依正式修正程序處理，不可偷留例外」。
 - 兩者是否衝突取決於「`fetch_log`／`market_indicator` 的取數紀錄寫入算不算 Google Sheet 資料寫入」與「`SET-5` 保留是否含其寫入副作用」，**文件沒有任何一處裁示**；J-14 的客戶裁示只處理 `SET-4`，沒有提到 `SET-5` 的寫入。依 `PROJECT_RULES.md` 第 4 節（多個合理方案且結果具有產品意義），本檔不自行判定，標「**客戶裁示**」。
+- `DEC-2026-10-25-04` (3) 原文：「若與現行 44／50／其他 SSOT 衝突，依正式修正程序處理，不可偷留例外」。
 - 上一點是文件組盤點，不是結論：不得被引用為「`SET-5` 可以保留寫入」或「`SET-5` 必須改唯讀」任一方向的依據。
 
 #### J-INV.2 現況與 J-6 的落差
@@ -587,7 +588,7 @@
 | ④ 小標「操作」 | ④ | 第二層「操作」 | **保留**（護欄 6） |
 | ④ 小標「證據／來源」 | ④ | 第三層標題「證據／來源」 | **保留**（護欄 6） |
 | `SET-3` 規則參數卡 | ④操作 | 第二層「操作」；卡頭「設定試算表：‹名稱›」移到「試算表連線」 | **保留＋拆出一行** |
-| `SET-4` 參數編輯 | ④操作 | 第二層「操作」 | ~~**保留**（J-6）~~ → **第一階段新 B UI 唯讀，不得寫入（J-6 已裁示，`DEC-2026-10-25-04`）；~~呈現方式（唯讀顯示或暫不出現）待客戶裁示（J-14）~~ → 呈現方式已由客戶裁示 (a)：新 B UI 第一階段不出現 SET-4（J-14，`DEC-2026-10-25-04` 2026-10-26 補記；2026-10-26；有意識的狀態變更，不是漏刪；決策者：客戶）；現行頁面的 SET-4 本批不動**（2026-10-25 補記；有意識的政策變更，不是漏刪；決策者：客戶） |
+| `SET-4` 參數編輯 | ④操作 | 第二層「操作」 | ~~**保留**（J-6）~~ → **第一階段新 B UI 唯讀，不得寫入（J-6 已裁示，`DEC-2026-10-25-04`）；** ~~呈現方式（唯讀顯示或暫不出現）待客戶裁示（J-14）~~ → **呈現方式已由客戶裁示 (a)：新 B UI 第一階段不出現 SET-4（J-14，`DEC-2026-10-25-04` 2026-10-26 補記；2026-10-26；有意識的狀態變更，不是漏刪；決策者：客戶）；現行頁面的 SET-4 本批不動**（2026-10-25 補記；有意識的政策變更，不是漏刪；決策者：客戶） |
 | `SET-5` 重新取數 | ④操作 | 第二層「操作」 | **保留**；另加［重新讀取連線狀態］一顆（Q3，客戶已同意） |
 | `SET-2` 來源健康卡 | ④證據／來源 | 第三層 | **移入第三層**（原樣） |
 | `SET-6` 取數紀錄 | ④證據／來源 | 第三層 | **移入第三層**（原樣） |
@@ -655,7 +656,7 @@
 8. `docs/v2/44_fund_ui_ssot.md` 本批未逐行讀；設定頁層表與最終字樣以 44 為準。
 9. 本版由文件組單組改寫，尚未經獨立稽核。
 10. 2026-10-25 回修（下拉、Pending／Active、［使用這一本］、［在 Google 開啟］只指 active）與 Preview `docs/v2/prototype/ui_prototype_set_oauth.html` 由架構與前端組單組產出；Preview 只在本機無頭瀏覽器以 390 與 1366 寬實跑（第一層只放狀態的版本只重拍 390），未經客戶實機、未經獨立稽核；Preview 的驗證三步、失敗分類與搜尋全是假資料模擬，不代表 Google API 實際能分出這些狀態（J-9）。
-11. 2026-10-25 補記（`DEC-2026-10-25-04`：J-4、J-6、CAP-SET-10 與 Wireframe／Preview 方向核准）：客戶裁示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；J-14 的題目切法與推薦為文件組擬、待客戶裁示；「現行頁面的 SET-4 本批不動」為文件組讀法；Preview `docs/v2/prototype/ui_prototype_set_oauth.html` 本批未改、未重新檢查其與本裁示是否衝突（見回報）；本次補記由文件組單組寫成，未經第二組驗證。
+11. 2026-10-25 補記（`DEC-2026-10-25-04`：J-4、J-6、CAP-SET-10 與 Wireframe／Preview 方向核准）：客戶裁示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；~~J-14 的題目切法與推薦為文件組擬、待客戶裁示~~ → J-14 已由客戶裁示 (a)（`DEC-2026-10-25-04` 2026-10-26 補記；有意識的狀態變更，不是漏刪；日期 2026-10-26）；「現行頁面的 SET-4 本批不動」為文件組讀法；Preview `docs/v2/prototype/ui_prototype_set_oauth.html` 本批未改、未重新檢查其與本裁示是否衝突（見回報）；本次補記由文件組單組寫成，未經第二組驗證。
 
 ---
 
