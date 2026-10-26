@@ -196,10 +196,17 @@ def load_live() -> dict:
     nav_rows = []
     mi_rows = [dict(row) for row in indicators["rows"]] if indicators else []
     # 2026-10-26 客戶裁示第 6 節：set 頁重新取數的市場指標列只留在本次工作階段（`st.session_state`，未存入試算表）。
-    # 有就優先（同主鍵以本次為準）併在試算表那一份之上；本頁只用匯率鍵，用到本次工作階段的匯率列時畫面標來源。
-    # 試算表讀取失敗照舊進 errors（本次工作階段的列不代表試算表那一份讀得到）。
-    runtime_rows = settings_store.session_runtime(st.session_state).load_market_indicator()["rows"]
-    mi_rows, notes["runtime_market_indicator"] = live.merge_runtime_indicators(mi_rows, runtime_rows)
+    # ~~有就優先（同主鍵以本次為準）~~ → 獨立稽核必修 2（有意識的更正，不是漏刪）：以 L2 `merge_sheet_and_runtime_indicators`
+    # 合併（同主鍵不同值不覆蓋、留試算表值；與 set 頁同一套規則）。本頁只用匯率鍵：用到本次的匯率列時標來源；
+    # 匯率鍵主鍵矛盾 → 照既有取數失敗方式進 errors。試算表讀取失敗照舊進 errors。
+    notes["mi_sheet_failed"] = "market_indicator" in errors
+    merged = settings_store.merge_sheet_and_runtime_indicators(
+        mi_rows, settings_store.session_runtime(st.session_state))
+    mi_rows = merged["rows"]
+    notes["runtime_market_indicator"] = live.runtime_fx_used(merged["runtime_rows"])
+    conflict = live.runtime_fx_conflict_text(merged["conflicts"])
+    if conflict:
+        errors["market_indicator"] = "；".join(filter(None, [errors.get("market_indicator"), conflict]))
     if tables is not None and live.wants_market_value(setting_rows):
         mask = alo_holdings.masker(values)
         holding = tables["holding"]

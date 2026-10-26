@@ -1056,3 +1056,67 @@ def test_整鍵都沒寫入的鍵_只在失敗原因_不在部分略過摘要(bo
     log = _logs(rt)[1]
     assert "vol_index: 取回 1 列，全部未寫入" in log[6]
     assert "寫入 0 列" not in log[6] and "部分略過" not in log[6]
+
+
+# ═══════════════════════ 2026-10-26 獨立稽核必修 2：讀取端合併沿用同一套規則 ═══════════════════════
+
+def _mi_row(obs, value, *, key="vol_index", rel=None, fetched="2026-09-25T06:00:00Z"):
+    return {"indicator_key": key, "obs_date": obs, "release_date": rel or obs, "value_num": value,
+            "value_unit": "index", "source_tier": "市場指標", "is_revised": False, "fetched_at": fetched}
+
+
+def test_讀取端合併_同主鍵同值視為已存在_不同值不覆蓋列入conflicts_新主鍵採用():
+    rt = S.RuntimeFetchStore()
+    rt.append_market_indicator([_mi_row("2026-09-21", 15.0), _mi_row("2026-09-22", 17.0),
+                                _mi_row("2026-09-23", 18.5)])
+    sheet = [_mi_row("2026-09-21", 15.0, fetched="2026-09-24T06:00:00Z"), _mi_row("2026-09-22", 16.0)]
+    out = S.merge_sheet_and_runtime_indicators(sheet, rt)
+    assert [(r["obs_date"], r["value_num"]) for r in out["rows"]] == [
+        ("2026-09-21", 15.0), ("2026-09-22", 16.0), ("2026-09-23", 18.5)]       # 矛盾那筆留試算表值
+    assert out["rows"][0]["fetched_at"] == "2026-09-24T06:00:00Z"               # 同值：留試算表那一列
+    assert [r["obs_date"] for r in out["runtime_rows"]] == ["2026-09-23"]
+    assert [c["key"] for c in out["conflicts"]] == [("vol_index", "2026-09-22", "2026-09-22")]
+
+
+def test_讀取端合併_is_revised以合併後主鍵集合重算():
+    rt = S.RuntimeFetchStore()
+    rt.append_market_indicator([_mi_row("2026-07-01", 4.32, key="policy_rate_pct", rel="2026-09-01")])
+    sheet = [_mi_row("2026-07-01", 4.33, key="policy_rate_pct", rel="2026-08-01")]
+    out = S.merge_sheet_and_runtime_indicators(sheet, rt)
+    assert [(r["release_date"], r["is_revised"]) for r in out["rows"]] == [
+        ("2026-08-01", False), ("2026-09-01", True)]
+    assert out["conflicts"] == []
+
+
+def test_讀取端合併_沒有本次資料_原樣():
+    sheet = [_mi_row("2026-09-21", 15.0)]
+    out = S.merge_sheet_and_runtime_indicators(sheet, S.RuntimeFetchStore())
+    assert out == {"rows": sheet, "runtime_rows": [], "conflicts": []}
+
+
+@pytest.mark.parametrize("existing, incoming", [
+    ([], [_mi_row("2026-09-21", 15.0), _mi_row("2026-09-22", 16.0)]),
+    ([_mi_row("2026-09-21", 15.0)], [_mi_row("2026-09-21", 15.0), _mi_row("2026-09-22", 16.0)]),
+    ([_mi_row("2026-09-21", 15.0)], [_mi_row("2026-09-21", 15.5), _mi_row("2026-09-22", 16.0)]),
+    ([], [_mi_row("2026-09-22", 16.0), _mi_row("2026-09-22", 16.1)]),                  # 同一批內互相矛盾
+    ([], [_mi_row("2026-09-22", 16.0), _mi_row("2026-09-22", 16.0)]),                  # 同一批內重複
+    ([_mi_row("2026-07-01", 4.33, rel="2026-08-01")], [_mi_row("2026-07-01", 4.32, rel="2026-09-01")]),
+])
+def test_merge_market_indicator與append_market_indicator同輸入同結果(book, existing, incoming):
+    """純函式（記憶體）與休眠寫入函式（假試算表）對照：appended／already_present／conflicts 與寫進去的列一致。"""
+    from _fake_settings_sheet import FakeWorksheet
+    book.allow_writes = True   # 本條就是要走休眠中的 L1 寫入函式本體當對照組
+    head = [n for n, _k, _nl in R.MARKET_INDICATOR_SPEC]
+    book.tabs["market_indicator"] = FakeWorksheet(
+        book, "market_indicator", [head] + [R._serialize(R.MARKET_INDICATOR_SPEC, r) for r in existing])
+    sheet_out = R.append_market_indicator(incoming, mask=lambda m: m)
+    mem_out = R.merge_market_indicator(existing, incoming)
+    for k in ("appended", "already_present", "conflicts"):
+        assert sheet_out[k] == mem_out[k], k
+    R.clear_cache()
+    sheet_rows = R.load_market_indicator(mask=lambda m: m)["rows"]
+
+    def pick(rows):
+        return sorted((r["indicator_key"], r["obs_date"], r["release_date"], r["value_num"], r["is_revised"])
+                      for r in rows)
+    assert pick(sheet_rows) == pick(mem_out["rows"])

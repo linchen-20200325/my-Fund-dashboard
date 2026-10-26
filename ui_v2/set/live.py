@@ -44,6 +44,16 @@ TEXT_LOG_SCOPE = "這裡只記在本頁按「重新取數」的結果；其他�
 TEXT_MI_TIME_SCOPE = "這個時間是本頁最近一次取數的時間，不是市場總覽頁畫面上那一份的時間"  # ★4
 # 2026-10-26 裁示第 6 節：該塊含本次工作階段重新取數的結果（記憶體，未存入試算表）時，說明行加這一句標來源。
 TEXT_RUNTIME_SOURCE = "含本次工作階段取數，未存入試算表"
+# 2026-10-26 獨立稽核必修 1：本次資料在、但試算表那一份讀取失敗時，不說「含」（那會暗示試算表那份也在）。
+TEXT_RUNTIME_SOURCE_SHEET_FAILED = "本次工作階段取數，未存入試算表；試算表讀取失敗"
+
+
+def runtime_source_line(runtime: dict, errors: dict, tables) -> str | None:
+    """該塊的標來源句：`tables` 裡有一張含本次工作階段資料才標；其中有一張試算表讀取失敗 → 失敗那一句。"""
+    used = [t for t in tables if runtime.get(t)]
+    if not used:
+        return None
+    return TEXT_RUNTIME_SOURCE_SHEET_FAILED if any(errors.get(t) for t in tables) else TEXT_RUNTIME_SOURCE
 # SET-1 淨值列有時間時才印（客戶 2026-10-09 核准，`docs/v2/53_nav_source_plan.md` §7 第 4 列）。
 TEXT_NAV_TIME_SCOPE = "這個時間是本頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間"
 # 客戶 2026-10-19 裁示（同上）：`SET-4` 某鍵沒有任何畫面用到時那一行。~~「改這個鍵會影響：44 各塊的來源欄沒有宣告用它」~~
@@ -489,8 +499,10 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     set1["live_lines"] = _structure_lines(notes, "SET-1")
     set1["detail_lines"] = _strip_demo(set1["detail_lines"])  # ✂2
     runtime = notes.get("runtime") or {}
-    if runtime.get("market_indicator") or runtime.get("fetch_log"):   # 2026-10-26 裁示第 6 節：標來源
-        set1["detail_lines"].append(TEXT_RUNTIME_SOURCE)
+    errors = dataset.get("errors") or {}
+    line = runtime_source_line(runtime, errors, ("market_indicator", "fetch_log"))   # 2026-10-26 裁示第 6 節：標來源
+    if line:
+        set1["detail_lines"].append(line)
     # 客戶 2026-10-19 裁示：新鮮度上限那一行不帶括號裡的鍵名（`（set_max_age_days）`，一般畫面換字後是「（新鮮度上限日數）」）。
     set1["limit_lines"] = [line.replace(f"（{logic.MAX_AGE_KEY}）", "") for line in set1.get("limit_lines") or ()]
 
@@ -507,8 +519,9 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
         if _masked(row["message_text"], token):
             row["message_note_lines"].append(MASKED_NOTE)  # ★5
     set2["detail_lines"] = _strip_demo(set2["detail_lines"])  # ✂2（★3 只留在 SET-6，客戶 2026-10-19 裁示）
-    if runtime.get("fetch_log"):   # 2026-10-26 裁示第 6 節：標來源
-        set2["detail_lines"].append(TEXT_RUNTIME_SOURCE)
+    line = runtime_source_line(runtime, errors, ("fetch_log",))   # 2026-10-26 裁示第 6 節：標來源
+    if line:
+        set2["detail_lines"].append(line)
     _plain_results(set2, dataset)
     _relabel_unconfigured_lamp(set0, set2)
     if set2["placeholder"]:
@@ -647,8 +660,9 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     order = logic.TEXT_SET6_ORDER.replace("`", "") + "。"
     set6["detail_lines"] = [TEXT_SET6_ORDER_PLAIN if line == order else line
                             for line in _strip_demo(set6["detail_lines"])] + [TEXT_LOG_SCOPE]  # ✂2、★3；U7（c）
-    if runtime.get("fetch_log"):   # 2026-10-26 裁示第 6 節：標來源
-        set6["detail_lines"].append(TEXT_RUNTIME_SOURCE)
+    line = runtime_source_line(runtime, errors, ("fetch_log",))   # 2026-10-26 裁示第 6 節：標來源
+    if line:
+        set6["detail_lines"].append(line)
 
     _sa_raw_restore((set2, set6))
 

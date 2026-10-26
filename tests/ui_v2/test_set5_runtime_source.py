@@ -25,30 +25,45 @@ def _row(key, obs, value, rel=None):
 
 def test_兩頁標來源用同一句():
     assert alo_live.TEXT_RUNTIME_SOURCE == set_live.TEXT_RUNTIME_SOURCE == "含本次工作階段取數，未存入試算表"
+    # 2026-10-26 獨立稽核必修 1：試算表那一份讀取失敗時不說「含」
+    assert alo_live.TEXT_RUNTIME_SOURCE_SHEET_FAILED == set_live.TEXT_RUNTIME_SOURCE_SHEET_FAILED \
+        == "本次工作階段取數，未存入試算表；試算表讀取失敗"
 
 
-def test_alo_沒有本次工作階段的列_原樣且不標來源():
-    sheet = [_row("fx_twd_per_usd", "2026-10-20", 32.0)]
-    rows, used = alo_live.merge_runtime_indicators(sheet, [])
-    assert rows == sheet and used is False
+# ~~test_alo_沒有本次工作階段的列_原樣且不標來源／test_alo_同主鍵以本次工作階段為準_用到匯率列才標來源~~
+# → 2026-10-26 獨立稽核必修 2（有意識的行為變更，不是漏刪）：合併改由 L2 `merge_sheet_and_runtime_indicators`
+#   沿用 `merge_market_indicator` 的規則（同主鍵不同值不覆蓋；測試見 tests/test_v2_tables_settings_store.py）；
+#   本檔只測 alo 對合併結果的判讀。
+def test_alo_用到匯率列才標來源():
+    assert alo_live.runtime_fx_used([_row("fx_twd_per_usd", "2026-10-22", 32.3)]) is True
+    assert alo_live.runtime_fx_used([_row("vol_index", "2026-10-22", 17.0)]) is False
+    assert alo_live.runtime_fx_used([]) is False
 
 
-def test_alo_同主鍵以本次工作階段為準_用到匯率列才標來源():
-    sheet = [_row("fx_twd_per_usd", "2026-10-20", 32.0), _row("fx_twd_per_usd", "2026-10-21", 32.1)]
-    runtime = [_row("fx_twd_per_usd", "2026-10-21", 32.2), _row("fx_twd_per_usd", "2026-10-22", 32.3)]
-    rows, used = alo_live.merge_runtime_indicators(sheet, runtime)
-    assert [(r["obs_date"], r["value_num"]) for r in rows] == [
-        ("2026-10-20", 32.0), ("2026-10-21", 32.2), ("2026-10-22", 32.3)]
-    assert used is True
-    # 非匯率鍵（本頁用不到）不標來源
-    _rows, used = alo_live.merge_runtime_indicators(sheet, [_row("vol_index", "2026-10-22", 17.0)])
-    assert used is False
+def test_alo_匯率鍵主鍵矛盾_照失敗方式寫一句_非匯率鍵不計():
+    fx = {"key": ("fx_twd_per_usd", "2026-10-21", "2026-10-21")}
+    vol = {"key": ("vol_index", "2026-10-21", "2026-10-21")}
+    assert alo_live.runtime_fx_conflict_text([fx, vol]) == \
+        "主鍵矛盾 1 組（本次工作階段取數與試算表不同），未採用本次值"
+    assert alo_live.runtime_fx_conflict_text([vol]) is None and alo_live.runtime_fx_conflict_text([]) is None
 
 
-def test_alo_標來源只加在ALO2說明行_沒有就不加():
+def test_set_標來源句_試算表讀取失敗時換句_沒有本次資料不標():
+    ok = {"fetch_log": True, "market_indicator": False}
+    assert set_live.runtime_source_line(ok, {}, ("fetch_log",)) == set_live.TEXT_RUNTIME_SOURCE
+    assert set_live.runtime_source_line(ok, {"fetch_log": "讀不到"}, ("fetch_log",)) == \
+        set_live.TEXT_RUNTIME_SOURCE_SHEET_FAILED
+    assert set_live.runtime_source_line(ok, {"fetch_log": "讀不到"}, ("market_indicator",)) is None
+
+
+def test_alo_標來源只加在ALO2說明行_沒有就不加_試算表失敗換句():
     model = alo_logic.build_page_model(alo_fx.scenario_with("full", save_failed=False))
     plain = alo_live.apply_live_notes(model)
     marked = alo_live.apply_live_notes(model, runtime_source=True)
+    failed = alo_live.apply_live_notes(model, runtime_source=True, sheet_failed=True)
     where = [b["code"] for b in marked["blocks"] if alo_live.TEXT_RUNTIME_SOURCE in (b.get("detail_lines") or ())]
     assert where == ["ALO-2"]
     assert not [b for b in plain["blocks"] if alo_live.TEXT_RUNTIME_SOURCE in (b.get("detail_lines") or ())]
+    alo2 = next(b for b in failed["blocks"] if b["code"] == "ALO-2")
+    assert alo_live.TEXT_RUNTIME_SOURCE_SHEET_FAILED in alo2["detail_lines"]
+    assert alo_live.TEXT_RUNTIME_SOURCE not in alo2["detail_lines"]

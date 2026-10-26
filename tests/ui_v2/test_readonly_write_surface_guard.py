@@ -185,12 +185,16 @@ def _l1_write_problems(source: str, rel: str, writers) -> list:
             continue
         f = node.func
         fn = enclosing_fn(node)
-        if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id in aliases \
+        # 接收者：別名（`store.x(...)`）或全路徑（`import repositories.settings_sheet_repository` 後的
+        # `repositories.settings_sheet_repository.x(...)`；2026-10-26 獨立稽核建議補）。
+        # ⚠️ 已知限制：`getattr(store, "open_fetch_log")(...)` 之類的動態取用不在偵測範圍。
+        receiver = ast.unparse(f.value) if isinstance(f, ast.Attribute) else ""
+        if isinstance(f, ast.Attribute) and (receiver in aliases or receiver == L1_SETTINGS_MODULE) \
                 and f.attr in writers:
             ok = (rel == "services/v2_tables/settings_store.py" and f.attr == "save_user_setting"
-                  and fn is not None and fn.name == "save_user_setting")
+                  and fn is not None and fn.name == "save_user_setting" and receiver in aliases)
             if not ok:
-                problems.append(f"{rel}:{node.lineno} 呼叫 L1 寫入 {f.value.id}.{f.attr}(")
+                problems.append(f"{rel}:{node.lineno} 呼叫 L1 寫入 {receiver}.{f.attr}(")
         elif isinstance(f, ast.Attribute) and f.attr == "save_user_setting":
             problems.append(f"{rel}:{node.lineno} 經別的模組呼叫 save_user_setting（{ast.unparse(f)}）")
         elif isinstance(f, ast.Name) and f.id == "save_user_setting":
@@ -243,6 +247,10 @@ def test_l1_write_detector_catches_synthetic_violations():
     assert _l1_write_problems(early, rel, writers)
     assert _l1_write_problems("from repositories.settings_sheet_repository import open_fetch_log\n", rel, writers)
     assert _l1_write_problems("import x\nx.settings_store.save_user_setting(1)\n", "ui_v2/a.py", writers)
+    full = ("import repositories.settings_sheet_repository\n"
+            "def refetch(x):\n    repositories.settings_sheet_repository.open_fetch_log('市場指標', mask=x)\n")
+    assert _l1_write_problems(full, rel, writers)
+    assert _l1_write_problems(full.replace("open_fetch_log", "append_market_indicator"), "ui_v2/a.py", writers)
 
 
 def test_detectors_catch_synthetic_violations():

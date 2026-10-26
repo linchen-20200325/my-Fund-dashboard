@@ -117,7 +117,8 @@ def load_live() -> dict:
                                          "is_revised_mismatch": indicators["is_revised_mismatch"]}
     # 2026-10-26 裁示第 6 節：本次工作階段的重新取數結果（記憶體，未存入試算表）優先 —— 併在試算表既有資料之上
     # （同 log_id／同主鍵以本次為準）；有它時，該表讀試算表失敗不再整塊畫失敗（資料取自本次工作階段，畫面另標來源）。
-    runtime = _merge_runtime(settings_store.session_runtime(st.session_state), fetch_log, mi_rows, errors)
+    runtime = _merge_runtime(settings_store.session_runtime(st.session_state), fetch_log, mi_rows, errors,
+                             structure)
 
     # ★10：標題取自讀設定那一次打開（L1 記下），讀設定失敗時是同一個失敗的兩處呈現、不另計一次取數。
     if "user_setting" in errors:
@@ -158,26 +159,28 @@ def load_live() -> dict:
     return {"dataset": dataset, "notes": notes}
 
 
-def _merge_runtime(runtime, fetch_log: list, mi_rows: list, errors: dict) -> dict:
-    """把本次工作階段的取數紀錄與市場指標列併進（就地改 `fetch_log`、`mi_rows`、`errors`）。
+def _merge_runtime(runtime, fetch_log: list, mi_rows: list, errors: dict, structure: dict) -> dict:
+    """把本次工作階段的取數紀錄與市場指標列併進（就地改 `fetch_log`、`mi_rows`、`structure`）。
 
-    回 `notes["runtime"]`：`{"fetch_log": bool, "market_indicator": bool}` —— 哪一張表含本次工作階段的資料
-    （畫面據此標來源，`live.TEXT_RUNTIME_SOURCE`）。兩者都沒有 → 原樣（照既有 Missing／失敗呈現）。
+    ~~有本次資料時 `errors.pop(表)`~~ → 2026-10-26 獨立稽核必修 1（有意識的更正，不是漏刪）：試算表讀取錯誤**照留**、
+    照既有方式顯示；畫面另標「本次工作階段取數，未存入試算表；試算表讀取失敗」（`live.TEXT_RUNTIME_SOURCE_SHEET_FAILED`）。
+    市場指標列以 L2 `merge_sheet_and_runtime_indicators` 合併（同主鍵不同值不覆蓋、計入主鍵矛盾；必修 2）。
+
+    回 `notes["runtime"]`：`{"fetch_log": bool, "market_indicator": bool, "conflicts": int}` —— 哪一張表含本次工作階段的資料、
+    本次與試算表主鍵矛盾幾組（畫面據此標來源）。都沒有 → 原樣（照既有 Missing／失敗呈現）。
     """
     logs = runtime.load_fetch_log()["rows"]
-    rows = runtime.load_market_indicator()["rows"]
     if logs:
         ids = {r["log_id"] for r in logs}
         fetch_log[:] = sorted([r for r in fetch_log if r["log_id"] not in ids] + [dict(r) for r in logs],
                               key=lambda r: r["started_at"])
-        errors.pop("fetch_log", None)
-    if rows:
-        def pk(r):
-            return (r["indicator_key"], r["obs_date"], r["release_date"])
-        keys = {pk(r) for r in rows}
-        mi_rows[:] = [r for r in mi_rows if pk(r) not in keys] + [dict(r) for r in rows]
-        errors.pop("market_indicator", None)
-    return {"fetch_log": bool(logs), "market_indicator": bool(rows)}
+    merged = settings_store.merge_sheet_and_runtime_indicators(mi_rows, runtime)
+    mi_rows[:] = merged["rows"]
+    conflicts = len(merged["conflicts"])
+    if conflicts:
+        mi = structure.setdefault("market_indicator", {"bad_rows": 0, "conflicts": 0, "is_revised_mismatch": 0})
+        mi["conflicts"] = mi.get("conflicts", 0) + conflicts   # ★9「⚠ 主鍵矛盾 N 組，未採用」照既有方式顯示
+    return {"fetch_log": bool(logs), "market_indicator": bool(merged["runtime_rows"]), "conflicts": conflicts}
 
 
 def save_setting(setting_key, setting_value, value_kind) -> dict:

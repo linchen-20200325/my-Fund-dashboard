@@ -456,20 +456,28 @@ def _drop_dev_notes(node):
 TEXT_RUNTIME_SOURCE = "含本次工作階段取數，未存入試算表"
 
 
-def merge_runtime_indicators(sheet_rows, runtime_rows) -> tuple:
-    """試算表上的 `market_indicator` 列 ＋ 本次工作階段的列（同主鍵以本次為準）→ `(rows, 用到本次工作階段的匯率列與否)`。
-    本頁只用匯率鍵（`logic.FX_KEY_PREFIX` 開頭），所以「用到」只看匯率鍵。"""
-    def pk(row):
-        return (row["indicator_key"], row["obs_date"], row["release_date"])
+# 2026-10-26 獨立稽核必修 1：本次匯率列在、但試算表那一份讀取失敗時（與 set 頁同一句）。
+TEXT_RUNTIME_SOURCE_SHEET_FAILED = "本次工作階段取數，未存入試算表；試算表讀取失敗"
+# 必修 2：本次工作階段的匯率列與試算表同主鍵不同值 → 不覆蓋、不採用本次值，照取數失敗方式標示。
+TEXT_RUNTIME_FX_CONFLICT = "主鍵矛盾 {n} 組（本次工作階段取數與試算表不同），未採用本次值"
 
-    runtime = [dict(r) for r in runtime_rows]
-    keys = {pk(r) for r in runtime}
-    rows = [dict(r) for r in sheet_rows if pk(r) not in keys] + runtime
-    used = any(r["indicator_key"].startswith(logic.FX_KEY_PREFIX) for r in runtime)
-    return rows, used
+# ~~def merge_runtime_indicators(sheet_rows, runtime_rows)：同主鍵以本次為準~~ → 2026-10-26 獨立稽核必修 2
+# （有意識的更正，不是漏刪）：合併移到 L2 `settings_store.merge_sheet_and_runtime_indicators`（與 set 頁同一套規則）；
+# 本檔只判讀它的結果（下面兩支）。
 
 
-def apply_live_notes(model: dict, *, wired_keys=(), runtime_source=False) -> dict:
+def runtime_fx_used(runtime_rows) -> bool:
+    """本次工作階段採用的列（L2 合併結果的 `runtime_rows`）裡有沒有本頁用得到的匯率鍵。"""
+    return any(r["indicator_key"].startswith(logic.FX_KEY_PREFIX) for r in runtime_rows)
+
+
+def runtime_fx_conflict_text(conflicts):
+    """匯率鍵的主鍵矛盾 → 一句失敗訊息（沒有 → None）。非匯率鍵本頁用不到，不計。"""
+    n = sum(1 for c in conflicts if c["key"][0].startswith(logic.FX_KEY_PREFIX))
+    return TEXT_RUNTIME_FX_CONFLICT.format(n=n) if n else None
+
+
+def apply_live_notes(model: dict, *, wired_keys=(), runtime_source=False, sheet_failed=False) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的三件事：
 
     1. 頁首的示意行不印（`hint_note` 清空；`page.py` 正式模式那一支也不印它）；
@@ -488,7 +496,8 @@ def apply_live_notes(model: dict, *, wired_keys=(), runtime_source=False) -> dic
     if runtime_source:   # 2026-10-26 裁示第 6 節：標來源（見 `TEXT_RUNTIME_SOURCE`）
         for block in out["blocks"]:
             if block.get("code") == "ALO-2":
-                block["detail_lines"] = list(block.get("detail_lines") or ()) + [TEXT_RUNTIME_SOURCE]
+                line = TEXT_RUNTIME_SOURCE_SHEET_FAILED if sheet_failed else TEXT_RUNTIME_SOURCE
+                block["detail_lines"] = list(block.get("detail_lines") or ()) + [line]
     for button in _walk_buttons(out["blocks"]):
         if not button["_writes"]:      # `logic._BUTTON_WRITES`：只有「存檔」會寫 user_setting
             continue

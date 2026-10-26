@@ -165,8 +165,12 @@ def is_read_only() -> bool:
     """新 B UI（ui_v2）`user_setting` 存檔路徑是否唯讀：**第一階段恆為 True**，不讀任何旗標。
 
     ⚠️ 射程：**只管 `user_setting` 存檔路徑**（`settings_store.save_setting_for_page` 先問它）。
-    `SET-5`「重新取數」對 `fetch_log`／`fetch_log_open`／`market_indicator` 的 Google Sheet 寫入**不受本函式控制**，
-    依裁示第 6 節另批停寫 —— 本函式回 True **不代表**新 B UI 已對 Google Sheet 零寫入。
+    ~~`SET-5`「重新取數」對 `fetch_log`／`fetch_log_open`／`market_indicator` 的 Google Sheet 寫入**不受本函式控制**，
+    依裁示第 6 節另批停寫 —— 本函式回 True **不代表**新 B UI 已對 Google Sheet 零寫入。~~
+    → 2026-10-26 狀態更新（不是漏刪）：`SET-5` 已依裁示第 6 節停寫 —— 重新取數的結果與取數紀錄改記在本次工作階段
+    （`services/v2_tables/settings_store.py::RuntimeFetchStore`），不呼叫本檔任何寫入函式（守衛：
+    `tests/ui_v2/test_readonly_write_surface_guard.py::test_no_settings_sheet_l1_write_calls`）。本函式射程照舊只到
+    `user_setting` 存檔路徑；SET-5 的零寫入不是靠它，是靠不呼叫。
 
     依據：客戶 2026-10-26 正式裁示第 7 節（`docs/evidence/decisions/2026-10-26_ui_v2_implementation_security_gate_decisions.md`：
     「同一批或緊鄰批次把新 B UI 切為 default read-only」「不再依賴必須手動設定 `UI_V2_READ_ONLY=true` 才符合 J-6」

@@ -544,14 +544,16 @@ def test_重新取數後_SET1_SET2_SET6標本次工作階段來源_試算表零�
     assert live.TEXT_RUNTIME_SOURCE not in _strings(before)
     source.refetch("市場指標")
     data, model = _page()
-    assert data["notes"]["runtime"] == {"fetch_log": True, "market_indicator": True}
+    assert data["notes"]["runtime"] == {"fetch_log": True, "market_indicator": True, "conflicts": 0}
     for code in ("SET-1", "SET-2", "SET-6"):
         assert live.TEXT_RUNTIME_SOURCE in _b(model, code)["detail_lines"], code
     assert [r["indicator_key"] for r in data["dataset"]["market_indicator"]] == ["vol_index", "vol_index"]
     assert env.writes() == []
 
 
-def test_讀試算表取數紀錄失敗_有本次工作階段紀錄時優先用它(env, monkeypatch):
+# ~~test_讀試算表取數紀錄失敗_有本次工作階段紀錄時優先用它（斷言 errors 裡沒有 fetch_log）~~
+# → 2026-10-26 獨立稽核必修 1（有意識的行為變更，不是漏刪）：試算表讀取錯誤照留、照既有方式顯示；本次資料照併，標來源換句。
+def test_讀試算表取數紀錄失敗_錯誤照留_本次紀錄照併_標來源寫試算表讀取失敗(env, monkeypatch):
     _stub_fetch(monkeypatch, _vix())
     source.refetch("市場指標")
 
@@ -559,9 +561,31 @@ def test_讀試算表取數紀錄失敗_有本次工作階段紀錄時優先用�
         raise S.SettingsSheetError("讀不到", code="api")
     monkeypatch.setattr(source.settings_store, "load_fetch_log", broken)
     data, model = _page()
-    assert "fetch_log" not in data["dataset"]["errors"]
+    assert data["dataset"]["errors"]["fetch_log"] == "讀不到"
     assert [r["outcome"] for r in data["dataset"]["fetch_log"]] == ["ok"]
-    assert live.TEXT_RUNTIME_SOURCE in _b(model, "SET-6")["detail_lines"]
+    assert _b(model, "SET-6")["placeholder"]                             # 照既有讀取失敗呈現
+    for code in ("SET-2", "SET-6"):
+        lines = _b(model, code)["detail_lines"]
+        assert live.TEXT_RUNTIME_SOURCE_SHEET_FAILED in lines and live.TEXT_RUNTIME_SOURCE not in lines, code
+
+
+def test_本次市場指標與試算表同主鍵不同值_不覆蓋_計入主鍵矛盾(env, monkeypatch):
+    """2026-10-26 獨立稽核必修 2：讀取端沿用 `merge_market_indicator` 的規則，留試算表值、本次那列不採用。"""
+    from _fake_settings_sheet import FakeWorksheet
+    head = [n for n, _k, _nl in R.MARKET_INDICATOR_SPEC]
+    env.tabs["market_indicator"] = FakeWorksheet(env, "market_indicator", [
+        head, ["vol_index", "2026-09-22", "2026-09-22", "16", "index", "市場指標", "FALSE",
+               "2026-09-24T06:00:00Z"]])
+    _stub_fetch(monkeypatch, _vix())                                    # 本次 09-22＝17.0、09-23＝18.5
+    source.refetch("市場指標")
+    R.clear_cache()
+    data, model = _page()
+    rows = {(r["obs_date"]): r["value_num"] for r in data["dataset"]["market_indicator"]}
+    assert rows == {"2026-09-22": 16.0, "2026-09-23": 18.5}              # 矛盾那筆留試算表值
+    assert data["notes"]["runtime"]["conflicts"] == 1
+    assert data["notes"]["structure"]["market_indicator"]["conflicts"] == 1
+    assert live.TEXT_PK_CONFLICT.format(n=1) in _strings(model)
+    assert env.writes() == []
 
 
 def test_未接上的層級_source直接拒絕():

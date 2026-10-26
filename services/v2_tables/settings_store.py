@@ -360,6 +360,22 @@ class RuntimeFetchStore:
         return not (self.log_rows or self.indicator_rows)
 
 
+def merge_sheet_and_runtime_indicators(sheet_rows: list, runtime: RuntimeFetchStore) -> dict:
+    """讀取端：試算表既有 `market_indicator` 列 ＋ 本次工作階段的列，沿用 L1 `merge_market_indicator` 的同一套規則
+    （2026-10-26 獨立稽核必修 2）：
+    - 同主鍵同值 → 視為已存在（留試算表那一列，不算本次來源）；
+    - 同主鍵不同值 → **不覆蓋**，留試算表值、本次那一列不採用，主鍵列入 `conflicts`（畫面照既有主鍵矛盾／失敗方式標示）；
+    - `is_revised` 以合併後的主鍵集合重算。
+    回 `{"rows": 合併後的列（試算表在前）, "runtime_rows": 本次採用的列（新主鍵）, "conflicts": [...]}`。
+    ~~同主鍵以本次為準~~（上一版的讀取端行為；有意識的更正，不是漏刪：它直接蓋掉試算表值、矛盾偵測消失）。"""
+    runtime_rows = runtime.load_market_indicator()["rows"]
+    if not runtime_rows:
+        return {"rows": [dict(r) for r in sheet_rows], "runtime_rows": [], "conflicts": []}
+    merged = store.merge_market_indicator(sheet_rows, runtime_rows)
+    n = len(sheet_rows)
+    return {"rows": merged["rows"], "runtime_rows": merged["rows"][n:], "conflicts": merged["conflicts"]}
+
+
 def session_runtime(state) -> RuntimeFetchStore:
     """畫面層的 session 容器（`st.session_state` 或任何可變對映）→ 本次工作階段的 `RuntimeFetchStore`（沒有就放一個）。"""
     runtime = state.get(RUNTIME_STATE_KEY)
