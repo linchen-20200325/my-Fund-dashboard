@@ -333,6 +333,13 @@ ALLOWED_IMPORTS: frozenset[str] = frozenset(
         "infra.cache",
         "infra.config",
         "infra.gspread_retry",
+        # 2026-10-26 新 B UI Batch 3b（總管裁定；只開這一個 infra 子模組，不開整個 infra）：
+        # 供 `services/v2_tables/personal_session.py` 的 Personal OAuth session 橋接。token HTTP 由
+        # infra.personal_oauth 負責，L2 本身不 import requests。
+        # ⚠️ 本白名單是「整個 services/ 通用」，不是逐檔；逐檔限制靠兩條 pin：
+        # `test_infra_personal_oauth只有personal_session能import`（本檔）與
+        # tests/test_v2_tables_market_indicator.py::_EXTRA_ALLOWED。
+        "infra.personal_oauth",
     }
 )
 
@@ -1007,3 +1014,21 @@ def test_debt_tables_are_debt_not_approval():
         f"⚠️ 調高上限前先問:這個數字上一次下降,是**有人修好了**,還是**載體被刪掉了**?"
         f"後者不構成調高的理由。"
     )
+
+
+def test_infra_personal_oauth只有personal_session能import():
+    """`ALLOWED_IMPORTS` 對 services/ 是整體通用的；這條把 `infra.personal_oauth` 釘回單一檔。"""
+    owner = "services/v2_tables/personal_session.py"
+    offenders = sorted({
+        f"{_rel(p)} -> {m}"
+        for p in _services_files()
+        if _rel(p) != owner
+        for m, _ in _imported_modules(_parse(p))
+        if m == "infra.personal_oauth" or m.startswith("infra.personal_oauth.")
+    })
+    assert offenders == [], offenders
+    assert any(
+        m == "infra.personal_oauth"
+        for p in _services_files() if _rel(p) == owner
+        for m, _ in _imported_modules(_parse(p))
+    ), "owner 檔沒有 import infra.personal_oauth：白名單開了卻沒人用"

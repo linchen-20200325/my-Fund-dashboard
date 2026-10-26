@@ -463,8 +463,14 @@ _L2_TO_L2_ALLOWED = {"nav_dividend.py": ("services.moneydj_fetcher",)}
 #   `threading`（鎖住模組層記憶 dict）、`copy`（存入與交出都用深拷貝，下游就地改寫碰不到記憶裡那一份）。
 #   `copy` 是純標準庫、無 I/O，且在 `tests/test_services_purity_contract.py::ALLOWED_IMPORTS` 上。
 # 只開這兩個檔、這幾個名字；開了卻沒人用也紅。
+# → 2026-10-26 新 B UI Batch 3b（總管裁定，照 `exp_universe.py`／`exp_nav.py` 先例；決策者：AI 總管）：
+#   加開 `personal_session.py`，只准 `infra.personal_oauth` 這一個名字。理由：它是 Personal OAuth 的 session 橋接層，
+#   token 的 HTTP（換 token／續期／revoke／userinfo）由 `infra.personal_oauth` 負責，L2 本身不 import requests；
+#   Drive／Sheets 唯讀讀取走 L1 `repositories.personal_drive_repository`（`repositories` 本來就在 allowed_top）。
+#   不開整個 infra、不給其他檔；開了卻沒人用也紅。
 _EXTRA_ALLOWED = {"exp_universe.py": ("infra.cache", "infra.gspread_retry", "time", "threading"),
-                  "exp_nav.py": ("infra.cache", "time", "threading", "copy")}
+                  "exp_nav.py": ("infra.cache", "time", "threading", "copy"),
+                  "personal_session.py": ("infra.personal_oauth",)}
 
 
 def _is_v2_tables(name: str) -> bool:
@@ -521,5 +527,6 @@ def test_v2_tables只import標準庫與L0_L1():
     assert {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names} == {
         ("exp_universe.py", "infra.cache"), ("exp_universe.py", "infra.gspread_retry"),
         ("exp_universe.py", "time"), ("exp_universe.py", "threading"),
-        ("exp_nav.py", "infra.cache"), ("exp_nav.py", "time"), ("exp_nav.py", "threading"), ("exp_nav.py", "copy")}
+        ("exp_nav.py", "infra.cache"), ("exp_nav.py", "time"), ("exp_nav.py", "threading"), ("exp_nav.py", "copy"),
+        ("personal_session.py", "infra.personal_oauth")}
     assert extra_seen == {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names}, extra_seen
