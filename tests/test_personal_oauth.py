@@ -165,15 +165,19 @@ def test_state_replay_rejected():
     assert ei.value.code == ec.AUTH_STATE_INVALID
 
 
-def test_store_cap(monkeypatch):
+def test_store_cap_evicts_oldest(monkeypatch):
+    assert po.PENDING_MAX == 10000
     monkeypatch.setattr(po, "PENDING_MAX", 3)
-    states = [po.register_pending(now=0)[0] for _ in range(3)]
+    states = [po.register_pending(now=i)[0] for i in range(3)]
+    new_state, _ = po.register_pending(now=5)  # 滿額：不拒絕，淘汰最舊
+    assert po.pending_count() == 3
+    assert set(po._PENDING) == {states[1], states[2], new_state}
     with pytest.raises(po.PersonalOAuthError) as ei:
-        po.register_pending(now=1)
-    assert ei.value.code == ec.UNAVAILABLE
-    assert set(po._PENDING) == set(states)  # 不淘汰任何有效 state
-    # 過期後可再登記（先清過期）
-    po.register_pending(now=po.PENDING_TTL_SEC + 5)
+        po.consume_pending(states[0], now=6)  # 被淘汰者 fail closed
+    assert ei.value.code == ec.AUTH_STATE_INVALID
+    assert po.consume_pending(states[1], now=6)
+    # 過期者先清，不必淘汰有效 state
+    po.register_pending(now=po.PENDING_TTL_SEC + 10)
     assert po.pending_count() == 1
 
 
@@ -681,11 +685,130 @@ def test_begin_reuse_and_cap(monkeypatch):
     sess = {}
     po.begin_authorization(sess, now=0)
     po.begin_authorization({}, now=0)
-    po.begin_authorization(sess, now=1)  # 重用，不受滿額影響
-    with pytest.raises(po.PersonalOAuthError) as ei:
-        po.begin_authorization({}, now=1)
-    assert ei.value.code == ec.UNAVAILABLE
+    first = po.begin_authorization(sess, now=1)  # 重用，不增加筆數
     assert po.pending_count() == 2
+    po.begin_authorization({}, now=1)  # 滿額：淘汰最舊（即 sess 那一筆）
+    assert po.pending_count() == 2
+    assert first["state"] not in po._PENDING
+    again = po.begin_authorization(sess, now=2)  # 被淘汰後重開新 state，不重用失效者
+    assert again["state"] != first["state"] and again["state"] in po._PENDING
+
+
+# ── 同帳號重新登入不 revoke（複驗必修 1）───────────────────────────────
+def test_confirm_same_sub_does_not_revoke_old(monkeypatch):
+    sess = _logged_in()
+    sess[po.KEY_ACCOUNT_SUB] = "1234"  # 與 GOOD_ID 同一帳號
+    calls = _pending(monkeypatch, sess)
+    po.confirm_pending_login(sess, now=10)
+    assert [c for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == []
+    assert po.get_tokens(sess)["access_token"] == "NEWAT"
+
+
+def test_complete_same_sub_replaces_pending_without_revoke(monkeypatch):
+    sess = {}
+    _pending(monkeypatch, sess)
+    calls = _pending(monkeypatch, sess, now=1)  # 同帳號再走一次 callback
+    assert [c for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == []
+    assert po.get_pending_login(sess, now=2)["sub"] == "1234"
+
+
+def test_complete_different_sub_revokes_old_pending(monkeypatch):
+    sess = {po.KEY_PENDING_LOGIN: {"tokens": {"access_token": "OTHER"}, "sub": "other",
+                                   "email": "o@x", "expires_at": 9e9}}
+    calls = _pending(monkeypatch, sess, now=1)
+    assert [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == ["OTHER"]
+
+
+# ── clear_session 撤待確認登入（複驗必修 2）＋ 移除 pending state ──────
+def test_clear_session_revokes_pending_once(monkeypatch):
+    sess = {}
+    calls = _pending(monkeypatch, sess)
+    po.begin_authorization(sess, now=1)
+    st = sess[po.KEY_AUTH_PENDING_STATE]
+    po.clear_session(sess)
+    assert [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == ["NEWRT"]
+    assert st not in po._PENDING
+    assert not [k for k in sess if k.startswith(po.SESSION_PREFIX)]
+
+
+def test_clear_session_revoke_failure_does_not_raise(monkeypatch):
+    sess = {}
+    _pending(monkeypatch, sess)
+    monkeypatch.setattr(po.requests, "post", _raise(RuntimeError("boom")))
+    po.clear_session(sess)
+    assert po.KEY_PENDING_LOGIN not in sess
+
+
+def test_logout_revokes_pending_exactly_once(monkeypatch):
+    sess = {}
+    calls = _pending(monkeypatch, sess)
+    po.logout(sess)
+    assert [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == ["NEWRT"]
+
+
+def test_confirm_removes_session_pending_state(monkeypatch):
+    sess = {}
+    po.begin_authorization(sess, now=0)
+    st = sess[po.KEY_AUTH_PENDING_STATE]
+    _pending(monkeypatch, sess, now=0)
+    po.confirm_pending_login(sess, now=1)
+    assert st not in po._PENDING
+
+
+# ── 次要：confirm 競態、各入口過期檢查 ─────────────────────────────────
+def test_confirm_twice_raises_state_invalid(monkeypatch):
+    sess = {}
+    _pending(monkeypatch, sess)
+    po.confirm_pending_login(sess, now=1)
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.confirm_pending_login(sess, now=2)
+    assert ei.value.code == ec.AUTH_STATE_INVALID
+
+
+class _RacySession(dict):
+    """get 看得到待確認登入，但另一個執行緒已先 pop 走。"""
+
+    def pop(self, key, *default):
+        if key == po.KEY_PENDING_LOGIN:
+            return default[0] if default else None
+        return super().pop(key, *default)
+
+
+def test_confirm_race_no_keyerror(monkeypatch):
+    sess = _RacySession()
+    _pending(monkeypatch, sess)
+    with pytest.raises(po.PersonalOAuthError) as ei:
+        po.confirm_pending_login(sess, now=1)
+    assert ei.value.code == ec.AUTH_STATE_INVALID
+
+
+@pytest.mark.parametrize("entry", ["begin", "ensure_fresh", "complete_diff_sub"])
+def test_entries_expire_pending_login(monkeypatch, entry):
+    sess = {}
+    calls = _pending(monkeypatch, sess, now=0)
+    late = po.PENDING_LOGIN_TTL_SEC + 1
+    if entry == "begin":
+        po.begin_authorization(sess, now=late)
+    elif entry == "ensure_fresh":
+        with pytest.raises(po.PersonalOAuthError):
+            po.ensure_fresh(sess, now=late)
+    else:
+        s2, _ = po.register_pending(now=late)
+        _set_get(monkeypatch, lambda url, **kw: FakeResp(200, {"sub": "zzz", "email": "z@x", "email_verified": True}))
+        po.complete_authorization(sess, code="C", state=s2, now=late)
+    revoked = [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL]
+    assert revoked == ["NEWRT"]
+    if entry != "complete_diff_sub":
+        assert po.KEY_PENDING_LOGIN not in sess
+
+
+def test_complete_same_sub_expired_pending_not_revoked(monkeypatch):
+    """同帳號過期的待確認登入在 callback 時只本機丟棄：revoke 會連新授權一起撤掉。"""
+    sess = {}
+    _pending(monkeypatch, sess, now=0)
+    calls = _pending(monkeypatch, sess, now=po.PENDING_LOGIN_TTL_SEC + 1)
+    assert [c for c in calls if c[0] == po.GOOGLE_REVOKE_URL] == []
+    assert po.get_pending_login(sess, now=po.PENDING_LOGIN_TTL_SEC + 2)["sub"] == "1234"
 
 
 # ── 帳號身分（總管裁定 4）──────────────────────────────────────────────
