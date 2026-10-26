@@ -857,6 +857,7 @@ def _plain_set_words(model: dict) -> dict:
 
 LOGIN_CARD_TITLE = "Google 帳號"
 LOGIN_METHOD_LINE = "登入方式：Google 個人帳號"
+# 這句是靜態字樣，其真實性來自 `infra/personal_oauth.py::_scope_problem`：授權範圍不是恰為四項最小 scope 就拒絕登入。
 LOGIN_SCOPE_LINE = "授權範圍：唯讀（列出與讀取試算表）"
 TEXT_LOGIN_LOGGED_IN = "已登入 {email}"
 TEXT_LOGIN_LOGGED_IN_NO_EMAIL = "已登入（帳號讀不到）"
@@ -876,6 +877,7 @@ TEXT_LOGIN_PENDING = "以 {email} 登入？"
 TEXT_LOGIN_REASON_REJECTED = "原因：登入驗證資訊不符或已逾時"
 TEXT_LOGIN_REASON_SCOPE = "原因：授權範圍或帳號身分未通過檢查"
 TEXT_LOGIN_REASON_EXCHANGE = "原因：向 Google 換取登入資料失敗"
+TEXT_LOGIN_REASON_CANCELLED = "原因：登入被取消或沒有完成"   # NEW（授權頁導回帶 error）
 
 LOGIN_BUTTON_LOGIN = "登入 Google"
 LOGIN_BUTTON_RELOGIN = "重新登入"
@@ -892,6 +894,7 @@ LOGIN_ACTIONS = ("confirm", "reject", "logout", "switch_ask", "switch_cancel", "
 _AUTHORIZE_PREFIX = "https://accounts.google.com/"
 
 _ERR_AUTH_EXPIRED = "AUTH_EXPIRED"
+_ERR_AUTH_REQUIRED = "AUTH_REQUIRED"
 _ERR_STATE_INVALID = "AUTH_STATE_INVALID"
 _ERR_PERMISSION = "PERMISSION_DENIED"
 _ERR_UNAVAILABLE = "UNAVAILABLE"
@@ -902,6 +905,8 @@ def login_error_lines(code) -> list:
     """錯誤代號 → 畫面字（只比對代號，不比對例外字串；J-9）。未知代號一律落「⬜ 無法判定」，不當成功。"""
     if code == _ERR_AUTH_EXPIRED:
         return [TEXT_LOGIN_EXPIRED, TEXT_LOGIN_EXPIRED_NOTE]
+    if code == _ERR_AUTH_REQUIRED:   # 授權頁導回帶 error（取消或沒有完成）：來源層記 AUTH_REQUIRED
+        return [TEXT_LOGIN_FAILED, TEXT_LOGIN_REASON_CANCELLED]
     if code == _ERR_STATE_INVALID:
         return [TEXT_LOGIN_FAILED, TEXT_LOGIN_REASON_REJECTED]
     if code == _ERR_PERMISSION:
@@ -950,7 +955,8 @@ def login_view(login_input) -> dict:
             return view("pending_login", notice_lines + [TEXT_LOGIN_UNKNOWN, TEXT_LOGIN_UNKNOWN_NOTE],
                         [_login_button("reject", LOGIN_BUTTON_CANCEL)], notice)
         return view("pending_login", notice_lines + [TEXT_LOGIN_PENDING.format(email=email)],
-                    [_login_button("confirm", LOGIN_BUTTON_CONFIRM), _login_button("reject", LOGIN_BUTTON_CANCEL)],
+                    [{**_login_button("confirm", LOGIN_BUTTON_CONFIRM), "arg": email},   # 確認的是「畫面上顯示的這個帳號」
+                     _login_button("reject", LOGIN_BUTTON_CANCEL)],
                     notice)
 
     if login_state == "logged_in":
@@ -969,10 +975,10 @@ def login_view(login_input) -> dict:
     if not isinstance(begin, dict):
         return view("unknown", notice_lines + [TEXT_LOGIN_UNKNOWN, TEXT_LOGIN_UNKNOWN_NOTE], [], notice)
     if begin.get("ok") is not True:
+        # `begin_login` 的 UNAVAILABLE 不只代表「部署沒設定 Google 登入」（`infra/personal_oauth.py` 在登記授權請求失敗等
+        # 暫時或內部失敗時也丟 UNAVAILABLE），橋接的回傳又只帶代號、分不出來 → 無法證明是未設定，一律落「⬜ 無法判定」，
+        # 不印「尚未設定」（B-1 字樣常數保留，待橋接能證明未設定時再接）。
         code = begin.get("error_code")
-        if code == _ERR_UNAVAILABLE:   # 部署端沒有可用的 Google 登入設定（B-1）：不畫登入鈕
-            extra = [] if notice in (None, _ERR_UNAVAILABLE) else notice_lines
-            return view("not_configured", extra + [TEXT_LOGIN_NOT_CONFIGURED, TEXT_LOGIN_NOT_CONFIGURED_NOTE], [], code)
         return view("unknown", notice_lines + login_error_lines(code), [], code if isinstance(code, str) else None)
     url = begin.get("authorize_url")
     if not (isinstance(url, str) and url.startswith(_AUTHORIZE_PREFIX)):

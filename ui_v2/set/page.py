@@ -558,7 +558,8 @@ def _render_login(login_live) -> None:
             if "url" in button:
                 st.link_button(button["label"], button["url"], key=key)
             else:
-                st.button(button["label"], key=key, on_click=login_live["act"], args=(button["action"],))
+                st.button(button["label"], key=key, on_click=login_live["act"],
+                          args=(button["action"], *((button["arg"],) if "arg" in button else ())))
 
 
 def _render_set0_nav() -> None:

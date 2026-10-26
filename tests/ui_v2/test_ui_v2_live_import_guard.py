@@ -54,7 +54,7 @@ _FILE_ALLOWLIST = {
     },
     # 2026-09-26 set 頁正式模式（客戶核准的線框草稿）。`spec` 是規格快照（純 tuple），不是 fixtures。
     "ui_v2/set/source.py": {
-        "__future__", "os", "datetime.datetime", "datetime.timezone", "streamlit",
+        "__future__", "logging", "os", "datetime.datetime", "datetime.timezone", "streamlit",
         "services.v2_tables.market_indicator", "services.v2_tables.masking",
         "services.v2_tables.settings_store", "ui_v2.set.spec",
         # 2026-10-26 批 3b-2：Google 個人登入的 L2 橋接（只此一個，只給 set 頁的 source.py）

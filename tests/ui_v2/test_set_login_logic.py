@@ -59,11 +59,13 @@ def test_未登入_授權網址不是Google端點_不畫連結():
         assert v["state"] == "unknown" and v["buttons"] == [], bad
 
 
-def test_未設定Google登入_B1_不畫登入鈕():
+def test_橋接回UNAVAILABLE_不印尚未設定_落無法判定_不畫登入鈕():
+    """UNAVAILABLE 也代表暫時或內部失敗，無法證明是「部署沒設定 Google 登入」→ 不得印 B-1 那句。"""
     v = _view(_status("logged_out"), {"ok": False, "error_code": ec.UNAVAILABLE})
-    assert v["state"] == "not_configured"
-    assert v["lines"] == [live.TEXT_LOGIN_NOT_CONFIGURED, live.TEXT_LOGIN_NOT_CONFIGURED_NOTE]
-    assert v["buttons"] == []
+    assert v["state"] == "unknown" and v["buttons"] == []
+    assert v["lines"] == [live.TEXT_LOGIN_UNKNOWN, live.TEXT_LOGIN_UNKNOWN_NOTE]
+    for every in _every_view():
+        assert live.TEXT_LOGIN_NOT_CONFIGURED not in every["lines"]
 
 
 @pytest.mark.parametrize("begin", [None, "x", 3, [], {"ok": True}, {"ok": False}, {"ok": False, "error_code": "WAT"}])
@@ -178,9 +180,18 @@ def test_動作失敗的錯誤字畫在目前狀態之上_不改變目前狀態(
     assert v["state"] == "logged_in" and v["lines"][0] == live.TEXT_LOGIN_FAILED
 
 
-def test_未設定時_同代號的動作錯誤不重複顯示():
-    v = _view(_status("logged_out"), {"ok": False, "error_code": ec.UNAVAILABLE}, notice=ec.UNAVAILABLE)
-    assert v["lines"] == [live.TEXT_LOGIN_NOT_CONFIGURED, live.TEXT_LOGIN_NOT_CONFIGURED_NOTE]
+def test_授權頁導回帶error_AUTH_REQUIRED_畫登入沒有完成_不是讀不到登入狀態():
+    v = _view(_status("logged_out"), {"ok": True, "authorize_url": _URL}, notice=ec.AUTH_REQUIRED)
+    assert v["lines"] == [live.TEXT_LOGIN_FAILED, live.TEXT_LOGIN_REASON_CANCELLED]
+    assert live.TEXT_LOGIN_UNKNOWN_NOTE not in v["lines"]
+    assert v["buttons"][0]["label"] == live.LOGIN_BUTTON_RELOGIN
+
+
+def test_確認鈕帶畫面上顯示的帳號():
+    v = _view(_status("pending_login", pending_login_email="new@example.com"))
+    confirm = next(b for b in v["buttons"] if b["action"] == "confirm")
+    assert confirm["arg"] == "new@example.com"
+    assert all("arg" not in b for b in v["buttons"] if b["action"] != "confirm")
 
 
 # ───────────── 不變式：零權杖、零指示句、零禁詞、不是寫入控制 ─────────────
@@ -229,6 +240,7 @@ def test_按鈕只在白名單動作內_不是寫入控制():
             assert b["action"] in allowed
             assert "_writes" not in b and "_action_kind" not in b   # 不在 `logic` 的按鈕表裡，不經 readonly.strip
             assert ("url" in b) == (b["action"] == "login")
+            assert ("arg" in b) == (b["action"] == "confirm")
 
 
 def test_ui_v2_set_只有登入動作_沒有任何寫入動作代號():
@@ -242,27 +254,59 @@ def _set_py_files():
     return sorted(_SET_DIR.glob("*.py"))
 
 
+_BANNED_ST_ATTRS = {"user", "experimental_user", "login", "logout", "context"}
+
+
+def _identity_hits(tree, label="x"):
+    """找：`st.<平台登入身分相關名>`（含別名）、`getattr(st, …)`、`from streamlit import …`、`import streamlit.<子模組>`。"""
+    aliases = {"st", "streamlit"}
+    hits = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.name == "streamlit" and a.asname:
+                    aliases.add(a.asname)
+                elif a.name.startswith("streamlit."):
+                    hits.append(f"{label}:{node.lineno} import {a.name}")
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".")[0] == "streamlit":
+            hits.append(f"{label}:{node.lineno} from streamlit import …")
+        if isinstance(node, ast.Attribute) and node.attr in _BANNED_ST_ATTRS:
+            if isinstance(node.value, ast.Name) and node.value.id in aliases:
+                hits.append(f"{label}:{node.lineno} st.{node.attr}")
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "getattr"
+                and node.args and isinstance(node.args[0], ast.Name) and node.args[0].id in aliases):
+            hits.append(f"{label}:{node.lineno} getattr(st, …)")
+    return hits
+
+
 def test_set頁原始碼不讀平台登入身分_AST():
     """J-10：個人 OAuth 與平台登入身分 namespace 分離；本頁一律只用 session_state／query_params。
-    用 AST 找 `st.<名>` 屬性（不是字串比對，所以本檔與註解不會自己命中）。"""
-    banned = {"user", "experimental_user"}
+    用 AST（不是字串比對，所以本檔與註解不會自己命中）。"""
     hits = []
     for path in _set_py_files():
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.Attribute) and node.attr in banned:
-                value = node.value
-                if isinstance(value, ast.Name) and value.id in ("st", "streamlit"):
-                    hits.append(f"{path.name}:{node.lineno}")
-            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "getattr"
-                    and node.args and isinstance(node.args[0], ast.Name) and node.args[0].id in ("st", "streamlit")):
-                hits.append(f"{path.name}:{node.lineno} getattr(st, …)")
+        hits += _identity_hits(ast.parse(path.read_text(encoding="utf-8")), path.name)
     assert hits == []
 
 
-def test_AST偵測器本身咬得到_負控():
-    probe = ast.parse("import streamlit as st\nx = st." + "user" + "\ny = getattr(st, name)\n")
-    found = [n for n in ast.walk(probe) if isinstance(n, ast.Attribute) and n.attr == "user"]
-    assert found and isinstance(found[0].value, ast.Name) and found[0].value.id == "st"
+@pytest.mark.parametrize("code", [
+    "import streamlit as st\nx = st.user\n",
+    "import streamlit as st\nx = st.experimental_user\n",
+    "import streamlit as st\nst.login()\n",
+    "import streamlit as st\nst.logout()\n",
+    "import streamlit as st\nx = st.context\n",
+    "import streamlit as s2\nx = s2.user\n",
+    "from streamlit import user\n",
+    "from streamlit import session_state\n",
+    "import streamlit.web as w\n",
+    "import streamlit as st\ny = getattr(st, name)\n",
+])
+def test_AST偵測器本身咬得到_負控(code):
+    assert _identity_hits(ast.parse(code))
+
+
+def test_AST偵測器不誤報正常用法():
+    assert _identity_hits(ast.parse("import streamlit as st\nst.session_state['a'] = 1\nst.query_params.get('x')\n")) == []
 
 
 def test_source只呼叫橋接的身分動作_不碰試算表寫入():

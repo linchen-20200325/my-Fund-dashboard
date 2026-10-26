@@ -35,6 +35,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timezone
 
@@ -225,7 +226,8 @@ _KEY_NOTICE = "_set_login_notice"          # 上一個登入動作留下的錯�
 _KEY_SWITCH_ASK = "_set_login_switch_ask"  # 已按［切換帳號］、等使用者確認
 _KEY_CB_SEEN = "_set_login_cb_seen"        # 這個工作階段已處理過的 callback state（防重跑重放）
 # Google 導回時帶的參數：處理完一律從網址拿掉（授權碼一次性，不留在網址列、不隨重跑重送）。
-_CALLBACK_PARAMS = ("code", "state", "scope", "authuser", "prompt", "hd")
+_CALLBACK_PARAMS = ("code", "state", "scope", "authuser", "prompt", "hd", "error", "error_description", "iss")
+_LOG = logging.getLogger(__name__)
 
 
 def _handle_oauth_callback() -> None:
@@ -234,12 +236,16 @@ def _handle_oauth_callback() -> None:
     成功只進「待確認登入」（要使用者按［確認］才啟用，見 `login_act`）。重跑時同一個 state 不再送第二次
     （橋接與 OAuth 層本來就是一次性，第二次必得 AUTH_STATE_INVALID，會把成功蓋成假失敗）。"""
     params = st.query_params
-    code, state_param = params.get("code"), params.get("state")
-    if code is None or state_param is None:
+    present = [name for name in _CALLBACK_PARAMS if name in params]
+    if not present:
         return
-    for name in _CALLBACK_PARAMS:
-        if name in params:
-            del params[name]
+    code, state_param, has_error = params.get("code"), params.get("state"), "error" in params
+    for name in present:   # 先拿掉（含單獨出現的 code／state）、再處理：授權碼一次性，不留在網址列
+        del params[name]
+    if code is None or state_param is None:
+        if has_error and code is None:   # 授權頁導回帶 error：取消或沒有完成（分不出細項，不猜）
+            st.session_state[_KEY_NOTICE] = "AUTH_REQUIRED"
+        return
     if st.session_state.get(_KEY_CB_SEEN) == state_param:
         return
     st.session_state[_KEY_CB_SEEN] = state_param
@@ -254,17 +260,20 @@ def login_load() -> dict:
     state = st.session_state
     try:
         _handle_oauth_callback()
-    except Exception:  # noqa: BLE001 —— 不是吞：callback 沒處理成，畫面如實落「無法判定」，不當成已登入
+    except Exception as exc:  # noqa: BLE001 —— 不是吞：記類型（不記訊息）、畫面如實落「無法判定」，不當成已登入
+        _LOG.warning("設定頁登入 callback 處理失敗：%s", type(exc).__name__)
         state[_KEY_NOTICE] = "UNAVAILABLE"
     try:
         status = personal_session.status(state)
-    except Exception:  # noqa: BLE001 —— 同上
+    except Exception as exc:  # noqa: BLE001 —— 同上
+        _LOG.warning("設定頁讀登入狀態失敗：%s", type(exc).__name__)
         status = None
     begin = None
     if isinstance(status, dict) and status.get("login_state") == "logged_out":
         try:
             begin = personal_session.begin_login(state)   # 同一工作階段重複呼叫會重用尚未過期的授權請求
-        except Exception:  # noqa: BLE001 —— 同上
+        except Exception as exc:  # noqa: BLE001 —— 同上
+            _LOG.warning("設定頁取授權網址失敗：%s", type(exc).__name__)
             begin = None
     switch_confirm = bool(state.get(_KEY_SWITCH_ASK)) and isinstance(status, dict) \
         and status.get("login_state") == "logged_in"
@@ -274,8 +283,11 @@ def login_load() -> dict:
             "switch_confirm": switch_confirm}
 
 
-def login_act(action) -> None:
-    """畫面按鈕的動作（只接白名單內的代號）。確認只由使用者按［確認］進來，沒有任何自動確認的路徑。"""
+def login_act(action, displayed_email=None) -> None:
+    """畫面按鈕的動作（只接白名單內的代號）。確認只由使用者按［確認］進來，沒有任何自動確認的路徑。
+
+    `confirm` 要帶「畫面上顯示的待確認帳號」：動作當下重讀狀態，目前待確認的帳號不等於畫面上顯示的就不確認（無動作；
+    重畫後畫面會顯示新的待確認登入）。`switch_go` 要有 `switch_ask` 留下的標記。"""
     state = st.session_state
     if action == "switch_ask":
         state[_KEY_SWITCH_ASK] = True
@@ -284,6 +296,15 @@ def login_act(action) -> None:
         state.pop(_KEY_SWITCH_ASK, None)
         return
     if action == "confirm":
+        try:
+            current = personal_session.status(state)
+        except Exception as exc:  # noqa: BLE001 —— 讀不到目前待確認的帳號 ＝ 無法證明畫面上那個還是它，不確認
+            _LOG.warning("設定頁確認前讀登入狀態失敗：%s", type(exc).__name__)
+            return
+        shown = displayed_email.strip() if isinstance(displayed_email, str) else ""
+        if not (isinstance(current, dict) and current.get("login_state") == "pending_login" and shown
+                and current.get("pending_login_email") == shown):
+            return
         result = personal_session.confirm_login(state)
     elif action == "reject":
         result = personal_session.reject_login(state)
@@ -291,7 +312,8 @@ def login_act(action) -> None:
         state.pop(_KEY_SWITCH_ASK, None)
         result = personal_session.logout(state)
     elif action == "switch_go":
-        state.pop(_KEY_SWITCH_ASK, None)
+        if not state.pop(_KEY_SWITCH_ASK, None):
+            return
         result = personal_session.switch_account(state)   # 先登出（清 Active／Pending），再開始新授權；回到未登入畫面
     else:
         return
