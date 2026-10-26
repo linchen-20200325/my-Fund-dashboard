@@ -387,7 +387,7 @@
 3. **觸發時機**（6.1 第 1、6、7 點之外另加）：
    - **一般**：一個實作小批完成、commit 完成、PR 建立、稽核完成、PR 合併、Model／Effort 切換前、進入下一完整工作階段前。
    - **額度約 >80%**：每個 meaningful safe checkpoint 都更新；優先小批次；避免一次開過大新工作。
-   - **額度約 >90%**：每完成一個可驗證步驟就保存；優先 push 已安全完成的 commit／branch；不把大量未保存工作留在本機工作樹；新批次若無法在安全 checkpoint 前保存就延後開始（併讀 6.1 第 7 點 Final Save）。
+   - **額度約 >90%**：每完成一個可驗證步驟就保存；優先 push 已安全完成的 commit／branch；不把大量未保存工作留在本機工作樹；新批次若無法在安全 checkpoint 前保存就延後開始（併讀 6.1 第 7 點 Final Save：額度接近約 90% 時禁止開新 Batch；兩者不一致時以較嚴者為準）。
 4. **Git 保存原則**：可保存＝已完成且自驗通過的安全修改、feature branch commit、Draft PR、HANDOFF checkpoint。**不得為了 checkpoint**：把未驗證程式推進 main、繞過 CI／audit、降低 security gate、把 secret／token／credential 寫入文件或 commit（同 6.1 第 4 點）、拿 checkpoint 當完成證據（同第 1 節 1.3）。未完成但需保存 → 留在 feature branch、commit message 標示 WIP／checkpoint、PR 維持 Draft、HANDOFF 寫明「未完成、不可視為驗收」，最終仍走正常 review／CI／Auto-Ship（第 10 節）。既有規則若禁止 WIP commit 則以既有規則為準；**2026-10-26 文件組查 `CLAUDE.md`、`PROCESS.md`、`EXCEPTIONS.md`、本檔、`docs/DECISIONS.md`、`docs/HANDOFF.md`，未見禁止 WIP commit 的條文**（單組 grep，未經第二組驗證）；commit message 識別碼規則（第 10 節）照舊適用。
 5. **恢復流程**（新 session、額度恢復、對話中斷後，不問客戶「做到哪裡」）：(1) GitHub Verification Gate（第 2 節）→ (2) 讀本檔 → (3) 讀 HANDOFF Resume Checkpoint → (4) 讀相關 BACKLOG／DECISIONS → (5) 查 current PR／branch／CI → (6) 比對 HANDOFF 與 GitHub。**GitHub 操作事實優先**（第 1 節 1.1）：一致 → 直接從 next single action 繼續；不一致 → 以 GitHub 為準修正 HANDOFF 後繼續。只有真正 Stop Gate（第 4 節）才問客戶。
 6. **中斷後不得重做**：不因 session 失憶而重跑已有可信 CI 證據的整批工作、重問已正式裁示的問題、重建已存在的 PR、重寫已完成文件、重新研究已有 evidence 的結論；先讀現有 GitHub 證據再判斷是否真的需要重跑（併讀第 9 節 9.1）。
