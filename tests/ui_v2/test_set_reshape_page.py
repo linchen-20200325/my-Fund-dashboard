@@ -2,7 +2,8 @@
 """設定與診斷頁正式模式重排的畫面測試（Phase 3 P1-⑥；`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之八其二、其三）。
 
 用 `tests/ui_v2/_plain_scan.py` 的設定與診斷正式模式腳本（真 L2 ＋ 真 L1 ＋ 假 gspread，不打網路）。
-驗：①結論 → ②關鍵數字（只有資料新鮮度卡）→ ③需要注意（有「外」才畫）→ ④詳細資料（「操作」：規則參數卡、參數編輯、重新取數；
+驗：①結論 → ②關鍵數字（只有資料新鮮度卡）→ ③需要注意（有「外」才畫）→ ④詳細資料（「操作」：規則參數卡、重新取數 ——
+參數編輯第一階段不畫（客戶 2026-10-26 裁示第 7 節）；
 「證據／來源」：來源健康卡、取數紀錄、欄位對照表、進階診斷）；`SET-0` 燈下那一枚同頁導覽；示範模式畫面逐位元組不變。
 """
 
@@ -86,7 +87,11 @@ def test_四段由上而下_SET1在關鍵數字_SET2SET3搬進詳細資料(name)
     assert any('data-block="SET-3"' in m.value for m in set3.markdown)
     assert any('data-block="SET-2"' in m.value for m in set2.markdown)
     labels = [e.label for e in at.expander]
-    assert labels.index(set3.label) < labels.index(next(x for x in labels if x.startswith("參數編輯")))
+    # ~~`assert labels.index(set3.label) < labels.index(<「參數編輯」展開區>)`~~ —— 有意識的行為變更，不是漏刪（決策者：客戶
+    # 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6、2026-10-26 J-14 補記）：新 B UI 第一階段 `SET-4` 參數編輯塊整塊不畫
+    # （`ui_v2/readonly.py`）。44 正文 SET-4 塊待正式修正程序（44 凍結，本測試不改 44）。
+    assert not any(x.startswith("參數編輯") for x in labels), labels
+    assert labels.index(set3.label) < labels.index(next(x for x in labels if x.startswith("重新取數")))
     assert labels.index(set2.label) > labels.index(next(x for x in labels if x.startswith("重新取數")))
     assert labels.index(set2.label) < labels.index(next(x for x in labels if x.startswith("取數紀錄")))
 
@@ -102,8 +107,10 @@ def test_燈下一枚同頁導覽_落點在重新取數之前_不是按鈕(name)
     anchor = _first(values, f'id="{sections.SET_NAV_ANCHOR}"')
     assert _label(values, plain.LABEL_LAYER3) < anchor < _label(values, plain.LABEL_LAYER4)
     assert sum(f'id="{sections.SET_NAV_ANCHOR}"' in v for v in values) == 1
-    # 不新增按鈕：畫面上的按鈕只有既有的「存檔」與「重新取數」兩枚。
-    assert sorted(b.label for b in at.button) == ["存檔", "重新取數"]
+    # 不新增按鈕：畫面上的按鈕只有既有的「重新取數」一枚。
+    # ~~`== ["存檔", "重新取數"]`~~ —— 有意識的行為變更，不是漏刪（客戶 2026-10-26 裁示第 7 節；J-6／J-14）：
+    # 第一階段唯讀，`SET-4` 的「存檔」連同整塊不畫。44 待正式修正程序。
+    assert sorted(b.label for b in at.button) == ["重新取數"]
 
 
 def test_有逾期_需要注意列出外那一列_SET1比較欄加時鐘():

@@ -214,10 +214,14 @@ def test_SET_取數紀錄射程只說一次_不寫set頁():
 def test_SET_摘要只寫個數_標籤中文_影響說明_新鮮度上限():
     titles = _expander_titles("set", "正常")
     assert "規則參數卡　—　18 個設定，18 個未設定" in titles
-    assert "參數編輯　—　18 個設定，18 個未設定" in titles
+    # ~~`"參數編輯　—　18 個設定，18 個未設定" in titles`、`"計算基礎" in texts`（SET-4 輸入欄標籤）、
+    # `"目前沒有畫面用到這個設定" in texts`（SET-4 每鍵那一行）~~ —— 有意識的行為變更，不是漏刪（決策者：客戶 2026-10-26
+    # 裁示第 7 節；`DEC-2026-10-25-04` J-6、2026-10-26 J-14 補記）：新 B UI 第一階段 `SET-4` 參數編輯塊整塊不畫
+    # （`ui_v2/readonly.py`）；44 待正式修正程序（44 凍結，本測試不改 44）。
+    assert not any(t.startswith("參數編輯") for t in titles)
     texts = _texts("set", "正常")
-    assert "計算基礎" in texts and not any(t.startswith("alo_basis（") for t in texts)
-    assert "目前沒有畫面用到這個設定" in texts
+    assert "計算基礎" not in texts and not any(t.startswith("alo_basis（") for t in texts)
+    assert "目前沒有畫面用到這個設定" not in texts
     assert not any("44 各塊的來源欄" in t for t in texts)
     assert "新鮮度上限：⬜ 未設定" in texts and not any("新鮮度上限日數）" in t for t in texts)
 
@@ -233,12 +237,18 @@ def test_SET_服務帳戶與試算表ID字樣():
 
 def test_ALO_字句():
     texts = _texts("alo", "正常")
-    assert "類別在 Sheets 維護；這裡的存檔只存比重基準與類別名稱" in texts
+    # ~~`"類別在 Sheets 維護；這裡的存檔只存比重基準與類別名稱" in texts`~~ —— 有意識的行為變更，不是漏刪（客戶 2026-10-26
+    # 裁示第 7 節；J-6）：第一階段「存檔」不畫，「這裡的存檔只存…」那半句會是假話，改寫成前半句（`readonly.PHASE1_TEXT_REWRITES`）。
+    assert "類別在 Sheets 維護" in texts
+    assert not any("這裡的存檔" in t for t in texts)
     assert "持倉資料在 Sheets 維護，本儀表板唯讀" in texts         # 44 ALO-4 逐字
     assert "目標修改紀錄　—　目標比重、容許帶皆已設定" in _expander_titles("alo", "正常")
     assert "「未分類」沒有目標比重，這一列不計算目標、差額與內外" in _texts("alo", "nobucket")
     help_texts = [b.help for b in _at("alo", "正常").button if b.disabled]
-    assert "試算存檔尚未開放" in help_texts
+    # ~~`assert "試算存檔尚未開放" in help_texts`~~（ALO-3「存檔」的停用原因）—— 有意識的行為變更，不是漏刪（客戶 2026-10-26
+    # 裁示第 7 節；J-6）：第一階段寫 `user_setting` 的「存檔」一律不畫（`ui_v2/readonly.py`）。
+    assert "試算存檔尚未開放" not in help_texts
+    assert "存檔" not in [b.label for b in _at("alo", "正常").button]
 
 
 def test_EXP_字句():

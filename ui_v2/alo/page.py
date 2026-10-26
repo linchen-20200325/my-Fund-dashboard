@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain, sections, symbols
+from .. import health, health_view, plain, readonly, sections, symbols
 from . import fixtures, live, logic, theme
 
 _log = logging.getLogger(__name__)
@@ -739,6 +739,9 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         # 預設只畫「開始試算」入口；③ 列 `ALO-2` 已算出的帶外類別。判定一個都不動（`ui_v2/sections.py`）。
         sections.relayer(model, "alo")
         attention = sections.attention_items(model, "alo")
+        # 新 B UI 第一階段唯讀（客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6）：寫 `user_setting` 的「存檔」不畫，
+        # 叫人存檔的說明一併改寫（`ui_v2/readonly.py`）。在收集與記錄之後做，判定與總表不受影響。
+        readonly.strip_write_controls(model)
         key = "live"
     plain_mode = load_live is not None
 

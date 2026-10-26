@@ -159,22 +159,25 @@ _clock = time.monotonic
 
 
 READ_ONLY_SECRET_KEY = "UI_V2_READ_ONLY"
-_TRUTHY_READ_ONLY = frozenset({"1", "true", "yes", "on"})
 
 
 def is_read_only() -> bool:
-    """ui_v2 是否唯讀（`UI_V2_READ_ONLY` secret／環境變數）。
+    """新 B UI（ui_v2）是否唯讀：**第一階段恆為 True**，不讀任何旗標。
 
-    只有明確真值字串（1／true／yes／on，大小寫不分、去前後空白）才回 True；未設定、空字串、
-    無法辨識一律回 False。⚠️ **False 是現況，不是安全預設**；唯讀化的時點待客戶裁示，本函式只提供
-    「可關」的機制，不代表已關閉。
+    依據：客戶 2026-10-26 正式裁示第 7 節（`docs/evidence/decisions/2026-10-26_ui_v2_implementation_security_gate_decisions.md`：
+    「同一批或緊鄰批次把新 B UI 切為 default read-only」「不再依賴必須手動設定 `UI_V2_READ_ONLY=true` 才符合 J-6」
+    「若環境旗標保留，只能用作更嚴格控制／測試，不得讓 production B UI 預設重新變成可寫」）；`DEC-2026-10-25-04` J-6
+    （新 B UI 第一階段全部唯讀，含 SET-4 類型的設定寫入）。
+
+    ~~只有明確真值字串才回 True；未設定一律回 False（「False 是現況，不是安全預設」）~~ —— 有意識的政策變更，不是漏刪
+    （2026-10-26，決策者：客戶）。舊行為在寫下當時為真（#1059：唯讀化時點待客戶裁示，只提供可關的機制）；被推翻的是它的
+    前提 —— 客戶已裁示預設唯讀。旗標只准更嚴格，而預設已是最嚴格，故不再解析 `UI_V2_READ_ONLY` 的值
+    （`READ_ONLY_SECRET_KEY` 常數保留，只供測試與文件指認舊旗標名；設了任何值都不會讓這裡回 False）。
+
+    函式本身保留：`services/v2_tables/settings_store.py::save_setting_for_page` 先問它；測試要模擬休眠中的寫入路徑時
+    以 monkeypatch 讓它回 False。寫入函式本體（`save_user_setting`／append／fetch_log 等）原樣保留為休眠能力。
     """
-    raw = get_secret(READ_ONLY_SECRET_KEY, None)
-    if isinstance(raw, bool):          # secrets.toml 寫 `= true`
-        return raw
-    if isinstance(raw, int):           # secrets.toml 寫 `= 1`；其他整數為假
-        return raw == 1
-    return isinstance(raw, str) and raw.strip().lower() in _TRUTHY_READ_ONLY
+    return True
 
 
 def _utcnow() -> datetime:

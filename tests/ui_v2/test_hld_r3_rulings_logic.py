@@ -491,3 +491,19 @@ def test_總管判定_設定讀取失敗的原因句_禁詞零命中():
               chr(0x6700) + chr(0x9069), chr(0x8cb7) + chr(0x9032), chr(0x8ce3) + chr(0x51fa),
               chr(0x52a0) + chr(0x78bc), chr(0x6e1b) + chr(0x78bc)]
     assert not [w for w in banned if w in live.SAVE_BLOCKED_READ_FAILED_REASON]
+
+
+# ───────── 新 B UI 第一階段唯讀下的休眠寫入路徑（2026-10-26） ─────────
+@pytest.fixture(autouse=True)
+def _dormant_write_path(monkeypatch):
+    """本檔驗的是**休眠中的寫入路徑**（存檔怎麼寫、結果怎麼顯示、或以 L2 存檔佈置測試資料）。第一階段唯讀
+    （客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6、2026-10-26 J-14 補記）下 `is_read_only()` 恆為 True、
+    五頁正式模式不畫「存檔」與 `SET-4`；這裡把兩道開關同時打開再驗，**不是**宣稱 production 可寫。
+    第一階段的真實行為（不畫、短路、零呼叫）見 `tests/ui_v2/test_readonly_write_surface_guard.py`。"""
+    import pathlib as _pathlib
+    import sys as _sys
+
+    _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent))
+    import _dormant_writes
+
+    _dormant_writes.enable(monkeypatch)
