@@ -547,10 +547,8 @@ def complete_authorization(
         _revoke_tokens(tokens)
         _drop_pending_login(session_state)
         raise
-    old_pending = session_state.pop(KEY_PENDING_LOGIN, None)
-    if (isinstance(old_pending, Mapping) and isinstance(old_pending.get("tokens"), Mapping)
-            and old_pending.get("sub") != sub):
-        _revoke_tokens(old_pending["tokens"])  # 同帳號只本機丟棄（revoke 會撤掉新授權）
+    # 取代舊的待確認登入：與新登入或正式登入同帳號 → 只本機丟棄（revoke 會撤掉該授權）
+    _discard_pending_record(session_state, session_state.pop(KEY_PENDING_LOGIN, None), keep_subs=(sub,))
     session_state[KEY_PENDING_LOGIN] = {
         "tokens": dict(tokens),
         "sub": sub,
@@ -560,14 +558,27 @@ def complete_authorization(
     return {"sub": sub, "email": email}
 
 
+def _discard_pending_record(
+    session_state: MutableMapping, pending: Any, *, keep_subs: tuple[str, ...] = ()
+) -> LogoutResult:
+    """丟棄一筆（已從 session 取出的）待確認登入 —— 所有丟棄點的唯一規則。
+
+    待確認登入的 sub 與目前正式登入同帳號（或屬 `keep_subs`）→ 只在本機丟棄，不 revoke
+    （Google revoke 撤整份 app 授權，會連帶撤掉正式登入／新授權）；
+    不同帳號、或沒有正式登入 → revoke 後丟棄。本函式絕不 revoke 正式登入的 token。
+    """
+    if not (isinstance(pending, Mapping) and isinstance(pending.get("tokens"), Mapping)):
+        return LogoutResult(revoke_attempted=False, revoke_confirmed=False)
+    formal_sub = session_state.get(KEY_ACCOUNT_SUB) if get_tokens(session_state) is not None else None
+    protected = {x for x in (formal_sub, *keep_subs) if isinstance(x, str) and x}
+    if pending.get("sub") in protected:
+        return LogoutResult(revoke_attempted=False, revoke_confirmed=False)
+    return _revoke_tokens(pending["tokens"])
+
+
 def _drop_pending_login(session_state: MutableMapping) -> LogoutResult:
-    """revoke 待確認登入的 token 並移除該 key；沒有待確認登入時不做事。"""
-    pending = session_state.get(KEY_PENDING_LOGIN)
-    if KEY_PENDING_LOGIN in session_state:
-        del session_state[KEY_PENDING_LOGIN]
-    if isinstance(pending, Mapping) and isinstance(pending.get("tokens"), Mapping):
-        return _revoke_tokens(pending["tokens"])
-    return LogoutResult(revoke_attempted=False, revoke_confirmed=False)
+    """取出並丟棄待確認登入（規則見 `_discard_pending_record`）；沒有時不做事。"""
+    return _discard_pending_record(session_state, session_state.pop(KEY_PENDING_LOGIN, None))
 
 
 def _expire_pending_login(session_state: MutableMapping, ts: float) -> None:
@@ -614,7 +625,7 @@ def confirm_pending_login(session_state: MutableMapping, now: float | None = Non
         raise PersonalOAuthError(ec.AUTH_STATE_INVALID, "沒有待確認的登入，請重新登入")
     exp = pending.get("expires_at")
     if not isinstance(exp, (int, float)) or exp <= ts:
-        _revoke_tokens(pending["tokens"])
+        _discard_pending_record(session_state, pending)
         raise PersonalOAuthError(ec.AUTH_STATE_INVALID, "登入確認已逾時，請重新登入")
     tokens = dict(pending["tokens"])
     sub, email = pending.get("sub"), pending.get("email")

@@ -847,3 +847,88 @@ def test_no_id_token_parsing():
     literals = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
     assert "id_token" not in literals
     assert "b64decode" not in src and "urlsafe_b64decode" not in src
+
+
+# ── 丟棄待確認登入的統一規則：與正式登入同 sub 只本機丟棄（稽核 A 複驗）──
+def _formal_same_sub():
+    s = _logged_in()
+    s[po.KEY_ACCOUNT_SUB] = "1234"  # 與 GOOD_ID 同帳號
+    s[po.KEY_TOKENS]["refresh_token"] = "FORMALRT"
+    return s
+
+
+def _revoked(calls):
+    return [c[1]["data"]["token"] for c in calls if c[0] == po.GOOGLE_REVOKE_URL]
+
+
+@pytest.mark.parametrize("entry", ["begin", "ensure_fresh", "get_pending", "confirm_timeout", "reject"])
+def test_same_sub_pending_discard_never_revokes(monkeypatch, entry):
+    sess = _formal_same_sub()
+    calls = _pending(monkeypatch, sess, now=0)
+    late = po.PENDING_LOGIN_TTL_SEC + 1
+    if entry == "begin":
+        po.begin_authorization(sess, now=late)
+    elif entry == "ensure_fresh":
+        po.ensure_fresh(sess, now=late)  # 正式登入 expires_at=9e9，不需續期
+    elif entry == "get_pending":
+        assert po.get_pending_login(sess, now=late) is None
+    elif entry == "confirm_timeout":
+        with pytest.raises(po.PersonalOAuthError):
+            po.confirm_pending_login(sess, now=late)
+    else:
+        po.reject_pending_login(sess)
+    assert _revoked(calls) == []
+    assert po.KEY_PENDING_LOGIN not in sess
+    assert po.get_tokens(sess)["refresh_token"] == "FORMALRT"
+
+
+def test_clear_session_same_sub_pending_not_revoked(monkeypatch):
+    sess = _formal_same_sub()
+    calls = _pending(monkeypatch, sess, now=0)
+    po.clear_session(sess)
+    assert _revoked(calls) == []
+
+
+def test_logout_same_sub_revokes_formal_once(monkeypatch):
+    sess = _formal_same_sub()
+    calls = _pending(monkeypatch, sess, now=0)
+    po.logout(sess)
+    assert _revoked(calls) == ["FORMALRT"]
+
+
+def test_diff_sub_pending_still_revoked_with_formal(monkeypatch):
+    sess = _logged_in()  # 正式登入 sub-A，待確認 1234
+    calls = _pending(monkeypatch, sess, now=0)
+    po.begin_authorization(sess, now=po.PENDING_LOGIN_TTL_SEC + 1)
+    assert _revoked(calls) == ["NEWRT"]
+
+
+def test_failed_callback_does_not_revoke_formal_or_same_sub_pending(monkeypatch):
+    sess = _formal_same_sub()
+    _pending(monkeypatch, sess, now=0)  # 待確認登入 sub=1234（同正式登入）
+    s2, _ = po.register_pending(now=1)
+    calls = _set_post(monkeypatch, lambda url, **kw: FakeResp(200, _ok_token(access_token="BAD", refresh_token="BADRT", scope="openid"))
+                      if url == po.GOOGLE_TOKEN_URL else FakeResp(200, {}))
+    with pytest.raises(po.PersonalOAuthError):
+        po.complete_authorization(sess, code="C", state=s2, now=1)
+    assert _revoked(calls) == ["BADRT"]  # 只撤新 token
+    assert po.get_tokens(sess)["refresh_token"] == "FORMALRT"
+
+
+def test_replace_pending_same_as_formal_not_revoked(monkeypatch):
+    sess = _formal_same_sub()
+    _pending(monkeypatch, sess, now=0)  # 舊待確認 sub=1234（同正式）
+    s2, _ = po.register_pending(now=1)
+    calls = _set_post(monkeypatch, lambda url, **kw: FakeResp(200, _ok_token()) if url == po.GOOGLE_TOKEN_URL else FakeResp(200, {}))
+    _set_get(monkeypatch, lambda url, **kw: FakeResp(200, {"sub": "other", "email": "o@x", "email_verified": True}))
+    po.complete_authorization(sess, code="C", state=s2, now=1)
+    assert _revoked(calls) == []
+    assert po.get_pending_login(sess, now=2)["sub"] == "other"
+
+
+def test_stale_sub_without_formal_tokens_does_not_protect(monkeypatch):
+    """殘留 sub 但沒有正式 token ＝ 沒有正式登入 → 過期的待確認登入照樣 revoke。"""
+    sess = {po.KEY_ACCOUNT_SUB: "1234"}
+    calls = _pending(monkeypatch, sess, now=0)
+    po.begin_authorization(sess, now=po.PENDING_LOGIN_TTL_SEC + 1)
+    assert _revoked(calls) == ["NEWRT"]
