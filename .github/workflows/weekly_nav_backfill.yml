@@ -40,6 +40,8 @@ jobs:
           # 讀持倉/選股池:優先 POLICY_SHEET_ID(App 寫這本的 _fund_pool),退 macro_weights。
           POLICY_SHEET_ID: ${{ secrets.POLICY_SHEET_ID }}
           macro_weights_sheet_id: ${{ secrets.MACRO_WEIGHTS_SHEET_ID }}
+          # 選股池目標本(list_pool 讀這把)。2026-10-26 起程式無寫死預設本:未設 → 選股池視為未設定。
+          POOL_SHEET_ID: ${{ secrets.POOL_SHEET_ID }}
           # 選填:美國 IP 抓不到 MoneyDJ 時走 NAS 代理。
           PROXY_URL: ${{ secrets.PROXY_URL }}
         run: >

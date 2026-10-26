@@ -68,6 +68,8 @@ STATUS_FAILED = "failed"
 
 # 本機 store 時的訊息（字面為本組擬定；畫面照印）。
 TEXT_NOT_CLOUD = "選股池未設定雲端來源（沒有服務帳戶憑證），不讀本機暫存檔當母體"
+# 2026-10-26 J-7（移除寫死預設本）：`POOL_SHEET_ID` 未設定時同走 `STATUS_NOT_CLOUD`，但原因要寫對。
+TEXT_NO_SHEET_ID = "選股池未設定雲端來源（部署端未設定選股池試算表），不讀本機暫存檔當母體"
 # 冷卻中時的訊息前半（後面接上一次的失敗原文）。字面為本組擬定。
 TEXT_COOLING = "選股池剛讀取失敗過，冷卻中（約剩 {left} 秒），本次不重打 Google Sheets"
 # 2026-10-13 第二輪複驗回修：冷卻不是本模組自己的失敗造成時的兩句（字面為本組擬定）。
@@ -190,7 +192,8 @@ def load_pool_codes(secret_values, *, oauth_client=None, now=None, wall=None) ->
     store = pool_repository.get_pool_store(oauth_client)
     backend = getattr(store, "backend_name", type(store).__name__)
     if isinstance(store, pool_repository.LocalJsonPoolStore):
-        return _empty(STATUS_NOT_CLOUD, backend, TEXT_NOT_CLOUD)
+        text = TEXT_NOT_CLOUD if pool_repository.pool_sheet_configured() else TEXT_NO_SHEET_ID
+        return _empty(STATUS_NOT_CLOUD, backend, text)
 
     key = pool_repository._pool_backoff_ident(oauth_client)
     with _LOCK:

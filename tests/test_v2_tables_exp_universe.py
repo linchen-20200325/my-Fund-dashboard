@@ -102,6 +102,7 @@ def test_不過濾status_CLOSED也列(monkeypatch):
 
 
 def test_本機store時不讀本機JSON當母體_照實回未設定雲端(monkeypatch):
+    monkeypatch.setattr(POOL, "_pool_sheet_id", lambda: "FAKE_POOL_BOOK")   # 試算表有設、只缺憑證
     store = _stub(monkeypatch, _LocalStore())
     out = U.load_pool_codes([])
     assert store.calls == 0
@@ -115,11 +116,28 @@ def test_稽核K反例_服務帳戶在但試算表ID空_store是本機_也不讀
     （舊寫法只問 `pool_backend_status`，它此時回 `service_account`，就會把本機暫存檔當母體讀。）"""
     monkeypatch.setattr(POOL, "_sa_present", lambda: True)
     monkeypatch.setattr(POOL, "_pool_sheet_id", lambda: "")
-    assert POOL.pool_backend_status() == "service_account"            # 反例的前提真的成立
+    # ~~assert POOL.pool_backend_status() == "service_account"~~ → 2026-10-26 J-7（有意識的更正，不是漏刪）：
+    # 移除寫死預設本時一併讓 `pool_backend_status` 在試算表 ID 未設定時回 "local"，與 L1 實際交出的 store 一致；
+    # 本測試記載的「兩支 L1 函式不一致」前提因此不再成立，本層的行為（不讀本機暫存檔）照舊要守。
+    assert POOL.pool_backend_status() == "local"
     monkeypatch.setattr(POOL.LocalJsonPoolStore, "list_pool",
                         lambda self: (_ for _ in ()).throw(AssertionError("讀了本機暫存檔")))
     out = U.load_pool_codes([])
     assert out["status"] == U.STATUS_NOT_CLOUD and out["backend"] == "local-json"
+    assert out["message"] == U.TEXT_NO_SHEET_ID and "未設定雲端來源" in out["message"]
+
+
+@pytest.mark.parametrize("raw", [None, "", "   "])
+def test_試算表ID未設定_缺或空白_回未設定雲端_不讀任何本(monkeypatch, raw):
+    """2026-10-26 J-7：POOL_SHEET_ID 缺／空白 → 沿用 STATUS_NOT_CLOUD（未設定路徑），不退回任何預設本、不崩。"""
+    import infra.config as cfg
+    vals = {"google_service_account": {"client_email": "sa@x.iam"}, "POOL_SHEET_ID": raw}
+    monkeypatch.setattr(cfg, "get_secret", lambda k, default=None: vals.get(k, default))
+    monkeypatch.setattr(POOL.LocalJsonPoolStore, "list_pool",
+                        lambda self: (_ for _ in ()).throw(AssertionError("讀了本機暫存檔")))
+    out = U.load_pool_codes([])
+    assert out["status"] == U.STATUS_NOT_CLOUD and out["codes"] == []
+    assert out["message"] == U.TEXT_NO_SHEET_ID
 
 
 def test_讀取失敗_照實回失敗_訊息遮蔽_帶例外型別名(monkeypatch):

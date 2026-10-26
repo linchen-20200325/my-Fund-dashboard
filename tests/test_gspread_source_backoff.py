@@ -222,9 +222,11 @@ def gs(monkeypatch):
 
     sa = {"client_email": "probe@x.iam.gserviceaccount.com"}
     orig = cfg.get_secret
+    # 2026-10-26 J-7：選股池不再有寫死預設本 → 測試給一把假的 POOL_SHEET_ID（不是任何真實本）。
+    fake = {"google_service_account": sa, "POOL_SHEET_ID": "FAKE_POOL_BOOK"}
     monkeypatch.setattr(
         cfg, "get_secret",
-        lambda k, *a, **kw: (sa if k == "google_service_account" else orig(k, *a, **kw)))
+        lambda k, *a, **kw: (fake[k] if k in fake else orig(k, *a, **kw)))
     monkeypatch.setattr(cfg, "require_secret", lambda k: sa)
 
     counter, fail = _Counter(), set()

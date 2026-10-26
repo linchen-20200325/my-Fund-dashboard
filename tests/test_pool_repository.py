@@ -1,4 +1,5 @@
 """選股池持久化(repositories/pool_repository.py,v19.428)。本地 JSON 後端 CRUD + 驗證。"""
+from pathlib import Path
 import pytest
 
 import repositories.pool_repository as P
@@ -64,35 +65,70 @@ def test_corrupt_local_file_returns_empty(tmp_path):
     assert LocalJsonPoolStore(base_dir=tmp_path).list_pool() == []   # 壞檔 → 空,不崩
 
 
-# ── v19.472:選股池目標 Sheet = 獨立一本(POOL_SHEET_ID → baked 預設,不共用持倉)──────
+# ── 選股池目標 Sheet = 獨立一本,只認 POOL_SHEET_ID(2026-10-26 J-7:移除寫死預設本)──────
 def _fake_secrets(monkeypatch, mapping):
     import infra.config as _cfg
     monkeypatch.setattr(_cfg, "get_secret", lambda k, default=None: mapping.get(k, default))
 
 
+_SA = {"client_email": "sa@x.iam"}
+
+
 def test_pool_sheet_id_prefers_pool_sheet_secret(monkeypatch):
-    _fake_secrets(monkeypatch, {"POOL_SHEET_ID": "my_pool_book",
+    _fake_secrets(monkeypatch, {"POOL_SHEET_ID": "  FAKE_POOL_BOOK  ",
                                 "POLICY_SHEET_ID": "policy_book"})
-    assert P._pool_sheet_id() == "my_pool_book"       # 優先 POOL_SHEET_ID(不動持倉那本)
+    assert P._pool_sheet_id() == "FAKE_POOL_BOOK"     # 有值 → 用它(去前後空白;不動持倉那本)
+    assert P.pool_sheet_configured() is True
 
 
-def test_pool_sheet_id_falls_back_to_baked_default(monkeypatch):
-    _fake_secrets(monkeypatch, {"POLICY_SHEET_ID": "policy_book"})   # 無 POOL_SHEET_ID
-    assert P._pool_sheet_id() == P._POOL_SHEET_ID_DEFAULT            # 回退 baked,**不**回退持倉
+@pytest.mark.parametrize("mapping", [
+    {"POLICY_SHEET_ID": "policy_book"},                       # secret 缺
+    {"POOL_SHEET_ID": "", "POLICY_SHEET_ID": "policy_book"},  # 空字串
+    {"POOL_SHEET_ID": "   \t", "POLICY_SHEET_ID": "policy_book"},  # 只有空白
+    {"POOL_SHEET_ID": None},                                  # None
+])
+def test_pool_sheet_id_missing_or_blank_is_unconfigured(monkeypatch, mapping):
+    # J-7:無明確設定 → 回 ""(未設定),不退回任何預設本、也不退回持倉 POLICY_SHEET_ID
+    _fake_secrets(monkeypatch, mapping)
+    assert P._pool_sheet_id() == ""
+    assert P.pool_sheet_configured() is False
 
 
-def test_pool_sheet_id_never_uses_policy_sheet(monkeypatch):
-    # 核心不變量(user 2026-08-18「不能共上方的 id」):即使只有 POLICY_SHEET_ID 也不採用
-    _fake_secrets(monkeypatch, {"POLICY_SHEET_ID": "policy_book"})
-    assert P._pool_sheet_id() != "policy_book"
+def test_no_baked_default_constant_left():
+    # 突變守衛:寫死的預設常數與「退回預設」寫法不得回來(加回 → 本測試 + 上一支轉紅)
+    assert not hasattr(P, "_POOL_SHEET_ID_DEFAULT")
+    src = Path(P.__file__).read_text(encoding="utf-8")
+    assert "_POOL_SHEET_ID_DEFAULT" not in src
 
 
-def test_gs_enabled_needs_sa_only_sheet_always_present(monkeypatch):
-    # baked 預設讓 sheet 恆在 → SA 為唯一 gate(v19.472)
-    _fake_secrets(monkeypatch, {"google_service_account": {"client_email": "sa@x.iam"}})
-    assert P._gs_enabled() is True                    # 只要 SA 在 → 啟用(sheet 走 baked)
-    _fake_secrets(monkeypatch, {"google_service_account": {}})
+def test_unconfigured_sheet_with_sa_goes_unconfigured_path(monkeypatch):
+    # SA 在、但 POOL_SHEET_ID 未設 → GS 不啟用、store 落本地、backend 誠實回 "local"、
+    # 退避鍵為空(不上網)—— 四個判斷一致,不會「回報雲端、實際寫本地」。
+    _fake_secrets(monkeypatch, {"google_service_account": _SA})
+    assert P._gs_enabled() is False
+    assert P.GoogleSheetsPoolStore().is_available() is False
+    assert P.GoogleSheetsPoolStore(oauth_client=object()).is_available() is False
+    assert isinstance(P.get_pool_store(), P.LocalJsonPoolStore)
+    assert P.pool_backend_status() == "local"
+    assert P.pool_backend_status(object()) == "local"
+    assert P._pool_backoff_ident() == ("", "")
+    assert P._pool_backoff_ident(object()) == ("", "")
+
+
+def test_get_sheet_unconfigured_fails_loud(monkeypatch):
+    _fake_secrets(monkeypatch, {"google_service_account": _SA})
+    with pytest.raises(KeyError):
+        P._get_sheet()
+
+
+def test_configured_sheet_with_sa_enables_gs(monkeypatch):
+    _fake_secrets(monkeypatch, {"google_service_account": _SA, "POOL_SHEET_ID": "FAKE_POOL_BOOK"})
+    assert P._gs_enabled() is True
+    assert P.pool_backend_status() == "service_account"
+    assert P._pool_backoff_ident() == ("sa", "FAKE_POOL_BOOK")
+    _fake_secrets(monkeypatch, {"google_service_account": {}, "POOL_SHEET_ID": "FAKE_POOL_BOOK"})
     assert P._gs_enabled() is False                   # SA 缺 client_email → 走本地
+    assert P.pool_backend_status(object()) == "oauth"
     _fake_secrets(monkeypatch, {})
     assert P._gs_enabled() is False                   # 無 SA → 走本地
 

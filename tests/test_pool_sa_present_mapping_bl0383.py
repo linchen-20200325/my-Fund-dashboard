@@ -151,6 +151,9 @@ def test_exp_universe_with_toml_sa_is_not_not_cloud(monkeypatch, real_st_secrets
     from infra import source_backoff as SB
 
     real_st_secrets(_TOML)
+    # 2026-10-26 J-7：選股池無寫死預設本。不把 POOL_SHEET_ID 寫進 TOML 頂層（頂層字串會被 Streamlit
+    # 寫進 os.environ，見 fixture 註解），改只替換 sheet id 讀取：SA 仍走真的 st.secrets。
+    monkeypatch.setattr(P, "_pool_sheet_id", lambda: "FAKE_POOL_BOOK")
     U.clear_cache()
     SB.reset_all()
     try:
