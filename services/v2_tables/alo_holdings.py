@@ -7,6 +7,7 @@ ui_v2 只經由 `ui_v2/<頁>/source.py` 碰到本檔（`49` §3.3 方案 A；**�
 
 規則出處（客戶 2026-09-27 及之前的裁示；規格見 scratchpad `alo_sheet_tabs_spec.md` 定稿版）：
 - T6：三個來源（保單分頁、`_持倉補充`、`_保單資料`）都讀 `POLICY_SHEET_ID` 那一本；沒設就 fail loud（L1）。
+  （⚠️ 2026-10-26 更正：這只描述 `load_alo_tables`，現僅 `refetch_nav`［BL-0460］使用；hld／alo 走 `load_alo_tables_active`。）
 - `_持倉補充` 鍵（保單編號, 基金代號）；比對前兩邊只去前後空白，不改大小寫、不補前導 0。
 - R1＝B：`最後核對日` 只收 `YYYY-MM-DD`，換成當日 12:00 台灣時間 ＝ `YYYY-MM-DDT04:00:00Z`，
   填 `holding.last_synced_at`。時刻為推定值（`ACCEPTANCE.md` 第八節 8.1 登記）。不得以讀取時間冒充。

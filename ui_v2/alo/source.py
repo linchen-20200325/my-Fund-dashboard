@@ -76,7 +76,8 @@ _NAV_UNAVAILABLE_WITHHELD = frozenset({
     nav_dividend.WITHHELD_FETCHED_AT_FUTURE,
 })
 
-# `load_alo_tables` 回傳裡屬於「沒寫進持倉的列」那一組（草稿 D3）。本輪原樣轉交，不判讀、不歸納。
+# （hld／alo 現走 `load_alo_tables_active`；只有 `load_alo_tables`［`refetch_nav`，BL-0460］仍讀 `POLICY_SHEET_ID`。）
+# `load_alo_tables`／`load_alo_tables_active` 回傳裡屬於「沒寫進持倉的列」那一組（草稿 D3）。本輪原樣轉交，不判讀、不歸納。
 _SKIP_GROUPS = (
     "skipped_holdings",
     "missing_supplement",

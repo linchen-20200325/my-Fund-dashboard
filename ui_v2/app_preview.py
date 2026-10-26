@@ -30,6 +30,8 @@
 
 ~~真資料四頁~~ 真資料五頁（2026-10-13 起標的探索也接上；狀態更新，不是漏刪）**不退回 fixtures**：本檔不 import 任何 `fixtures`；讀不到資料時由各頁既有的正式模式
 錯誤路徑照實顯示（例如「未設定保單試算表 ID（POLICY_SHEET_ID），不讀取」），不補任何數字。
+（⚠️ 2026-10-26 更正，有意識的更正，不是漏刪：該例句已過期 —— 持倉體檢、資產配置自批 3b-4 起讀個人 Active Sheet
+（`load_alo_tables_active`），不再看 `POLICY_SHEET_ID`；現在只有 `load_alo_tables`（`refetch_nav`，BL-0460）用它。）
 
 真資料四頁需要的設定（`st.secrets`，Streamlit Cloud 設在該 app 的 Secrets；本機放 `.streamlit/secrets.toml`；
 沒有 `st.secrets` 時，`infra.config.get_secret` 退讀同名環境變數）—— 鍵名逐一讀自各頁 `source.py`

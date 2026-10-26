@@ -56,7 +56,10 @@ KEY_LOGIN_NOTICE = "_set_login_notice"
 
 
 class PersonalSessionError(Exception):
-    """`access_target` 專用：只帶九個 code 之一（與選填的固定 `reason`），不含 token。"""
+    """`access_target` 專用：只帶九個 code 之一（與選填的固定 `reason`），不含 token。
+
+    畫面端 `ui_v2/active_gate.is_no_active` 是 code **與** reason 一起看（UNAVAILABLE 只有 `no_active` 才算「沒有 Active」）；
+    `SCHEMA_INVALID` 的 reason 來自另一個類別（`personal_policy_reader.PersonalSchemaError.reason`），兩者互不相干。"""
 
     def __init__(self, code: str, reason: str | None = None) -> None:
         if code not in ec.ALL_ERROR_CODES:
