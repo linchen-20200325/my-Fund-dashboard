@@ -398,7 +398,7 @@ def test_讀Google回AUTH_EXPIRED_清整個session_死token不再被重用(monke
 def test_變異檢查_不清session_上一條就會紅(monkeypatch):
     from infra import personal_oauth as po
 
-    monkeypatch.setattr(personal_session, "handle_read_error", lambda state, code: None)
+    monkeypatch.setattr(personal_session, "handle_read_error", lambda state, code, prior_sub=None: None)
     state = _session_state()
     _expired_run(monkeypatch, state)
     with pytest.raises(AssertionError):
@@ -556,3 +556,124 @@ def test_新舊解析等價_標頭邊界(name):
 def test_新舊解析等價_兩個以上補出來的空欄名是重複_該分頁略過_不靜默丟資料欄():
     assert _old(_EQUIV["two extra data columns"]) == "ERR" == _new(_EQUIV["two extra data columns"])
     assert _old(_EQUIV["interior blank header"]) != "ERR" and _new(_EQUIV["interior blank header"]) != "ERR"
+
+
+# ═══════════════════════ 第二輪稽核回修（A／B／C） ═══════════════════════
+
+def _renew_fails(monkeypatch, state, code):
+    """`ensure_fresh` 續期失敗：自己清 session 再拋（真實行為：PERMISSION_DENIED／AUTH_EXPIRED 都會清）。"""
+    from infra import personal_oauth as po
+
+    def fake(st, now=None):
+        po.clear_session(st)
+        raise po.PersonalOAuthError(code)
+    monkeypatch.setattr(personal_session.po, "ensure_fresh", fake)
+
+
+@pytest.mark.parametrize("code", [ec.PERMISSION_DENIED, ec.AUTH_EXPIRED])
+def test_續期失敗_ensure_fresh已清session_仍丟該帳號快取(monkeypatch, code):
+    """sub 在 `ensure_fresh` 清 session 之後就讀不到了：必須在它之前取，否則該帳號快取殘留。"""
+    _use(monkeypatch, Net({TOKEN_A: _workbook()}))
+    _load(SUB_A, TOKEN_A)
+    assert any(k[0] == SUB_A for k in reader._CACHE)
+    state = _session_state(SUB_A)
+    _renew_fails(monkeypatch, state, code)
+    with pytest.raises(alo_holdings.ActiveSourceError) as e:
+        alo_holdings.load_alo_tables_active(state, [])
+    assert e.value.code == code
+    assert not any(k[0] == SUB_A for k in reader._CACHE)
+
+
+def test_變異檢查_不用失敗前取的sub_上一條就會紅(monkeypatch):
+    real = personal_session.handle_read_error
+    monkeypatch.setattr(personal_session, "handle_read_error",
+                        lambda state, code, prior_sub=None: real(state, code))   # 忽略 prior_sub：舊行為
+    _use(monkeypatch, Net({TOKEN_A: _workbook()}))
+    _load(SUB_A, TOKEN_A)
+    state = _session_state(SUB_A)
+    _renew_fails(monkeypatch, state, ec.PERMISSION_DENIED)
+    with pytest.raises(alo_holdings.ActiveSourceError):
+        alo_holdings.load_alo_tables_active(state, [])
+    with pytest.raises(AssertionError):
+        assert not any(k[0] == SUB_A for k in reader._CACHE)
+
+
+def test_網路失敗_session還在_不丟快取(monkeypatch):
+    _use(monkeypatch, Net({TOKEN_A: _workbook()}))
+    _load(SUB_A, TOKEN_A)
+    personal_session.handle_read_error(_session_state(SUB_A), ec.NETWORK_ERROR, SUB_A)
+    assert any(k[0] == SUB_A for k in reader._CACHE)
+
+
+def test_drop_account使在途讀取作廢_不會把drop之前發出的結果寫回(monkeypatch):
+    """競態：讀取發出後、回來前，使用者登出（`drop_account`）。回來的內容不得再進快取。"""
+    net = Net({TOKEN_A: _workbook()}, on_call=lambda: reader.drop_account(SUB_A))
+    _use(monkeypatch, net)
+    _load(SUB_A, TOKEN_A)
+    assert reader._CACHE == {}
+    n = len(net.calls)
+    _load(SUB_A, TOKEN_A)
+    assert len(net.calls) == 2 * n
+
+
+def test_drop_account_真的跨執行緒_另一緒讀取中被drop(monkeypatch):
+    import threading
+
+    entered, release = threading.Event(), threading.Event()
+    inner = Net({TOKEN_A: _workbook()})
+
+    def slow_get(url, params=None, headers=None, timeout=None, allow_redirects=None):
+        entered.set()
+        assert release.wait(5)
+        return inner(url, params, headers, timeout, allow_redirects)
+
+    monkeypatch.setattr(drive.requests, "get", slow_get)
+    t = threading.Thread(target=lambda: _load(SUB_A, TOKEN_A))
+    t.start()
+    assert entered.wait(5)
+    reader.drop_account(SUB_A)        # 讀取在途中
+    release.set()
+    t.join(10)
+    assert not t.is_alive() and reader._CACHE == {}
+
+
+def test_變異檢查_drop不升世代_上一條就會紅(monkeypatch):
+    def drop_without_gen(sub):
+        with reader._CACHE_LOCK:
+            for k in [k for k in reader._CACHE if k[0] == sub]:
+                del reader._CACHE[k]
+    monkeypatch.setattr(reader, "drop_account", drop_without_gen)
+    net = Net({TOKEN_A: _workbook()}, on_call=lambda: reader.drop_account(SUB_A))
+    _use(monkeypatch, net)
+    _load(SUB_A, TOKEN_A)
+    with pytest.raises(AssertionError):
+        assert reader._CACHE == {}
+
+
+# 標頭邊界：真的 gspread `get_all_records` 的行為就是下列結果，新路徑逐案相同（不是猜的；`_old` 即真 gspread）。
+# ⚠️ 與稽核建議「空白欄名一律拒收」不同：舊路徑**接受**第 1 列為空、單一空欄名、內部單一空欄名、恰 1 格多出的資料；
+# 只有「≥2 個空欄名（含補出來的）」會因重複而拒收。新路徑照舊路徑，不自行變嚴（變嚴 ＝ 與服務帳戶路徑行為分岔）。
+_EQUIV2 = {
+    "第1列空_下一列有值": [[], ["x"]],
+    "單一空欄_下一列有值": [[""], ["x"]],
+    "內部單一空欄名": [["a", "", "c"], ["1", "2", "3"]],
+    "多出1格": [_H, ["P1", "u", "F", "1", "", "1", "s1"]],
+    "多出2格": [_H, ["P1", "u", "F", "1", "", "1", "s1", "s2"]],
+}
+
+
+@pytest.mark.parametrize("name", sorted(_EQUIV2))
+def test_新舊解析等價_稽核指定的標頭邊界案例(name):
+    old, new = _old(_EQUIV2[name]), _new(_EQUIV2[name])
+    assert repr(old) == repr(new), name
+
+
+def test_舊路徑接受的空欄名_下游不會變成幻影持倉(monkeypatch):
+    """新舊同樣接受 `[[""],["x"]]` 這類表：它產生一列 policy_id／fund_code 皆空的原始列，L2 `build_alo_tables` 把它
+    列進 `skipped_holdings`（原因＝保單編號或基金代號空白），**不會**變成 `holding` 列。"""
+    rows, errs = sup._process_policy_tab("T", reader._records([[""], ["x"]]))
+    empty_tabs = {n: {"records": [], "bad_rows": [], "blank_rows": 0, "tab_missing": True}
+                  for n in (sup.TAB_HOLDING_SUPPLEMENT, sup.TAB_POLICY_PROFILE)}
+    out = alo_holdings.build_alo_tables(rows, empty_tabs, skipped_tabs=[], invest_twd_parse_errors=errs)
+    assert out["holding"] == []
+    assert [r["reasons"] for r in out["skipped_holdings"]] == [["保單編號或基金代號空白"]]

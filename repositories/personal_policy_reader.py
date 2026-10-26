@@ -63,8 +63,10 @@ def drop_account(account_sub: str) -> None:
     """丟掉某個帳號的全部快取（登出、換帳號、確認新登入、AUTH_EXPIRED 清 session 時由 L2 呼叫）。"""
     if not isinstance(account_sub, str) or not account_sub.strip():
         return
+    global _CACHE_GEN
     sub = account_sub.strip()
     with _CACHE_LOCK:
+        _CACHE_GEN += 1    # 世代 +1：drop 之前已發出、尚在途中的讀取，回來後不得再把內容寫回快取（全域；多丟一次快取無害）
         for key in [k for k in _CACHE if k[0] == sub]:
             del _CACHE[key]
 

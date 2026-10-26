@@ -509,6 +509,7 @@ def load_alo_tables_active(state, secret_values) -> dict:
     回傳比 `load_alo_tables` 多一個 `actor`（＝`"oauth"`，來源標示）。
     """
     code = reason = tab = None
+    prior_sub = personal_session.current_sub(state)   # 續期失敗時 ensure_fresh 會自己清 session，所以要在它之前取
     try:
         sheet_id, token, account_sub = personal_session.access_target(state)
         mask = masker(list(secret_values) + [token])
@@ -517,7 +518,7 @@ def load_alo_tables_active(state, secret_values) -> dict:
         code, reason, tab = exc.code, getattr(exc, "reason", None), getattr(exc, "tab", None)
     if code is not None:
         # 讀 Google 回 AUTH_EXPIRED：死 token 不可再用 → 清 session（同 `list_for_picker`／`use_pending`）
-        personal_session.handle_read_error(state, code)
+        personal_session.handle_read_error(state, code, prior_sub)
         raise ActiveSourceError(code, reason, tab) from None
     policy = bundle["policy"]
     out = build_alo_tables(policy["rows"], bundle["supplement"], skipped_tabs=policy["skipped_tabs"],

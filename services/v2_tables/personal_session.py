@@ -109,13 +109,25 @@ def _drop_account_cache(state: MutableMapping) -> None:
         policy_cache.drop_account(sub)
 
 
-def handle_read_error(state: MutableMapping, code: str) -> None:
-    """用 token 讀 Google 回 AUTH_EXPIRED（401：本機 expires_at 還沒到、但 token 已被拒）→ 與 `list_for_picker`／
-    `use_pending` 同一個處置：清整個 session（要求重新登入），並丟掉該帳號的讀取快取；否則下一次 `ensure_fresh`
-    會一直重用這顆死 token。其他 code 不動。"""
+def current_sub(state: MutableMapping):
+    """目前正式登入的帳號 sub（未登入 → None）。呼叫端在 `access_target`／`ensure_fresh` **之前**取，
+    因為續期失敗時 `ensure_fresh` 會自己清 session，之後就讀不到 sub 了。"""
+    return asheet.current_account_sub(state)
+
+
+def handle_read_error(state: MutableMapping, code: str, prior_sub=None) -> None:
+    """讀取失敗後的善後（`prior_sub`：失敗前取的帳號 sub，見 `current_sub`）。
+    - `AUTH_EXPIRED`（401：本機 expires_at 還沒到、但 token 已被 Google 拒絕）→ 與 `list_for_picker`／`use_pending`
+      同一個處置：丟該帳號的讀取快取、清整個 session（要求重新登入），否則下一次 `ensure_fresh` 會一直重用這顆死 token。
+    - 其他 code：若 session 已被別處清掉（`ensure_fresh` 遇到 PERMISSION_DENIED／AUTH_EXPIRED 會自己清）而 sub 已讀不到，
+      仍以 `prior_sub` 丟該帳號的快取。session 還在的其他失敗（網路、5xx…）不動。"""
+    sub = prior_sub if isinstance(prior_sub, str) and prior_sub.strip() else asheet.current_account_sub(state)
     if code == ec.AUTH_EXPIRED:
-        _drop_account_cache(state)
+        if sub is not None:
+            policy_cache.drop_account(sub)
         po.clear_session(state)
+    elif asheet.current_account_sub(state) is None and sub is not None:
+        policy_cache.drop_account(sub)
 
 
 def confirm_login(state: MutableMapping) -> dict[str, Any]:
