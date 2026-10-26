@@ -136,7 +136,13 @@ def _read_active_record(state: Mapping) -> ActiveSheet | None:
 # 對外 API
 # ──────────────────────────────────────────────────────────────────────
 def get_active(state: Mapping) -> ActiveSheet | None:
-    """目前生效的 Active Sheet；未登入、從未驗證、紀錄壞掉、或驗證時帳號 ≠ 目前帳號 → None。"""
+    """目前生效的 Active Sheet；未登入、從未驗證、紀錄壞掉、或驗證時帳號 ≠ 目前帳號 → None。
+
+    ⚠️ 本函式只讀 `state`、**不續期、不檢查 token 是否過期**：有 Active 不代表 token 還能用。
+    要拿去讀 Google 的呼叫端**必須先走 `infra.personal_oauth.ensure_fresh`**（或其 L2 包裝
+    `services/v2_tables/personal_session.py::access_target`，它先續期、再取 Active 與 token），
+    不得自己以 `get_active` 的 `sheet_id` 配一顆舊 token 去讀。
+    """
     sub = current_account_sub(state)
     if sub is None:
         return None

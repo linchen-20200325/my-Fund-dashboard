@@ -84,7 +84,7 @@ def wired(monkeypatch):
     def _record(name, values):
         state["secret_values"][name] = values
 
-    def _load_alo_tables(values):
+    def _load_alo_tables(_state, values):   # 批 3b-4：`load_alo_tables_active(state, values)`
         _record("alo_holdings.load_alo_tables", values)
         got = state["tables"]
         if isinstance(got, Exception):
@@ -105,7 +105,7 @@ def wired(monkeypatch):
             raise got
         return got
 
-    monkeypatch.setattr(source.alo_holdings, "load_alo_tables", _load_alo_tables)
+    monkeypatch.setattr(source.alo_holdings, "load_alo_tables_active", _load_alo_tables)
     monkeypatch.setattr(source.settings_store, "load_user_settings", _load_user_settings)
     monkeypatch.setattr(source.settings_store, "load_market_indicator", _load_market_indicator)
 

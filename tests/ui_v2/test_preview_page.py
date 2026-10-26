@@ -201,8 +201,11 @@ def test_整個入口跑得起來_預設頁是市場總覽_側邊欄寫明非正
 
 _MISSING = {
     "mkt": ("⛔ 取數失敗：" + _NO_NET,),
-    "hld": (POL.NOT_CONFIGURED_MESSAGE, SET_REPO.NOT_CONFIGURED_MESSAGE),
-    "alo": (POL.NOT_CONFIGURED_MESSAGE, SET_REPO.NOT_CONFIGURED_MESSAGE),
+    # ~~"hld"／"alo": (POL.NOT_CONFIGURED_MESSAGE, SET_REPO.NOT_CONFIGURED_MESSAGE)~~ → 2026-10-26 批 3b-4（有意識的更正，不是漏刪；
+    # 決策者：客戶 J-7／J-13）：持倉體檢與資產配置只讀個人 Active Sheet，不再讀 `POLICY_SHEET_ID`；沒有 Active ＝
+    # 「⬜ 尚未選定持倉資料來源」（明確狀態，不是取數失敗，下面另驗），所以這兩頁沒有「未設定保單試算表 ID」原文。
+    "hld": (),
+    "alo": (),
     "set": (SET_REPO.NOT_CONFIGURED_MESSAGE,),
     # ~~"exp": (EXP_UNIVERSE.TEXT_NOT_CLOUD, ...)~~ → 2026-10-26（有意識的更正，不是漏刪）：POOL_SHEET_ID 寫死預設本已移除，
     # 無憑證替身之下試算表 ID 也未設定，`load_pool_codes` 改回 TEXT_NO_SHEET_ID（原因寫對）；仍走 STATUS_NOT_CLOUD。
@@ -221,6 +224,16 @@ def test_e_無憑證_四頁照實顯示缺失_沒有Traceback_不碰fixtures_沒
         assert needle in where, (slug, needle)
         if slug != "set":
             assert needle not in text, (slug, needle)
+    if slug in ("hld", "alo"):
+        from ui_v2 import active_gate
+
+        assert active_gate.TEXT_NO_ACTIVE in text, slug
+        assert "取數失敗" not in text and "HOLD" not in text, slug
+        assert POL.NOT_CONFIGURED_MESSAGE not in text and POL.NOT_CONFIGURED_MESSAGE not in _raw_text(at, slug), slug
+        # 預覽入口傳了 settings_page → 一枚只換頁的連結（st.page_link），不是單頁入口的說明行
+        assert any(active_gate.LINK_LABEL in str(getattr(e, "label", "")) or active_gate.LINK_LABEL in repr(e)
+                   for e in at.main.get("page_link")), slug
+        assert active_gate.LINK_ELSEWHERE_TEXT not in text, slug
     assert _MARK not in text
     # fixtures 的每一個基金名、類別名、訊息原文都帶「示意」；正式模式的頁首也不印情境名。
     assert "示意" not in text, slug

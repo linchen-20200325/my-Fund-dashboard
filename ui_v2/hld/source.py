@@ -24,6 +24,7 @@ import streamlit as st
 
 from services.v2_tables import alo_holdings, contract, fund_keys, masking, nav_dividend, settings_store
 
+from .. import active_gate
 from . import live
 
 # 淨值被扣下、畫面印「⬜ 資料未備」的四碼。⛔ 刻意不含 `WITHHELD_INPUT_CONFLICT`（契約被破壞 → raise）。
@@ -56,8 +57,14 @@ def load_live() -> dict:
 
     tables = holding_error = key_results = nav_table = dividend_table = None
     try:
-        tables = alo_holdings.load_alo_tables(values)
-    except alo_holdings.PolicySupplementError as exc:
+        # 批 3b-4（客戶 2026-10-26 J-7／J-13）：持倉原始表只讀使用者的 Active Sheet（個人 Google 帳號、唯讀），
+        # 不再讀 `POLICY_SHEET_ID`／服務帳戶，沒有任何 fallback。判定與計算（`build_alo_tables` 以下）一個字未動。
+        tables = alo_holdings.load_alo_tables_active(st.session_state, values)
+    except alo_holdings.ActiveSourceError as exc:
+        if active_gate.is_no_active(exc.code):
+            raise active_gate.NoActiveSource(exc.code) from None   # 沒有 Active：整頁「⬜ 尚未選定持倉資料來源」，不是錯誤
+        holding_error = mask(active_gate.failure_text(exc.code))   # 其餘九 code 之一：走既有持倉讀取失敗路徑
+    except alo_holdings.PolicySupplementError as exc:   # 補充分頁標頭不符（訊息已遮蔽）
         holding_error = mask(str(exc))
 
     settings = settings_error = None

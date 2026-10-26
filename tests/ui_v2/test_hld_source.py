@@ -107,7 +107,9 @@ def wired(monkeypatch):
         text = f"上游逾時 token={_SECRET}"
         return None, text, {"items": None, "outcome": None, "error": text}
 
-    monkeypatch.setattr(source.alo_holdings, "load_alo_tables", _load("load_alo_tables", "tables"))
+    # 批 3b-4：持倉改走 Active Sheet 路徑 `load_alo_tables_active(state, values)`（有意識的更正，不是漏刪）；其餘斷言不變。
+    _load_tables = _load("load_alo_tables", "tables")
+    monkeypatch.setattr(source.alo_holdings, "load_alo_tables_active", lambda _state, values: _load_tables(values))
     monkeypatch.setattr(source.settings_store, "load_user_settings", _load("load_user_settings", "settings"))
     monkeypatch.setattr(source.fund_keys, "resolve_full_keys", _resolve)
     monkeypatch.setattr(source.nav_dividend, "build_nav_dividend_tables", _build)

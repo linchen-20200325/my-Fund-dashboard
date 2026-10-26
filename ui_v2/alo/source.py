@@ -62,6 +62,7 @@ import streamlit as st
 
 from services.v2_tables import alo_holdings, fund_keys, market_indicator, masking, nav_dividend, settings_store
 
+from .. import active_gate
 from . import live
 
 _log = logging.getLogger(__name__)
@@ -149,7 +150,14 @@ def load_live() -> dict:
 
     # ── holding ＋ policy：同一次呼叫的產物（見 live.tables_failed_together 的說明）──
     try:
-        tables = alo_holdings.load_alo_tables(values)
+        # 批 3b-4（客戶 2026-10-26 J-7／J-13）：持倉原始表只讀使用者的 Active Sheet（個人 Google 帳號、唯讀），
+        # 不再讀 `POLICY_SHEET_ID`／服務帳戶，沒有任何 fallback。判定與計算（`build_alo_tables` 以下）一個字未動。
+        tables = alo_holdings.load_alo_tables_active(st.session_state, values)
+    except alo_holdings.ActiveSourceError as exc:
+        if active_gate.is_no_active(exc.code):
+            raise active_gate.NoActiveSource(exc.code) from None   # 沒有 Active：整頁「⬜ 尚未選定持倉資料來源」，不是錯誤
+        tables = None
+        errors.update(live.tables_failed_together(active_gate.failure_text(exc.code)))
     except alo_holdings.PolicySupplementError as exc:
         tables = None
         errors.update(live.tables_failed_together(str(exc)))   # 已由 L1 經 L2 的 mask 遮過

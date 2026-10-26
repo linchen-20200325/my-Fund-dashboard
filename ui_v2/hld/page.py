@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain, readonly, sections, symbols
+from .. import active_gate, health, health_view, plain, readonly, sections, symbols
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -1048,6 +1048,12 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
                 save_results=save_results,
                 **loaded["live_args"]
             )
+        except active_gate.NoActiveSource:
+            # 批 3b-4（J-13）：沒有 Active Sheet ＝ 明確的第三種狀態「⬜ 尚未選定持倉資料來源」＋前往設定；不是錯誤、不是空持倉。
+            active_gate.render_no_active(
+                "hld", title=logic.PAGE_TITLE, answers=logic.PAGE_ANSWERS, title_class="hld-title",
+                sub_class="hld-sub", tone_hex=_tone, settings_page=settings_page)
+            return
         except Exception as exc:  # noqa: BLE001 —— 不是吞：下一行整頁改畫錯誤畫面，型別與訊息原文照印（進階診斷）
             _render_live_error(exc, mask_error, settings_page)
             return
