@@ -6,20 +6,20 @@
 > 文中若引「約 :N」行號，以 `git show d5d391b:<path>` 讀（本批合併後交接本等檔的行號已因指標行而位移）。
 
 > **⏯ Resume Checkpoint**（規則：`PROJECT_RULES.md` 第 6 節 6.1.2，`DEC-2026-10-26-02`；**總管提供**；接手先依該節恢復流程比對 GitHub，不一致以 GitHub 為準）
-> - **last checkpoint**：2026-10-26（文件批 3b，docs 分支 `docs/handoff-batch3b-20261026`；舊版 checkpoint 停在 `fbb08116`、寫「批次 3b 尚未開始」，已過期，以本區塊為準）
-> - **latest verified main**：`623f982e`（`git log origin/main` 查證，2026-10-26）。本階段已合併：#1066 SET-5 零寫入 `c98c9639`、#1067 Active Sheet 狀態機 `d2ca1933`、#1068 移除寫死 `POOL_SHEET_ID` 預設 `fbb08116`、#1069 本檔 checkpoint＋BL-0454～0459 `6f87123d`、#1070 批 3b-1 個人 Sheet 橋接 `8b500f63`、#1071 批 3b-2 設定頁 Google 登入卡 `f1313a8d`、#1072 批 3b-3 Sheet Picker＋「使用這一本」`ea283b8e`、#1073 批 3b-4 hld／alo 只讀 Active Sheet `623f982e`
+> - **last checkpoint**：2026-10-26（批次 5 文件同步，docs 分支 `docs/handoff-batch4-20261026`；舊版 checkpoint 停在 `623f982e`、寫「批次 4 尚未開工」，已過期，以本區塊為準）
+> - **latest verified main**：`830f0bb2`（`git log origin/main` 查證，2026-10-26）。本階段已合併：#1066 SET-5 零寫入 `c98c9639`、#1067 Active Sheet 狀態機 `d2ca1933`、#1068 移除寫死 `POOL_SHEET_ID` 預設 `fbb08116`、#1069 本檔 checkpoint＋BL-0454～0459 `6f87123d`、#1070 批 3b-1 個人 Sheet 橋接 `8b500f63`、#1071 批 3b-2 設定頁 Google 登入卡 `f1313a8d`、#1072 批 3b-3 Sheet Picker＋「使用這一本」`ea283b8e`、#1073 批 3b-4 hld／alo 只讀 Active Sheet `623f982e`、#1074 本檔 checkpoint＋BL-0460～0469 `065726fe`、#1075 批次 4（個人 token 遮蔽於 5 個 ui_v2 頁、`PersonalSessionError.reason` 區分 `no_active`／`deploy_config`、AUTH_EXPIRED 單次登入提示 `KEY_LOGIN_NOTICE`、過期註解修正）`830f0bb2`
 > - **current branch／PR**：無 in-flight 實作 PR（`gh api` 查 open PR，2026-10-26；本文件批 docs 分支另開 draft PR，以 GitHub 為準）
-> - **current task**：新 B UI Implementation／Security Gate（`DEC-2026-10-26-03`）；批次 3b（3b-1～3b-4）已全數合併；現為**批次 4 剩餘項**（見下）→ 批次 5 文件同步
-> - **exact stopping point**：3b-4 合併後；批次 4 尚未開工（hld／alo 的「⬜ 尚未選定持倉資料來源」畫面已隨 3b-4 落地，其餘頁與錯誤分類接線未查）
-> - **next single action（唯讀、可安全先做）**：批次 4 剩餘項的**唯讀稽核**——盤點 mkt／exp／set 與 hld／alo 對九個 error code 的接線與「沒有 Active」畫面是否一致；只讀碼、出報告回總管，**不改碼、不改文案**（工作項 BL-0469；是否授權動工由客戶／總管指派）
-> - **需客戶裁示（Decision Gate，登記於 `docs/BACKLOG.md` BL-0460～BL-0468，皆未裁）**：①`settings_store.refetch_nav` 仍走舊 `POLICY_SHEET_ID`／服務帳戶路徑、與 hld／alo 不一致（BL-0460）；②單頁入口 `app_hld_live.py`／`app_alo_live.py` 無登入／選本路徑，去留（BL-0461）；③「空白→0.0／100.0」是否與「缺值不等於 0」衝突（BL-0462，Audit First，無 Decision Gate 前不得改公式）；④個人讀取無冷卻／429 退避（BL-0463）；⑤標頭寬鬆度是否與舊路徑一起變嚴（BL-0464）；⑥驗證規則是否加強（BL-0466）；⑦3b-2 三處偏離 65 的處置（BL-0467）；⑧新增使用者可見字樣待客戶定字（BL-0468）；另 BL-0465（redirect_uri 部署清單）為部署事項、非裁示
+> - **current task**：新 B UI Implementation／Security Gate（`DEC-2026-10-26-03`）；批次 3b 已合併、**批次 4 = 完成（#1075）**、批次 5 文件同步 = 本 PR；現為**等待客戶裁示 Decision Gate**（BL-0470～BL-0474 字樣／行為、BL-0477 D1 線框，及既有 BL-0460～BL-0468）
+> - **exact stopping point**：#1075 合併（main `830f0bb2`）後；批次 4 已做完，獨立稽核的剩餘文字／行為項已登記為 BL-0470～BL-0475，待客戶裁示
+> - **next single action（可安全先做）**：D1 雙層側欄導覽殼設計 **Phase 1（只做設計）**（BL-0477）——出桌機＋手機線框、類別→子頁對應等交付物送客戶審；**客戶核准線框前不得寫任何版面程式碼**；凍結的 `docs/v2/44_fund_ui_ssot.md` 不得修改
+> - **需客戶裁示（Decision Gate，登記於 `docs/BACKLOG.md` BL-0460～BL-0468、BL-0470～BL-0474、BL-0477，皆未裁；BL-0470～BL-0474 為批次 4 稽核的字樣／行為項，BL-0475 為待查證）**：①`settings_store.refetch_nav` 仍走舊 `POLICY_SHEET_ID`／服務帳戶路徑、與 hld／alo 不一致（BL-0460）；②單頁入口 `app_hld_live.py`／`app_alo_live.py` 無登入／選本路徑，去留（BL-0461）；③「空白→0.0／100.0」是否與「缺值不等於 0」衝突（BL-0462，Audit First，無 Decision Gate 前不得改公式）；④個人讀取無冷卻／429 退避（BL-0463）；⑤標頭寬鬆度是否與舊路徑一起變嚴（BL-0464）；⑥驗證規則是否加強（BL-0466）；⑦3b-2 三處偏離 65 的處置（BL-0467）；⑧新增使用者可見字樣待客戶定字（BL-0468）；另 BL-0465（redirect_uri 部署清單）為部署事項、非裁示
 > - **下一個 AI 不得做**：不得為 hld／alo／refetch 加任何 `POLICY_SHEET_ID`／服務帳戶 fallback；不得新增或放寬 OAuth scope、不得寫入 Sheet、不得動 SET-4；不得自行改任何使用者可見字樣（含 `請…` 句型，須客戶定字）；不得改 `_normalize_float`／`_normalize_div_cash_pct` 或任何公式／門檻（Audit First＋Decision Gate）；不得編輯凍結的 `docs/v2/44_fund_ui_ssot.md`；不得替未裁示項「順手修」；不得把 PR 內自驗回修 delta 當成已獨立稽核
 > - **風險**：①#1072、#1073 的回修 delta 依各 PR 說明為自驗、未經第二組獨立複驗；②AppTest 頁面測試本機因缺 streamlit／相依只能 CI 驗，各 PR 的完整 slow lane 本機未跑完，本區塊不代為宣稱 CI 結果；③OAuth callback 只在 Google 導回落在設定頁（`/set`）時才處理（BL-0465），部署 `redirect_uri` 設錯登入不會完成；④單頁入口永遠顯示「尚未選定」（BL-0461）；⑤新字樣未經客戶確認（BL-0468）
 > - **開工先讀的 SSOT**：`docs/v2/65_set_wireframe_and_cap_gate_01_02.md`（設定頁最終 Wireframe、J-1～J-13）→ `docs/DECISIONS.md` `DEC-2026-10-26-03`（索引條目，原文在其 evidence 檔）→ `shared/active_sheet.py` 檔頭（Active 狀態機、J-13 畫面路徑）→ `ui_v2/active_gate.py` 檔頭 → `docs/v2/44_fund_ui_ssot.md`（凍結）
-> - **tests／CI**：以 GitHub check-run 逐條 `conclusion` 為準；本批查詢 `623f982e` 時 Schema gate success、Fast checks 仍 in_progress（2026-10-26），之後請重查，本區塊不代為宣稱
+> - **tests／CI**：以 GitHub check-run 逐條 `conclusion` 為準；上一版 checkpoint 查詢 `623f982e` 時 Schema gate success、Fast checks 仍 in_progress（2026-10-26）；`830f0bb2` 的 CI 本批未查，請重查，本區塊不代為宣稱
 > - **unresolved true Stop Gates**：無（上列 Decision Gate 為待客戶裁示登記，不是停住中的 Stop Gate）
 > - **uncommitted／unpushed work**：無
-> - **recommended Model／Effort**：Sonnet 5.5／Medium（批次 4 唯讀稽核）
+> - **recommended Model／Effort**：Sonnet 5.5／Medium（D1 導覽設計 Phase 1，僅設計文件）
 > - **停止規則**：Stop Gate 必須顯式回報、禁止靜默停住（`DEC-2026-10-26-04`，`PROJECT_RULES.md` 6.1.3）
 > - ⚠️ **本區塊由文件組單組依 GitHub／讀碼寫成，未經第二組獨立驗證；各 BL 項細節與查證範圍見 `docs/BACKLOG.md`。**
 > - ⚠️ **未完成項不可視為驗收。**
