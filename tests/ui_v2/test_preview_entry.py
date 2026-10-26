@@ -236,7 +236,8 @@ def test_b_live入口的注入本身沒有漂移_體檢四份的關鍵字集合(
         # ~~"set": {…, "mask_error": "mask_error"},~~ → 2026-10-26 批 3b-2（狀態更新，不是漏刪）：設定頁入口與預覽同步加傳
         # login_live（Google 個人登入卡；`ui_v2/set/source.py::login_live`）。
         "set": {"load_live": "load_live", "save_live": "save_setting", "refetch_live": "refetch",
-                "mask_error": "mask_error", "login_live": "login_live"},
+                "mask_error": "mask_error", "login_live": "login_live",
+                "picker_live": "picker_live"},   # 2026-10-26 批 3b-3（狀態更新，不是漏刪）：加傳 picker_live
     }
 
 

@@ -313,10 +313,12 @@ def test_source只呼叫橋接的身分動作_不碰試算表寫入():
     tree = ast.parse((_SET_DIR / "source.py").read_text(encoding="utf-8"))
     used = {n.attr for n in ast.walk(tree)
             if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "personal_session"}
+    # ~~本檔原寫 used 恰為七個身分動作、且不含 Picker 三個~~ → 2026-10-26 批 3b-3（狀態更新，不是漏刪）：source 加上
+    # Picker／使用這一本的三個橋接動作（`list_for_picker`／`select_pending`／`use_pending`）。身分七個一個不少；
+    # 仍然沒有 `access_target`（讀取試算表內容不在本批）、沒有任何 Sheet 寫入動作（用到的名字恰為下列十個）。
     assert used == {"complete_login", "status", "begin_login", "confirm_login", "reject_login", "logout",
-                    "switch_account"}
-    # 沒有 Picker／使用這一本（本批範圍之外）
-    assert not used & {"list_for_picker", "select_pending", "use_pending", "access_target"}
+                    "switch_account", "list_for_picker", "select_pending", "use_pending"}
+    assert not used & {"access_target"}
 
 
 def test_source的callback處理_先拿掉網址參數_再呼叫complete_login():
