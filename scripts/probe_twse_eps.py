@@ -47,7 +47,7 @@ ALLOWED_HOSTS = frozenset({
     "mopsov.twse.com.tw",
     "mops.twse.com.tw",
 })
-TIMEOUT_SEC = 30
+TIMEOUT_SEC = 20
 MAX_BYTES = 20 * 1024 * 1024
 SAMPLE_ROWS = 3
 SAMPLE_STR_LEN = 80
@@ -69,6 +69,7 @@ ENDPOINTS = (
     ("openapi_t187ap06_L", "financials", f"{_O}/opendata/t187ap06_L", "json"),
     ("openapi_t187ap14_L", "financials", f"{_O}/opendata/t187ap14_L", "json"),
     ("openapi_t187ap05_L", "financials", f"{_O}/opendata/t187ap05_L", "json"),
+    ("openapi_t187ap06_L_ci", "financials", f"{_O}/opendata/t187ap06_L_ci", "json"),   # 候選：404 屬預期
     ("openapi_swagger", "swagger", f"{_O}/swagger.json", "swagger"),
     # 僅 HTTP 可達性（不解析內容）。條款頁網址為候選、未驗證；404 也是如實記錄。
     ("mopsov_index", "mops_reach", "https://mopsov.twse.com.tw/mops/web/index", "reach"),
@@ -80,36 +81,56 @@ SWAGGER_PATH_KEYWORDS = (
     "MI_INDEX", "FMTQIK", "BWIBBU", "t187ap06", "t187ap14", "t187ap05", "MI_5MINS_HIST",
 )
 SWAGGER_TEXT_KEYWORDS = ("本益比", "每股盈餘", "綜合損益", "加權股價指數")
+# 端點路徑皆未經真實回應驗證；報告對下列端點與整個 financials 群組標 candidate=true（404 屬預期）。
+CANDIDATE_IDS = frozenset({"openapi_t187ap06_L_ci", "twse_terms_candidate", "openapi_MI_5MINS_HIST"})
 MARKET_LEVEL_IDS = frozenset({
     "openapi_MI_INDEX", "rwd_MI_INDEX_IND", "openapi_MI_5MINS_HIST", "openapi_FMTQIK", "rwd_FMTQIK",
 })
 _RE_USERINFO = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)[^\s/@'\"]+@")
-_RE_PE_FIELD = re.compile(r"本益比|(?<![A-Za-z])P/?E(?![a-z])", re.IGNORECASE)
+def _norm_field(name) -> str:
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]", "", str(name).lower())
+
+
+def classify_field(name) -> str | None:
+    """欄名正規化（小寫、去非字母數字）後分類：pe／pb／yield／None。"""
+    n = _norm_field(name)
+    if "本益比" in n or re.fullmatch(r"(trailing|forward)?pe(ratio)?", n):
+        return "pe"
+    if "股價淨值比" in n or re.fullmatch(r"pb(ratio)?", n):
+        return "pb"
+    if "殖利率" in n or n == "dividendyield":
+        return "yield"
+    return None
 
 
 # ───────────────────────── 安全：遮蔽／白名單 ─────────────────────────
 
-def secret_literals() -> tuple:
-    """`PROXY_URL` 整串、帳密、host、port、netloc（任何可辨識 NAS 的片段）。"""
+def secret_literals(strong_only: bool = False) -> tuple:
+    """`PROXY_URL` 整串、帳密、host、port、netloc（任何可辨識 NAS 的片段）。
+
+    `strong_only=True`：只回傳高熵長字串（整串、密碼、user:pass、host、host:port；短帳號與 port 不含），
+    供「整份報告全域掃描」用 —— 低熵片段（如 port 3128）做全域子字串替換會改寫 sample 數值（如 23128.45）。
+    """
     raw = os.environ.get("PROXY_URL", "").strip()
     if not raw:
         return ()
     out = [raw]
+    minlen = 8 if strong_only else 3
     try:
         p = urlsplit(raw)
         for piece in (p.password, p.username, p.hostname, p.netloc,
                       f"{p.username}:{p.password}" if p.username and p.password else None):
-            if piece and len(piece) >= 3:
+            if piece and len(piece) >= minlen:
                 out.append(piece)
         try:
             port = p.port
         except ValueError:
             port = None
-        if port and len(str(port)) >= 4:
+        if port and len(str(port)) >= 4 and not strong_only:
             out.append(str(port))
         # netloc 去掉 userinfo 後的 host:port
         tail = p.netloc.split("@")[-1]
-        if len(tail) >= 3:
+        if len(tail) >= minlen:
             out.append(tail)
     except ValueError:
         pass
@@ -163,13 +184,22 @@ def is_date_field(name: str) -> bool:
     return ("日期" in n) or ("date" in n.lower())
 
 
-def judge_freshness(source_dates, run_date: date) -> dict:
-    """來源日期對比執行日。沒有來源日期 → `no_source_date`（不補值）。"""
+def judge_freshness(source_dates, run_date: date, group: str = "") -> dict:
+    """來源日期對比執行日（`heuristic` 恆 true，非正式 freshness 規格）。
+
+    沒有來源日期 → `no_source_date`（不補值）。財報群組的「出表日期」是發布日而非財報期間，
+    不下 fresh／stale 結論（`publication_date_not_period`）。
+    """
     if not source_dates:
-        return {"state": "no_source_date", "latest_source_date": None, "age_days": None}
+        return {"state": "no_source_date", "latest_source_date": None, "age_days": None, "heuristic": True}
     latest = max(source_dates)
     age = (run_date - latest).days
+    if group == "financials":
+        return {"state": "publication_date_not_period", "latest_source_date": latest.isoformat(),
+                "age_days": age, "heuristic": True,
+                "note": "出表日期為發布日，非財報期間；不判 fresh／stale"}
     return {
+        "heuristic": True,
         "state": "stale" if age > STALE_AFTER_DAYS else "fresh",
         "latest_source_date": latest.isoformat(),
         "age_days": age,
@@ -273,11 +303,14 @@ def analyze_json(obj) -> dict:
     else:
         schema = {"top_level": _tname(obj)}
     text = json.dumps(obj, ensure_ascii=False)
+    cls = {n: classify_field(n) for n in field_names}
     return {
         "schema": schema,
         "source_dates": dates,
         "source_date_fields": sorted(set(dfields)),
-        "pe_like_field_names": sorted({n for n in field_names if _RE_PE_FIELD.search(str(n))}),
+        "pe_like_field_names": sorted({n for n, c in cls.items() if c == "pe"}),
+        "pb_like_field_names": sorted({n for n, c in cls.items() if c == "pb"}),
+        "yield_like_field_names": sorted({n for n, c in cls.items() if c == "yield"}),
         "contains_taiex_row": TAIEX_NAME in text,
     }
 
@@ -340,7 +373,15 @@ def make_http_get(secrets: tuple):
         for attempt in (0, 1):
             t0 = time.monotonic()
             try:
-                r = _session(transport).get(url, timeout=TIMEOUT_SEC, stream=True)
+                r = _session(transport).get(url, timeout=TIMEOUT_SEC, stream=True, allow_redirects=False)
+                if 300 <= r.status_code < 400:
+                    # 不跟隨轉址、不讀 body；只記 Location 供判讀（遮蔽後）
+                    loc = r.headers.get("Location")
+                    r.close()
+                    out.update(status=r.status_code, content_type=r.headers.get("Content-Type"),
+                               latency_ms=round((time.monotonic() - t0) * 1000, 1), bytes=0, body=None,
+                               location=mask_text(loc, secrets) if loc else None)
+                    return out
                 chunks, total = [], 0
                 for ch in r.iter_content(65536):
                     total += len(ch)
@@ -358,6 +399,8 @@ def make_http_get(secrets: tuple):
                 return out
             except Exception as e:  # noqa: BLE001 — 例外原文照錄（遮蔽後），Fail Loud
                 last_err = mask_text(f"{type(e).__name__}: {e}", secrets)
+                # 前一次的 5xx 狀態不得殘留到「重試丟例外」的結果
+                out.update(status=None, content_type=None, bytes=None, body=None)
                 out["latency_ms"] = round((time.monotonic() - t0) * 1000, 1)
                 if attempt == 0:
                     time.sleep(2)
@@ -391,6 +434,12 @@ def probe_one(http_get, ep, transport, run_date, secrets, proxy_enabled) -> tupl
     if body is not None:
         res["body_sha256"] = hashlib.sha256(body).hexdigest()
     status = r.get("status")
+    if status is not None and 300 <= status < 400:
+        loc = r.get("location")
+        host = (urlsplit(loc).hostname or "").lower() if loc else ""
+        res["redirect_location_host"] = mask_text(host, secrets) or None
+        res["outcome"] = "blocked_redirect" if (host and host not in ALLOWED_HOSTS) else "redirect_not_followed"
+        return res, None, None
     if status is None:
         res["outcome"] = "unreachable"
         return res, None, None
@@ -422,8 +471,10 @@ def probe_one(http_get, ep, transport, run_date, secrets, proxy_enabled) -> tupl
     res["outcome"] = "ok" if (n_rows is None or n_rows > 0) else "empty_dataset"
     res["schema"] = sc
     res["source_date_fields"] = a["source_date_fields"]
-    res["freshness"] = judge_freshness(a["source_dates"], run_date)
+    res["freshness"] = judge_freshness(a["source_dates"], run_date, group)
     res["pe_like_field_names"] = a["pe_like_field_names"]
+    res["pb_like_field_names"] = a["pb_like_field_names"]
+    res["yield_like_field_names"] = a["yield_like_field_names"]
     res["contains_taiex_row"] = a["contains_taiex_row"]
     return res, a, None
 
@@ -451,7 +502,9 @@ def build_research_metric(ep_results: dict) -> dict:
             if r.get("outcome") == "ok":
                 sc = r.get("schema", {})
                 n = sc.get("n_rows") if sc.get("top_level") == "list" else (sc.get("data") or {}).get("n_rows")
-                bw[f"{ep_id}/{t}"] = {"n_rows": n, "pe_like_field_names": r.get("pe_like_field_names")}
+                bw[f"{ep_id}/{t}"] = {"n_rows": n, "pe_like_field_names": r.get("pe_like_field_names"),
+                                      "pb_like_field_names": r.get("pb_like_field_names"),
+                                      "yield_like_field_names": r.get("yield_like_field_names")}
     return {
         "market_level_trailing_pe_field_provided": provided,
         "market_level_pe_field_names": market_pe_names,
@@ -471,9 +524,10 @@ def _env_or_none(name):
 
 
 def write_report(report: dict, path: str, secrets: tuple) -> None:
-    """落盤前整份再遮蔽一次（深度防禦），再 gzip。"""
+    """落盤前整份再掃一次（深度防禦）再 gzip。只用高熵長字串做全域替換（`strong_only`），
+    低熵片段（port、短帳號）已在 error／content_type 等文字欄位遮蔽，不得全域替換而改寫 sample 數值。"""
     text = json.dumps(report, ensure_ascii=False, default=str)
-    text = mask_text(text, secrets)
+    text = mask_text(text, secret_literals(strong_only=True))
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with gzip.open(path, "wb", compresslevel=9) as f:
         f.write(text.encode("utf-8"))
@@ -506,7 +560,8 @@ def run_probe(http_get=None, out_path=None, sleep_sec=1.0, now=None, endpoints=E
     swagger_obj = None
     for ep in endpoints:
         ep_id, group, url, kind = ep
-        entry = {"id": ep_id, "group": group, "url": url, "kind": kind, "transports": {}}
+        entry = {"id": ep_id, "group": group, "url": url, "kind": kind, "transports": {},
+                 "candidate": (ep_id in CANDIDATE_IDS or group == "financials")}
         for tr in TRANSPORTS:
             if sleep_sec and not (tr == "nas_proxy" and not proxy_enabled):
                 time.sleep(sleep_sec)

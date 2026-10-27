@@ -189,3 +189,108 @@ def test_write_report_is_gzip_json(tmp_path):
     P.run_probe(http_get=_fake(ROUTES), out_path=str(out), sleep_sec=0, now=NOW)
     data = json.loads(gzip.decompress(out.read_bytes()))
     assert data["probe"] == "twse_eps" and data["complete"] is True
+
+
+# ───────────── 稽核修正（M1/M2/S1/S3/S5/S7）─────────────
+
+def test_m1_pe_pb_yield_field_classification():
+    fn = P.classify_field
+    assert fn("PEratio") == "pe" and fn("P/E") == "pe" and fn("本益比") == "pe" and fn("PE") == "pe"
+    assert fn("PBratio") == "pb" and fn("股價淨值比") == "pb"
+    assert fn("DividendYield") == "yield" and fn("殖利率(%)") == "yield"
+    assert fn("Type") is None and fn("Code") is None
+
+
+def test_m1_bwibbu_peratio_detected_in_report():
+    row = {"Date": "1151026", "Code": "2330", "PEratio": "20.5", "PBratio": "5.1", "DividendYield": "2.0"}
+    rep = P.run_probe(http_get=_fake({"BWIBBU_ALL": _resp([row])}), sleep_sec=0, now=NOW)
+    r = next(e for e in rep["endpoints"] if e["id"] == "openapi_BWIBBU_ALL")["transports"]["direct"]
+    assert r["pe_like_field_names"] == ["PEratio"]
+    assert r["pb_like_field_names"] == ["PBratio"] and r["yield_like_field_names"] == ["DividendYield"]
+    assert rep["research_metric"]["per_security_pe_sources"]["openapi_BWIBBU_ALL/direct"]["pe_like_field_names"] == ["PEratio"]
+
+
+def test_m2_low_entropy_fragments_do_not_rewrite_sample_values(monkeypatch, tmp_path):
+    monkeypatch.setenv("PROXY_URL", "http://ab:Sup3rSecretPw@nas-internal.example.invalid:3128")
+    row = {"收盤指數": "23128.45", "Code": "3128", "note": "ab"}
+    out = tmp_path / "r.json.gz"
+    P.run_probe(http_get=_fake({"MI_INDEX": _resp([row])}), out_path=str(out), sleep_sec=0, now=NOW)
+    raw = gzip.decompress(out.read_bytes()).decode("utf-8")
+    assert "23128.45" in raw and '"3128"' in raw and '"ab"' in raw
+    for s in ("Sup3rSecretPw", "nas-internal.example.invalid"):
+        assert s not in raw
+
+
+def test_m2_error_text_still_masks_port_and_host(monkeypatch, tmp_path):
+    monkeypatch.setenv("PROXY_URL", FAKE_PROXY)
+    out = tmp_path / "r.json.gz"
+    P.run_probe(http_get=_fake({}, leak="host=nas-internal.example.invalid port=31280"), out_path=str(out),
+                sleep_sec=0, now=NOW)
+    raw = gzip.decompress(out.read_bytes()).decode("utf-8")
+    assert "31280" not in raw and "nas-internal.example.invalid" not in raw and "Sup3rSecretPw" not in raw
+
+
+def test_s1_redirect_not_followed_and_offsite_blocked():
+    def redirect(loc):
+        return {"status": 302, "content_type": "text/html", "latency_ms": 1.0, "bytes": 0, "body": None, "error": None,
+                "location": loc}
+    ep = ("r", "x", "https://openapi.twse.com.tw/v1/x", "json")
+    off = P.run_probe(http_get=_fake({"/v1/x": redirect("https://evil.example.com/a")}), sleep_sec=0, now=NOW, endpoints=(ep,))
+    t = off["endpoints"][0]["transports"]["direct"]
+    assert t["outcome"] == "blocked_redirect" and t["redirect_location_host"] == "evil.example.com" and "schema" not in t
+    on = P.run_probe(http_get=_fake({"/v1/x": redirect("/v1/y")}), sleep_sec=0, now=NOW, endpoints=(ep,))
+    assert on["endpoints"][0]["transports"]["direct"]["outcome"] == "redirect_not_followed"
+
+
+def test_s1_http_get_disables_redirects():
+    src = (_ROOT / "scripts" / "probe_twse_eps.py").read_text(encoding="utf-8")
+    assert "allow_redirects=False" in src
+
+
+def test_s3_freshness_heuristic_and_financials_not_judged():
+    rep = P.run_probe(http_get=_fake(ROUTES), sleep_sec=0, now=NOW)
+    by = {e["id"]: e for e in rep["endpoints"]}
+    assert by["openapi_MI_INDEX"]["transports"]["direct"]["freshness"]["heuristic"] is True
+    fr = by["openapi_t187ap06_L"]["transports"]["direct"]["freshness"]
+    assert fr["state"] == "publication_date_not_period" and fr["heuristic"] is True
+
+
+def test_s5_candidates_flagged():
+    rep = P.run_probe(http_get=_fake(ROUTES), sleep_sec=0, now=NOW)
+    by = {e["id"]: e for e in rep["endpoints"]}
+    assert by["openapi_t187ap06_L_ci"]["candidate"] is True and by["openapi_t187ap14_L"]["candidate"] is True
+    assert by["openapi_BWIBBU_ALL"]["candidate"] is False
+
+
+def test_s7_retry_exception_clears_stale_5xx_status(monkeypatch):
+    requests = pytest.importorskip("requests")
+    monkeypatch.setattr(P.time, "sleep", lambda *_a: None)
+    calls = {"n": 0}
+
+    class R5:
+        status_code = 503
+        headers = {"Content-Type": "text/html"}
+        def iter_content(self, _n):
+            yield b"x"
+        def close(self):
+            pass
+
+    class S:
+        def get(self, *a, **k):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return R5()
+            raise requests.exceptions.ConnectionError("down")
+        trust_env = False
+
+    class Hd(dict):
+        pass
+    class S2(S):
+        headers = Hd()
+        proxies = {}
+    monkeypatch.setattr(requests, "Session", lambda: S2())
+    r = P.make_http_get(())("https://openapi.twse.com.tw/v1/x", "direct")
+    assert r["status"] is None and r["body"] is None and r["error"]
+    rep = P.run_probe(http_get=lambda u, t: r, sleep_sec=0, now=NOW,
+                      endpoints=(("r", "x", "https://openapi.twse.com.tw/v1/x", "json"),))
+    assert rep["endpoints"][0]["transports"]["direct"]["outcome"] == "unreachable"

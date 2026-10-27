@@ -11,6 +11,11 @@ name: "探測：TWSE／MOPS 公開端點可達性與欄位（BL-0509，只讀，
 #    `PROXY_URL` 環境變數 → 自建 requests Session 的 proxies（不改 `infra/proxy.py`、不新增 API 架構）。
 #    `PROXY_URL` 只在「Run probe」那一步以 env 傳入；腳本不印、不寫報告、錯誤文字先遮蔽。
 #
+# ⚠️ 據實揭露 `ref: main` 擋不到的事：push 事件執行的是「被推的那顆 commit 裡的這份 workflow 檔」本身。
+#    能推按鈕分支、且能改 workflow 檔的人，可以連這份 yml 一起改掉，進而讀取 `secrets.PROXY_URL`
+#    （含 NAS 帳密）。**建議（本檔不實作）**：把 `PROXY_URL` 改放 GitHub Environment secret，
+#    並對該 Environment 設必要審核者／限定分支，讓讀取 secret 需要人工核准。
+#
 # ⚠️ 只讀：只發 GET；報告只推到專用分支 `probe/twse-eps-results`（**不推 main、不推其他分支、不 force**）。
 # ⚠️ 沒有排程。觸發方式只有兩種：
 #    (1) 手動 `workflow_dispatch`（沒有輸入參數）；
@@ -36,8 +41,9 @@ concurrency:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    # 端點約 20 個 × 2 條路徑，每請求 timeout 30 秒、最多 1 次重試；上限遠低於此。
-    timeout-minutes: 30
+    # 最壞情況推算（非實量）：16 個端點 × 2 條路徑 × (2 次嘗試 × 20 秒 timeout ＋ 2 秒重試間隔 ＋ 1 秒請求間隔)
+    # ≈ 16×2×43 秒 ≈ 23 分；Run probe 步驟上限 32 分，job 上限 40 分，確保最壞情況下報告提交步驟（if: always()）仍有時間執行。
+    timeout-minutes: 40
     env:
       RESULT_BRANCH: probe/twse-eps-results
       REPORT_PATH: probe_out/twse_eps_report.json.gz
@@ -63,6 +69,7 @@ jobs:
         run: pip install requests
 
       - name: Run probe
+        timeout-minutes: 32
         env:
           # 有設才經 NAS 中繼；腳本只記 enabled=true/false 與各路徑實際結果，不輸出 host／帳密。
           PROXY_URL: ${{ secrets.PROXY_URL }}
