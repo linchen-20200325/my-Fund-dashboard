@@ -19,10 +19,12 @@ import argparse
 import gzip
 import json
 import sys
+import zlib
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 TZ_TAIPEI = timezone(timedelta(hours=8))
+MAX_DECOMPRESSED_BYTES = 20 * 1024 * 1024   # 解壓上限（防解壓炸彈）；超過即略過該檔
 MIN_RUNS_FOR_CHANGE = 2          # 判斷「有沒有變」至少要幾份報告
 MIN_DISTINCT_DATES_FOR_LAG = 2   # 推發布延遲至少要觀察到幾個不同的來源日期
 MIN_RUN_DATES_FOR_FREQUENCY = 3  # 談更新頻率至少要幾個不同的台北日
@@ -51,6 +53,56 @@ def _parse_date(raw):
         return None
 
 
+def _dicts(x) -> list:
+    return [i for i in x if isinstance(i, dict)] if isinstance(x, list) else []
+
+
+def _int_or(x, default=1) -> int:
+    try:
+        return int(x)
+    except (TypeError, ValueError):
+        return default
+
+
+def _sanitize(rep: dict) -> None:
+    """型別防呆：不合法的欄位視為缺值（不補值），不讓畸形報告讓分析崩潰。"""
+    rep["schema_version"] = _int_or(rep.get("schema_version"), 1)
+    eps = []
+    for e in _dicts(rep.get("endpoints")):
+        if not isinstance(e.get("id"), str):
+            continue
+        tr = e.get("transports")
+        e["transports"] = {k: v for k, v in tr.items() if isinstance(v, dict)} if isinstance(tr, dict) else {}
+        for res in e["transports"].values():
+            for key in ("timeseries", "freshness", "schema"):
+                if not isinstance(res.get(key), dict):
+                    res.pop(key, None)
+            ts = res.get("timeseries")
+            if ts:
+                for k in ("n_cells", "empty_string_cells", "dash_cells", "null_cells", "row_count"):
+                    v = ts.get(k)
+                    if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
+                        ts[k] = None
+                if not isinstance(ts.get("missing_by_field"), dict):
+                    ts["missing_by_field"] = {}
+                ts["missing_by_field"] = {
+                    k: {m: c for m, c in v.items() if isinstance(c, (int, float)) and not isinstance(c, bool)}
+                    for k, v in ts["missing_by_field"].items() if isinstance(v, dict)}
+        eps.append(e)
+    rep["endpoints"] = eps
+    rep["openapi_vs_rwd"] = _dicts(rep.get("openapi_vs_rwd"))
+    tr = rep.get("terms_research")
+    rep["terms_research"] = tr if isinstance(tr, dict) else {}
+    tr = rep["terms_research"]
+    tr["followed"] = _dicts(tr.get("followed"))
+    if not isinstance(tr.get("swagger_description"), dict):
+        tr["swagger_description"] = {}
+    tr["swagger_description"]["links"] = _dicts(tr["swagger_description"].get("links"))
+    for f in tr["followed"]:
+        t = f.get("transports")
+        f["transports"] = {k: v for k, v in t.items() if isinstance(v, dict)} if isinstance(t, dict) else {}
+
+
 def load_reports(paths) -> tuple:
     """回傳 (reports, skipped)；reports 依 generated_at_utc 排序，每份附 `_source`、`_dt_utc`。"""
     files = []
@@ -64,9 +116,13 @@ def load_reports(paths) -> tuple:
     for f in files:
         try:
             with gzip.open(f, "rb") as fh:
-                rep = json.loads(fh.read().decode("utf-8"))
-        except (OSError, ValueError) as e:
-            skipped.append((str(f), f"{type(e).__name__}"))
+                raw = fh.read(MAX_DECOMPRESSED_BYTES + 1)
+            if len(raw) > MAX_DECOMPRESSED_BYTES:
+                skipped.append((str(f), f"decompressed size exceeds {MAX_DECOMPRESSED_BYTES} bytes"))
+                continue
+            rep = json.loads(raw.decode("utf-8"))
+        except (OSError, EOFError, zlib.error, ValueError, RecursionError, MemoryError) as e:
+            skipped.append((str(f), f"unreadable: {type(e).__name__}"))
             continue
         if not isinstance(rep, dict) or rep.get("probe") != "twse_eps":
             skipped.append((str(f), "not a twse_eps probe report"))
@@ -77,6 +133,7 @@ def load_reports(paths) -> tuple:
             continue
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
+        _sanitize(rep)
         rep["_source"] = str(f)
         rep["_dt_utc"] = dt
         reports.append(rep)
@@ -107,7 +164,7 @@ def ep_view(report, ep_id, transport) -> dict | None:
         n_cells = ts.get("n_cells")
         missing = None
         if n_cells:
-            missing = (ts.get("empty_string_cells", 0) + ts.get("dash_cells", 0) + ts.get("null_cells", 0))
+            missing = sum((ts.get(k) or 0) for k in ("empty_string_cells", "dash_cells", "null_cells"))
         return {
             "group": e.get("group"),
             "outcome": res.get("outcome"),
@@ -285,7 +342,7 @@ def section_missing(reports, transport) -> str:
             if not v or not v["n_cells"]:
                 rows.append([run_label(r), "—", "—", "—"])
                 continue
-            pe = {k: sum(c.values()) for k, c in v["missing_by_field"].items() if any(m in k for m in PE_FIELD_MARKERS)}
+            pe = {str(k): sum(c.values()) for k, c in v["missing_by_field"].items() if any(m in str(k) for m in PE_FIELD_MARKERS)}
             rows.append([run_label(r), f"{v['missing_cells']}/{v['n_cells']}",
                          f"{v['missing_cells'] / v['n_cells']:.4%}", json.dumps(pe, ensure_ascii=False) if pe else "—"])
         lines.append(f"### {ep}")
@@ -411,18 +468,27 @@ def section_limits() -> str:
     ])
 
 
+def _safe(fn, title, *a):
+    try:
+        return fn(*a)
+    except (TypeError, ValueError, AttributeError, KeyError, IndexError, RecursionError) as e:
+        return f"## {title}\n\n（此節因報告資料格式異常而略過：{type(e).__name__}；不補值）"
+
+
 def analyze(reports, skipped=(), transport="direct") -> str:
     parts = ["# BL-0509 TWSE probe 多日序列分析", "",
              "> 研究性彙整，非 Data Source Decision Gate 裁示；不接正式 signal／AI Brain。", ""]
-    parts.append(section_overview(reports, list(skipped), transport))
+    parts.append(_safe(section_overview, "1. 樣本概況", reports, list(skipped), transport))
     if reports:
-        parts += ["", section_changes(reports, transport),
-                  "", section_latest_date_progress(reports, transport),
-                  "", section_openapi_vs_rwd(reports, transport),
-                  "", section_missing(reports, transport),
-                  "", section_revision(reports, transport),
-                  "", section_nas_vs_direct(reports),
-                  "", section_terms(reports)]
+        for fn, title, extra in (
+                (section_changes, "2. 各端點跨 run 變化", (transport,)),
+                (section_latest_date_progress, "3. latest_source_date 推進", (transport,)),
+                (section_openapi_vs_rwd, "4. openapi vs rwd 來源日期差", (transport,)),
+                (section_missing, "5. Missing 比例", (transport,)),
+                (section_revision, "6. 疑似 revision", (transport,)),
+                (section_nas_vs_direct, "7. direct vs nas_proxy", ()),
+                (section_terms, "8. 條款研究", ())):
+            parts += ["", _safe(fn, title, reports, *extra)]
     parts += ["", section_limits(), ""]
     return "\n".join(parts)
 

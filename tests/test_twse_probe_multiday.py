@@ -338,3 +338,85 @@ def test_analyzer_is_stdlib_only_and_has_no_network():
     src = (_ROOT / "scripts" / "analyze_twse_probe_series.py").read_text(encoding="utf-8")
     for bad in ("import requests", "import urllib", "import socket", "import subprocess", "PROXY_URL"):
         assert bad not in src
+
+
+# ───────────── 稽核修正（M1／M2／M3／S1） ─────────────
+
+def test_m1_hop_interval_sleep_between_hops(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(P.time, "sleep", lambda x: sleeps.append(x))
+    f = _fake({EP[2]: _redir("/a"), "https://www.twse.com.tw/a": _redir("/b"),
+               "https://www.twse.com.tw/b": _html("使用條款")})
+    res, *_ = P.probe_one(f, EP, "direct", NOW.date(), (), False, 1.5)
+    assert res["n_hops"] == 2 and sleeps == [1.5, 1.5]          # 3 個請求 → hop 之間 2 次間隔，首跳不重複 sleep
+    sleeps.clear()
+    P.probe_one(_fake({EP[2]: _html("x")}), EP, "direct", NOW.date(), (), False, 1.5)
+    assert sleeps == []
+    sleeps.clear()
+    f2 = _fake({})
+    sw = {"info": {"description": "https://www.twse.com.tw/t1"}}
+    P.build_terms_research(f2, sw, set(), (), False, NOW.date(), sleep_sec=2.0)
+    assert 2.0 in sleeps                                           # swagger 連結的請求也遵守間隔
+
+
+def test_m3_port_restricted_to_443():
+    assert P.is_allowed_url("https://www.twse.com.tw/x")
+    assert P.is_allowed_url("https://www.twse.com.tw:443/x")
+    assert not P.is_allowed_url("https://www.twse.com.tw:8443/x")
+    assert not P.is_allowed_url("https://www.twse.com.tw:80/x")
+    assert not P.is_allowed_url("https://www.twse.com.tw:notaport/x")
+    f = _fake({EP[2]: _redir("https://www.twse.com.tw:8443/t")})
+    res, *_ = P.probe_one(f, EP, "direct", NOW.date(), (), False)
+    assert res["outcome"] == "blocked_redirect" and len(f.calls) == 1
+
+
+def test_s1_request_uses_raw_url_record_uses_masked(monkeypatch):
+    monkeypatch.setenv("PROXY_URL", FAKE_PROXY)
+    sec = P.secret_literals()
+    raw = "https://www.twse.com.tw/t?k=Sup3rSecretPw"
+    f = _fake({raw: _html("使用條款")})
+    out = P.build_terms_research(f, {"info": {"description": raw}}, set(), sec, False, NOW.date())
+    assert [u for u, _t in f.calls] == [raw]                       # 請求用原值
+    rec = json.dumps(out, ensure_ascii=False)
+    assert "Sup3rSecretPw" not in rec and "***" in rec            # 記錄用遮蔽值
+    assert out["followed"][0]["transports"]["direct"]["outcome"] == "reachable"
+
+
+def _gz(b):
+    return gzip.compress(b)
+
+
+def test_m2_analyzer_survives_malformed_inputs(tmp_path, monkeypatch):
+    good = _rep(datetime(2026, 10, 27, 19, 37, tzinfo=TP), "2026-10-22", "a" * 64)
+    (tmp_path / "good.json.gz").write_bytes(_gz(json.dumps(good).encode()))
+    # 1. 截斷的 gz
+    (tmp_path / "trunc.json.gz").write_bytes(_gz(json.dumps(good).encode() * 50)[:-20])
+    # 2. 極深巢狀 JSON
+    (tmp_path / "deep.json.gz").write_bytes(_gz(b"[" * 100000 + b"]" * 100000))
+    # 3. 型別錯誤欄位
+    bad = _rep(datetime(2026, 10, 28, 19, 37, tzinfo=TP), "2026-10-23", "b" * 64)
+    bad["schema_version"] = "zz"
+    bad["endpoints"][0]["transports"]["direct"]["timeseries"]["n_cells"] = "100"
+    bad["endpoints"][0]["transports"]["direct"]["timeseries"]["missing_by_field"] = {"PEratio": 5, "x": {"empty": "n"}}
+    bad["openapi_vs_rwd"] = [1, "x", None, {"pair": "BWIBBU", "transport": "direct", "diff_days": "zz"}]
+    bad["terms_research"] = {"followed": [7], "swagger_description": {"links": ["u"]}}
+    bad["endpoints"].append("notadict")
+    (tmp_path / "bad.json.gz").write_bytes(_gz(json.dumps(bad).encode()))
+    # 4. 解壓炸彈（把上限調小以免真的吃記憶體）
+    monkeypatch.setattr(A, "MAX_DECOMPRESSED_BYTES", 200_000)
+    (tmp_path / "bomb.json.gz").write_bytes(_gz(b" " * 5_000_000))
+    reports, skipped = A.load_reports([tmp_path])
+    reasons = {Path(s).name: why for s, why in skipped}
+    assert "trunc.json.gz" in reasons and "deep.json.gz" in reasons
+    assert "exceeds" in reasons["bomb.json.gz"]
+    assert len(reports) == 2                                       # good + bad 皆載入
+    md = A.analyze(reports, skipped)                               # 不崩
+    assert "BL-0509" in md and "樣本概況" in md
+
+
+def test_m2_analyzer_section_guard_never_raises(tmp_path):
+    reports = [_rep(datetime(2026, 10, 27, 19, 37, tzinfo=TP), "2026-10-22", "a" * 64)]
+    reports[0]["_dt_utc"] = reports[0].get("_dt_utc") or datetime(2026, 10, 27, tzinfo=timezone.utc)
+    reports[0]["endpoints"] = [{"id": "x", "transports": {"direct": {"timeseries": {"n_cells": "z"}}}}]
+    md = A.analyze(reports, [])                                    # 未經 load_reports 的畸形資料也不得崩
+    assert "此節因報告資料格式異常而略過" in md or "樣本" in md

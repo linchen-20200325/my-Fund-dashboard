@@ -167,7 +167,12 @@ def is_allowed_url(url: str) -> bool:
         p = urlsplit(url)
     except ValueError:
         return False
-    return p.scheme == "https" and (p.hostname or "").lower() in ALLOWED_HOSTS and not p.username
+    try:
+        port_ok = p.port in (None, 443)
+    except ValueError:
+        return False
+    return (p.scheme == "https" and (p.hostname or "").lower() in ALLOWED_HOSTS and not p.username
+            and port_ok)
 
 
 # ───────────────────────── 日期解析／stale 判定 ─────────────────────────
@@ -579,12 +584,14 @@ def _hop_entry(hop, url, r, secrets):
     return e
 
 
-def follow_redirects(http_get, url, transport, secrets):
+def follow_redirects(http_get, url, transport, secrets, hop_sleep=0.0):
     """最多 MAX_REDIRECT_HOPS 跳；每一跳目標都必須通過 `is_allowed_url`，否則停（blocked_redirect）。
     回傳 (chain, stop_reason, final_response)；stop_reason：final／blocked_redirect／redirect_limit_exceeded／
     redirect_loop／redirect_without_location。http_get 本身恆不自動跟隨（一次只發一跳）。"""
     chain, seen, cur = [], {url}, url
     for hop in range(MAX_REDIRECT_HOPS + 1):
+        if hop > 0 and hop_sleep:
+            time.sleep(hop_sleep)          # hop 之間同樣遵守請求間隔
         r = http_get(cur, transport)
         entry = _hop_entry(hop, cur, r, secrets)
         chain.append(entry)
@@ -610,11 +617,11 @@ def follow_redirects(http_get, url, transport, secrets):
     return chain, "redirect_limit_exceeded", None   # 理論上不會到這裡
 
 
-def _probe_follow(http_get, ep, transport, secrets) -> dict:
+def _probe_follow(http_get, ep, transport, secrets, hop_sleep=0.0) -> dict:
     """`terms_reach` 專用：有限度跟隨，只記每跳摘要與關鍵詞「存在與否／次數」。不下可否商用結論。"""
     _id, _group, url, _kind = ep
     res = {"transport": transport}
-    chain, stop, last = follow_redirects(http_get, url, transport, secrets)
+    chain, stop, last = follow_redirects(http_get, url, transport, secrets, hop_sleep)
     last = last or {}
     res.update(
         http_status=last.get("status"),
@@ -651,8 +658,8 @@ def _probe_follow(http_get, ep, transport, secrets) -> dict:
 _RE_URL = re.compile(r"https?://[^\s)\]\"'<>]+")
 
 
-def extract_swagger_terms_links(swagger_obj, secrets: tuple = ()) -> dict:
-    """swagger `info.description`／`info.termsOfService` 內的 URL（完整、不截斷）與其 host。"""
+def _swagger_raw_urls(swagger_obj) -> list:
+    """swagger info 內的原始 URL（未遮蔽；**只供發請求用，不得寫進報告**）。"""
     info = swagger_obj.get("info") if isinstance(swagger_obj, dict) and isinstance(swagger_obj.get("info"), dict) else {}
     desc = str(info.get("description") or "")
     urls = []
@@ -663,6 +670,16 @@ def extract_swagger_terms_links(swagger_obj, secrets: tuple = ()) -> dict:
     tos = info.get("termsOfService")
     if isinstance(tos, str) and tos.strip() and tos.strip() not in urls:
         urls.append(tos.strip())
+    return urls
+
+
+def extract_swagger_terms_links(swagger_obj, secrets: tuple = ()) -> dict:
+    """swagger `info.description`／`info.termsOfService` 內的 URL（完整、不截斷）與其 host。
+    回傳內的 url 是遮蔽後的記錄用值；請求用原值見 `_swagger_raw_urls`（與 links 同順序）。"""
+    info = swagger_obj.get("info") if isinstance(swagger_obj, dict) and isinstance(swagger_obj.get("info"), dict) else {}
+    desc = str(info.get("description") or "")
+    tos = info.get("termsOfService")
+    urls = _swagger_raw_urls(swagger_obj)
     links = []
     for u in urls:
         try:
@@ -694,17 +711,19 @@ def build_terms_research(http_get, swagger_obj, static_urls, secrets, proxy_enab
         return base
     info = extract_swagger_terms_links(swagger_obj, secrets)
     base["swagger_description"] = info
-    todo = [l["url"] for l in info["links"] if l["allowed"] and l["url"] not in static_urls][:MAX_TERMS_LINKS]
-    for i, url in enumerate(todo):
-        ep = (f"swagger_terms_link_{i + 1}", "terms_reach", url, "reach")
-        entry = {"id": ep[0], "url": url, "transports": {}}
+    raws = _swagger_raw_urls(swagger_obj)
+    todo = [(raw, l["url"]) for raw, l in zip(raws, info["links"])
+            if l["allowed"] and raw not in static_urls][:MAX_TERMS_LINKS]
+    for i, (url, masked) in enumerate(todo):
+        ep = (f"swagger_terms_link_{i + 1}", "terms_reach", url, "reach")   # 請求用原值
+        entry = {"id": ep[0], "url": masked, "transports": {}}               # 記錄用遮蔽值
         for tr in TRANSPORTS:
             if tr == "nas_proxy" and not proxy_enabled:
                 entry["transports"][tr] = {"transport": tr, "outcome": "proxy_not_configured", "http_status": None}
                 continue
             if sleep_sec:
                 time.sleep(sleep_sec)
-            entry["transports"][tr] = _probe_follow(http_get, ep, tr, secrets)
+            entry["transports"][tr] = _probe_follow(http_get, ep, tr, secrets, sleep_sec)
         base["followed"].append(entry)
     return base
 
@@ -746,7 +765,7 @@ def build_openapi_vs_rwd(ep_results: dict) -> list:
 
 # ───────────────────────── 單端點／單路徑 ─────────────────────────
 
-def probe_one(http_get, ep, transport, run_date, secrets, proxy_enabled) -> tuple:
+def probe_one(http_get, ep, transport, run_date, secrets, proxy_enabled, hop_sleep=0.0) -> tuple:
     """回傳 (report_dict, analysis_or_None, swagger_obj_or_None)。"""
     ep_id, group, url, kind = ep
     res = {"transport": transport}
@@ -757,7 +776,7 @@ def probe_one(http_get, ep, transport, run_date, secrets, proxy_enabled) -> tupl
         res.update(outcome="blocked_by_allowlist", http_status=None)
         return res, None, None
     if group in FOLLOW_GROUPS and kind == "reach":
-        return _probe_follow(http_get, ep, transport, secrets), None, None
+        return _probe_follow(http_get, ep, transport, secrets, hop_sleep), None, None
     r = http_get(url, transport)
     body = r.get("body")
     res.update(
@@ -904,7 +923,7 @@ def run_probe(http_get=None, out_path=None, sleep_sec=1.0, now=None, endpoints=E
         for tr in TRANSPORTS:
             if sleep_sec and not (tr == "nas_proxy" and not proxy_enabled):
                 time.sleep(sleep_sec)
-            res, _a, sw = probe_one(http_get, ep, tr, run_date, secrets, proxy_enabled)
+            res, _a, sw = probe_one(http_get, ep, tr, run_date, secrets, proxy_enabled, sleep_sec)
             entry["transports"][tr] = res
             ep_results.setdefault(ep_id, {})[tr] = res
             if sw is not None and swagger_obj is None:

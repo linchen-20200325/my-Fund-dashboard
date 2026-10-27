@@ -173,6 +173,22 @@ def test_schedule_exactly_two_weekday_crons_off_the_hour(wf):
         assert dow == "1-5", f"僅週一至週五：{c}"
 
 
+def test_schedule_utc_to_taipei_matches_header_comment(wf):
+    """cron 為 UTC；換算成台北（UTC+8，可能跨日）後的星期範圍與時刻，必須與檔頭註解逐條一致。"""
+    names = "日一二三四五六"
+    head = _WF.read_text(encoding="utf-8").split("\non:\n", 1)[0]
+    for item in _on(wf)["schedule"]:
+        cron = item["cron"]
+        minute, hour, _dom, _mon, dow = cron.split()
+        lo, hi = (int(x) for x in dow.split("-"))
+        total = int(hour) + 8
+        shift = 1 if total >= 24 else 0
+        tp_h, tp_m = total % 24, int(minute)
+        lo2, hi2 = (lo + shift) % 7, (hi + shift) % 7
+        expect = f"`{cron}` ＝ 台北週{names[lo2]}至週{names[hi2]} {tp_h:02d}:{tp_m:02d}"
+        assert expect in head, f"檔頭註解與 cron 換算不符，應含：{expect}"
+
+
 def test_schedule_is_documented_in_header_with_disable_instruction():
     head = _WF.read_text(encoding="utf-8").split("\non:\n", 1)[0]
     for needle in ("shadow probe", "2026-10-27", "如何停用", "schedule:", "不接正式 signal"):

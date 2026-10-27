@@ -15,11 +15,11 @@
 - **時間**（只週一至週五，分鐘避開整點／半點）：`37 11 * * 1-5` ＝ 台北週一至週五 19:37（當日盤後）；`43 22 * * 1-5` ＝ 台北週二至週六 06:43（前一交易日的隔日清晨）。GitHub 排程可能延遲或偶爾漏跑，以報告內 `generated_at_utc` 為準。cron 不知道休市日，休市日也會跑（得到「來源日期沒推進」的觀察）。
 - **預計**收集 3～5 個交易日（約 2026-10-28 ～ 2026-11-03）後，由客戶裁示是否停用。
 - **如何停用**：刪除 `.github/workflows/twse_eps_probe.yml` 中 `on:` 下的整個 `schedule:` 區塊（兩行 cron）並開 PR 合併進 main；同時把 `tests/test_twse_eps_probe_workflow.py` 的 `test_schedule_*` 與 `test_push_trigger_only_button_branch` 內的 `schedule` 斷言改為「無排程」。手動與按鈕分支觸發不受影響。
-- **請求量**：每次 run 約 16 個端點 × 2 路徑 ＋ 條款頁（含 swagger 內最多 2 條連結、最多 3 跳）；請求間隔 1 秒、單請求最多重試 1 次、只發 GET。每日 2 次、僅週一至週五。
+- **請求量**：每次 run 約 16 個端點 × 2 路徑 ＋ 條款頁（含 swagger 內最多 2 條連結、最多 3 跳）；請求間隔 1 秒（含 redirect 各跳之間）、單請求最多重試 1 次、只發 GET。每日 2 次、僅週一至週五。
 
 ## 條款研究（`terms_reach` 群組與 swagger 條款連結）
 
-- 資料端點一律不跟隨 redirect。只有 `terms_reach` 群組與 swagger `info.description`／`info.termsOfService` 內出現的條款連結，允許最多 3 跳；**每一跳目標的 scheme 與主機都必須在白名單內**，否則停並記 `blocked_redirect`（目標從不被請求）。
+- 資料端點一律不跟隨 redirect。只有 `terms_reach` 群組與 swagger `info.description`／`info.termsOfService` 內出現的條款連結，允許最多 3 跳；**每一跳目標的 scheme（https）、主機與埠號（僅 443）都必須在白名單內**——**只跟隨白名單主機上的連結**，否則停並記 `blocked_redirect`（目標從不被請求）。
 - 每跳只記（遮蔽後）host、status、path、content-type、body 長度與 sha256；頁面文字只計「使用條款／授權／著作權／商業」的**出現次數**，**不存整頁文字**。swagger 內條款連結的完整 URL 與 host 存在 `terms_research.swagger_description.links`（前次只存截斷摘要）。
 - **不下授權結論**。報告恆標 `⬜ 授權條款尚未完成驗證`；「頁面存在、含關鍵詞」不等於已讀懂條款、更不等於可商用。正式條款內容須由人閱讀後判定。
 
@@ -36,7 +36,7 @@ git fetch origin probe/twse-eps-results && git worktree add /tmp/twse_results FE
 python scripts/analyze_twse_probe_series.py /tmp/twse_results/results docs/evidence/probe_twse_eps --out probe_out/series.md
 ```
 
-純標準庫、離線、唯讀；輸入目錄（遞迴找 `*.json.gz`）或檔案，只收 `probe == "twse_eps"`。輸出 Markdown：各端點跨 run 的 sha／schema_hash／列數是否變化、`latest_source_date` 推進與 lag_days、各來源日期首次被觀察到的時點（上界）、openapi vs rwd 差距序列、缺值比例、疑似 revision、direct vs nas 一致性、條款研究摘要。樣本不足（<2 份報告、<2 個不同來源日期、<3 個台北日）一律明寫「樣本不足」。`--transport nas_proxy` 可改看另一條路徑。
+純標準庫、離線、唯讀；對畸形輸入有防呆（截斷 gz、過深 JSON、解壓後 >20MB、型別錯誤欄位皆略過或視為缺值，不崩）；輸入目錄（遞迴找 `*.json.gz`）或檔案，只收 `probe == "twse_eps"`。輸出 Markdown：各端點跨 run 的 sha／schema_hash／列數是否變化、`latest_source_date` 推進與 lag_days、各來源日期首次被觀察到的時點（上界）、openapi vs rwd 差距序列、缺值比例、疑似 revision、direct vs nas 一致性、條款研究摘要。樣本不足（<2 份報告、<2 個不同來源日期、<3 個台北日）一律明寫「樣本不足」。`--transport nas_proxy` 可改看另一條路徑。
 
 **多日序列可以得出（觀察，不是裁示）**：回應／schema／列數是否變動；來源日期推進節奏與落後天數；來源日期首次被觀察到時點的上界（≈ 發布延遲上界）；openapi 與 rwd 日期差是否穩定；缺值格數／比例是否變動；條款頁是否存在、是否含關鍵詞。
 

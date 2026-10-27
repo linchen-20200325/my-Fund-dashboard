@@ -44,7 +44,7 @@ name: "探測：TWSE／MOPS 公開端點可達性與欄位（BL-0509，只讀 sh
 #    * 不暴露 secret：排程事件與手動事件走同一條路徑；`PROXY_URL` 仍只在「Run probe」步驟 env，
 #      `GITHUB_TOKEN` 仍只在最後推送報告那一步；排程不新增任何 secret 引用。
 #    * 請求量：每次 run 約 16 個端點 × 2 路徑 ＋ 條款頁最多 3 跳／swagger 條款連結最多 2 條；
-#      每日 2 次、僅週一至週五。請求間隔 1 秒、單請求最多重試 1 次、只發 GET。
+#      每日 2 次、僅週一至週五。請求間隔 1 秒（含 redirect 各跳之間）、單請求最多重試 1 次、只發 GET；redirect 只跟隨白名單主機（https、443）上的連結。
 on:
   push:
     branches:
