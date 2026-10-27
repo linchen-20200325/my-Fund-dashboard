@@ -486,7 +486,7 @@ def render_portfolio_tab() -> None:
             render_mk_war_room(st.session_state.portfolio_funds)
             st.divider()
 
-            # v18.213：基金體檢表（郭老師「挑三揀四」PK 同類型，揪優等生 / 汰弱候選）
+            # v18.213：基金體檢表（外部投資教材「挑三揀四」PK 同類型，揪優等生 / 汰弱候選）
             from ui.helpers.fund_checkup import render_fund_checkup
             # expanded=True：同一個元件在組合健檢頁是展開的，這裡收起來 = 同元件兩種行為。
             # 體檢表是資料型內容（原則 1），統一展開。
