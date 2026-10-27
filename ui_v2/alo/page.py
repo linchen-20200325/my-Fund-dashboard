@@ -111,13 +111,13 @@ def _raw_css() -> str:
     .stApp, .stApp p, .stApp span, .stApp label {{ color: {theme.TEXT_PRIMARY}; }}
     .alo-title {{
       font-size: 1.45rem; font-weight: 700; letter-spacing: .04em;
-      color: {theme.TEAL_BRIGHT}; border-bottom: 2px solid {theme.TEAL_DARK};
+      color: {theme.TEAL_DARK}; border-bottom: 2px solid {theme.TEAL_DARK};
       padding-bottom: .4rem; margin-bottom: .2rem;
     }}
     .alo-sub {{ color: {theme.TEXT_MUTED}; font-size: .82rem; margin-bottom: .6rem; }}
     .alo-topline {{ color: {theme.STATE_GRAY}; font-size: .9rem; margin: .2rem 0 .6rem; }}
     .alo-layer-label {{
-      color: {theme.TEAL_BRIGHT}; font-size: .72rem; letter-spacing: .18em;
+      color: {theme.TEAL_DARK}; font-size: .72rem; letter-spacing: .18em;
       margin: 1.1rem 0 .35rem;
     }}
     .alo-lamp {{
@@ -139,7 +139,7 @@ def _raw_css() -> str:
       background: {theme.SURFACE}; border-radius: 8px 8px 0 0; padding: .5rem .8rem;
     }}
     .alo-card-code {{ color: {theme.TEXT_MUTED}; font-size: .72rem; }}
-    .alo-card-title {{ font-weight: 700; color: {theme.TEAL_BRIGHT}; }}
+    .alo-card-title {{ font-weight: 700; color: {theme.TEAL_DARK}; }}
     .alo-intro {{ color: {theme.TEXT_SECOND}; font-size: .8rem; margin: .2rem 0 .3rem; }}
     .alo-note {{ font-size: .76rem; color: {theme.TEXT_MUTED}; margin: .2rem 0; }}
     .alo-line {{ font-size: .82rem; color: {theme.TEXT_SECOND}; margin: .2rem 0; }}
@@ -154,7 +154,7 @@ def _raw_css() -> str:
     }}
     .alo-table {{ width: 100%; border-collapse: collapse; font-size: .78rem; table-layout: auto; }}
     .alo-table th {{
-      text-align: left; color: {theme.TEAL_BRIGHT}; border-bottom: 1px solid {theme.TEAL_DARK};
+      text-align: left; color: {theme.TEAL_DARK}; border-bottom: 1px solid {theme.TEAL_DARK};
       padding: .3rem .4rem; white-space: normal; word-break: break-word;
     }}
     .alo-table td {{

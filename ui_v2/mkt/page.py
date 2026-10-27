@@ -73,12 +73,12 @@ def _base_css() -> str:
     .stApp, .stApp p, .stApp span, .stApp label {{ color: {theme.TEXT_PRIMARY}; }}
     .mkt-page-title {{
       font-size: 1.45rem; font-weight: 700; letter-spacing: .04em;
-      color: {theme.TEAL_BRIGHT}; border-bottom: 2px solid {theme.TEAL_DARK};
+      color: {theme.TEAL_DARK}; border-bottom: 2px solid {theme.TEAL_DARK};
       padding-bottom: .4rem; margin-bottom: .2rem;
     }}
     .mkt-page-sub {{ color: {theme.TEXT_MUTED}; font-size: .82rem; margin-bottom: 1rem; }}
     .mkt-layer-label {{
-      color: {theme.TEAL_BRIGHT}; font-size: .72rem; letter-spacing: .18em;
+      color: {theme.TEAL_DARK}; font-size: .72rem; letter-spacing: .18em;
       text-transform: uppercase; margin: 1.1rem 0 .35rem;
     }}
     .mkt-light {{
@@ -101,7 +101,7 @@ def _base_css() -> str:
       border-bottom: 1px solid {theme.BORDER}; padding-bottom: .45rem; margin-bottom: .6rem;
     }}
     .mkt-card-code {{ color: {theme.TEXT_MUTED}; font-size: .72rem; }}
-    .mkt-card-title {{ font-weight: 700; color: {theme.TEAL_BRIGHT}; }}
+    .mkt-card-title {{ font-weight: 700; color: {theme.TEAL_DARK}; }}
     .mkt-mv {{ margin: .55rem 0; }}
     .mkt-mv-label {{ color: {theme.TEXT_MUTED}; font-size: .78rem; }}
     .mkt-mv-value {{ font-size: 1.32rem; font-weight: 600; color: var(--mkt-tone); }}
@@ -118,7 +118,7 @@ def _base_css() -> str:
     }}
     .mkt-table {{ width: 100%; border-collapse: collapse; font-size: .78rem; }}
     .mkt-table th {{
-      text-align: left; color: {theme.TEAL_BRIGHT}; border-bottom: 1px solid {theme.TEAL_DARK};
+      text-align: left; color: {theme.TEAL_DARK}; border-bottom: 1px solid {theme.TEAL_DARK};
       padding: .3rem .45rem; white-space: nowrap;
     }}
     .mkt-table td {{

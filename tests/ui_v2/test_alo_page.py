@@ -341,7 +341,7 @@ def test_瀏覽器量到燈的黃字與狀態字與卡片標題真的是那個�
     color = lambda sel: tab.eval_on_selector(sel, "e => getComputedStyle(e).color")  # noqa: E731
     assert color(".alo-lamp-text") == _rgb(theme.STATE_WARN)
     assert color(".alo-stword") == _rgb(theme.STATE_WARN)
-    assert color(".alo-card-title") == _rgb(theme.TEAL_BRIGHT)
+    assert color(".alo-card-title") == _rgb(theme.TEAL_DARK)
     tab.close()
 
 

@@ -133,6 +133,7 @@ from ui_v2.mkt import page as mkt_page  # noqa: E402
 from ui_v2.mkt import source as mkt_source  # noqa: E402
 from ui_v2.set import page as set_page  # noqa: E402
 from ui_v2.set import source as set_source  # noqa: E402
+from ui_v2 import shell  # noqa: E402
 
 PREVIEW_TITLE = "B 線 UI 預覽（非正式站）"
 # ~~"B 線 UI 預覽（非正式站）。市場總覽、持倉體檢、資產配置、設定與診斷四頁讀真資料，"~~
@@ -269,13 +270,20 @@ PAGES = (
 
 def main() -> None:
     st.set_page_config(page_title=PREVIEW_TITLE, layout="wide")
-    st.sidebar.info(PREVIEW_NOTE)
-    navigation = st.navigation(
-        [
-            st.Page(func, title=title, url_path=slug, default=index == 0)
-            for index, (slug, title, func) in enumerate(PAGES)
-        ]
+    pages = [
+        st.Page(func, title=title, url_path=slug, default=index == 0)
+        for index, (slug, title, func) in enumerate(PAGES)
+    ]
+    # 2026-10-27 殼層批（BL-0484／BL-0479；D1 方案 A，`DEC-2026-10-27-01`）：原生側欄導覽關掉（`position="hidden"`，
+    # 頁仍註冊、仍可路由），改由 `ui_v2/shell.py` 自繪「桌機深色側欄＋手機底部導覽」。第一層順序與頁名仍取自 `PAGES`。
+    # ~~`st.sidebar.info(PREVIEW_NOTE)` 在 `st.navigation` 之前、`navigation.run()` 之前~~ → 現在在殼層的五個連結之後、
+    # 頁面之前（側欄說明字面不變；守衛：test_preview_entry 的「側邊欄說明的字面」）。
+    navigation = st.navigation(pages, position="hidden")
+    shell.render(
+        [(slug, title, page) for (slug, title, _), page in zip(PAGES, pages)],
+        current_title=navigation.title,
     )
+    st.sidebar.info(PREVIEW_NOTE)
     navigation.run()
 
 

@@ -59,7 +59,9 @@ GAPS = {
         "44 對缺匯率寫的是只影響含外幣的那一類（其餘類別照算）。本頁對取數失敗從嚴，與缺匯率的畫法不同，據實登記。"
     ),
     "ALO-GAP-深色主題前提": (
-        "本頁的對比是在 repo 根的 .streamlit/config.toml（base = dark、textColor #e6edf3）之下量的；"
+        "~~本頁的對比是在 repo 根的 .streamlit/config.toml（base = dark、textColor #e6edf3）之下量的；~~"
+        "（2026-10-27 更正，`DEC-2026-10-27-09`，決策者：客戶；有意識的政策變更，不是漏刪：舊句在寫下當時為真，被權衡掉的是「主內容區也深色」）"
+        "本頁的對比現在是在 repo 根的 .streamlit/config.toml（base = light、backgroundColor #f6f8fa、textColor #1f2328；側欄另有深色一組）之下量的；"
         "Streamlit 元件（輸入欄、展開區標題、按鈕）的字色來自那份設定，不在本頁檔案裡。換成淺色主題，對比守衛的結論不成立。"
     ),
     "ALO-GAP-燈圖示共用": (

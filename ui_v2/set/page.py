@@ -91,12 +91,12 @@ def _raw_css() -> str:
     .stApp, .stApp p, .stApp span, .stApp label {{ color: {theme.TEXT_PRIMARY}; }}
     .set-title {{
       font-size: 1.45rem; font-weight: 700; letter-spacing: .04em;
-      color: {theme.TEAL_BRIGHT}; border-bottom: 2px solid {theme.TEAL_DARK};
+      color: {theme.TEAL_DARK}; border-bottom: 2px solid {theme.TEAL_DARK};
       padding-bottom: .4rem; margin-bottom: .2rem;
     }}
     .set-sub {{ color: {theme.TEXT_MUTED}; font-size: .82rem; margin-bottom: .6rem; }}
     .set-layer-label {{
-      color: {theme.TEAL_BRIGHT}; font-size: .72rem; letter-spacing: .18em;
+      color: {theme.TEAL_DARK}; font-size: .72rem; letter-spacing: .18em;
       margin: 1.1rem 0 .35rem;
     }}
     .set-lamp {{
@@ -120,7 +120,7 @@ def _raw_css() -> str:
       background: {theme.SURFACE}; border-radius: 8px 8px 0 0; padding: .5rem .8rem;
     }}
     .set-card-code {{ color: {theme.TEXT_MUTED}; font-size: .72rem; }}
-    .set-card-title {{ font-weight: 700; color: {theme.TEAL_BRIGHT}; }}
+    .set-card-title {{ font-weight: 700; color: {theme.TEAL_DARK}; }}
     .set-note {{ font-size: .76rem; color: {theme.TEXT_MUTED}; margin: .2rem 0; overflow-wrap: anywhere; }}
     .set-line {{ font-size: .82rem; color: {theme.TEXT_SECOND}; margin: .2rem 0; overflow-wrap: anywhere; }}
     .set-empty {{
@@ -135,7 +135,7 @@ def _raw_css() -> str:
     .set-hint {{ font-size: .78rem; color: {theme.STATE_WARN}; margin: .1rem 0 .3rem; overflow-wrap: anywhere; }}
     .set-table {{ width: 100%; border-collapse: collapse; font-size: .78rem; table-layout: auto; }}
     .set-table th {{
-      text-align: left; color: {theme.TEAL_BRIGHT}; border-bottom: 1px solid {theme.TEAL_DARK};
+      text-align: left; color: {theme.TEAL_DARK}; border-bottom: 1px solid {theme.TEAL_DARK};
       padding: .3rem .4rem; white-space: normal; overflow-wrap: anywhere; word-break: break-word;
     }}
     .set-table td {{
@@ -595,7 +595,7 @@ def _render_set0_nav() -> None:
     不觸發取數、重新整理、存檔或任何寫入（護欄 3）。樣式寫在這一枚的 style 屬性：共用 CSS 一字不改（示範模式畫面不變）。"""
     _html(
         f'<div class="set-nav" style="margin:.35rem 0 .2rem;font-size:.82rem">'
-        f'<a href="#{_esc(sections.SET_NAV_ANCHOR)}" style="color:{theme.TEAL_BRIGHT};text-decoration:underline">'
+        f'<a href="#{_esc(sections.SET_NAV_ANCHOR)}" style="color:{theme.TEAL_DARK};text-decoration:underline">'
         f"{_esc(sections.SET_NAV_LABEL)}</a></div>"
     )
 

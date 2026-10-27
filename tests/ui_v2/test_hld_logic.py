@@ -1033,8 +1033,11 @@ def test_每一組前景背景都達標_未達標數為零():
     assert len(theme.CONTRAST_PAIRS) >= 24
 
 
-def test_客戶指定的三個主色一個字都沒動():
-    assert theme.APP_BG == "#0e1117"
+def test_客戶指定的青色兩值沒動_底色已依2026_10_27裁示改淺色():
+    # ~~assert theme.APP_BG == "#0e1117"~~ → 2026-10-27 殼層批（BL-0484；`DEC-2026-10-27-09`，決策者：客戶；有意識的政策變更，不是漏刪）：
+    # 客戶裁示主內容區改淺色、深色只在側欄，「深色 app 底色 #0e1117」這一項的主內容區部分被取代；
+    # 舊斷言在寫下當時為真，被權衡掉的是「主內容區也深色」。青色兩值仍是客戶逐字指定、仍鎖。
+    assert theme.APP_BG == "#f6f8fa"
     assert theme.TEAL_DARK == "#0f6b6c"
     assert theme.TEAL_BRIGHT == "#5fd3d0"
 
