@@ -80,7 +80,8 @@ def test_市場總覽的頁名與提問句抽成常數_字面沒有變():
 
     model = logic.build_page_model(fixtures.dataset_all_ok())
     assert (model["title"], model["answers"]) == (logic.PAGE_TITLE, logic.PAGE_ANSWERS)
-    assert logic.PAGE_TITLE == "市場總覽"
+    # 2026-10-27 BL-0478（DEC-2026-10-27-02，決策者：客戶）：頁名換成正式頁名；有意識的政策變更，不是漏刪。 ~~"市場總覽"~~
+    assert logic.PAGE_TITLE == "🌍 市場與趨勢"
     assert logic.PAGE_ANSWERS == "現在的市場環境，和我上次看的時候比，變了哪裡"
 
 

@@ -42,7 +42,7 @@ COUNT_SYMBOLS = {KIND_UNCONFIGURED: "", KIND_FETCH: SYMBOL_ERROR, KIND_MISSING: 
 STALE_KEY = "整頁"
 
 PAGE_ORDER = ("mkt", "hld", "exp", "alo")
-PAGE_NAMES = {"mkt": "市場總覽", "hld": "持倉體檢", "exp": "標的探索", "alo": "資產配置"}
+PAGE_NAMES = {"mkt": "🌍 市場與趨勢", "hld": "💼 我的持股", "exp": "🔍 找基金", "alo": "⚖️ 資產配置"}
 
 TEXT_NOT_OPENED = "本次尚未開過這一頁"
 AS_OF_LABEL = "資料截至"

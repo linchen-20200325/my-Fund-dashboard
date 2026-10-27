@@ -173,6 +173,10 @@ def _restore_all_clear(markup: str) -> str:
     return markup
 
 
+_SET_TITLE_NEW = '<div class="set-title">⚙️ 設定</div>'
+_SET_TITLE_OLD = '<div class="set-title">設定與診斷</div>'
+
+
 def test_示範模式畫面逐位元組不變():
     """示範模式不經過重排（44 之八開頭第 4 條）。17 情境 × 存檔失敗開關，把 AppTest 抓到的 markdown、展開區標題、按鈕、
     說明、單選、輸入欄標籤序列化後取 md5；基準值於 c44e1551（P1-④ 稽核通過版）量得。"""
@@ -190,6 +194,10 @@ def test_示範模式畫面逐位元組不變():
             # 客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）：示範模式同樣不寫「資料齊、來源皆可達」。證明「示範畫面只差這一句」：
             # 把燈上那一格還原成舊字面，md5 必須回到舊基準值（c44e1551）；其餘一格不動。
             restored_md = [_restore_all_clear(m.value) for m in at.markdown]
+            # 2026-10-27 BL-0478（DEC-2026-10-27-02，決策者：客戶）：頁名「設定與診斷」→「⚙️ 設定」；頁標題那一格還原成舊字面，
+            # 證明示範畫面只差頁名這一格（每個畫面恰一格）。
+            assert restored_md.count(_SET_TITLE_NEW) == 1, name
+            restored_md = [_SET_TITLE_OLD if m == _SET_TITLE_NEW else m for m in restored_md]
             out.append([name, save_failed, restored_md, [e.label for e in at.expander],
                         [(b.label, b.disabled, b.help) for b in at.button], [c.value for c in at.caption],
                         [r.label for r in at.radio], [t.label for t in at.text_input] + [t.label for t in at.text_area]])

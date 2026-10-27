@@ -67,9 +67,9 @@ LINE_NOT_CONFIGURED = f"{SYMBOL_ERROR} {TEXT_NOT_CONFIGURED}"
 LINE_SETTINGS_UNREADABLE = f"{SYMBOL_ERROR} {TEXT_SETTINGS_UNREADABLE}"
 
 # 導覽（44 第五節第三小節 `導覽`，其五）：只換頁。
-SETTINGS_LINK_LABEL = "前往設定與診斷"
+SETTINGS_LINK_LABEL = "前往 ⚙️ 設定"
 # 單頁入口（沒有 `st.navigation`，換不了頁）只寫這一行。
-SETTINGS_ELSEWHERE_TEXT = "完整資料狀態在「設定與診斷」頁"
+SETTINGS_ELSEWHERE_TEXT = "完整資料狀態在「設定」頁"
 
 # ~~④「證據／來源」裡承接核心卡徽章的那一枚展開區（預設收合）：`PROVENANCE_TITLE = "核心卡的來源與新鮮度"`~~
 # → BL-0250 批次 3-C（G2）：四頁不再畫這一枚（同一份在總表明細），常數同次刪除（有意識的政策變更，不是漏刪）。

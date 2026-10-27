@@ -436,7 +436,8 @@ def test_八塊的回答什麼逐字引44現行那一句():
 
 def test_頁的回答什麼與不負責什麼逐字引44():
     d44 = _D44.read_text(encoding="utf-8")
-    assert logic.PAGE_TITLE == "資產配置"
+    # 2026-10-27 BL-0478（DEC-2026-10-27-02，決策者：客戶）：頁名換成正式頁名；有意識的政策變更，不是漏刪。 ~~"資產配置"~~
+    assert logic.PAGE_TITLE == "⚖️ 資產配置"
     assert _check_quote(logic.PAGE_ANSWERS, d44) == "live"
     for line in logic.NOT_RESPONSIBLE:
         assert _check_quote(line, d44) == "live", line

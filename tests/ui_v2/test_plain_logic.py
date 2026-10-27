@@ -526,7 +526,7 @@ def test_設定與診斷頁_原文與鍵名照舊_只換塊代號與層字樣():
 def test_整頁錯誤那一行():
     line, raw = plain.plain_error_line("⛔ 取數失敗：RuntimeError：fetch_url returned None", page="hld")
     assert line == "⛔ 資料 取數失敗：本頁暫時無法判定"
-    assert raw == [{"where": "持倉體檢", "text": "⛔ 取數失敗：RuntimeError：fetch_url returned None"}]
+    assert raw == [{"where": "💼 我的持股", "text": "⛔ 取數失敗：RuntimeError：fetch_url returned None"}]  # 2026-10-27 BL-0478（DEC-2026-10-27-02，決策者：客戶）：頁名換正式頁名（~~持倉體檢／市場總覽~~）；有意識的政策變更，不是漏刪
     line, _raw = plain.plain_error_line("⛔ 取數失敗：ValueError：" + plain.MSG_POLICY_NOT_CONFIGURED, page="alo")
     assert line == "⛔ 保單與持倉 取數失敗：保單試算表尚未設定"
 
@@ -559,16 +559,16 @@ def test_record_raw_每次整格覆寫_沒有就寫空():
     state = {}
     plain.record_raw(state, "mkt", [{"where": "MKT-1 風險情緒卡", "text": "原文一"}],
                      datetime.datetime(2026, 10, 17, 1, 2, 3, tzinfo=datetime.timezone.utc))
-    plain.record_raw(state, "hld", [{"where": "持倉體檢", "text": "原文二"}], "2026-10-17T02:00:00+00:00")
+    plain.record_raw(state, "hld", [{"where": "💼 我的持股", "text": "原文二"}], "2026-10-17T02:00:00+00:00")  # 2026-10-27 BL-0478（DEC-2026-10-27-02，決策者：客戶）：頁名換正式頁名（~~持倉體檢／市場總覽~~）；有意識的政策變更，不是漏刪
     assert plain.raw_entries(state) == [
-        ("市場總覽", "2026-10-17T01:02:03+00:00", "MKT-1 風險情緒卡", "原文一"),
-        ("持倉體檢", "2026-10-17T02:00:00+00:00", "持倉體檢", "原文二"),
+        ("🌍 市場與趨勢", "2026-10-17T01:02:03+00:00", "MKT-1 風險情緒卡", "原文一"),
+        ("💼 我的持股", "2026-10-17T02:00:00+00:00", "💼 我的持股", "原文二"),
     ]
     plain.record_raw(state, "mkt", [{"where": "MKT-3 資金與匯率卡", "text": "原文三"}], "t2")
     assert [e[3] for e in plain.raw_entries(state)] == ["原文三", "原文二"]   # 整格覆寫，不累加
     plain.record_raw(state, "mkt", [], "t3")
     assert [e[3] for e in plain.raw_entries(state)] == ["原文二"]            # 沒有就寫空
-    assert plain.recorded_pages(state) == [("市場總覽", "t3"), ("持倉體檢", "2026-10-17T02:00:00+00:00")]
+    assert plain.recorded_pages(state) == [("🌍 市場與趨勢", "t3"), ("💼 我的持股", "2026-10-17T02:00:00+00:00")]
     assert plain.raw_entries({}) == [] and plain.recorded_pages({}) == []
 
 

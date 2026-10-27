@@ -324,6 +324,22 @@ def _digest(obj) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
 
 
+def _restore_old_page_title(node, new: str, old: str) -> int:
+    """2026-10-27 BL-0478（`DEC-2026-10-27-02`，決策者：客戶）：頁名換成正式頁名後，模型頂層 `title` 是唯一改的一格。
+    把等於新頁名的 `title` 原地還原成舊頁名，回傳還原了幾格；呼叫端斷言 > 0，再拿舊基準值比 —— 證明模型只差頁名這一格。"""
+    count = 0
+    if isinstance(node, dict):
+        if node.get("title") == new:
+            node["title"] = old
+            count += 1
+        for value in node.values():
+            count += _restore_old_page_title(value, new, old)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            count += _restore_old_page_title(value, new, old)
+    return count
+
+
 def _demo_models(name):
     """示範模式：每一個展開狀態（不展開＋每一筆持倉）× 三種套用狀態 × 示意字樣開／關。"""
     args = fixtures.scenario(name)
@@ -476,6 +492,9 @@ def test_T2c正_十七個情境_示範與正式模式共389個模型_與改動�
     for name in fixtures.ALL_SCENARIO_NAMES:
         demo, real = _demo_models(name), _live_models(name)
         count += len(demo) + len(real)
+        # 2026-10-27 BL-0478：頁名「持倉體檢」→「💼 我的持股」（每個模型頂層 `title` 一格）；還原後比同一組基準值。
+        assert _restore_old_page_title(demo, "💼 我的持股", "持倉體檢") == len(demo), name
+        assert _restore_old_page_title(real, "💼 我的持股", "持倉體檢") == len(real), name
         assert (_digest(demo), _digest(real)) == _BASELINE[name], name
     assert count == 389, count
 
@@ -803,7 +822,10 @@ def test_空白套用d反_設定讀得到_清空再套用照舊說未設定_本�
     applies = {"空白套用": _BLANK_APPLY, "只填區間": _WINDOW_ONLY_APPLY, "只填門檻": _RULES_ONLY_APPLY}
     assert set(_NO_SETTINGS_FAILURE_BASELINE) == {(m, a) for m in makes for a in applies}
     for (make, applied), expected in _NO_SETTINGS_FAILURE_BASELINE.items():
-        assert _digest(_build_logic(makes[make](), **_apply(applies[applied]))) == expected, (make, applied)
+        model = _build_logic(makes[make](), **_apply(applies[applied]))
+        # 2026-10-27 BL-0478：頁名「持倉體檢」→「💼 我的持股」（頂層 `title` 一格）；還原後比同一個基準值。
+        assert _restore_old_page_title(model, "💼 我的持股", "持倉體檢") == 1, (make, applied)
+        assert _digest(model) == expected, (make, applied)
     # 正控：清空再套用時「未設定」字句真的在畫面上，上面的比對不是空比。
     for make in (_unset, _full):
         model = _build_logic(make(), **_apply(_BLANK_APPLY))

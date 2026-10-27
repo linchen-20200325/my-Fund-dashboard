@@ -231,6 +231,22 @@ def _without_batch3b_marks(node):
     return node
 
 
+def _restore_old_page_title(node, new: str, old: str) -> int:
+    """2026-10-27 BL-0478（`DEC-2026-10-27-02`，決策者：客戶）：頁名換成正式頁名後，模型頂層 `title` 是唯一改的一格。
+    把等於新頁名的 `title` 原地還原成舊頁名，回傳還原了幾格；呼叫端斷言 > 0，再拿舊基準值比 —— 證明模型只差頁名這一格。"""
+    count = 0
+    if isinstance(node, dict):
+        if node.get("title") == new:
+            node["title"] = old
+            count += 1
+        for value in node.values():
+            count += _restore_old_page_title(value, new, old)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            count += _restore_old_page_title(value, new, old)
+    return count
+
+
 def test_示範模式_持倉體檢與標的探索全情境模型_md5與動手前相同():
     """示範模式不經過 `live.py`。基準值於 `7114da08`（本批動手前）以同一支序列化量得。"""
     default = lambda o: sorted(o, key=repr) if isinstance(o, (set, frozenset)) else repr(o)  # noqa: E731
@@ -242,6 +258,9 @@ def test_示範模式_持倉體檢與標的探索全情境模型_md5與動手前
             params = dict(exp_fixtures.scenario_with(name, save_failed=save_failed))
             ds = params.pop("dataset")
             out.append(["exp", name, save_failed, exp_logic.build_page_model(ds, save_failed=save_failed, **params)])
+    # 2026-10-27 BL-0478：頁名「持倉體檢」→「💼 我的持股」、「標的探索」→「🔍 找基金」（每個模型頂層 `title` 一格）；還原後回到同一個基準值。
+    assert _restore_old_page_title([e for e in out if e[0] == "hld"], "💼 我的持股", "持倉體檢") == len(hld_fixtures.ALL_SCENARIO_NAMES)
+    assert _restore_old_page_title([e for e in out if e[0] == "exp"], "🔍 找基金", "標的探索") > 0
     digest = hashlib.md5(json.dumps(_without_batch3b_marks(out), ensure_ascii=False, sort_keys=True,
                                     default=default).encode()).hexdigest()
     assert digest == "4f2cbd85a00bdcff4e4aa1ee5b9508a0", digest

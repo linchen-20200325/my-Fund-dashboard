@@ -23,5 +23,5 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from ui_v2.exp import page  # noqa: E402
 
-st.set_page_config(page_title="標的探索", layout="wide")
+st.set_page_config(page_title="🔍 找基金", layout="wide")
 page.render()

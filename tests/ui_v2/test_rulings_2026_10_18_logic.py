@@ -352,6 +352,22 @@ def _without_batch3b_marks(node):
     return node
 
 
+def _restore_old_page_title(node, new: str, old: str) -> int:
+    """2026-10-27 BL-0478（`DEC-2026-10-27-02`，決策者：客戶）：頁名換成正式頁名後，模型頂層 `title` 是唯一改的一格。
+    把等於新頁名的 `title` 原地還原成舊頁名，回傳還原了幾格；呼叫端斷言 > 0，再拿舊基準值比 —— 證明模型只差頁名這一格。"""
+    count = 0
+    if isinstance(node, dict):
+        if node.get("title") == new:
+            node["title"] = old
+            count += 1
+        for value in node.values():
+            count += _restore_old_page_title(value, new, old)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            count += _restore_old_page_title(value, new, old)
+    return count
+
+
 def test_示範模式SET與MKT模型_只差BL0371那兩句_其餘逐位元組不變():
     """本批只改正式模式。示範模式模型（設定與診斷 17 情境 × 存檔失敗開關、市場總覽各固定資料集）取 md5，
     基準值於 2d98692a（本批動手前）量得；`kind_time_from_log` 只有正式模式會給，示範模式走不到 BL-0373 那一支。"""
@@ -382,6 +398,9 @@ def test_示範模式SET與MKT模型_只差BL0371那兩句_其餘逐位元組不
                 light["text"] = "三張卡的資料齊"
                 changed += 1
     assert changed > 0
+    # 2026-10-27 BL-0478：頁名「設定與診斷」→「⚙️ 設定」、「市場總覽」→「🌍 市場與趨勢」（每個模型頂層 `title` 一格）；還原後回到同一個基準值。
+    assert _restore_old_page_title([e for e in restored if e[0] == "set"], "⚙️ 設定", "設定與診斷") == 34
+    assert _restore_old_page_title([e for e in restored if e[0] == "mkt"], "🌍 市場與趨勢", "市場總覽") > 0
     digest = hashlib.md5(json.dumps(_without_batch3b_marks(restored), ensure_ascii=False, sort_keys=True,
                                     default=default).encode()).hexdigest()
     assert digest == "e44fc6ade09b98d81979ff1ace6174c2", digest

@@ -345,7 +345,7 @@ def not_applicable_text(reason: str) -> str:
 
 
 # 頁名與提問句（2026-10-17 Phase 3 P1-⑤ 抽成常數，字面一字未改：整頁載入失敗的畫面要用同一組，體例同其他四頁）。
-PAGE_TITLE = "市場總覽"
+PAGE_TITLE = "🌍 市場與趨勢"
 PAGE_ANSWERS = "現在的市場環境，和我上次看的時候比，變了哪裡"
 
 
