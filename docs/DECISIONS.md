@@ -1558,6 +1558,19 @@
 | supersedes／superseded by | supersedes：無。superseded by：無 |
 | provenance | **執行組單組讀法，未經第二組獨立驗證**；①取自 44 第二節 2.1 逐字文字，②～⑧為執行組選擇。 |
 
+### DEC-2026-10-27-40｜客戶裁示（結束對話指示）：BL-0512 不另開批次、下一優先 BL-0509、方向性 AI Action 不得提前實作、建議 Sonnet 5.5／Medium
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | 客戶逐字：「BL-0512 頁內錨點：不另開獨立批次；等各頁內容 Batch 落地時順帶處理。」「下一優先工作：BL-0509 EPS Data Source Probe。」「Risk Cap／減碼 trigger 仍未完成，方向性 AI Action 不得提前實作。」「當前建議 Model／Effort：Sonnet 5.5／Medium。」另客戶要求正式結束本對話、不再開始新實作。 |
+| 理由／背景 | 客戶原話未附理由；本批只登記。 |
+| evidence／source | 客戶 2026-10-27 結束對話指示；逐字存檔 `docs/evidence/decisions/2026-10-27_session_close_rulings.md`。 |
+| 影響範圍 | BL-0512 改 deferred（隨各頁內容 Batch 順帶，不另開批次、本裁示不授權改 `page.render` 內部以外的範圍）；BL-0509 為下一優先；BL-0495／BL-0496 維持待客戶裁示；`docs/HANDOFF.md` Resume Checkpoint。不改程式、不改 44。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：BL-0512「待確認」狀態（`DEC-2026-10-27-10`／`-11` 本身不變）。superseded by：無 |
+| provenance | **逐字**（四句引號內文字）；「結束對話」為客戶要求的轉述；影響範圍欄為文件組讀法，可推翻。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
