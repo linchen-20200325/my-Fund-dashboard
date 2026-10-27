@@ -623,7 +623,8 @@ def clear_raw(session_state, slug: str) -> None:
 
 
 def raw_entries(session_state) -> list:
-    """設定與診斷頁讀：`[(頁名, 記錄時間, 位置, 原文), ...]`，依五頁頁序；沒開過的頁不在裡面。"""
+    """設定頁讀：`[(頁名, 記錄時間, 位置, 原文), ...]`，~~依五頁頁序~~ → 依 `PAGE_NAMES` 的鍵序（mkt、hld、exp、alo、set ——
+    2026-10-27 起這是**舊頁序**，與導覽的正式頁序不同，待 `docs/BACKLOG.md` BL-0483 另批對齊；狀態更新，不是漏刪）；沒開過的頁不在裡面。"""
     store = session_state.get(RAW_STATE) or {}
     out = []
     for slug in PAGE_NAMES:

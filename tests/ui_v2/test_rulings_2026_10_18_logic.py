@@ -400,7 +400,8 @@ def test_示範模式SET與MKT模型_只差BL0371那兩句_其餘逐位元組不
     assert changed > 0
     # 2026-10-27 BL-0478：頁名「設定與診斷」→「⚙️ 設定」、「市場總覽」→「🌍 市場與趨勢」（每個模型頂層 `title` 一格）；還原後回到同一個基準值。
     assert _restore_old_page_title([e for e in restored if e[0] == "set"], "⚙️ 設定", "設定與診斷") == 34
-    assert _restore_old_page_title([e for e in restored if e[0] == "mkt"], "🌍 市場與趨勢", "市場總覽") > 0
+    mkt_entries = [e for e in restored if e[0] == "mkt"]
+    assert mkt_entries and _restore_old_page_title(mkt_entries, "🌍 市場與趨勢", "市場總覽") == len(mkt_entries)   # 每個模型恰一格
     digest = hashlib.md5(json.dumps(_without_batch3b_marks(restored), ensure_ascii=False, sort_keys=True,
                                     default=default).encode()).hexdigest()
     assert digest == "e44fc6ade09b98d81979ff1ace6174c2", digest

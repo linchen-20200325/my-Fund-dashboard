@@ -260,7 +260,8 @@ def test_示範模式_持倉體檢與標的探索全情境模型_md5與動手前
             out.append(["exp", name, save_failed, exp_logic.build_page_model(ds, save_failed=save_failed, **params)])
     # 2026-10-27 BL-0478：頁名「持倉體檢」→「💼 我的持股」、「標的探索」→「🔍 找基金」（每個模型頂層 `title` 一格）；還原後回到同一個基準值。
     assert _restore_old_page_title([e for e in out if e[0] == "hld"], "💼 我的持股", "持倉體檢") == len(hld_fixtures.ALL_SCENARIO_NAMES)
-    assert _restore_old_page_title([e for e in out if e[0] == "exp"], "🔍 找基金", "標的探索") > 0
+    exp_entries = [e for e in out if e[0] == "exp"]
+    assert exp_entries and _restore_old_page_title(exp_entries, "🔍 找基金", "標的探索") == len(exp_entries)   # 每個模型恰一格
     digest = hashlib.md5(json.dumps(_without_batch3b_marks(out), ensure_ascii=False, sort_keys=True,
                                     default=default).encode()).hexdigest()
     assert digest == "4f2cbd85a00bdcff4e4aa1ee5b9508a0", digest
