@@ -8,6 +8,8 @@
 
 > ⛔ **此藍圖為 ChatGPT 協作助手與客戶已確認的目標 UI，不得在未經新 Decision Gate 下自行重新設計成不同 IA / visual hierarchy。**（客戶原文第 9 節要求逐字記錄的那一句。）
 
+> 📌 **2026-10-27 狀態更新**：客戶已就本檔第 8 節裁示 Gate 1A～7A 與同輪事項（`DEC-2026-10-27-08`～`-24`）；各列現行狀態見第 8.10 節，G-DATA 六欄表見第 8.11 節。上方與第 0 節的「待客戶答」敘述在寫下當時為真，保留不改。
+
 ---
 
 ## 0. 結論先講
@@ -329,6 +331,51 @@
 **依頁**：`SH` — `OK-UI` 8、`G-44` 5；`MK` — `G-DATA` 5、`G-DEC` 3、`G-FORM` 3、`G-44` 1、`OK-UI` 1；`AL` — `G-FORM` 4、`G-DATA` 2、`G-DIR` 2、`OK-UI` 2；`HL` — `G-FORM` 5、`G-DATA` 2、`OK-UI` 2、`G-DIR` 1；`EX` — `G-44` 3、`G-FORM` 2、`G-DIR` 2、`G-DATA` 1、`OK-UI` 1；`ST` — `OK-UI` 6、`G-DEC` 1、`G-DATA` 1；`AI` — `G-FORM` 3、`G-DIR` 2、`OK-UI` 1。
 
 **怎麼數的**：以腳本讀本檔 8.1～8.7 各表，取每列第 5 欄（缺口類型）統計；若日後有人改某列的類型，**本節計數須同步重算**（它是會漂移的量測值，量測日 2026-10-27）。「主類型」是單選，**同一列常同時涉及多類**，所以 `G-*` 的列數**不能**相加成「需要幾個客戶決定」——實際的客戶決定數會因合併（例如 `AI-6` 一個准入規格同時解 11 列的方向性前提）而少很多；打包方式見 BL-0491。
+
+### 8.10 2026-10-27 客戶裁示後的狀態更新（不改上列各表的類型欄；8.8 計數照舊是登記當時的量測值）
+
+> **出處**：客戶 2026-10-27 Decision Gate 1A～7A 與同輪裁示（逐字存檔 `docs/evidence/decisions/2026-10-27_vnext_gate_rulings.md`；`docs/DECISIONS.md` `DEC-2026-10-27-08`～`-24`）。**本節是狀態更新，不刪任何列**；8.1～8.7 各表的「缺口類型」欄刻意不改，以免 8.8 的計數失去可重現性。各列現行狀態以本表為準。
+
+| 列 | 原類型 | 裁示 | 現行狀態 |
+|---|---|---|---|
+| `SH-2` 第二層字面 | `OK-UI*` | 3A（`DEC-2026-10-27-10`） | ✅ 已答：第二層入口先使用 44 既有區塊標題，不自行創造新文案 |
+| `SH-3` 手機導覽 | `OK-UI*` | 4A（`DEC-2026-10-27-11`） | ✅ 已答：五大主頁底部導航＋頁內跳轉／收合；主要目的地最多 2 次互動；必須實測 390px；不得自行刪主頁 |
+| `SH-5` 深色 vs 淺色 | `OK-UI*` | 2B（`DEC-2026-10-27-09`） | ✅ 已答：深色主側欄＋淺色主內容區；supersede 舊全深色視覺方向（`docs/v2/21` §U-3-2 裁示三、`.streamlit/config.toml`、五個 `ui_v2/*/theme.py`），**只限視覺 theme**；程式對齊於 BL-0484 |
+| 「風險觀察」（D1 未裁題，不在上表） | — | 5A（`DEC-2026-10-27-12`） | ✅ 已答：目前不顯示，不做空殼、不放「規劃中」 |
+| `SH-4`、`SH-6`、`SH-7`、`SH-8`、`SH-9`、`MK-13`、`EX-1`、`EX-4`、`EX-9`（9 個 `G-44`） | `G-44` | 6A（`DEC-2026-10-27-13`） | ⏳ 已裁「正式最小解凍、逐項裁示／修訂」；每項須列 44 現行文字／Blueprint 新需求／衝突原因／最小 amendment／風險／對 tests 與 guards 的影響；amendment **另開 PR**（BL-0494）；44 本批一個字未動 |
+| `MK-1` 一句話市場結論 | `G-DEC` | 7A（`DEC-2026-10-27-14`） | ⏳ 禁止項已有限 supersede：可輸出綜合狀態，但只是多個已計算結果的自然語言摘要、不是單一總分，且須經固定鏈；仍缺 🌍 綜合狀態的正式 deterministic 規則（`G-FORM`）與方向性准入 |
+| `MK-2` 市場風險 5 級儀表 | `G-DEC` | 7A（`DEC-2026-10-27-14`） | ⏳ 若由多個已計算結果依正式 deterministic 規則分級、非單一 0～100 分數，落在新允許範圍（文件組讀法）；分級規則仍未定義（`G-FORM`） |
+| `MK-11` 對基金配置的含義 | `G-DEC` | 7A（`DEC-2026-10-27-14`） | ⏳ 「對基金配置的含義」列入新允許，須經固定鏈；AI 不得自己決定資產水位或發明持股比例 |
+| `ST-6` 管理組合／觀察清單 | `G-DEC` | ⚙️ 寫入邊界（`DEC-2026-10-27-17`） | ✅ 已答：第一階段 read-only；只可查看目前組合、查看觀察清單、前往 Google Sheet 管理、read-only detail；直接修改 Google Sheet 本階段禁止 |
+| `MK-8` EPS × PE 情境 | `G-FORM` | `DEC-2026-10-27-21` | ⏳ 公式已定（`docs/v2/66` 第 4 節）；`EPS_base`／`g` 資料來源仍 ⬜（`G-DATA`，BL-0501）；PE 15x／18x／21x 仍只是例子，不是產品常數 |
+| `HL-9` 六個行動語意 | `G-DIR` | `DEC-2026-10-27-22` | ⏳ 語意 SSOT 已定（`docs/v2/67` 第 2 節）；Risk Cap（BL-0495）與減碼 trigger（BL-0496）未定義前，除「無法判定」外不得產生 |
+| `AI-1`～`AI-4` One AI Brain | `G-FORM`／`G-DIR`／`OK-UI` | `DEC-2026-10-27-18` | ⏳ 結構已定（各頁四種輸入、固定六項輸出、查看依據、AI 六項禁止；`docs/v2/67` 第 3 節）；contract／provider／句子→依據對映仍未定 |
+| `AI-5` Risk Cap | `G-FORM` | — | ⬜ 仍未定義（BL-0495） |
+| `AI-6` 方向性總准入 | `G-DIR` | 7A（`DEC-2026-10-27-14`） | ⏳ 產品方向已許可；准入三條件（44 第七節第三小節之四其二）與固定鏈併讀，正式規則未定義前不上線 |
+| 11 個 `G-DATA` 列 | `G-DATA` | `DEC-2026-10-27-23` | ⏳ 不得因藍圖自行新增 API；逐列走 Data Source Decision Gate，見 8.11 |
+
+- ⚠️ 本表由文件組單組依逐字存檔與上列各表寫成，**未經第二組驗證**；「⏳」列的「仍缺」是文件組讀法，可被客戶推翻。
+
+### 8.11 G-DATA 資料缺口表（`DEC-2026-10-27-23`；客戶要求的六欄格式）
+
+> **規則（客戶原話）**：「這些不得因 Visual Blueprint 就自行新增 API。」「需要新來源時，先交 ChatGPT 協作助手評估，再走 Data Source Decision Gate。」「舊程式碼中的 S&P 500、加權指數等資料邏輯：可以研究與比對。」「但不能因舊 UI 存在，就默認符合新 B 線 Data Contract。」
+> **「現有來源」欄**：舊樹位置**只作研究參考（research-only）**，不是已核准來源、不代表符合 B 線 Data Contract；量測 `c1d4ecab`，文件組單組 `git grep`／讀檔，不宣稱窮舉。**「候選來源」欄一律不推薦 provider。**
+
+| 欄位 | 用途 | 現有來源（B 線／舊樹 research-only） | 缺口 | 候選來源 | 是否需 Decision Gate |
+|---|---|---|---|---|---|
+| NASDAQ | 🌍 核心圖 3 國際市場重點指數（`MK-10`） | B 線：無。舊樹：無 NASDAQ 綜合指數取數；`QQQ`（ETF，不是指數）只出現在 `ui/components/mk_dashboard.py` 衛星對比基準選項與 `scripts/export_fund_db.py` | 無來源、無欄位、無 Data Contract | 待 ChatGPT 協作助手評估 → Data Source Decision Gate | 是（BL-0498） |
+| MSCI World | 同上 | B 線：無。舊樹：未找到 | 同上 | 待 ChatGPT 協作助手評估 → Data Source Decision Gate | 是（BL-0499） |
+| MSCI EM | 同上 | B 線：無。舊樹：未找到 | 同上 | 待 ChatGPT 協作助手評估 → Data Source Decision Gate | 是（BL-0500） |
+| EPS／PE（`EPS_base`、`g`） | 🌍 台股 EPS × PE 情境（`MK-8`；公式 `docs/v2/66` 第 4 節）；國際趨勢的企業獲利（`MK-4`） | B 線：無。舊樹：`shared/macro_buckets.py` 的 Forward P/E 只是 inline literal；`fetch_yf_forward_pe`／`fetch_multpl_pe` 已於 2026-08-28 刪除（`CLAUDE.md` §2.2）；台股 EPS 與成長率取數未找到 | `EPS_base`（年度、as-of）與 `g`（來源或正式模型）皆無來源；PE 情境軸產品取值另案 | 待 ChatGPT 協作助手評估 → Data Source Decision Gate | 是（BL-0501） |
+| 同類平均 | 💼 持股績效趨勢、🔍 候選基金績效比較（`HL-5`、`EX-3`） | B 線：無。舊樹：MoneyDJ wb01／wb07（同類排名、年度比較；`fund_fetcher.py`、`repositories/fund/sources.py`） | 「同類」的 identity（分類口徑）與序列來源未定；B 線無欄位 | 待 ChatGPT 協作助手評估 → Data Source Decision Gate | 是（BL-0502；另含 identity 定義） |
+| 基準指數 | 同上 | B 線：無。舊樹：`repositories/macro/yf.py::fetch_benchmark_close`（預設 `SPY`；`ui/components/mk_dashboard.py` 在用）；S&P 500（`^GSPC`）在 `services/risk_radar.py`、`services/macro/turning_points.py`、`services/crisis_backtest.py::MARKET_TICKERS`、`scripts/update_macro_history.py` | 每檔基金對應「哪一個」基準的 identity 無規格；B 線無欄位 | 待 ChatGPT 協作助手評估 → Data Source Decision Gate | 是（BL-0503；另含 identity 定義） |
+| B 線財報／國際資料健康 | ⚙️ 資料健康檢查 5 列中的「財報」「國際」兩列（`ST-7`） | B 線：無這兩個資料類（44 `SET-1`／`SET-8` 無）；舊樹：未找到對應 | 資料類本身不存在（依賴上列 EPS／國際指數來源） | 待 ChatGPT 協作助手評估 → Data Source Decision Gate | 是（BL-0504；隨上列來源） |
+| 區域欄位 | ⚖️ 區域配置、💼 持股類型分布（`AL-6`、`HL-6`） | B 線：44 `fund_profile` 無區域欄。舊樹：MoneyDJ `fund_region`（`repositories/fund/sources.py`、`repositories/fund/fund_orchestration.py`） | 值域與五類（全球／美國／歐洲／亞洲／台灣其他）的對映可靠度未驗；B 線無欄位 | 待 ChatGPT 協作助手評估 → Data Source Decision Gate | 是（BL-0505） |
+| 產業欄位 | 💼 持股類型分布（`HL-6`） | B 線：無。舊樹：`repositories/fund/nav_metrics.py` sector 關鍵字對映 | 可靠度未驗；關鍵字對映屬推算，不得視為可靠 mapping | 待 ChatGPT 協作助手評估 → Data Source Decision Gate | 是（BL-0506） |
+| 投資風格欄位 | ⚖️ 投資風格（`AL-7`） | B 線：無。舊樹：無對應欄位；`services/health/asset_class.py` 以名稱關鍵字歸類，屬「由名稱猜屬性」，**不得當可靠 mapping**（`DEC-2026-10-23-10` (5)） | 無來源、無欄位 | 待 ChatGPT 協作助手評估 → Data Source Decision Gate | 是（BL-0507） |
+
+- 加權指數（`^TWII`，`MK-7`）不在客戶列的十項內：舊樹 `services/crisis_backtest.py::MARKET_TICKERS`、`scripts/update_macro_history.py`（research-only）；接進 B 線同樣屬新 production 資料路徑，依 `docs/v2/66` 區段 B 與 `DEC-2026-10-27-23` 須 Gate（文件組讀法，可被客戶推翻；本批不另開 BL，隨 BL-0480）。S&P 500（`MK-9`）同理。
+- ⚠️ 本表由文件組單組寫成，**未經第二組驗證**；「未找到」只代表本組查找字串 0 命中，不是「repo 內沒有」的證明。
 
 ### 8.9 治理備註（不計入上表）
 

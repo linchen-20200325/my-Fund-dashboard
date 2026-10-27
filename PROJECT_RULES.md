@@ -78,6 +78,8 @@
 | Data-first 順序；Missing ≠ 0／False／中性／HOLD／安全；deterministic calculation 單一 SSOT；AI 不補不存在的資料 | 第 13 節 13.1「正式順序」與「禁止」（`DEC-2026-10-24-02`） |
 | 不因形式（如投資專案）預設升 High | 第 5 節 5.1 第 9 點（`DEC-2026-10-23-04`）；第 9 節 9.1 第 8 點（`DEC-2026-10-24-04`） |
 | Minimum Sufficient Test Scope | 第 9 節 9.1 第 2～4 點（`DEC-2026-10-24-04`） |
+| GitHub Discussion Persistence Gate（協作助手與客戶的討論結論須在下一個相關實作批次前落 GitHub SSOT） | 第 12 節 12.2（`DEC-2026-10-27-19`） |
+| Public Repository Personal Name Redaction Rule（公開 repo 不得出現外部教材作者／老師真實姓名） | 第 12 節 12.3（`DEC-2026-10-27-20`） |
 
 **Supersession hygiene（同裁示）**：(1) 舊內容保留歷史，不刪；(2) 被新裁示取代時，在舊內容就地標示「superseded by <DEC-ID>」；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只能指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（現行四份見 0.4）。
 
@@ -531,6 +533,29 @@
 5. **尚未形成正式裁示的聊天討論，不得假裝成 Decision**（傾向依 `DEC-2026-10-24-01` 例標「未核准」）。
 
 與上表「客戶裁示｜收到當輪」同向，本節把時機收緊為「進下一個 Batch 之前」；不構成動工授權（`CLAUDE.md` §-1）。
+
+### 12.2 長期規則：GitHub Discussion Persistence Gate（客戶 2026-10-27 永久治理規則，`DEC-2026-10-27-19`，永久）
+
+> **出處**：客戶 2026-10-27 正式裁示，逐字存檔 `docs/evidence/decisions/2026-10-27_vnext_gate_rulings.md` 第十三節；決策者：**客戶**。位階同第 3 節 3.1（受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄）。
+
+1. **觸發**：ChatGPT 協作助手與客戶一輪討論形成新的 UI 結論、產品方向、公式、AI 語意、架構、資料規則、治理規則或 supersede，就不能只留在聊天記憶。
+2. **時機**：在**下一個相關實作批次之前**，同步到適當的 GitHub SSOT：`docs/DECISIONS.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md`、對應 design／spec；本檔只收**永久治理規則**。
+3. **保存什麼**：不需要逐字複製整段對話；只保存最終裁示、邊界、supersede、未決事項、下一步、Model／Effort Gate（若相關）。
+4. **GitHub 為跨對話 SSOT；聊天記憶只能作輔助**（客戶原話）。
+5. **與既有規則的關係**：與 12.1（新裁示同批落盤，`DEC-2026-10-24-05`）、6.1.1（Stateless AI Handoff／GitHub = Project Memory，`DEC-2026-10-24-07`）同向；本節把射程明確擴及協作助手與客戶的討論。不另建第二套 memory（12.1 第 4 點）；尚未形成正式裁示的討論不得假裝成 Decision（12.1 第 5 點）。不構成動工授權（`CLAUDE.md` §-1）。
+
+### 12.3 長期規則：Public Repository Personal Name Redaction Rule（客戶 2026-10-27 正式 Privacy Requirement，`DEC-2026-10-27-20`，永久）
+
+> **出處**：客戶 2026-10-27 正式裁示，逐字存檔 `docs/evidence/decisions/2026-10-27_vnext_gate_rulings.md` 第十一、十二節；決策者：**客戶**。位階同第 3 節 3.1。
+
+1. **核心原則**：公開 GitHub repo 不得公開外部教材作者／老師的真實姓名，也不得讓人從上下文反推出作者身分。
+2. **一律用中性名稱**，例如：「外部投資教材」「客戶提供之投資教材」「台股大盤／國際趨勢參考教材」「External Investment Reference」。
+3. **射程（新增或修改內容一律不得出現真實姓名）**：`PROJECT_RULES.md`、`docs/DECISIONS.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md`、design／spec、evidence、程式碼、helper／function／class／constant 名稱、註解、測試名稱、fixture、PR title、PR body、commit message、review comment、audit report、issue、branch name。
+4. **可以保存**：公式、方法、原始數值、日期、資料口徑、source evidence、教材頁面／章節位置；**不得保存作者姓名**。
+5. **既有內容（歷史姓名處理，`DEC-2026-10-27-16`）**：不 force-push、不 rewrite Git history；對 default branch 目前可見的文件、程式碼、註解、helper 名稱、測試、evidence 做 **forward-only cleanup** —— 姓名不是程式必要識別者一律改中性名稱；已公開、須改寫歷史才能移除的 commit／PR metadata 只登記 historical exposure、不改寫、不再擴散，新文件不得再次引用。待辦：`docs/BACKLOG.md` BL-0492（cleanup）、BL-0493（historical exposure）、BL-0497（守衛測試）。
+6. **轉存客戶原文時**：原文含姓名者，以「〔作者姓名：公開 repo 不入檔〕」之類的遮蔽字樣取代並在檔頭登記（前例 `docs/evidence/decisions/2026-10-27_d1_44_unfreeze_rulings.md`）；遮蔽是本規則要求的格式處理，不算改動裁示字句。
+7. **自查**：送出 commit、PR 或檔案前，確認上列射程內沒有真實姓名；守衛測試落地前（BL-0497）靠人工自查，不宣稱已有機器守衛。
+8. 本節與 `DEC-2026-10-22-05` (5)（正式產品命名不得用作者／老師姓名）同向，是射程擴大，不取代。不構成動工授權（`CLAUDE.md` §-1）。
 
 ## 第 13 節｜Domain-rule 索引（基金領域護欄 14 條）
 
