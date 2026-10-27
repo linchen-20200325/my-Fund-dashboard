@@ -1,11 +1,11 @@
-"""v18.213：基金體檢表（郭老師「挑三揀四」PK 同類型）。
+"""v18.213：基金體檢表（外部投資教材「挑三揀四」PK 同類型；2026-10-27 依公開 repo 姓名遮蔽規則匿名化）。
 
 把每檔基金的含息報酬與 MoneyDJ「同類型平均」PK，
 打敗同類＝🏆 優等生（抱緊）；明顯落後＝⚠️ 汰弱候選。
 
 資料邊界（誠實告知，呼應 CLAUDE.md §4）：
   - 同類平均取自 MoneyDJ 績效評比頁 risk_metrics.peer_compare，約 3 成基金抓不到 → 標 ⬜ 不評。
-  - 郭老師另兩項標準（成分股 ROE>15%/EPS 成長、規模流動性）資料源無法取得 → 不納入。
+  - 外部投資教材另兩項標準（成分股 ROE>15%/EPS 成長、規模流動性）資料源無法取得 → 不納入。
   - 買賣點（標準差／布林）沿用 戰情室既算欄位，僅在本表附「買點」燈號。
 純函式 + 單一 render，無 @st.cache_data（STATE.md 鐵律）。
 """
@@ -476,7 +476,7 @@ def render_fund_checkup(portfolio_funds: list | None, expanded: bool = False) ->
     with st.expander("🩺 基金體檢表 — 與同類型 PK，揪出優等生 / 汰弱候選",
                      expanded=expanded):
         st.caption(
-            "📖 郭老師「挑三揀四」法則：把每檔基金的含息報酬與『同類型平均』PK，"
+            "📖「挑三揀四」法則（客戶提供之投資教材）：把每檔基金的含息報酬與『同類型平均』PK，"
             "打敗同類＝🏆 優等生（抱緊滾雪球），明顯落後＝⚠️ 汰弱候選。")
 
         df = build_checkup_dataframe(portfolio_funds)

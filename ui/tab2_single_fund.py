@@ -1778,7 +1778,7 @@ def render_single_fund_tab() -> None:
                             f"padding:3px 10px;background:{GH_BG_PRIMARY};"
                             f"border-radius:4px;margin:2px 0 6px 0'>ℹ️ {_rec_blocked}</div>",
                             unsafe_allow_html=True)
-                    # Sharpe 持久性說明（孫慶龍老師框架）
+                    # Sharpe 持久性說明（外部投資教材框架）
                     # v19.338:M9(v19.336)抽 _risk_1y_rows_html 時 _sh1 定義隨 inline
                     # 區塊移走 → 此處 NameError(except ValueError/TypeError 接不住),
                     # Tab2 完整視圖整段炸(AppTest slow job 抓到)。補回取值。

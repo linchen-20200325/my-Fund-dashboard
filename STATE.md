@@ -1924,7 +1924,7 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
 
 - **v19.338 M9 回歸 hotfix:Tab2 `_sh1` NameError(merge 前 CI slow lane 抓到)**:
   v19.336 M9 抽 `_risk_1y_rows_html` 時,`_sh1`(Sharpe 1Y)的定義隨 inline 區塊移入 helper,
-  但下游「Sharpe 持久性說明(孫慶龍框架)」仍引用 → NameError(`except (ValueError,
+  但下游「Sharpe 持久性說明(外部投資教材框架)」仍引用 → NameError(`except (ValueError,
   TypeError)` 接不住)→ Tab2 完整視圖整段炸。補回
   `_sh1 = (risk_tbl.get("一年",{}) or {}).get("Sharpe","—")`。
   驗證:2 個原紅 AppTest(`test_tab2_loaded_fund_with_macro_*` / `test_tab2_nav_source_banner_*`)
