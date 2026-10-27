@@ -626,7 +626,7 @@
 | evidence／source | 客戶 2026-10-22 指示，經總管派工單轉達；repo 內無逐字存檔。落地：`docs/v2/63_market_trend_research_baseline.md`（量測 SHA `b149873`）、`docs/BACKLOG.md` BL-0415～BL-0419、`docs/HANDOFF.md` 第 2 節 2026-10-22（第三次）框 |
 | 影響範圍 | 🌍 市場與趨勢頁的研究方法與命名；Phase 5～8 路線（BL-0314）的趨勢層輸入；與 `DEC-2026-10-22-04`（B 版設計原則）併讀。下一個唯一接手點＝BL-0415「客戶提供市場趨勢參考資料 × Repo 現有趨勢引擎」唯讀對齊稽核，完成後再回到 G-A～G-S Decision Gate |
 | 是否可逆 | 可逆（客戶可另行裁示） |
-| supersedes／superseded by | supersedes：無（補強 `DEC-2026-10-22-04`，不取代）。superseded by：~~無~~ → **部分 superseded by `DEC-2026-10-27-03`**（2026-10-27；有意識的狀態變更，不是漏刪；決策者：客戶）：第 (7) 項 EPS × PE「待驗證的台股估值情境之一」升為 🌍 台股大盤的正式規劃方向（「EPS × PE 固定倍數」未核准照舊）；第 (5) 項中性名清單的「台股趨勢」回到正式規劃。另 `DEC-2026-10-23-01` 先前已取代本筆第 (5)～(7) 項的台股部分（見該筆），本行只補登記指標 |
+| supersedes／superseded by | supersedes：無（補強 `DEC-2026-10-22-04`，不取代）。superseded by：~~無~~ → **部分 superseded by `DEC-2026-10-27-03`**（2026-10-27；有意識的狀態變更，不是漏刪；決策者：客戶）：第 (7) 項 EPS × PE「待驗證的台股估值情境之一」升為 🌍 台股大盤的正式規劃方向（「EPS × PE 固定倍數」未核准照舊）；第 (5) 項中性名清單的「台股趨勢」回到正式規劃。另 `DEC-2026-10-23-01` 先前已取代本筆第 (5)～(7) 項的台股部分（見該筆），本行只補登記指標；**另 2026-10-27 部分 superseded by `DEC-2026-10-27-21`**（有意識的狀態變更，不是漏刪；決策者：客戶）：第 (7) 項 EPS × PE 的公式已定為 `Index_target(g, PE) = EPS_base × (1 + g) × PE`，不再是「待驗證」；「EPS × PE 固定倍數未核准」照舊——PE_target 是情境軸，教材案例的約 15～21 倍不是永久合理本益比；第 (5) 項「正式產品不得使用參考資料作者／老師姓名」的射程由 `DEC-2026-10-27-20` 擴及公開 repo 全部內容與 metadata（擴大，不取代） |
 | provenance | **要點轉述**（決策者：客戶 2026-10-22，經總管轉達；文件組未見客戶對話本身）。`docs/v2/63` §3～§5 的引擎盤點、稽核結論、Decision Gate 建議與實作順序＝總管讀法，不是客戶核准，未經第二組驗證 |
 
 ### DEC-2026-10-23-01｜客戶確認新版 SSOT 收斂方向與資訊擁有權
@@ -634,12 +634,12 @@
 | 欄位 | 內容 |
 |---|---|
 | 日期 | 2026-10-23 |
-| 決策內容摘要 | **已確認方向**：(1) 新研究邏輯＋舊 UI 已驗證精華 → 去重 → 唯一 SSOT → 重新設計五頁（🌍 市場與趨勢／⚖️ 資產配置／💼 我的持股／🔍 找基金／⚙️ 設定；「今天」不使用），每項資訊一個完整主頁、他頁只引用摘要／status／必要數字／drill-down（64 §1）；(2) Information Ownership Matrix（64 §2），含 🌍 禁止 composite 單一總分、舊 regime／verdict 作 SSOT、建議資產水位、台股專屬趨勢軸、投資動作，台灣只作一般 region exposure（→ 2026-10-27 補註，有意識的政策變更，不是漏刪；決策者：客戶（`DEC-2026-10-27-03`）：「台灣只作一般 region exposure」讀作台灣不是全球市場 SSOT，不是「🌍 沒有台灣區段」—— 台股大盤／台股趨勢已列入 🌍 正式規劃）；💼 不得重算基金健康／位置；⚖️ 只組合不重算；⚙️ 不放分析與選股；(3) HWM σ 只作「相對自身近一年高點的位置 evidence」，不得稱買賣點，−0.5／−1.5 不視為正式門檻；raw NAV 除息跳空造成假低基期列為 Blocking Issue，裁示前不得成為 production investment judgment（64 §3）；(4) SSOT 去重原則與優先收斂 12 項，`ui_v2/*/logic.py` 不形成第二套金融計算 SSOT（64 §4）；(5) 舊 UI 保留／重構、退休候選、Decision Gate 三分類（64 §5）；(6) 資料 ≠ AI 永久資料流與 missing 顯示規則（64 §6）；~~並移除 63 的台股專屬趨勢研究軸~~（→ **2026-10-27 superseded by `DEC-2026-10-27-03`**（有意識的政策變更，不是漏刪；日期 2026-10-27；決策者：客戶）：「移除台股趨勢」與 (2) Ownership Matrix 中「🌍 禁止……台股專屬趨勢軸」那一項由客戶 2026-10-27 裁示取代 —— 🌍 後續正式規劃納入台股大盤／台股趨勢與國際趨勢，台股大盤含每股盈餘 × 本益比 → 加權指數情境分析方向；本筆其餘各項（含 🌍 禁止 composite 單一總分、舊 regime／verdict 作 SSOT、建議資產水位、投資動作）不受影響。舊表述的用意（不把台股指標混成全球市場 SSOT）仍成立，被權衡掉的是「台股完全不作獨立呈現」）。**本筆不構成核准**：新公式、新門檻、HWM 修正法、新資料來源、schema 變更、UI layout、任何投資動作（買、賣、加碼、減碼、停扣、Switch、Cash Parking、自動再平衡、推薦標的）、`docs/v2/63` §4.4 的 G-A～G-S。本批只保存文件，不實作、不改 production code、不解凍 `docs/v2/44`；G8（`DEC-2026-10-22-02`）未解除 |
+| 決策內容摘要 | **已確認方向**：(1) 新研究邏輯＋舊 UI 已驗證精華 → 去重 → 唯一 SSOT → 重新設計五頁（🌍 市場與趨勢／⚖️ 資產配置／💼 我的持股／🔍 找基金／⚙️ 設定；「今天」不使用），每項資訊一個完整主頁、他頁只引用摘要／status／必要數字／drill-down（64 §1）；(2) Information Ownership Matrix（64 §2），含 🌍 禁止 composite 單一總分、舊 regime／verdict 作 SSOT、建議資產水位、台股專屬趨勢軸、~~投資動作~~，台灣只作一般 region exposure（→ **2026-10-27 amendment／有限 supersede by `DEC-2026-10-27-14`**（有意識的政策變更，不是漏刪；日期 2026-10-27；決策者：客戶（Gate 7A））：只有「投資動作」一項的**全面禁止**改為**有限允許**，而且**只限 7A 逐字列舉的輸出**——中性偏多／中性／中性偏空等綜合狀態、風險升高／下降、配置偏離、續抱、觀察、降低曝險、減碼、替代比較、無法判定、對基金配置的含義——並且**只能**經固定鏈「Raw Data → Validate → Normalize → Domain / Formula → Deterministic Rules → Risk Cap → AI Explanation」產生。**「建議資產水位」維持禁止、未劃線**：7A 列舉中的「配置偏離」「降低曝險」「對基金配置的含義」不等於建議資產水位；列舉以外的任何資產層級建議（例：建議持有多少百分比股票型）一律仍未核准；AI 自己決定資產水位明文禁止。**仍然禁止（客戶逐字七項）**：黑盒單一總分；用單一 0～100 分數決定市場好壞；AI 自己決定資產水位；AI 自己發明持股比例；AI 自己發明 threshold；關鍵資料不足仍硬給方向；AI 覆寫 deterministic rule。「一句話市場結論」不是單一總分，只是多個已計算結果的自然語言摘要。本項其餘（禁 composite 單一總分、舊 regime／verdict 作 SSOT、建議資產水位）不變。舊表述的用意（不讓黑盒分數或 AI 自行決定投資判斷）仍成立，被權衡掉的是「凡方向性輸出一律禁止」；固定鏈各環（正式規則、Risk Cap、減碼 trigger）尚未定義前，新允許項不得上線（`DEC-2026-10-27-14` 影響範圍、`DEC-2026-10-27-22`）。2026-10-27 同 PR 稽核回修（有意識的更正，不是漏刪）：本註初版把「建議資產水位」一併劃線，會被讀成新允許，已恢復原字並改寫本註）（→ 2026-10-27 補註，有意識的政策變更，不是漏刪；決策者：客戶（`DEC-2026-10-27-03`）：「台灣只作一般 region exposure」讀作台灣不是全球市場 SSOT，不是「🌍 沒有台灣區段」—— 台股大盤／台股趨勢已列入 🌍 正式規劃）；💼 不得重算基金健康／位置；⚖️ 只組合不重算；⚙️ 不放分析與選股；(3) HWM σ 只作「相對自身近一年高點的位置 evidence」，不得稱買賣點，−0.5／−1.5 不視為正式門檻；raw NAV 除息跳空造成假低基期列為 Blocking Issue，裁示前不得成為 production investment judgment（64 §3）；(4) SSOT 去重原則與優先收斂 12 項，`ui_v2/*/logic.py` 不形成第二套金融計算 SSOT（64 §4）；(5) 舊 UI 保留／重構、退休候選、Decision Gate 三分類（64 §5）；(6) 資料 ≠ AI 永久資料流與 missing 顯示規則（64 §6）；~~並移除 63 的台股專屬趨勢研究軸~~（→ **2026-10-27 superseded by `DEC-2026-10-27-03`**（有意識的政策變更，不是漏刪；日期 2026-10-27；決策者：客戶）：「移除台股趨勢」與 (2) Ownership Matrix 中「🌍 禁止……台股專屬趨勢軸」那一項由客戶 2026-10-27 裁示取代 —— 🌍 後續正式規劃納入台股大盤／台股趨勢與國際趨勢，台股大盤含每股盈餘 × 本益比 → 加權指數情境分析方向；本筆其餘各項（含 🌍 禁止 composite 單一總分、舊 regime／verdict 作 SSOT、建議資產水位、投資動作）不受影響。（→ 2026-10-27 再補：其中「投資動作」一項之後另由 `DEC-2026-10-27-14` 有限 supersede，只限 7A 逐字列舉的輸出，見 (2) 的就地註記；「建議資產水位」仍禁止）舊表述的用意（不把台股指標混成全球市場 SSOT）仍成立，被權衡掉的是「台股完全不作獨立呈現」）。**本筆不構成核准**：新公式、新門檻、HWM 修正法、新資料來源、schema 變更、UI layout、任何投資動作（買、賣、加碼、減碼、停扣、Switch、Cash Parking、自動再平衡、推薦標的）（→ **2026-10-27 補註，有意識的狀態變更，不是漏刪；決策者：客戶（`DEC-2026-10-27-14`、`-21`、`-22`）**：本括號是「本筆當時不構成核准」的登記，於 2026-10-23 為真；其中續抱／觀察／降低曝險／減碼／替代比較／無法判定與綜合狀態，已由 `DEC-2026-10-27-14` 改為經固定鏈的有限允許、語意由 `-22` 定義；「新公式」中台股 EPS × PE 由 `-21` 定稿。自動再平衡照舊排除（`DEC-2026-10-27-05`）；買、賣、加碼、停扣、Switch、Cash Parking、推薦標的 不在 7A 新允許清單內，照舊不構成核准）、`docs/v2/63` §4.4 的 G-A～G-S。本批只保存文件，不實作、不改 production code、不解凍 `docs/v2/44`；G8（`DEC-2026-10-22-02`）未解除 |
 | 理由／背景 | （總管背景說明，不是客戶原話）BL-0415 唯讀稽核（2026-10-22／23，五組 agent＋總管抽驗）發現同一概念多套算法並存，且 HWM σ 對月配息基金有假低基期問題；客戶據此確認以「去重成唯一 SSOT」為新版方向，先逐項裁示 SSOT 規格再實作 |
 | evidence／source | 客戶 2026-10-23 裁示，經總管派工單轉達；repo 內無逐字存檔。落地：`docs/v2/64_v2_ssot_convergence.md`（量測 SHA `bde2468`）、`docs/v2/62` 與 `docs/v2/63` 的 2026-10-23 狀態更新、`docs/BACKLOG.md` BL-0420～BL-0423、`docs/HANDOFF.md` 第 2 節 2026-10-23 框 |
 | 影響範圍 | 五頁資訊擁有權；BL-0415（稽核已完成）、BL-0416（G-D～G-S 照舊待裁）；下一唯一接手點＝64 §7 |
 | 是否可逆 | 可逆（客戶可另行裁示） |
-| supersedes／superseded by | supersedes：`DEC-2026-10-22-05` 第 (5) 項中性名清單的「台股趨勢」「籌碼狀態」與第 (6)、(7) 項的台股層／EPS × PE 部分（其餘項目不變）。superseded by：~~無~~ → **部分 superseded by `DEC-2026-10-27-03`**（2026-10-27；有意識的狀態變更，不是漏刪；決策者：客戶）：只限「移除台股趨勢／台股不作獨立軸」與 Ownership Matrix 的台股專屬趨勢軸禁止項；其餘不變 |
+| supersedes／superseded by | supersedes：`DEC-2026-10-22-05` 第 (5) 項中性名清單的「台股趨勢」「籌碼狀態」與第 (6)、(7) 項的台股層／EPS × PE 部分（其餘項目不變）。superseded by：~~無~~ → **部分 superseded by `DEC-2026-10-27-03`**（2026-10-27；有意識的狀態變更，不是漏刪；決策者：客戶）：只限「移除台股趨勢／台股不作獨立軸」與 Ownership Matrix 的台股專屬趨勢軸禁止項；其餘不變；**另 2026-10-27 部分 amended／有限 superseded by `DEC-2026-10-27-14`**（Gate 7A；有意識的政策變更，不是漏刪；決策者：客戶）：只限 (2) 的「投資動作」一項由全面禁止改為有限允許（只限 7A 逐字列舉的輸出、只能經固定鏈），七項仍然禁止照列於 (2) 就地註記；「建議資產水位」「禁止 composite 單一總分」「舊 regime／verdict 作 SSOT」不變 |
 | provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管轉達；文件組未見客戶對話本身）。64 §3～§5 的稽核事實為稽核組結論，單組實測＋總管抽驗，未經第二組逐條驗證 |
 
 ### DEC-2026-10-23-02｜客戶正式裁示 SSOT 收斂 1B（1Y 含息／配息率／吃本金）、2C（HWM σ 基金位置）、3A（3-3-3）
@@ -1139,8 +1139,229 @@
 | evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-27_vnext_visual_blueprint.md`（客戶 2026-10-27 指示，經總管於派工單內逐字轉存；原文無作者姓名、無遮蔽）。落地：`docs/design/vnext_visual_blueprint.md`（設計規格＋衝突缺口登記）、`docs/design/D1_dual_sidebar_nav_phase1.md` 檔頭一行指標、`docs/BACKLOG.md` BL-0484～BL-0491 與 BL-0479 列尾補記、`docs/HANDOFF.md` Resume Checkpoint。 |
 | 影響範圍 | **目標畫面的設計規格落盤，不授權任何 production 實作、不改 `ui_v2/**`、不改測試。** 實作順序與驗收如上「客戶所述」；各批依賴的 Decision Gate 見 `docs/design/vnext_visual_blueprint.md` 第 8 節與 BL-0491。**本筆不構成**：新資料來源、新公式、新 threshold、EPS／本益比倍數、方向性輸出（續抱／減碼／降低曝險／替代比較／偏多／偏空／本期行動）、Risk Cap 定義、新 schema、44 任何條文的改寫、第一階段唯讀護欄（`DEC-2026-10-25-04` J-6）的鬆動、Active Sheet／OAuth 變更。 |
 | 是否可逆 | 可逆（客戶可另行裁示） |
-| supersedes／superseded by | **supersedes：無（不取代任何既有 DEC）。** **amendment：D1 設計草稿**（`docs/design/D1_dual_sidebar_nav_phase1.md`）第 2.1 節桌機線框（增加可選右側 AI 區）與第 2.2 節手機線框（新增底部導航選項）被本藍圖修正；草稿原文一字未改，只在檔頭加一行指標；第 8.3 節 ④（手機點擊數）、⑥（第二層字面）**只被部分回答、仍未裁**；第 8.4 節方案 A 邊界只約束殼層批（文件組讀法，可被客戶推翻）。**與 `docs/v2/44_fund_ui_ssot.md` 的衝突**：44 一個字未動；本藍圖**不**自行解凍 44——`DEC-2026-10-27-02` 的解凍射程仍只有頁序、頁名與 D1 導覽殼直接需要的條文／守衛；藍圖與 44 的結構衝突（一頁最多 10 塊、層 2 最多 3 張核心卡、一頁只回答自己那一句問題、🔍 不排名不標最佳、各頁邊界、圖表元件、AI 塊）須另開新的 44 解凍 Decision Gate（登記於 BL-0491）。**與既有 DEC 的牴觸**（例：`DEC-2026-10-23-01` 禁 composite 單一總分與建議資產水位、`DEC-2026-10-25-04` J-6 第一階段唯讀）：本筆**不**視為客戶已覆議——藍圖原文自己寫「與既有 SSOT 衝突」時不自行換版型；覆議須客戶明文並對舊條加刪除線保留（文件組讀法，可被客戶推翻）。**GitHub 最新正式裁示優先**（客戶原文）：D1 草稿與本藍圖衝突處，以本筆與 `DEC-2026-10-27-01`～`-06` 的最新者為準。**與 `DEC-2026-10-27-06` 並存**：該筆指定「frozen 44＋長期 IA 階段＝Opus 5.5／Medium」；本筆客戶建議 Sonnet 5.5／Medium。文件組讀法：本批（只寫文件、不碰 frozen 44）依客戶最新建議用 Sonnet 5.5／Medium；之後任何批次若涉及 44 解凍、Risk Cap 或投資核心語意，依 `PROJECT_RULES.md` 第 5 節第 10 點 Change Gate 停手等客戶切換（可被客戶推翻）。superseded by：無 |
+| supersedes／superseded by | **supersedes：無（不取代任何既有 DEC）。** **amendment：D1 設計草稿**（`docs/design/D1_dual_sidebar_nav_phase1.md`）第 2.1 節桌機線框（增加可選右側 AI 區）與第 2.2 節手機線框（新增底部導航選項）被本藍圖修正；草稿原文一字未改，只在檔頭加一行指標；第 8.3 節 ④（手機點擊數）、⑥（第二層字面）**只被部分回答、仍未裁**；第 8.4 節方案 A 邊界只約束殼層批（文件組讀法，可被客戶推翻）。**與 `docs/v2/44_fund_ui_ssot.md` 的衝突**：44 一個字未動；本藍圖**不**自行解凍 44——`DEC-2026-10-27-02` 的解凍射程仍只有頁序、頁名與 D1 導覽殼直接需要的條文／守衛；藍圖與 44 的結構衝突（一頁最多 10 塊、層 2 最多 3 張核心卡、一頁只回答自己那一句問題、🔍 不排名不標最佳、各頁邊界、圖表元件、AI 塊）須另開新的 44 解凍 Decision Gate（登記於 BL-0491）。**與既有 DEC 的牴觸**（例：`DEC-2026-10-23-01` 禁 composite 單一總分與建議資產水位、`DEC-2026-10-25-04` J-6 第一階段唯讀）：本筆**不**視為客戶已覆議——藍圖原文自己寫「與既有 SSOT 衝突」時不自行換版型；覆議須客戶明文並對舊條加刪除線保留（文件組讀法，可被客戶推翻）。**GitHub 最新正式裁示優先**（客戶原文）：D1 草稿與本藍圖衝突處，以本筆與 `DEC-2026-10-27-01`～`-06` 的最新者為準。**與 `DEC-2026-10-27-06` 並存**：該筆指定「frozen 44＋長期 IA 階段＝Opus 5.5／Medium」；本筆客戶建議 Sonnet 5.5／Medium。文件組讀法：本批（只寫文件、不碰 frozen 44）依客戶最新建議用 Sonnet 5.5／Medium；之後任何批次若涉及 44 解凍、Risk Cap 或投資核心語意，依 `PROJECT_RULES.md` 第 5 節第 10 點 Change Gate 停手等客戶切換（可被客戶推翻）。superseded by：~~無~~ → **部分 superseded／回答 by `DEC-2026-10-27-08`～`-24`**（2026-10-27；有意識的狀態變更，不是漏刪；決策者：客戶）：「與 44 的衝突須另開新的 44 解凍 Decision Gate」→ 已裁 6A（`-13`，逐項最小解凍、另開 PR）；「與既有 DEC 的牴觸不視為客戶已覆議」→ `MK-1`／`MK-2`／`MK-11` 已由 7A 有限 supersede（`-14`），`ST-6` 由 `-17` 定為唯讀＋前往 Sheet；「本筆不構成：方向性輸出…Risk Cap 定義」→ 方向性輸出改為經固定鏈的有限允許（`-14`），Risk Cap 仍未定義（BL-0495）；`SH-5` 主題 → `-09`；D1 ④⑥、風險觀察 → `-11`、`-10`、`-12`；Model／Effort 並存讀法 → `-24`（本階段 Opus 5.5／Medium）。本筆其餘（藍圖內容、批次順序、每批驗收、「不得在未經新 Decision Gate 下自行重新設計」）不變 |
 | provenance | **逐字**：引號內文字（全文見逐字存檔，無遮蔽）。「amendment 範圍」「方案 A 邊界只約束殼層批」「不視為客戶已覆議既有 DEC」「Model／Effort 並存讀法」為文件組讀法，可被客戶推翻；衝突缺口登記（69 列）為文件組單組依 `git grep`／讀檔寫成，**未經第二組獨立稽核**（`docs/design/vnext_visual_blueprint.md` 第 9 節）。 |
+
+### DEC-2026-10-27-08｜客戶裁示 Gate 1A：vNext 批次 1 殼層可以先開始；客戶第十四節：SSOT 收斂完成後再開始 BL-0484（**不授權本批實作**）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「1A：批次 1 殼層可以先開始」；第十四節工作順序：「請先完成：1. 本次 Decision / supersede 落盤 2. Privacy Requirement 落盤 3. default branch 姓名 forward-only cleanup 盤點 4. EPS × PE Product Calculation SSOT 5. 六個 Action Vocabulary SSOT 6. 9 個 G-44 最小解凍 amendment 7. DEC-2026-10-23-01 amendment 8. 對應 guards / tests 9. BACKLOG / HANDOFF 更新」；「完成以上 SSOT 收斂後，再開始：- BL-0484 Shell / Navigation - 深色側欄＋淺色主內容 - Mobile bottom navigation」；「不要在正式公式／Risk Cap／trigger 尚未完成前做假的 AI 投資建議。」（條列改以空白併列，字面見逐字存檔。） |
+| 理由／背景 | （文件組背景說明，不是客戶原話）`docs/design/vnext_visual_blueprint.md` 第 0 節第 4 點把批次 1 列為可先動但有四題待答（D1 ④⑥、風險觀察、`SH-5`）；本次 2B／3A／4A／5A 一次答完。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-27_vnext_gate_rulings.md` 第一節、第十四節。落地：`docs/BACKLOG.md` BL-0484／BL-0479 列尾補記；`docs/HANDOFF.md` Resume Checkpoint。 |
+| 影響範圍 | 批次 1 殼層（BL-0484／BL-0479）的開工條件。**文件組讀法（可被客戶推翻）**：「1A 可以先開始」與第十四節「完成以上 SSOT 收斂後，再開始 BL-0484」併讀＝殼層排在第十四節第 1～9 項之後，不與 SSOT 收斂平行；客戶確認視覺前不寫正式導覽程式的 `CLAUDE.md` §-1.5.4 約束，由本次 2B／3A／4A／5A 的裁示滿足殼層部分。本筆不授權任何 `G-*` 列的實作。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。**回答**：`docs/design/vnext_visual_blueprint.md` 第 0 節第 4 點與 BL-0484「仍待客戶的」四題（由 `-09`～`-12` 答覆）。superseded by：無 |
+| provenance | **逐字**：引號內文字。「1A 與第十四節的併讀」為文件組讀法，可被客戶推翻。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-09｜客戶裁示 Gate 2B：正式目標視覺＝深色主側欄＋淺色主內容區；vNext Visual Blueprint supersede 舊全深色視覺方向（**只限視覺 theme**）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「2B：本批直接採「深色主側欄＋淺色主內容區」」；「正式目標視覺：深色主側欄＋淺色主內容區」；「不要先維持全深色再做第二次 theme migration。」；「若舊 "docs/v2/21"、".streamlit/config.toml"、既有 "theme.py" 與此衝突，請正式記錄：- vNext Visual Blueprint supersede 舊全深色視覺方向 - 僅取代視覺 theme - 不藉此更動資料、公式或投資邏輯」 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）既有深色方向的三處出處（規格 `SH-5` 已登記）：(1) `docs/v2/21_decision_log.md` §U-3-2 裁示三：客戶就地指定視覺方向四項（淺色註記層＋深色 app 螢幕、青色為註記主色、四層結構、深色 app 底色）；(2) `.streamlit/config.toml` `[theme]` `base = "dark"`、`backgroundColor = "#0e1117"`；(3) `ui_v2/{mkt,alo,hld,exp,set}/theme.py` 五檔「客戶逐字指定」註解（深色 app 底色 `APP_BG` `#0e1117`）。**兩邊理由並陳**：舊方向在當時為真（客戶確實就地指定深色 app 底色，作為線 2 第一頁的視覺方向）；被權衡掉的是「主內容區也深色」—— 客戶 2026-10-27 核准的 vNext 藍圖要求淺色主內容區，且明示不要先做全深色再遷移一次。 |
+| evidence／source | 逐字存檔第一節、第二節 Desktop。落地：本筆；`docs/v2/21_decision_log.md` §U-3-2 裁示三之後一行指標；`docs/design/vnext_visual_blueprint.md` 第 8.10 節 `SH-5`。 |
+| 影響範圍 | **只限視覺 theme**（底色、側欄與主內容區的明暗、與其相關的對比與色彩 token）。**不構成**：資料、公式、投資邏輯、Missing 規則、文案、44 塊定義的任何變更（客戶原文「不藉此更動資料、公式或投資邏輯」）。`.streamlit/config.toml` 與五個 `theme.py` 的程式改動屬 BL-0484 殼層批，本批（純文件）不動；改動時須保留「顏色不得是唯一語意載體」（`PROJECT_RULES.md` 13.2 第 3 條）與 390px 檢查。「淺色註記層」與「淺色主內容區」是否同義：本筆不需判定（主內容區已由本筆明定）；青色主色、四層結構是否照舊：**文件組讀法：照舊**（客戶只取代「全深色」，未提主色與四層），可被客戶推翻。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | **supersedes（只限視覺 theme）**：`docs/v2/21_decision_log.md` §U-3-2 裁示三視覺方向四項中的「深色 app 螢幕」「深色 app 底色」兩項之於主內容區的部分（側欄仍為深色）；`.streamlit/config.toml` `[theme]` 與五個 `ui_v2/*/theme.py` 的深色 app 底色註解所記之方向（程式碼本批不改，於 BL-0484 對齊）。superseded by：無 |
+| provenance | **逐字**：引號內文字。被 supersede 的三處出處由文件組依規格 `SH-5` 與讀檔列出（21 的裁示三為該檔摘要，文件組未逐字核對原始對話）；「青色主色與四層照舊」為文件組讀法。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-10｜客戶裁示 Gate 3A：第二層入口先使用 44 現有區塊標題，不自行創造新文案
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「3A：第二層入口先使用 44 現有區塊標題」；「第二層入口先使用 44 既有區塊標題，不自行創造新文案。」 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）D1 草稿第 8.3 節 ⑥「第二層字面由客戶定字」與規格 `SH-2` 待答。 |
+| evidence／source | 逐字存檔第一節、第二節 Mobile 段末。落地：`docs/design/vnext_visual_blueprint.md` 第 8.10 節 `SH-2`；BL-0484／BL-0479 列尾補記。 |
+| 影響範圍 | 第二層導覽字面＝44 第三節各頁塊的現有標題（逐字取用）。**不構成** 44 文案改寫授權；藍圖文案與 44 逐字不同者仍依 `SH-13` 屬 44 解凍範圍（`-13`）。哪幾塊進第二層（全部或部分）：**本筆未裁**，文件組讀法：依 D1 方案 A「只放該類真實存在的入口」，由殼層批以 44 現有塊為母體挑選並在 PR 列明（可被客戶推翻）。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。**回答**：D1 草稿第 8.3 節 ⑥、規格 `SH-2`。superseded by：無 |
+| provenance | **逐字**：引號內文字；「挑選方式」為文件組讀法。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-11｜客戶裁示 Gate 4A：Mobile 採五大主頁底部導航＋頁內跳轉／收合，主要目的地最多 2 次互動；必須實測 390px；不得自行刪主頁
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「4A：Mobile 採五大主頁底部導航＋頁內跳轉，主要目的地最多 2 次互動」；「- 五大主頁使用底部導航 - 頁內第二層使用頁內跳轉／收合 - 主要目的地最多 2 次互動可達 - 必須實測 390px - 若五個底部入口在 390px 發生截斷、誤觸或空間不足，再提出技術性調整 - 不得自行刪主頁」；五大主頁固定為「1. 🌍 市場與趨勢 2. ⚖️ 資產配置 3. 💼 我的持股 4. 🔍 找基金 5. ⚙️ 設定」（條列改以空白併列，字面見逐字存檔）。 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）D1 草稿第 2.2 節只有抽屜 drill-in、跨分類 3 次點擊；第 8.3 節 ④ 待答；規格 `SH-3` 登記藍圖只部分回答。 |
+| evidence／source | 逐字存檔第一節、第二節 Mobile。落地：規格第 8.10 節 `SH-3`；BL-0484／BL-0479 列尾補記。 |
+| 影響範圍 | 手機導覽形式（底部導航取代 D1 草稿第 2.2 節的抽屜 drill-in 作為第一層）與互動上限（主要目的地 ≤ 2 次互動）。390px 實測是殼層批的驗收項。五頁順序與名稱同 `DEC-2026-10-27-02`（不變）。若 390px 實測發生截斷、誤觸或空間不足，**提出技術性調整**（客戶原文）——文件組讀法：屬回報後由客戶裁示的事項，不得自行改成抽屜或刪減入口（可被客戶推翻）。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：D1 草稿第 2.2 節手機線框的抽屜 drill-in 第一層形式（草稿原文不改，屬 amendment；同 `DEC-2026-10-27-07` 處理方式）。**回答**：D1 草稿第 8.3 節 ④、規格 `SH-3`。superseded by：無 |
+| provenance | **逐字**：引號內文字；「技術性調整須回報」為文件組讀法。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-12｜客戶裁示 Gate 5A：「風險觀察」目前不顯示，不做空殼、不放「規劃中」
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「5A：「風險觀察」目前不顯示，不做空殼」；「「風險觀察」目前沒有正式功能，因此先不顯示，也不放「規劃中」空殼。」 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）D1 草稿與 BL-0479 登記「風險觀察是否進導覽」待答。 |
+| evidence／source | 逐字存檔第一節、第二節末。落地：規格第 8.10 節；BL-0479／BL-0484 列尾補記。 |
+| 影響範圍 | 導覽與頁面均不出現「風險觀察」入口或佔位；未來若有正式功能，另案裁示。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。**回答**：BL-0479「風險觀察是否進導覽」。superseded by：無 |
+| provenance | **逐字**。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-13｜客戶裁示 Gate 6A：9 個 G-44 衝突走正式最小解凍，逐項裁示／修訂（不是整份 44 放行）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「6A：9 個 G-44 衝突走正式最小解凍，但必須逐項裁示／修訂」；「同意 6A。」；「但 9 個 G-44 必須逐項處理，不是整份 44 放行。」；「每一項必須列：1. 44 現行文字 2. Blueprint 新需求 3. 衝突原因 4. 最小 amendment 5. 風險 6. 對 tests / guards 的影響」；「解凍目的只限於實現已核准 Visual Blueprint。」；「禁止藉此：- 改投資核心規則 - 改資料契約 - 新增外部資料來源 - 改 OAuth / security - 放寬 Missing 規則 - 放寬 Risk Cap - 全面重寫 44」（條列改以空白併列，字面見逐字存檔）。 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）9 個 `G-44` 列＝規格第 8 節 `SH-4`、`SH-6`、`SH-7`、`SH-8`、`SH-9`、`MK-13`、`EX-1`、`EX-4`、`EX-9`（量測 `c1d4ecab`）。 |
+| evidence／source | 逐字存檔第一節、第三節。落地：`docs/BACKLOG.md` BL-0494（44 最小解凍 amendment，另開 PR）；規格第 8.10 節。 |
+| 影響範圍 | **「本批只登記、amendment 另開 PR」是總管排程決定（不是客戶裁示，可被推翻）**。授權**另開一個 PR** 對 `docs/v2/44_fund_ui_ssot.md` 做逐項最小 amendment，每項六欄齊全、逐項可被客戶裁示／修訂。**本批（純文件）對 44 一個位元組都不改。** 射程只限「實現已核准 Visual Blueprint」；上列七項禁止一律適用。`DEC-2026-10-27-02` 的既有解凍射程（頁序、頁名、D1 殼層直接需要的條文／守衛）不變；本筆另加 9 項的逐項解凍路徑。 ⚠️ **待確認的第 10 項（2026-10-27 稽核回修登記，不自行裁決）**：`DEC-2026-10-27-21` 的 `Index_target` 情境指數值若要顯示，與 44 第一節第二小節「禁輸出」的目標價、以及 44 第七節第三小節之四其五第 4 點（無可靠模型不得給目標價）可能衝突；須在 BL-0494 列為第 10 項（六欄），或由客戶確認「正式公式下的情境指數值不是目標價」的讀法——**目前 pending，裁示前不得顯示 `Index_target`**。 |
+| 是否可逆 | 可逆（客戶可另行裁示；每項 amendment 可逐項撤回） |
+| supersedes／superseded by | supersedes：`DEC-2026-10-27-07`「與 44 的衝突須另開新的 44 解凍 Decision Gate」的待裁狀態（Gate 已開、已裁為 6A）。superseded by：無 |
+| provenance | **逐字**：引號內文字；9 列清單為文件組依規格第 8 節統計。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-14｜客戶裁示 Gate 7A：G-DEC 有限 supersede —— 允許新版綜合狀態與方向性輸出，但必須來自固定鏈；七項禁止照舊；修訂 `DEC-2026-10-23-01`
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「7A：允許新版綜合狀態與方向性輸出，但依下方「有限 supersede」執行」；「舊 DEC 不整個推翻。」**仍然禁止**（逐字）：「- 黑盒單一總分 - 用單一 0～100 分數決定市場好壞 - AI 自己決定資產水位 - AI 自己發明持股比例 - AI 自己發明 threshold - 關鍵資料不足仍硬給方向 - AI 覆寫 deterministic rule」。**新允許**（逐字）：「- 中性偏多／中性／中性偏空等綜合狀態 - 風險升高／下降 - 配置偏離 - 續抱 - 觀察 - 降低曝險 - 減碼 - 替代比較 - 無法判定 - 對基金配置的含義」；「但必須來自："Raw Data → Validate → Normalize → Domain / Formula → Deterministic Rules → Risk Cap → AI Explanation"」；「「一句話市場結論」不是單一總分。」；「它只是多個已計算結果的自然語言摘要。」；「例如可使用：- EPS revision - PE scenario - rates - international earnings - market risk - portfolio exposure」；「請修訂 "DEC-2026-10-23-01"，明確記錄本次 amendment / supersede 關係，不得讓新舊規則同時存在造成歧義。」（條列改以空白併列，字面見逐字存檔。） |
+| 理由／背景 | （文件組背景說明，不是客戶原話）規格第 8 節 4 個 `G-DEC` 列：`MK-1`（一句話市場結論）、`MK-2`（市場風險 5 級儀表）、`MK-11`（對基金配置的含義）與 `DEC-2026-10-23-01` 的禁止項牴觸；`ST-6`（管理組合／觀察清單）與 J-6 唯讀牴觸，由 `-17` 處理。 |
+| evidence／source | 逐字存檔第一節、第四節。落地：`DEC-2026-10-23-01` 就地 amendment 標示；`DEC-2026-10-22-05`、`DEC-2026-10-27-07` supersede 欄補指標；`docs/v2/67_ai_action_vocabulary.md`（行動語意）；規格第 8.10 節。 |
+| 影響範圍 | **新允許的輸出，一律須走固定鏈「Raw Data → Validate → Normalize → Domain / Formula → Deterministic Rules → Risk Cap → AI Explanation」**；缺任一環 → 不得輸出該方向（顯示「無法判定」，`-22`）。**現行狀態（文件組讀法，可被客戶推翻）**：鏈上的 Deterministic Rules（含 🌍 綜合狀態判定規則、`MK-2` 風險分級規則）、Risk Cap（BL-0495）、減碼 trigger（BL-0496）repo 內尚未定義 ⇒ **本筆是產品方向的許可，不是可以立刻上線的規則**；客戶原文「不要在正式公式／Risk Cap／trigger 尚未完成前做假的 AI 投資建議」。與 `DEC-2026-10-16-08`／正式修正案 #8（`docs/v2/57`）與 44 第七節第三小節之四其二的方向性准入三條件**併讀、不取代**：固定鏈要求與准入三條件同向（正式規格核准、證據足夠、新鮮度與出處合格）。`MK-2` 的 5 級儀表：**若**由多個已計算結果依正式 deterministic 規則分級、且非單一 0～100 分數，落在新允許範圍；黑盒加總成單一分數者照舊禁止（文件組讀法）。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | **supersedes（有限）**：`DEC-2026-10-23-01` (2) Ownership Matrix 中「🌍 禁止……投資動作」一項與「本筆不構成核准」括號內投資動作清單中與上列「新允許」重疊者，改為「僅能經固定鏈產生」；**只限 7A 逐字列舉的輸出**。**「建議資產水位」不在 supersede 範圍內、維持禁止**：「配置偏離」「降低曝險」「對基金配置的含義」不等於建議資產水位，列舉以外的任何資產層級建議仍未核准，AI 決定資產水位明文禁止；`DEC-2026-10-27-07`「本筆不構成：方向性輸出（續抱／減碼／降低曝險／替代比較／偏多／偏空／本期行動）」一句的產品方向部分（實作仍待固定鏈各環定義）。**不取代**：「禁止 composite 黑盒單一總分」「舊 regime／verdict 作 SSOT」「AI 決定資產水位／持股比例／threshold」等上列七項仍然禁止；`DEC-2026-10-16-08`、`DEC-2026-10-16-14`、`DEC-2026-10-24-09`／`-10`／`-12`（Missing／Unknown 不得經單軸訊號產生行動）照舊有效。superseded by：無 |
+| provenance | **逐字**：引號內文字。「許可≠可上線」「與准入三條件併讀」「`MK-2` 的落點」與 supersede 的條文切分為文件組讀法，可被客戶推翻。由文件組單組寫成，未經第二組驗證（屬 investment meaning／governance 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核）。 |
+
+### DEC-2026-10-27-15｜客戶裁示治理 Q1＝A：AI commit 署名不改寫歷史，從現在起遵守既有規則
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「AI commit 署名：A，不改寫歷史，從現在起遵守既有規則」 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）`docs/HANDOFF.md` 2026-10-27 Resume Checkpoint 登記「Q1 commit 署名（AI trailer 相關）」待客戶回覆（總管轉達，文件組未見原題全文）。既有規則：`DEC-2026-10-16-09`（commit message 不加 AI 共同作者署名、session URL 或其他 AI 身分署名）。 |
+| evidence／source | 逐字存檔第一節「前輪治理兩題」。 |
+| 影響範圍 | 已推送的歷史 commit 一律不改寫（不 rebase、不 amend、不 force-push）；自本裁示起所有新 commit message 遵守 `DEC-2026-10-16-09`。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無（重申 `DEC-2026-10-16-09`）。superseded by：無 |
+| provenance | **逐字**。Q1 原題文字 repo 內無存檔（文件組未見）。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-16｜客戶裁示治理 Q2：歷史 PR／commit 曾出現教材作者姓名 —— 不 force-push、不 rewrite history；做 forward-only cleanup；登記 historical exposure
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「歷史 PR／commit 已曾出現教材作者姓名：不 force-push、不 rewrite history；但依下方隱私規則做 forward-only cleanup」；第十二節：「不 force-push。」「不 rewrite Git history。」「但要做 forward-only cleanup。」「請盤點 default branch 目前仍可見的：- 文件 - 程式碼 - 註解 - helper 名稱 - 測試 - evidence」「若姓名不是程式必要識別：全部改成中性名稱。」「已知至少盤點："ui/helpers/fund/checkup.py"」「如果其中姓名只是 attribution 或歷史命名，請匿名化。」「歷史 commit / PR metadata 若已經公開且必須改寫歷史才能移除：- 不改寫 - 登記 historical exposure - 不再擴散 - 新文件不得再次引用姓名」（條列改以空白併列，字面見逐字存檔。） |
+| 理由／背景 | （文件組背景說明，不是客戶原話）總管轉達：PR #1078 的 commit `a28c5a2d` 曾出現教材作者姓名（文件組實測：`a28c5a2d` 存在、不在 main 祖先鏈上，仍可由遠端分支 `docs/d1-rulings-44-unfreeze-20261027` 取得；PR #1078 以 squash 合併為 main `eb0c5af1`；該 commit 內容文件組未逐行讀、未印出）。另：舊樹（`ui/**` 與部分 root 文件）以「姓氏＋老師」字樣出現。 |
+| evidence／source | 逐字存檔第一節、第十二節。落地：`docs/BACKLOG.md` BL-0492（default branch forward-only cleanup，另開 PR）、BL-0493（historical exposure 登記）。 |
+| 影響範圍 | **本批不做 cleanup**（純文件批；cleanup 另開 PR，含程式碼與文件）。forward-only cleanup 的射程＝default branch 目前可見內容；已公開、須改寫歷史才能移除的 commit／PR metadata＝只登記、不改寫。**遠端分支 `docs/d1-rulings-44-unfreeze-20261027` 是否刪除**：本筆未裁；文件組讀法：該分支已合併，依 merge 常設授權可隨合併刪除，但刪除不會讓 PR #1078 頁面上的 commit 消失，故不是移除手段；是否刪由總管排程決定（可被客戶推翻）。 |
+| 是否可逆 | 「不改寫歷史」可逆（客戶可另行裁示）；forward-only cleanup 本身可逆（git 歷史保留） |
+| supersedes／superseded by | supersedes：無。**回答**：`docs/HANDOFF.md` 2026-10-27 登記的 Q2。superseded by：無 |
+| provenance | **逐字**：引號內文字。`a28c5a2d` 的位置為文件組 `git` 實測；「曾出現姓名」為總管轉達，文件組未讀該 commit 內容。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-17｜客戶裁示 ⚙️ 設定頁寫入邊界：第一階段仍 read-only；「管理組合／管理觀察清單」只能是查看＋前往 Google Sheet 管理
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「第一階段仍維持 read-only。」；「因此若：「管理組合」「管理觀察清單」代表直接修改 Google Sheet，本階段禁止。」；「第一階段可做：- 查看目前組合 - 查看觀察清單 - 前往 Google Sheet 管理 - read-only detail」；「未來若正式解除 J-6 read-only，再另案加入寫入。」 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）規格 `ST-6`（`G-DEC`）：藍圖的「管理組合／管理觀察清單」用字未區分寫入或導向。 |
+| evidence／source | 逐字存檔第十節。落地：規格第 8.10 節 `ST-6`；BL-0489 列尾補記。 |
+| 影響範圍 | ⚙️「快速設定」只能呈現唯讀資訊與前往 Google Sheet 的導覽；任何新增／刪除／編輯一律不在第一階段。觀察清單數量的來源仍取決於 `docs/v2/62` CAP-GATE-05（候選池／觀察清單是否同一份，未裁），未裁前顯示 Missing（規格 `ST-5`）。 |
+| 是否可逆 | 可逆（解除 J-6 須另案裁示） |
+| supersedes／superseded by | supersedes：無（重申 `DEC-2026-10-25-04` J-6、`DEC-2026-10-26-01` (11)、`DEC-2026-10-26-03`）。**回答**：規格 `ST-6`。superseded by：無 |
+| provenance | **逐字**。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-18｜客戶裁示 One AI Brain, Many Data Views：全站唯一 AI Brain；各頁只提供 Data View／Domain Result／Rule Result／Local Explanation；固定六項輸出；AI 六項禁止
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「正式採：One AI Brain, Many Data Views」；「不是每頁各有一個獨立 AI Brain。」；「各頁只提供：- Data View - Domain Result - Rule Result - Local Explanation」；「全站唯一 AI Brain 整合：市場 → 資產配置 → 持股 → 候選基金 → Missing / freshness → Risk Cap → 最終行動摘要」；「最終輸出固定：1. 市場 2. 配置 3. 持股 4. 候選基金 5. 主要風險 6. 本期最多 3 項行動」；「每一項未來都必須能展開："查看依據"」；「AI 不得：- 自己生成市場數字 - 自己補 Missing - 自己改 threshold - 自己新增資料來源 - 自己改 Risk Cap - 自己推翻 deterministic rule」（條列改以空白併列，字面見逐字存檔。） |
+| 理由／背景 | （文件組背景說明，不是客戶原話）`DEC-2026-10-27-07` 藍圖第 6 節已述 One AI Brain；本次升為正式架構裁示，且各頁輸入多了「Domain Result」一項（藍圖原為 Data View／Rule Result／Local Explanation 三項）。 |
+| evidence／source | 逐字存檔第八節。落地：`docs/v2/67_ai_action_vocabulary.md` 第 3 節；規格第 8.10 節 `AI-1`～`AI-4`；BL-0490 列尾補記。 |
+| 影響範圍 | AI 架構的正式方向；輸入輸出 contract（schema）、模型與 provider 選擇、Risk Cap 定義仍未定（`AI-1`、`AI-5`；BL-0495）。「本期最多 3 項行動」受 `-14` 固定鏈與 `-22` 行動語意約束。B 線現無 AI（44 第七節第三小節之四其六），接入仍須 44 對應塊的解凍（`SH-4`，屬 `-13` 的 9 項之一）。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無（升格並補強 `DEC-2026-10-27-07` 藍圖第 6 節；各頁輸入三項 → 四項）。superseded by：無 |
+| provenance | **逐字**。「三項 → 四項」為文件組比對藍圖原文所得。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-19｜客戶永久治理規則：GitHub Discussion Persistence Gate（協作助手與客戶的討論結論，下一個相關實作批次前必須同步到 GitHub SSOT）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「只要 ChatGPT 協作助手與客戶一輪討論形成新的：- UI 結論 - 產品方向 - 公式 - AI 語意 - 架構 - 資料規則 - 治理規則 - supersede 就不能只留在聊天記憶。」；「在下一個相關實作批次前，必須同步到適當 GitHub SSOT：- DECISIONS - BACKLOG - HANDOFF - design/spec - PROJECT_RULES（只有永久治理規則）」；「不需要逐字複製整段對話。」；「只保存：- 最終裁示 - 邊界 - supersede - 未決事項 - 下一步 - Model / Effort Gate（若相關）」；「GitHub 為跨對話 SSOT。」；「聊天記憶只能作輔助。」（條列改以空白併列，字面見逐字存檔。） |
+| 理由／背景 | （文件組背景說明，不是客戶原話）與 `DEC-2026-10-24-05`（新裁示同批 GitHub 落盤）、`DEC-2026-10-24-07`（Stateless AI Handoff／GitHub = Project Memory）同向；本條把射程明確擴及「ChatGPT 協作助手與客戶的討論」並列出保存項目。 |
+| evidence／source | 逐字存檔第十三節。落地：`PROJECT_RULES.md` 第 12 節 12.2 與 0.5 索引。 |
+| 影響範圍 | 永久治理規則；不構成任何動工授權（`CLAUDE.md` §-1）。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無（補強 `DEC-2026-10-24-05`、`-07`）。superseded by：無 |
+| provenance | **逐字**。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-20｜客戶永久治理規則：Public Repository Personal Name Redaction Rule（公開 repo 不得出現外部教材作者／老師真實姓名）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「這是正式 Privacy Requirement。」；「公開 GitHub repo 不得公開外部教材作者／老師的真實姓名。」；「後續一律使用中性名稱，例如："外部投資教材" "客戶提供之投資教材" "台股大盤／國際趨勢參考教材" "External Investment Reference"」；「不得從上下文反推出作者身分。」；禁止姓名出現的位置（逐字）：「PROJECT_RULES、DECISIONS、BACKLOG、HANDOFF、design/spec、evidence、程式碼、helper / function / class / constant 名稱、註解、測試名稱、fixture、PR title、PR body、commit message、review comment、audit report、issue、branch name」（原為條列，這裡以頓號併列）；可以保存（逐字）：「公式、方法、原始數值、日期、資料口徑、source evidence、教材頁面／章節位置」，「但不得保存作者姓名。」；「另外，請新增永久治理規則：Public Repository Personal Name Redaction Rule」；「確保未來新對話／新專案 AI 不會再次把教材作者姓名寫進公開 repo。」 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）既有相近規則只約束正式產品命名（`DEC-2026-10-22-05` (5)：正式產品不得用參考資料作者／老師姓名作為模型、功能或 UI 名稱）；本條把射程擴及公開 repo 的全部內容與 metadata。 |
+| evidence／source | 逐字存檔第十一節、第十二節末。落地：`PROJECT_RULES.md` 第 12 節 12.3 與 0.5 索引；`docs/BACKLOG.md` BL-0492（cleanup）、BL-0493（historical exposure）、BL-0497（隱私守衛測試）。 |
+| 影響範圍 | 永久治理規則，適用所有新增或修改內容與 metadata。本 PR 自身（檔案、commit message、PR 標題與內文、branch 名）已依本條撰寫。既有內容的清理見 `-16`／BL-0492。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無（擴大 `DEC-2026-10-22-05` (5) 的射程，不取代）。superseded by：無 |
+| provenance | **逐字**。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-21｜客戶裁示台股大盤 EPS × PE Product Calculation SSOT：`Index_target(g, PE) = EPS_base × (1 + g) × PE`；教材案例只作 Source Evidence，不是產品常數
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「請正式落盤，不再標示「等待客戶提供公式」。」；核心公式「"Index_target = EPS_scenario × PE_target"」；「"EPS_scenario = EPS_base × (1 + g)"」；「"Index_target(g, PE) = EPS_base × (1 + g) × PE"」；EPS_base：「台股加權指數對應之基準年度整體 EPS / 指數盈餘。」規則「- 必須來自可追溯資料來源 - 必須有年度與 as-of date - 不得從教材案例反推後永久寫死」；g：「指定年度台股整體 EPS / 獲利成長率。」規則「- 必須有來源或正式估算模型 - Missing 不得自行猜測」；PE_target：「情境本益比。」「教材案例使用約："15x ～ 21x"」「但這只是 scenario axis，不代表 15～21 倍永久等於合理本益比。」「未來若要建立 dynamic PE regime，需另案正式規格化。」；第六節：教材案例資訊「以上只能保存為：Source Evidence / 教材案例」「不能直接變成產品永久常數。」「正式產品每次應依：- 當期 EPS_base - 當期 EPS 成長情境 g - PE scenario 重新計算。」「如果沒有 EPS："⬜ EPS 預估資料未取得，無法計算指數情境"」「禁止："EPS = 0"」（條列改以空白併列，字面見逐字存檔。） |
+| 理由／背景 | （文件組背景說明，不是客戶原話）`docs/v2/66` 區段 D 原為「⬜ 待客戶資料／待裁示」；規格 `MK-8`（`G-FORM`）登記藍圖所稱「既有 spec」在 repo 內找不到 —— 本筆即該 spec。 |
+| evidence／source | 逐字存檔第五節、第六節。落地：`docs/v2/66_market_trend_spec.md` 區段 D（正式公式、變數定義、Missing 文字、教材案例分區）；規格第 8.10、8.11 節；BL-0481 列尾補記；EPS_base／g 資料來源登記 BL-0501。 |
+| 影響範圍 | 公式與變數語意定稿。**仍缺**：EPS_base 與 g 的資料來源（⬜，走 Data Source Decision Gate，`-23`）、PE scenario 軸的正式取值方式（教材案例的約 15～21 倍只是案例，不是產品常數；文件組讀法：產品取值另案，可被客戶推翻）、指數情境的呈現（圖表屬 44 解凍 `SH-7`）。**禁止**：EPS = 0、從教材案例反推 EPS_base 並永久寫死、以教材案例數值作產品常數、未裁示的 dynamic PE regime。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：`docs/v2/66` 區段 D「公式 ⬜ 待客戶資料／待裁示」狀態；`DEC-2026-10-22-05` (7)「EPS × PE 只是待驗證的台股估值情境之一」的「待驗證」狀態（公式已定；「固定倍數」照舊未核准 —— PE_target 是情境軸，不是固定合理倍數）。superseded by：無 |
+| provenance | **逐字**：引號內文字。「PE 軸產品取值另案」為文件組讀法。由文件組單組寫成，未經第二組驗證（屬 formula 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核）。 |
+
+### DEC-2026-10-27-22｜客戶裁示六個 AI 行動語意 SSOT：續抱／觀察／降低曝險／減碼／替代比較／無法判定（只定語意邊界，不定數值 threshold）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字，全文見逐字存檔第七節）**，要點句：「本輪先定義「語意邊界」。」；「不要自行發明數值 threshold。」；續抱「目前正式規則與 Risk Cap 沒有要求降低部位，且資料完整度足以判定。」；觀察「出現值得追蹤的惡化／不確定因素，但尚未達正式降低部位條件。」；降低曝險「屬 portfolio / asset-class / region / style 層級。」「不等同指定單一基金一定要賣。」；減碼「屬單一基金／單一部位的具體方向性動作。」「trigger 尚未正式定義前，AI 不得自行決定減碼。」；替代比較「不代表 AI 自動換基金。」；無法判定「"無法判定 ≠ 續抱" "無法判定 ≠ 安全" "無法判定 ≠ 中性"」。各詞的「代表／不代表／必須顯示／前提／至少比較」逐條落於 `docs/v2/67_ai_action_vocabulary.md` 第 2 節，不在本筆重抄。 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）規格 `HL-9`（`G-DIR`）：repo 內原無把這六個詞訂為正式語意的規格。 |
+| evidence／source | 逐字存檔第七節。落地：`docs/v2/67_ai_action_vocabulary.md`；BL-0495（Risk Cap）、BL-0496（減碼 trigger）。 |
+| 影響範圍 | 六詞語意 SSOT。**現行可用性（文件組讀法，可被客戶推翻）**：續抱的定義引用 Risk Cap 與正式規則，觀察／降低曝險引用「正式降低部位條件」，減碼需 deterministic trigger —— 這些 repo 內**尚未定義**，故在定義前，除「無法判定」外的五詞不得由系統產生（`-14` 固定鏈；客戶第十四節末句）。現有守衛 `ui_v2/**/logic.py::FORBIDDEN_DIRECTION_WORDS` 等**本批不動**；守衛何時、如何調整屬實作批，須隨正式規則一起處理。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無（補 `DEC-2026-10-16-08` 所列方向集合中五詞以外的「觀察」「降低曝險」「替代比較」的語意；`DEC-2026-10-16-08` 與修正案 #8 的准入條件照舊）。superseded by：無 |
+| provenance | **逐字**：引號內文字。「定義前五詞不得產生」為文件組讀法。由文件組單組寫成，未經第二組驗證（investment meaning 等級，須至少 1 組真正獨立稽核）。 |
+
+### DEC-2026-10-27-23｜客戶裁示資料缺口（G-DATA）處理：不得因 Visual Blueprint 自行新增 API；新來源先交 ChatGPT 協作助手評估，再走 Data Source Decision Gate；舊樹資料邏輯只供研究比對
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「目前已盤點的 G-DATA：- NASDAQ - MSCI World - MSCI EM - EPS / PE - 同類平均 - 基準指數 - 新 B 線財報／國際資料健康 - 區域欄位 - 產業欄位 - 投資風格欄位」；「這些不得因 Visual Blueprint 就自行新增 API。」；「請整理：欄位\| 用途\| 現有來源\| 缺口\| 候選來源\| 是否需 Decision Gate」；「需要新來源時，先交 ChatGPT 協作助手評估，再走 Data Source Decision Gate。」；「舊程式碼中的 S&P 500、加權指數等資料邏輯：可以研究與比對。」；「但不能因舊 UI 存在，就默認符合新 B 線 Data Contract。」（條列改以空白併列，字面見逐字存檔。） |
+| 理由／背景 | （文件組背景說明，不是客戶原話）規格第 8 節 11 個 `G-DATA` 列。 |
+| evidence／source | 逐字存檔第九節。落地：`docs/design/vnext_visual_blueprint.md` 第 8.11 節 G-DATA 表；`docs/BACKLOG.md` BL-0498～BL-0507（逐列 Data Source Decision Gate）。 |
+| 影響範圍 | 十個資料缺口各自走 Data Source Decision Gate；候選來源欄一律「待 ChatGPT 協作助手評估 → Data Source Decision Gate」，本批不推薦任何 provider。舊樹位置只作研究參考，不得視為已核准或符合 B 線 Data Contract。與 `PROJECT_RULES.md` 第 4 節（新／替換 production data source 須停下裁示）同向。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。superseded by：無 |
+| provenance | **逐字**。G-DATA 表的現有來源欄為文件組 `git grep`／讀檔所得（單組，不宣稱窮舉）。由文件組單組寫成，未經第二組驗證。 |
+
+### DEC-2026-10-27-24｜客戶 Model／Effort：本階段（44 解凍、舊 DEC supersede、AI 行動語意、隱私治理、deterministic rule／AI 邊界）＝ Opus 5.5＋Medium；回到單純 UI wiring 後主動通知是否降回 Sonnet 5.5＋Medium
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字）**：「本階段涉及：- frozen 44 解凍 - 舊 DEC supersede - AI action semantics - privacy governance - deterministic rule / AI boundary」；「請使用：Model：Opus 5.5 Effort：Medium」；「完成 SSOT / 解凍／隱私收斂，工作回到單純 UI wiring 後，再依 Minimum Sufficient Effort 主動通知是否可降回：Sonnet 5.5 + Medium」；「維持 Silent Autonomous Cruise。」；「除：- Model / Effort Change Gate - 真正 Stop Gate - 完整階段完成 之外，不需中途回報。」（條列改以空白併列，字面見逐字存檔。） |
+| 理由／背景 | （文件組背景說明，不是客戶原話）`DEC-2026-10-27-06`（frozen 44＋長期 IA 階段＝Opus 5.5／Medium）與 `DEC-2026-10-27-07`（藍圖批建議 Sonnet 5.5／Medium）並存的讀法，由本筆對本階段明定。 |
+| evidence／source | 逐字存檔第十五節。落地：`docs/HANDOFF.md` Resume Checkpoint。 |
+| 影響範圍 | 本階段（`-08` 所列第十四節第 1～9 項）用 Opus 5.5＋Medium；SSOT 收斂完成、回到純 UI wiring（BL-0484 起）時主動通知客戶是否降回 Sonnet 5.5＋Medium（依 `PROJECT_RULES.md` 第 5 節 Change Gate）。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：`DEC-2026-10-27-07` supersede 欄「本批依客戶最新建議用 Sonnet 5.5／Medium」之於本階段的讀法（重申並具體化 `DEC-2026-10-27-06`）。superseded by：無 |
+| provenance | **逐字**。由文件組單組寫成，未經第二組驗證。 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
@@ -1281,3 +1502,4 @@
 - 第五節標題：2026-10-26 恢復。該標題於 #1054（`9f6e91a0`）插入 `DEC-2026-10-25-03` 時被截斷，只剩殘片「，以及不屬客戶裁示的決策登記）」；以 pickaxe 搜尋（`log -S`）找到原文 `## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）`（首見 `cfebcc7c`／#997）逐字恢復，未改任何決策語意。另：`DEC-2026-10-25-04` 的 J-14 補記段（#1058）原本落在第五節標題之後（疑因標題殘缺而誤置）；經核對內文屬 `DEC-2026-10-25-04`，2026-10-26 移回該條目表格之後、`DEC-2026-10-26-01` 之前，內容一字未改。
 - 第四節 `DEC-2026-10-27-01`～`-06`：~~客戶 2026-10-27 裁示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；十一點裁示照總管轉達要點拆成六筆，照寫不增刪；~~（→ 2026-10-27 同 PR 稽核回修，有意識的更正，不是漏刪：逐字原文已存 `docs/evidence/decisions/2026-10-27_d1_44_unfreeze_rulings.md`（作者姓名一處遮蔽），六筆的引號內文字改為逐字；文件組仍未見客戶對話本身）`-03` 第 (4) 項「先前指定」的 repo 前例為文件組單組 `git grep`（不宣稱窮舉）；`-02` 的「(c) 在方案 A 下只有頁序、頁名兩項」為文件組判讀；`DEC-2026-10-23-01`、`-10` 的就地 supersede 標示為文件組依派工單寫成；由文件組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-27-07`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_vnext_visual_blueprint.md`，無遮蔽），引號內文字逐字；文件組仍未見客戶對話本身；amendment 範圍、與既有 DEC 的牴觸讀法、Model／Effort 並存讀法為文件組讀法；69 列衝突缺口登記由文件組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-27-08`～`-24`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_vnext_gate_rulings.md`，無遮蔽），引號內文字逐字；文件組仍未見客戶對話本身；十五節裁示拆成十七筆的切分、各筆「文件組讀法」、`DEC-2026-10-23-01`／`-22-05`／`-27-07` 的就地 amendment 標示與 supersede 範圍為文件組依派工單寫成；`-14`、`-21`、`-22` 屬 investment meaning／formula 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核，本批由文件組單組寫成，**未經第二組驗證**；`-16` 的「`a28c5a2d` 曾出現姓名」為總管轉達，文件組只實測該 commit 的位置、未讀其內容。
