@@ -1,6 +1,6 @@
 # 探測報告：TWSE／MOPS 公開端點（BL-0509 EPS Data Source Probe）
 
-**目前沒有放任何報告檔**（先不放）。本目錄只說明報告怎麼產生、欄位意義。**本探測只做 probe／spec，不接正式 signal、不接 AI Brain；actual／trailing 不得冒充 forward。**
+~~**目前沒有放任何報告檔**（先不放）。~~ → 已存一份報告（見下方「已存報告」；狀態更新，不是漏刪）。本目錄也說明報告怎麼產生、欄位意義。**本探測只做 probe／spec，不接正式 signal、不接 AI Brain；actual／trailing 不得冒充 forward。**
 
 ## 怎麼產生
 
@@ -38,3 +38,12 @@
 
 - 報告與本目錄**不含**任何 `PROXY_URL`、帳密、NAS host／port；只記 `proxy.enabled` 與各路徑結果。錯誤原文先遮蔽，落盤前整份再掃一次。
 - 離線測試：`tests/test_probe_twse_eps.py`。
+
+## 已存報告（2026-10-27）
+
+| 本目錄檔名 | GitHub run | 報告內 `generated_at_utc` | `trigger_sha`＝`executed_sha` | 保存來源 |
+|---|---|---|---|---|
+| `20261027T143156Z_run40521810949_report.json.gz` | `40521810949` | 2026-10-27T14:30:58Z | `eb272e931446f95109ea0d44e31ddbda8de6cb80` | 分支 `probe/twse-eps-results` 的 `results/20261027T143156Z_run40521810949/report.json.gz`（與本檔 sha256 相同） |
+
+- 檔案大小 7787 bytes；sha256 `be0b4b4232df282209298f3cee3d1157f118b94d5c5d83688bc8f6d47ad469dd`（2026-10-27 實算）。
+- 結果解讀與未驗證項見 `docs/v2/68_bl0509_eps_probe_result.md`；該文件不是 Data Source Decision Gate 裁示。
