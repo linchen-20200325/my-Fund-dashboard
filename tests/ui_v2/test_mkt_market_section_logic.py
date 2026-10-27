@@ -227,6 +227,31 @@ def test_期間漲跌_不足兩點或起點非正_無法判定_不補值(pts):
                  "text": "⬜ 無法判定"}
 
 
+_NAN, _INF = float("nan"), float("inf")
+
+
+@pytest.mark.parametrize("pts", [
+    [{"obs_date": "2026-10-01", "value_num": _NAN}, {"obs_date": "2026-10-02", "value_num": 10.0}],
+    [{"obs_date": "2026-10-01", "value_num": 10.0}, {"obs_date": "2026-10-02", "value_num": _NAN}],
+    [{"obs_date": "2026-10-01", "value_num": 10.0}, {"obs_date": "2026-10-02", "value_num": _INF}],
+    [{"obs_date": "2026-10-01", "value_num": -_INF}, {"obs_date": "2026-10-02", "value_num": 10.0}],
+    [{"obs_date": "2026-10-01", "value_num": True}, {"obs_date": "2026-10-02", "value_num": 10.0}],
+    [{"obs_date": "2026-10-01", "value_num": 10.0}, {"obs_date": "2026-10-02", "value_num": False}],
+])
+def test_期間漲跌_非有限數與布林視為未觀測_無法判定(pts):
+    r = ms.period_return(pts)
+    assert r == {"status": "undeterminable", "pct": None, "first_obs": None, "last_obs": None,
+                 "text": "⬜ 無法判定"}
+
+
+def test_期間漲跌_中間夾NaN或bool_略過該點_其餘照算():
+    pts = [{"obs_date": "2026-10-01", "value_num": 100.0}, {"obs_date": "2026-10-02", "value_num": _NAN},
+           {"obs_date": "2026-10-05", "value_num": True}, {"obs_date": "2026-10-06", "value_num": 110.0}]
+    r = ms.period_return(pts)
+    assert r["status"] == "ok" and r["pct"] == pytest.approx(10.0)
+    assert r["text"] == "期間漲跌 +10.0%（2026-10-01 至 2026-10-06，收盤價）"
+
+
 def test_TAIEX圖卡_期間漲跌跟著所選窗口走():
     t = _taiex_ok(points=[{"obs_date": d, "value_num": 100.0 + i} for i, d in
                           enumerate(p["obs_date"] for p in _points())])

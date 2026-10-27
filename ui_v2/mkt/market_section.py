@@ -18,6 +18,8 @@ BL-0516 批 1（客戶裁示 C，`DEC-2026-10-27-41`；`docs/v2/66` 第 3.1 節�
 
 from __future__ import annotations
 
+import math
+
 from . import chart, live, logic, theme
 
 # ───────────────────────── 固定文案（逐字；總管擬，待覆核）─────────────────────────
@@ -106,6 +108,10 @@ def freshness_text(obs_date: str, fetched_at: str) -> str:
     return "經過 0 日" if delay == 0 else "未定義"
 
 
+def _is_observed_number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 def period_return(points: list) -> dict:
     """期間漲跌（確定性、只用已觀測的點）：視窗內最後一個有值收盤 vs 第一個有值收盤。
 
@@ -114,7 +120,8 @@ def period_return(points: list) -> dict:
     成功 → `{"status": "ok", "pct": float, "first_obs", "last_obs", "text": "期間漲跌 +x.x%（起日 至 迄日，收盤）"}`。
     這是價格算術，不是判定：不分偏多偏空、不上方向顏色。
     """
-    valued = [p for p in points if isinstance(p.get("value_num"), (int, float))]
+    # NaN / inf / bool 都不是「已觀測的收盤」：視為未觀測（不補值），不足兩點即落回「無法判定」。
+    valued = [p for p in points if _is_observed_number(p.get("value_num"))]
     if len(valued) < 2 or valued[0]["value_num"] <= 0:
         return {"status": "undeterminable", "pct": None, "first_obs": None, "last_obs": None,
                 "text": TEXT_PERIOD_RETURN_UNDETERMINABLE}
