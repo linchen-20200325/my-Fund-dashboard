@@ -1,0 +1,103 @@
+name: "探測：TWSE／MOPS 公開端點可達性與欄位（BL-0509，只讀，手動／按鈕分支觸發）"
+
+# 目的：BL-0509 EPS Data Source Probe。對 TWSE OpenAPI／公開網站端點（皆 GET 唯讀）分別量
+# 「GitHub runner IP 直連」與「經 NAS proxy」兩條路徑的 HTTP 狀態、延遲、欄位 schema、來源日期，
+# 供 docs/v2/66_market_trend_spec.md 4.7 的資料源研究。**只做 probe，不接任何正式 signal、不接 AI Brain。**
+# 結構照抄 `moneydj_basic_probe.yml`（按鈕分支、報告分支、checkout ref: main）。
+#
+# ⚠️ 連線路徑（與 moneydj_basic_probe 刻意不同，據實揭露）：
+#    `infra.proxy.get_proxy_config()` 只讀 Streamlit 機密設定檔、不讀環境變數，Actions 上讀不到，
+#    所以不能靠 `infra.proxy` 走 NAS。本腳本比照 `scripts/fetch_nav_cache.py`：
+#    `PROXY_URL` 環境變數 → 自建 requests Session 的 proxies（不改 `infra/proxy.py`、不新增 API 架構）。
+#    `PROXY_URL` 只在「Run probe」那一步以 env 傳入；腳本不印、不寫報告、錯誤文字先遮蔽。
+#
+# ⚠️ 只讀：只發 GET；報告只推到專用分支 `probe/twse-eps-results`（**不推 main、不推其他分支、不 force**）。
+# ⚠️ 沒有排程。觸發方式只有兩種：
+#    (1) 手動 `workflow_dispatch`（沒有輸入參數）；
+#    (2) push 到「按鈕分支」`probe/twse-eps-trigger`。
+# ⛔ 按鈕分支只當「按鈕」用 —— 它的內容不被執行，執行的永遠是 main（`actions/checkout` 指定 `ref: main`）。
+#    報告分記 `trigger_sha`（腳本於執行期自 runner 預設環境變數讀）與 `executed_sha`（`git rev-parse HEAD`）。
+#    用法：按鈕分支請從 main 建立、上面不放任何改動
+#    （例：`git fetch origin main` 後 `git push origin origin/main:refs/heads/probe/twse-eps-trigger`）。
+#    ⚠️ 本 workflow 必須先合併進 main，按鈕分支觸發的 run 才會執行 main 上的腳本。
+on:
+  push:
+    branches:
+      - probe/twse-eps-trigger
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 只為了把報告推到 probe/twse-eps-results
+
+concurrency:
+  group: twse-eps-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    # 端點約 20 個 × 2 條路徑，每請求 timeout 30 秒、最多 1 次重試；上限遠低於此。
+    timeout-minutes: 30
+    env:
+      RESULT_BRANCH: probe/twse-eps-results
+      REPORT_PATH: probe_out/twse_eps_report.json.gz
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # ⛔ 一律跑 main 上的腳本（見檔頭）。
+          ref: main
+          # 不把 token 留在 .git/config：探測步驟拿不到推送權限；只有最後推送那一步臨時注入認證。
+          persist-credentials: false
+
+      - name: Record executed SHA
+        run: echo "PROBE_EXECUTED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        # 腳本只用標準庫＋requests，不載入 streamlit／services。
+        run: pip install requests
+
+      - name: Run probe
+        env:
+          # 有設才經 NAS 中繼；腳本只記 enabled=true/false 與各路徑實際結果，不輸出 host／帳密。
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+        run: python scripts/probe_twse_eps.py --out "$REPORT_PATH"
+
+      - name: Commit report to probe/twse-eps-results
+        # 探測部分失敗時報告照樣寫出，失敗原文也要留下來 → always()。
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$REPORT_PATH" ]; then
+            echo "::error::報告檔不存在（$REPORT_PATH），沒有可提交的東西"
+            exit 1
+          fi
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::${AUTH}"
+          agit() { git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" "$@"; }
+          STAMP="$(date -u '+%Y%m%dT%H%M%SZ')_run${GITHUB_RUN_ID}"
+          mkdir -p "$RUNNER_TEMP/twseprobe"
+          cp "$REPORT_PATH" "$RUNNER_TEMP/twseprobe/report.json.gz"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git clean -fdxq
+          if agit ls-remote --exit-code --heads origin "$RESULT_BRANCH" >/dev/null; then
+            agit fetch --depth=1 origin "$RESULT_BRANCH"
+            git checkout -B "$RESULT_BRANCH" FETCH_HEAD
+          else
+            git checkout --orphan "$RESULT_BRANCH"
+            git rm -rfq .
+          fi
+          mkdir -p "results/$STAMP"
+          cp "$RUNNER_TEMP/twseprobe/report.json.gz" "results/$STAMP/report.json.gz"
+          git add "results/$STAMP/report.json.gz"
+          git commit -m "探測：TWSE EPS 資料源 ${STAMP} [skip ci]"
+          agit push origin "HEAD:refs/heads/$RESULT_BRANCH"
+          echo "報告已推到 $RESULT_BRANCH：results/$STAMP/report.json.gz"
