@@ -140,7 +140,12 @@ def test_VIX取數失敗429_不畫圖_沒有期間按鈕_寫原文():
     assert not at.exception, [e.value for e in at.exception]
     assert len(_charts(at)) == 0
     assert not [r for r in at.radio if r.key == "mkt_vix_period"]
-    assert "⛔ 取數失敗：Yahoo:^VIX 失敗：HTTP 429 Too Many Requests" in "\n".join(_texts(at))
+    needle = "⛔ 取數失敗：Yahoo:^VIX 失敗：HTTP 429 Too Many Requests"
+    assert needle not in "\n".join(_texts(at))        # 44 P0-①：一般畫面不印原文
+    assert "⛔ 取數失敗" in "\n".join(_texts(at))
+    from ui_v2 import plain
+    store = at.session_state[plain.RAW_STATE]["mkt"]["entries"]
+    assert needle in [e["text"] for e in store]       # 原文在跨頁原始訊息
     assert "⬜ EPS 預估資料未取得，無法計算正式指數情境" in "\n".join(_texts(at))   # 其他 Missing 區塊照樣在
 
 

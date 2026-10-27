@@ -842,6 +842,10 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         symbols.apply(model)
         # BL-0373（客戶 2026-10-18 裁示）：`MKT-6` 表上一筆觀測也沒有時，表尾那一句依成因改寫（全部失敗 ⛔；混合時另加一行 ⛔）。
         sections.mark_mkt6_fetch_failed(model)
+        # 市場趨勢區段的系統錯誤原文（44 P0-①）：一般畫面只寫「⛔ 取數失敗」，原文併入同一份跨頁原始訊息。
+        market_view_for_raw = notes.get("market_view")
+        if market_view_for_raw is not None:
+            raw = list(raw) + market_section.raw_entries(market_view_for_raw)
         plain.record_raw(st.session_state, "mkt", raw, datetime.now(timezone.utc))
         # Phase 3 P0-②（44 第七節第三小節之七其二第 3、4 條）：同源錯誤只在頁首資料狀態行摘要一次；
         # 核心卡的來源與新鮮度徽章移到 ④「證據／來源」。只改呈現：判定、狀態、顏色一個都不動（`ui_v2/health.py`）。

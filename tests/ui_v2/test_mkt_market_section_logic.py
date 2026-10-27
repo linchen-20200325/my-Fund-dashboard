@@ -111,12 +111,15 @@ def test_市場結論無偏多偏空_無總分_無風險分級():
         assert not [s for s in strings if word in s], word
 
 
-def test_VIX系統錯誤_狀態列寫取數失敗_卡上寫原文():
+def test_VIX系統錯誤_一般畫面只寫取數失敗_原文走原始訊息():
     bad = _dom("vix", "系統錯誤", reason="Yahoo:^VIX 失敗：HTTP 429")
     view = _view(bad)
     assert ms.conclusion_model(view)["rows"][0]["status_text"] == "⛔ 取數失敗"
     model = ms.vix_model(bad, "1Y")
-    assert model["message"] == "⛔ 取數失敗：Yahoo:^VIX 失敗：HTTP 429"
+    assert model["message"] == "⛔ 取數失敗"
+    assert "429" not in "".join(ms.section_strings(view, "1Y"))
+    raws = ms.raw_entries(view)
+    assert [r["text"] for r in raws] == ["⛔ 取數失敗：Yahoo:^VIX 失敗：HTTP 429"]
     assert model["spec"] is None and not any(model["availability"].values())
 
 

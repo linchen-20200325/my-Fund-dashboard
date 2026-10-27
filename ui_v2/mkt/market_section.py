@@ -84,6 +84,12 @@ def conclusion_model(view: dict) -> dict:
     return {"text": TEXT_NO_CONCLUSION, "rows": rows}
 
 
+def raw_entries(view: dict) -> list:
+    """系統錯誤的 domain → 跨頁原始訊息清單（`plain.record_raw` 的 entries 格式）；原文逐字 `logic.fetch_failed_text`。"""
+    return [{"where": f"{SECTION_LABEL} {LABELS[d['domain']]}", "text": logic.fetch_failed_text(d["reason"])}
+            for d in view["domains"] if d["status"] == logic.STATE_ERROR]
+
+
 def missing_copy(domain: dict) -> str:
     """Missing 卡的固定文案；status 不是 `資料未備`（理論上本批不會發生）→ 照狀態字面，不冒用 Missing 文案。"""
     if domain["status"] == logic.STATE_MISSING and domain["domain"] in _MISSING_COPY:
@@ -111,7 +117,8 @@ def vix_model(domain: dict, period: str) -> dict:
     model = {"label": LABELS["vix"], "status": domain["status"], "availability": avail, "period": period,
              "slice": None, "spec": None, "message": None, "caption_lines": [], "freshness": None}
     if domain["status"] == logic.STATE_ERROR:
-        model["message"] = logic.fetch_failed_text(domain["reason"])
+        # 44 第七節 P0-①：原文不上一般畫面，只寫狀態字；原文走 `raw_entries` 進跨頁原始訊息。
+        model["message"] = _STATUS_TEXT[logic.STATE_ERROR]
         return model
     if domain["status"] != logic.STATE_OK:
         model["message"] = f"{_STATUS_TEXT[domain['status']]}：{domain['reason']}" if domain.get("reason") \
