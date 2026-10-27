@@ -6,17 +6,17 @@
 > 文中若引「約 :N」行號，以 `git show d5d391b:<path>` 讀（本批合併後交接本等檔的行號已因指標行而位移）。
 
 > **⏯ Resume Checkpoint**（規則：`PROJECT_RULES.md` 第 6 節 6.1.2，`DEC-2026-10-26-02`；**總管提供**；接手先依該節恢復流程比對 GitHub，不一致以 GitHub 為準）
-> - **last checkpoint**：2026-10-27（客戶 D1 Gate 裁示落盤批，docs 分支 `docs/d1-rulings-44-unfreeze-20261027`；上一版 checkpoint（2026-10-26，`830f0bb2`，「批次 5 文件同步」）已過期，原文在 git 歷史，以本區塊為準）
-> - **latest verified main**：`22fcf724`（`git fetch` ＋ `git log origin/main` 查證，2026-10-27）＝ #1077 D1 雙層側欄導覽 Phase 1 設計草稿（`docs/design/D1_dual_sidebar_nav_phase1.md`）合併後；`830f0bb2` 之後的其他合併以 `git log` 為準
-> - **current branch／PR**：本 docs 分支 draft PR（純文件＋44 凍結守衛 md5／行數更新＋`tests/test_doc_counters.py` 新檔登記；production code 0）；其餘 in-flight PR 本區塊未查，以 GitHub 為準
+> - **last checkpoint**：2026-10-27（BL-0478 頁序頁名程式＋守衛對齊批，分支 `feat/ui-v2-page-order-names-20261027`；上一版 checkpoint（2026-10-27，D1 Gate 裁示落盤批，#1078）已過期，原文在 git 歷史，以本區塊為準）
+> - **latest verified main**：`eb0c5af1`（`git fetch` ＋ `git log origin/main` 查證，2026-10-27）＝ #1078 D1 Gate 裁示落盤批合併後；其後的其他合併以 `git log` 為準
+> - **current branch／PR**：本分支 draft PR（BL-0478：`ui_v2/app_preview.py::PAGES` 頁序頁名、44 五頁總表第一欄與列序、之十七其七、頁序守衛與 44 md5／行數守衛、本檔與 BACKLOG）；其餘 in-flight PR 本區塊未查，以 GitHub 為準
 > - **客戶 2026-10-27 裁示（`docs/DECISIONS.md` `DEC-2026-10-27-01`～`-06`；逐字存檔 `docs/evidence/decisions/2026-10-27_d1_44_unfreeze_rulings.md`，作者姓名一處遮蔽）**：①「Gate 1 選 A」（方案 A 內容依 D1 草稿 §8.1 定義：殼層先行、不拆頁）；②Gate 2 ＝ 是：44 正式解凍，**只限**五頁頁序、五頁頁名、D1 導覽殼直接需要的條文／守衛，不得全面解凍或順帶改投資規則／資料契約／其他凍結內容；③正式頁序 🌍 市場與趨勢 → ⚖️ 資產配置 → 💼 我的持股 → 🔍 找基金 → ⚙️ 設定；④「移除台股趨勢」（`DEC-2026-10-23-01`）由本次取代；⑤🌍 後續規劃：市場總覽、台股大盤／台股趨勢、國際趨勢，需納入客戶提供的投資教學參考資料（作者；姓名依公開 repo 不入檔）（**尚未進 repo**），台股大盤含 EPS × 本益比 → 加權指數情境分析方向；⑥新內容先落正式規格（`docs/v2/66_market_trend_spec.md` 骨架），不靠聊天記憶；舊 UI 只參考已驗證邏輯／資料 mapping、不沿用舊視覺；⑦不做一鍵再平衡（邊界：偏離檢查／客觀對照／情境試算）
-> - **44 現況**：本批只動兩處 —— 第三節第零小節五頁總表五列格尾行內加註正式頁名與頁序、檔尾新增第七節第三小節之十七；其餘全部維持凍結並已重新凍結。**五頁總表第一欄字面與列序刻意未改**（被 `tests/ui_v2/test_preview_entry.py::test_頁序與頁名逐字對44的五頁總表` 與程式端 `PAGES` 一起鎖住），對齊批同批改
-> - **current task**：D1 Gate 裁示落盤（本 PR）；完成後進入頁序頁名對齊
-> - **exact stopping point**：本 docs PR 開成 draft、待獨立稽核（治理規則／frozen SSOT 修改 → 至少 1 組真正獨立稽核，`PROJECT_RULES.md` 第 8 節）與合併
-> - **next single action（可安全先做；BL-0478 先於 BL-0479＝總管排程決定，可被客戶推翻）**：本 PR 合併後，開 **BL-0478 頁序與頁名的程式＋守衛對齊批**：`ui_v2/app_preview.py::PAGES` 順序與頁名、`test_頁序與頁名逐字對44的五頁總表` 期望值、44 五頁總表第一欄字面與列序（劃線保留舊名）、`PREVIEW_NOTE`／`test_preview_page.py` 側欄斷言等舊頁名字面同批改；url_path 與 `/set` OAuth 落點不改；不得弱化守衛。**之後**才做 BL-0479 方案 A 殼層（先兩個 spike；客戶確認視覺前不寫正式導覽程式）
+> - **44 現況**：BL-0478 對齊批只動兩處 —— 第三節第零小節五頁總表五列（第一欄劃線保留舊頁名、箭頭後寫正式頁名；列序改為正式頁序；其餘三欄一字未改；行數不變）、之十七新增其七；其餘全部維持凍結並已重新凍結。（上一版「第一欄字面與列序刻意未改」自本批起不再是現況；狀態更新，不是漏刪）
+> - **current task**：BL-0478 頁序頁名對齊（本 PR）；預覽側欄（`st.navigation`）的頁名與頁序已改為正式版，url_path（mkt／alo／hld／exp／set）不改
+> - **exact stopping point**：本 PR 開成 draft、待獨立稽核（UI 頁名＋frozen SSOT 修改 → 至少 1 組真正獨立稽核，`PROJECT_RULES.md` 第 8 節）與合併
+> - **next single action（BL-0478 先於 BL-0479＝總管排程決定，可被客戶推翻）**：①**總管先決定**畫面上其他寫著舊頁名的固定字句是否在 BL-0479 之前另開一小批換字（頁首標題 `PAGE_TITLE`、「前往設定與診斷」連結字樣、`page_health.PAGE_NAMES`／`plain.PAGE_NAMES`、指路句、`PREVIEW_NOTE` 等；這些**不是**由 `PAGES` 推導、本 PR 一字未改，清單見 BL-0478 列尾與本 PR 說明；圖示是否進句中文字未裁）；②然後做 **BL-0479 方案 A 殼層**（線框已核准；先做 D1 草稿第 8.3 節兩個 spike 並回報；客戶確認視覺前不寫正式導覽程式）
 > - **需客戶裁示／提供（Decision Gate）**：D1 草稿第 8.3 節 ④ 手機點擊數、⑥ 第二層字面、「風險觀察」是否進導覽（BL-0479）；🌍 參考資料提供與新資料源逐項 Decision Gate（BL-0480）；EPS × 本益比口徑與資料源（BL-0481）；既有 BL-0460～BL-0468、BL-0470～BL-0474 照舊未裁
 > - **下一個 AI 不得做**：不得把 44 解凍範圍擴大到頁序、頁名、D1 殼層直接需要的條文以外；不得改投資規則、資料契約、塊定義；不得在對齊批之外改 `PAGES` 或頁名守衛；不得自創 🌍 新內容的數字、公式、倍數或資料來源（`docs/v2/66` 未填者一律待客戶資料）；不得在正式產品出現參考資料作者或老師姓名；不得做一鍵再平衡；不得改 url_path／OAuth／Active Sheet／唯讀護欄；其餘上一版禁止事項（不寫 Sheet、不放寬 scope、不動 SET-4、不自行改使用者可見字樣、不改公式／門檻）照舊
-> - **風險**：①對齊批之前，44 第一欄與程式端仍是舊頁序頁名，正式頁序以 44 之十七其二為準（文件與程式暫時不一致，屬已登記的過渡）；②BL-0478 的舊頁名使用處清單未逐檔窮舉；③本批 DEC 引號內為逐字（姓名一處遮蔽），條文化與讀法為文件組單組寫成；④OAuth callback 只在 Google 導回落在設定頁（`/set`）時才處理，部署 `redirect_uri` 設錯登入不會完成（BL-0465）；⑤單頁入口 `app_hld_live.py`／`app_alo_live.py` 無登入／選本路徑、永遠顯示「尚未選定」（BL-0461）
+> - **風險**：①BL-0478 之後，側欄頁名已是正式版，但頁內標題、連結字樣、指路句與設定頁各頁資料狀態總表的頁名仍是舊頁名（固定字串，本 PR 未改）—— 同一畫面新舊頁名並存，屬已登記的過渡，待總管決定換字批；②舊頁名使用處清單為單組唯讀盤點，未經第二組驗證；③本批 DEC 引號內為逐字（姓名一處遮蔽），條文化與讀法為文件組單組寫成；④OAuth callback 只在 Google 導回落在設定頁（`/set`）時才處理，部署 `redirect_uri` 設錯登入不會完成（BL-0465）；⑤單頁入口 `app_hld_live.py`／`app_alo_live.py` 無登入／選本路徑、永遠顯示「尚未選定」（BL-0461）
 > - **開工先讀的 SSOT**：`docs/DECISIONS.md` `DEC-2026-10-27-01`～`-06` → `docs/v2/44_fund_ui_ssot.md` 第三節第零小節與第七節第三小節之十七 → `docs/design/D1_dual_sidebar_nav_phase1.md` 第 6～8 節 → `docs/BACKLOG.md` BL-0478～BL-0482 → `docs/v2/66_market_trend_spec.md`
 > - **tests／CI**：以 GitHub check-run 逐條 `conclusion` 為準；本機只跑了文件守衛與讀 44 的 logic 測試（見本 PR 說明），本區塊不代為宣稱 CI 結果
 > - **unresolved true Stop Gates**：無（上列為待客戶裁示／提供的登記，不是停住中的 Stop Gate）

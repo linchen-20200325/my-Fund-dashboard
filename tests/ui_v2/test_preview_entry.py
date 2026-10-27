@@ -355,28 +355,66 @@ def test_d_正控_標示不在最上方就紅(body):
 # ═══════════════════════ 其他：頁序、頁名、set_page_config、secret 鍵名 ═══════════════════════
 
 
-def _spec_page_names() -> list[str]:
-    """`docs/v2/44_fund_ui_ssot.md` 3.0 五頁總表第一欄（`| **頁名** |`），依表內順序。"""
+# ~~`_spec_page_names` 的 regex `^\| \*\*([^*|]+)\*\* \|`（只認「第一欄恰為粗體頁名」）~~
+# → 2026-10-27 對齊批（BL-0478；有意識的政策變更，不是漏刪；決策者：客戶（`DEC-2026-10-27-02`））：44 五頁總表第一欄改成
+#   「~~**舊頁名**~~ → **正式頁名**（日期註記）」，舊 regex 一列都抓不到。新 regex 一樣只認整個第一欄恰為這個形狀，
+#   **而且要求表內每一列都是這個形狀**（`_SPEC_ROW` 對不上的列直接紅，不靠 findall 靜默跳過），斷言仍是逐字相等，沒有放寬。
+_SPEC_ROW = re.compile(r"^\| ~~\*\*([^*|]+)\*\*~~ → \*\*([^*|]+)\*\*（[^|]*） \|")
+
+
+def _spec_rows() -> list[tuple[str, str]]:
+    """`docs/v2/44_fund_ui_ssot.md` 3.0 五頁總表第一欄 →（劃線的舊頁名, 正式頁名），依表內順序（＝正式頁序）。"""
     text = (_ROOT / "docs" / "v2" / "44_fund_ui_ssot.md").read_text(encoding="utf-8")
     section = text.split("### 3.0 五頁總表", 1)[1].split("### 3.1", 1)[0]
-    return re.findall(r"^\| \*\*([^*|]+)\*\* \|", section, flags=re.MULTILINE)
+    lines = [ln for ln in section.split("\n") if ln.startswith("| ")]
+    assert lines[0].startswith("| 頁 |"), lines[0]   # 表頭；第二行 `|---|` 不以 "| " 開頭
+    rows = []
+    for ln in lines[1:]:
+        m = _SPEC_ROW.match(ln)
+        assert m, f"44 五頁總表有一列的第一欄不是「~~**舊**~~ → **新**（註記）」的形狀：{ln[:60]}"
+        rows.append((m.group(1), m.group(2)))
+    return rows
+
+
+def _spec_page_names() -> list[str]:
+    """44 3.0 五頁總表第一欄箭頭後的正式頁名，依表內順序。"""
+    return [new for _old, new in _spec_rows()]
 
 
 def test_頁序與頁名逐字對44的五頁總表():
+    # ~~assert spec == ["市場總覽", "持倉體檢", "標的探索", "資產配置", "設定與診斷"]  # 量測日 2026-10-12~~
+    # → 2026-10-27 對齊批（BL-0478；決策者：客戶（`DEC-2026-10-27-02`））：正式頁序與頁名（44 之十七其二）。
+    assert _spec_rows() == [
+        ("市場總覽", "🌍 市場與趨勢"),
+        ("資產配置", "⚖️ 資產配置"),
+        ("持倉體檢", "💼 我的持股"),
+        ("標的探索", "🔍 找基金"),
+        ("設定與診斷", "⚙️ 設定"),
+    ]  # 量測日 2026-10-27
     spec = _spec_page_names()
-    assert spec == ["市場總覽", "持倉體檢", "標的探索", "資產配置", "設定與診斷"]  # 量測日 2026-10-12
     tree = _tree(_PREVIEW)  # PAGES 含函式名，不能整個 literal_eval，逐格讀
     node = next(n for n in tree.body if isinstance(n, ast.Assign)
                 and any(isinstance(t, ast.Name) and t.id == "PAGES" for t in n.targets))
     rows = [(ast.literal_eval(e.elts[0]), ast.literal_eval(e.elts[1]), e.elts[2].id) for e in node.value.elts]
     assert [title for _slug, title, _fn in rows] == spec
+    # url_path 不改（深連結、OAuth 落點 `/set`，BL-0465）；只換順序與頁名。
     assert rows == [
-        ("mkt", "市場總覽", "page_mkt"),
-        ("hld", "持倉體檢", "page_hld"),
-        ("exp", "標的探索", "page_exp"),
-        ("alo", "資產配置", "page_alo"),
-        ("set", "設定與診斷", "page_set"),
+        ("mkt", "🌍 市場與趨勢", "page_mkt"),
+        ("alo", "⚖️ 資產配置", "page_alo"),
+        ("hld", "💼 我的持股", "page_hld"),
+        ("exp", "🔍 找基金", "page_exp"),
+        ("set", "⚙️ 設定", "page_set"),
     ]
+
+
+@pytest.mark.parametrize("bad", [
+    "| **市場總覽** | 問 | 誰 | 邊界 |",                                    # 舊形狀（沒劃線、沒箭頭）
+    "| ~~**市場總覽**~~ → **🌍 市場與趨勢** | 問 | 誰 | 邊界 |",            # 少了日期註記
+    "| ~~**市場總覽**~~ → **🌍 市場與趨勢**（註記） 多字 | 問 | 誰 | 邊界 |",  # 第一欄夾了別的字
+    "| ~~市場總覽~~ → **🌍 市場與趨勢**（註記） | 問 | 誰 | 邊界 |",          # 舊頁名沒粗體
+])
+def test_正控_五頁總表第一欄不是對齊後的形狀就抓不到(bad):
+    assert _SPEC_ROW.match(bad) is None
 
 
 def _calls_named(tree: ast.AST, attr: str) -> int:
