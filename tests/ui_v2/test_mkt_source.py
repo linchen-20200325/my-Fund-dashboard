@@ -29,11 +29,17 @@ _ROW = {
 }
 
 
+_STUB_VIEW = {"domains": [], "provenance": {"readonly": True}}
+
+
 @pytest.fixture
 def fake_st(monkeypatch):
     st = types.SimpleNamespace(secrets={}, session_state={})
     monkeypatch.setattr(source, "st", st)
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", lambda: [])
+    # 2026-10-27 BL-0516 批 1：load_live 另向 L2 `market_view` 要「市場趨勢」區段的 Data View（會呼叫 L1 取 VIX）；
+    # 本檔是接縫測試、不打網路 → 換成固定替身（市場趨勢區段本身的測試在 tests/ui_v2/test_mkt_market_section_*.py）。
+    monkeypatch.setattr(source.market_view, "build_market_view", lambda: dict(_STUB_VIEW))
     # 2026-10-13 起 load_live 另讀已存設定（客戶裁示：市場總覽設定存檔接上）；本檔不測設定，給一張空表。
     # 設定那一段的測試在 tests/ui_v2/test_mkt_settings_logic.py。
     monkeypatch.setattr(source.settings_store, "load_user_settings",
@@ -67,7 +73,9 @@ def test_dataset與fixtures同形_只有rows與errors兩鍵(monkeypatch, fake_st
                                                 if k != "leading_index"],
                              "settings": {"window_days": None, "baseline_date": None, "indicator_keys": None,
                                           "pair_consistent": None},
-                             "settings_error": None}
+                             "settings_error": None,
+                             # 2026-10-27 BL-0516 批 1：另交 L2 Data View（狀態更新，不是漏刪）
+                             "market_view": _STUB_VIEW}
     for row in data["dataset"]["rows"]:
         assert list(row) == list(fixtures.observation("vol_index"))
 
