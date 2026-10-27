@@ -10,6 +10,8 @@ BL-0516 批 1（客戶裁示 C，`DEC-2026-10-27-41`；`docs/v2/66` 第 3.1 節�
 - **市場結論只列各 domain 的資料狀態**：不給偏多偏空、不給總分、不給風險分級（缺正式 aggregation rule，
   `DEC-2026-10-27-41`；`docs/v2/66` 3.1「不可顯示」）。
 - **Missing 就是 Missing**：沒有正式來源的 domain 不補值、不用 0、不拿別的代號頂替（例：不以 QQQ 代 NASDAQ）。
+- **已知限制（期間邊界）**：視窗起點若落在週末／假日，最早一筆有值觀測日必晚於起點，會被判「資料不足」；
+  不另發明容忍規則。目前 L1 抓 2y：1Y 以下不受影響，3Y 本來就不足。
 - **新鮮度只顯示資料日期與經過天數，不判新舊、不上顏色**（門檻 ⬜ 門檻待裁示，不自創）；
   經過天數沿用 `logic.delay_days`／`logic.freshness_badge_text`，台北日期（同 `live.DISPLAY_TZ`）。
 """
@@ -28,7 +30,7 @@ TEXT_INTL_MISSING = "⬜ Missing／Data Gap：目前沒有正式資料來源"
 TEXT_TAIEX_PENDING = "⬜ 資料來源待確認"
 TEXT_DATA_GAP = "⬜ Data Gap：目前沒有已核准的資料來源"
 TEXT_FRESHNESS_THRESHOLD = "新鮮度門檻 ⬜ 門檻待裁示：本圖只顯示資料日期與經過天數，不判新舊"
-TEXT_GAP_NOTE = "圓點為實際觀測日；相鄰觀測之間的連線不代表中間日有資料；序列缺值處折線斷開"
+TEXT_GAP_NOTE = "圓點為實際觀測日；相鄰觀測之間的連線不代表中間日有資料；缺值日不補值"
 
 # domain → 畫面名稱
 LABELS = {

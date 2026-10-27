@@ -62,6 +62,7 @@ def test_固定文案逐字():
         and "Data Gap" in ms.TEXT_INTL_MISSING
     assert "Data Gap" in ms.TEXT_DATA_GAP
     assert "⬜ 門檻待裁示" in ms.TEXT_FRESHNESS_THRESHOLD
+    assert ms.TEXT_GAP_NOTE == "圓點為實際觀測日；相鄰觀測之間的連線不代表中間日有資料；缺值日不補值"
     assert chart.TEXT_INSUFFICIENT == "資料不足以呈現此期間"
 
 

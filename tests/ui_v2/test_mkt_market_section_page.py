@@ -88,6 +88,8 @@ def test_正式模式_新區段出現_Missing文案逐字在():
                    market_section.TEXT_INTL_MISSING, market_section.TEXT_DATA_GAP,
                    "資料日期（最後觀測日）2026-10-23", "來源 Yahoo:^VIX", "⬜ 門檻待裁示"):
         assert needle in text, needle
+    assert ">市場結論</span>" in text and ">市場綜合判定</span>" not in text      # 卡名同 docs/v2/66 §3.1
+    assert "缺值日不補值" in text and "折線斷開" not in text
     for name in ("NASDAQ", "MSCI World", "MSCI EM", "台股加權指數（TAIEX）"):
         assert name in text, name
 

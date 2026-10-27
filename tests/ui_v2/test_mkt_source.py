@@ -134,3 +134,24 @@ def test_回傳的是複本_改它不會改到L2的結果(monkeypatch, fake_st):
     data["dataset"]["rows"].append({})
     data["notes"]["pending"]["x"] = "y"
     assert len(table_rows) == 1 and pending == {"leading_index": "ndc_no_release_date"}
+
+
+def test_market_view的失敗原文經真實_mask_view與load_live遮蔽_不含secret(monkeypatch, fake_st):
+    """BL-0516 稽核必修：不以固定替身繞過遮蔽——L2 回含 secret 的 reason，走真的 load_live → _mask_view。"""
+    key = _rnd.token_hex(12)
+    fake_st.secrets = {"FRED_API_KEY": key}
+    raw = f"Yahoo failed key={key} <script>alert(1)</script> 其餘照留"
+    view = {"domains": [
+        {"domain": "vix", "status": "系統錯誤", "reason": raw, "reason_code": None, "source": None,
+         "fetched_at": None, "obs_date": None, "value_unit": None, "points": []},
+        {"domain": "taiex", "status": "資料未備", "reason": "沒有秘密", "reason_code": "x", "source": None,
+         "fetched_at": None, "obs_date": None, "value_unit": None, "points": []}],
+        "provenance": {}}
+    monkeypatch.setattr(source.market_view, "build_market_view", lambda: view)
+    monkeypatch.setattr(source.market_indicator, "build_market_indicator_table",
+                        _fake_table([], {}, {}))
+    out = source.load_live()["notes"]["market_view"]
+    assert key not in repr(out)
+    assert out["domains"][0]["reason"].endswith("其餘照留")
+    assert out["domains"][1]["reason"] == "沒有秘密"
+    assert key in repr(view)          # 原物件未被改動（複本）

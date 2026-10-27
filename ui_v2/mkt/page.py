@@ -680,7 +680,7 @@ def _conclusion_html(view: dict) -> str:
         f'<span style="color:{theme.tone_hex(r["tone"])}">{_esc(r["status_text"])}</span></div>'
         for r in model["rows"])
     inner = f'<div class="mkt-trend-conclusion">{_esc(model["text"])}</div>{rows}'
-    return _trend_card("市場綜合判定", inner, "trend-conclusion")
+    return _trend_card("市場結論", inner, "trend-conclusion")
 
 
 def _missing_card_html(domain: dict) -> str:
