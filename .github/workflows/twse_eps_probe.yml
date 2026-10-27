@@ -1,4 +1,4 @@
-name: "探測：TWSE／MOPS 公開端點可達性與欄位（BL-0509，只讀，手動／按鈕分支觸發）"
+name: "探測：TWSE／MOPS 公開端點可達性與欄位（BL-0509，只讀 shadow probe，手動／按鈕分支／固定排程）"
 
 # 目的：BL-0509 EPS Data Source Probe。對 TWSE OpenAPI／公開網站端點（皆 GET 唯讀）分別量
 # 「GitHub runner IP 直連」與「經 NAS proxy」兩條路徑的 HTTP 狀態、延遲、欄位 schema、來源日期，
@@ -17,18 +17,41 @@ name: "探測：TWSE／MOPS 公開端點可達性與欄位（BL-0509，只讀，
 #    並對該 Environment 設必要審核者／限定分支，讓讀取 secret 需要人工核准。
 #
 # ⚠️ 只讀：只發 GET；報告只推到專用分支 `probe/twse-eps-results`（**不推 main、不推其他分支、不 force**）。
-# ⚠️ 沒有排程。觸發方式只有兩種：
+# ⚠️ 觸發方式共三種（皆只跑 main 上的腳本）：
 #    (1) 手動 `workflow_dispatch`（沒有輸入參數）；
-#    (2) push 到「按鈕分支」`probe/twse-eps-trigger`。
+#    (2) push 到「按鈕分支」`probe/twse-eps-trigger`；
+#    (3) 固定排程 `schedule`（見下方「排程」）。
 # ⛔ 按鈕分支只當「按鈕」用 —— 它的內容不被執行，執行的永遠是 main（`actions/checkout` 指定 `ref: main`）。
 #    報告分記 `trigger_sha`（腳本於執行期自 runner 預設環境變數讀）與 `executed_sha`（`git rev-parse HEAD`）。
 #    用法：按鈕分支請從 main 建立、上面不放任何改動
 #    （例：`git fetch origin main` 後 `git push origin origin/main:refs/heads/probe/twse-eps-trigger`）。
 #    ⚠️ 本 workflow 必須先合併進 main，按鈕分支觸發的 run 才會執行 main 上的腳本。
+#
+# 📅 排程（2026-10-27 客戶裁示 A 授權；**這是 BL-0509 shadow probe，不是正式資料層排程**）
+#    * 啟用日期：2026-10-27（本檔合併進 main 的那一刻起生效；GitHub 的 schedule 只讀預設分支上的 workflow 檔）。
+#    * 用途：連續收集 3～5 個交易日的唯讀 probe，補齊 update frequency／publication lag／revision behavior／
+#      openapi 與 rwd 資料時間差／schema stability／Missing behavior。**不接正式 signal、不接 AI Brain、
+#      不接正式資料層、不新增付費來源**；結果仍只落 `probe/twse-eps-results` 分支與 evidence。
+#    * 時間（台北 UTC+8；僅週一至週五；分鐘刻意避開整點／半點以減輕 GitHub 排程尖峰延遲）：
+#        - `37 11 * * 1-5` ＝ 台北週一至週五 19:37（涵蓋「當日盤後」，TWSE 盤後資料約 14:30 後陸續發布）。
+#        - `43 22 * * 1-5` ＝ 台北週二至週六 06:43（涵蓋「前一交易日的隔日清晨」；週六清晨對應週五）。
+#      GitHub 排程可能延遲數分鐘到數十分鐘，亦可能偶爾漏跑；報告內的 `generated_at_utc` 才是實際時間。
+#      cron 不知道台灣休市日，休市日仍會跑（得到『來源日期沒推進』的觀察，是有用的資料，不是錯誤）。
+#    * 預計收集 3～5 個交易日（約 2026-10-28 ～ 2026-11-03）後，由客戶裁示是否停用。
+#    * **如何停用**：刪除本檔 `on:` 下的整個 `schedule:` 區塊（連同兩行 cron）並開 PR 合併進 main；
+#      停用後手動／按鈕分支觸發仍可用。若要整個移除探測，另刪本檔。
+#      （備註：公開 repo 的排程在 repo 60 天無活動時會被 GitHub 自動停用，這也是一種被動停用。）
+#    * 不暴露 secret：排程事件與手動事件走同一條路徑；`PROXY_URL` 仍只在「Run probe」步驟 env，
+#      `GITHUB_TOKEN` 仍只在最後推送報告那一步；排程不新增任何 secret 引用。
+#    * 請求量：每次 run 約 16 個端點 × 2 路徑 ＋ 條款頁最多 3 跳／swagger 條款連結最多 2 條；
+#      每日 2 次、僅週一至週五。請求間隔 1 秒、單請求最多重試 1 次、只發 GET。
 on:
   push:
     branches:
       - probe/twse-eps-trigger
+  schedule:
+    - cron: "37 11 * * 1-5"   # 台北週一至週五 19:37（當日盤後）
+    - cron: "43 22 * * 1-5"   # 台北週二至週六 06:43（前一交易日的隔日清晨）
   workflow_dispatch:
 
 permissions:
@@ -41,9 +64,11 @@ concurrency:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    # 最壞情況推算（非實量）：16 個端點 × 2 條路徑 × (2 次嘗試 × 20 秒 timeout ＋ 2 秒重試間隔 ＋ 1 秒請求間隔)
-    # ≈ 16×2×43 秒 ≈ 23 分；Run probe 步驟上限 32 分，job 上限 40 分，確保最壞情況下報告提交步驟（if: always()）仍有時間執行。
-    timeout-minutes: 40
+    # 最壞情況推算（非實量）：每個請求 (2 次嘗試 × 20 秒 timeout ＋ 2 秒重試間隔 ＋ 1 秒請求間隔) ≈ 43 秒；
+    # 資料端點 16×2＝32 個請求；條款頁（2 個靜態端點＋最多 2 條 swagger 連結）× 2 路徑 × 最多 4 跳＝最多 32 個請求
+    # （其中已含上述靜態端點各 1 個首跳，故最壞約 32 ＋ 28 ＝ 60 個請求）≈ 60×43 秒 ≈ 43 分。
+    # Run probe 步驟上限 50 分，job 上限 60 分，確保最壞情況下報告提交步驟（if: always()）仍有時間執行。
+    timeout-minutes: 60
     env:
       RESULT_BRANCH: probe/twse-eps-results
       REPORT_PATH: probe_out/twse_eps_report.json.gz
@@ -69,7 +94,7 @@ jobs:
         run: pip install requests
 
       - name: Run probe
-        timeout-minutes: 32
+        timeout-minutes: 50
         env:
           # 有設才經 NAS 中繼；腳本只記 enabled=true/false 與各路徑實際結果，不輸出 host／帳密。
           PROXY_URL: ${{ secrets.PROXY_URL }}
