@@ -204,7 +204,7 @@ def test_44_凍結不變量_塊數與判準行數只照授權變():
     lines = _D44.read_text(encoding="utf-8").split("\n")
     count = lambda prefix: sum(1 for line in lines if line.startswith(prefix))
     assert (count("#### 塊 "), count("**判準**"), count("**節判準**"), count("**表判準**"), count("**元件判準**")) == (
-        42, 42, 7, 8, 6)  # 元件判準 5 → 6：44 之十八其三新增第六類元件「圖表」的元件判準（G-44 最小解凍，DEC-2026-10-27-27，決策者：客戶）
+        42, 42, 7, 8, 6)  # 元件判準 5 → 6：44 之十八其三新增第六類元件「圖表」的元件判準（G-44 最小解凍）；授權依據屬執行組讀法（DEC-2026-10-27-27），可被客戶推翻
     assert sum(1 for line in lines if line.startswith("#### 塊 SET-8｜各頁資料狀態總表")) == 1
 
 

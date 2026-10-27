@@ -1371,7 +1371,7 @@
 | 決策內容摘要 | **客戶原話（逐字）**：「全站 AI Brain 屬導覽／全站殼層能力，不算各頁內容塊。」；各頁第一階段只顯示「deterministic rule result」「template/local explanation」「查看依據」；「不要因此讓各頁各自呼叫一個獨立 AI。」；「正式 AI Brain integration 仍依既定 Batch 7。」 |
 | 理由／背景 | （執行組背景說明，不是客戶原話）`DEC-2026-10-27-13` 裁定九個 G-44 衝突走正式最小解凍、逐項裁示；本筆是其中一項（規格 `docs/design/vnext_visual_blueprint.md` 第 8 節）。對應 `SH-4`。 |
 | evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-27_g44_amendment_rulings.md` 1A 段。落地：`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十八其一；44 第二節「一頁最多 10 塊」行、之四其六行尾加註。 |
-| 影響範圍 | AI 區不計各頁塊數；各頁不得各自呼叫 AI；正式整合仍屬 BL-0490。之四其六「現階段 B 線 v1 不接 AI」照舊有效至 Batch 7（執行組讀法，可推翻）。**不授權接 AI。** |
+| 影響範圍 | AI 區不計各頁塊數；各頁不得各自呼叫 AI；正式整合仍屬 BL-0490。44 之十八其一第 4 條「之四其六『現階段 B 線 v1 不接 AI』照舊有效至 Batch 7」是執行組讀法，不是客戶原文，可推翻。**不授權接 AI。** |
 | 是否可逆 | 可逆（客戶可另行裁示） |
 | supersedes／superseded by | supersedes：無（補 `DEC-2026-10-27-18` One AI Brain 的位置與塊數歸屬）。superseded by：無 |
 | provenance | **逐字**：引號內文字（字面見逐字存檔）。由執行組單組寫成，未經第二組驗證（44 解凍屬治理／UI SSOT 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核）。 |
@@ -1397,12 +1397,12 @@
 | 決策內容摘要 | **客戶原話（逐字）**：允許顏色區分「不同資料序列」「不同基金」「benchmark」「scenario lines」；「但必須同時至少提供其中一種非顏色辨識：」「直接標籤」「legend」「線型」「marker」「文字」；「禁止只靠紅／綠代表：」「好／壞」「買／賣」「安全／危險」；「原本「顏色非唯一語意載體」不變。」 |
 | 理由／背景 | （執行組背景說明，不是客戶原話）`DEC-2026-10-27-13` 裁定九個 G-44 衝突走正式最小解凍、逐項裁示；本筆是其中一項（規格 `docs/design/vnext_visual_blueprint.md` 第 8 節）。對應 `SH-7`（44 第五節原本只有五類元件，沒有圖表）。 |
 | evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-27_g44_amendment_rulings.md` 3aA 段。落地：`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十八其三（含第六類元件「圖表」的元件判準）；44 第一節第二小節「禁顏色暗示方向」、第五節開頭行尾加註。 |
-| 影響範圍 | 44 第五節元件 5 → 6 類；元件判準的行 5 → 6（守衛 `tests/ui_v2/test_bl0250_batch3b_logic.py` 同批改）。「圖表」作為第六類元件的寫法（狀態、斷線、空狀態、元件判準）為執行組依裁示與 44 既有元件體例寫成，可推翻。 |
+| 影響範圍 | 44 第五節元件 5 → 6 類；元件判準的行 5 → 6（守衛 `tests/ui_v2/test_bl0250_batch3b_logic.py` 同批改）。**客戶 3aA 原文只定系列色與非顏色辨識**；「圖表」列為第六類元件、序列套用四種狀態、缺段斷線、空狀態模板、灰階元件判準（44 之十八其三第 1、2、5 條與元件判準）以及守衛元件判準 5 → 6 的授權依據，皆為執行組讀法／設計，不是客戶原文，可被客戶推翻。 |
 | 是否可逆 | 可逆（客戶可另行裁示） |
 | supersedes／superseded by | supersedes：44 第一節第二小節「顏色只映射資料狀態與新鮮度」之於圖表系列色的射程（原文保留，行尾加註）；44 第五節「五類元件」。superseded by：無 |
 | provenance | **逐字**：引號內文字（字面見逐字存檔）。由執行組單組寫成，未經第二組驗證（44 解凍屬治理／UI SSOT 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核）。 |
 
-### DEC-2026-10-27-28｜客戶裁示 G-44 3bA：期間切換 3M／6M／1Y／3Y 屬 Data View display control，不是投資參數；第一版五頁統一預設 1Y，禁止各頁任意不同
+### DEC-2026-10-27-28｜客戶裁示 G-44 3bA：期間切換 3M／6M／1Y／3Y 屬 Data View display control，不是投資參數；客戶提議第一版統一預設 1Y，既有頁若有更合理的一致預設可在 design spec 統一定義，但禁止各頁任意不同
 
 | 欄位 | 內容 |
 |---|---|
@@ -1410,7 +1410,7 @@
 | 決策內容摘要 | **客戶原話（逐字）**：期間切換「"3M / 6M / 1Y / 3Y"」「屬於 Data View display control，不是：」「投資試算參數」「投資假設」「recommendation input」；「因此可以有預設值。」；第一版統一預設「"1Y"」；「若既有頁已有更合理的一致預設，可在 design spec 統一定義，但禁止各頁任意不同。」 |
 | 理由／背景 | （執行組背景說明，不是客戶原話）`DEC-2026-10-27-13` 裁定九個 G-44 衝突走正式最小解凍、逐項裁示；本筆是其中一項（規格 `docs/design/vnext_visual_blueprint.md` 第 8 節）。對應 `SH-7`／`MK-7` 等核心圖的期間切換。 |
 | evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-27_g44_amendment_rulings.md` 3bA 段。落地：`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十八其四。 |
-| 影響範圍 | 圖表期間切換統一預設 1Y。44 `MKT-4`、`HLD-4` 的使用者輸入窗「無預設值」照舊、期間切換不回寫那兩塊、不改任何卡的計算（執行組讀法，可推翻）。守衛：BL-0508 列尾補記 1Y 預設一致性。 |
+| 影響範圍 | 圖表期間切換：第一版統一預設 1Y（客戶原文為提議語氣）；既有頁若有更合理的一致預設，可在 design spec 統一定義；不論哪一個，各頁不得各自不同。44 `MKT-4`、`HLD-4` 的使用者輸入窗「無預設值」照舊、期間切換不回寫那兩塊、不改任何卡的計算（執行組讀法，可推翻）。守衛：BL-0508 列尾補記 1Y 預設一致性。 |
 | 是否可逆 | 可逆（客戶可另行裁示） |
 | supersedes／superseded by | supersedes：無。superseded by：無 |
 | provenance | **逐字**：引號內文字（字面見逐字存檔）。由執行組單組寫成，未經第二組驗證（44 解凍屬治理／UI SSOT 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核）。 |
@@ -1475,7 +1475,7 @@
 | 決策內容摘要 | **客戶原話（逐字）**：「目前不做：」「排名」「星等」「AI score」「Top 1 / Top 5」；「顯示前 5～10 檔只是 UI 截斷，不代表名次。」；「穩定排序先採可重現 deterministic key，例如："基金代碼"」；「日後若正式建立 ranking model，再另走 Formula / Decision Gate。」 |
 | 理由／背景 | （執行組背景說明，不是客戶原話）`DEC-2026-10-27-13` 裁定九個 G-44 衝突走正式最小解凍、逐項裁示；本筆是其中一項（規格 `docs/design/vnext_visual_blueprint.md` 第 8 節）。對應 `EX-4`。 |
 | evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-27_g44_amendment_rulings.md` 8A 段。落地：`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十八其八第 2～5 條；44 第一節第二小節「禁排名為推薦」、`EXP-2` 規則欄、之四其五第 5 點行尾加註。 |
-| 影響範圍 | 44 `EXP-2`「無綜合分數欄，無星等欄，無排名欄」照舊；`ui_v2/exp/logic.py::FORBIDDEN_COLUMN_WORDS` 本批不動；排名模型登記 BL-0511。 |
+| 影響範圍 | 44 `EXP-2`「無綜合分數欄，無星等欄，無排名欄」照舊；44 第一節第二小節「也不預設排序欄位」與本筆「穩定排序用 deterministic key」的接合（顯示順序鍵不是排序欄位、不是排名）為執行組讀法，可推翻；`ui_v2/exp/logic.py::FORBIDDEN_COLUMN_WORDS` 本批不動；排名模型登記 BL-0511。 |
 | 是否可逆 | 可逆（客戶可另行裁示） |
 | supersedes／superseded by | supersedes：無。superseded by：無 |
 | provenance | **逐字**：引號內文字（字面見逐字存檔）。由執行組單組寫成，未經第二組驗證（44 解凍屬治理／UI SSOT 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核）。 |
