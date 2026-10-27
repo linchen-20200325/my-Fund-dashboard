@@ -29,11 +29,17 @@ _ROW = {
 }
 
 
+_STUB_VIEW = {"domains": [], "provenance": {"readonly": True}}
+
+
 @pytest.fixture
 def fake_st(monkeypatch):
     st = types.SimpleNamespace(secrets={}, session_state={})
     monkeypatch.setattr(source, "st", st)
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", lambda: [])
+    # 2026-10-27 BL-0516 批 1：load_live 另向 L2 `market_view` 要「市場趨勢」區段的 Data View（會呼叫 L1 取 VIX）；
+    # 本檔是接縫測試、不打網路 → 換成固定替身（市場趨勢區段本身的測試在 tests/ui_v2/test_mkt_market_section_*.py）。
+    monkeypatch.setattr(source.market_view, "build_market_view", lambda: dict(_STUB_VIEW))
     # 2026-10-13 起 load_live 另讀已存設定（客戶裁示：市場總覽設定存檔接上）；本檔不測設定，給一張空表。
     # 設定那一段的測試在 tests/ui_v2/test_mkt_settings_logic.py。
     monkeypatch.setattr(source.settings_store, "load_user_settings",
@@ -67,7 +73,9 @@ def test_dataset與fixtures同形_只有rows與errors兩鍵(monkeypatch, fake_st
                                                 if k != "leading_index"],
                              "settings": {"window_days": None, "baseline_date": None, "indicator_keys": None,
                                           "pair_consistent": None},
-                             "settings_error": None}
+                             "settings_error": None,
+                             # 2026-10-27 BL-0516 批 1：另交 L2 Data View（狀態更新，不是漏刪）
+                             "market_view": _STUB_VIEW}
     for row in data["dataset"]["rows"]:
         assert list(row) == list(fixtures.observation("vol_index"))
 
@@ -126,3 +134,24 @@ def test_回傳的是複本_改它不會改到L2的結果(monkeypatch, fake_st):
     data["dataset"]["rows"].append({})
     data["notes"]["pending"]["x"] = "y"
     assert len(table_rows) == 1 and pending == {"leading_index": "ndc_no_release_date"}
+
+
+def test_market_view的失敗原文經真實_mask_view與load_live遮蔽_不含secret(monkeypatch, fake_st):
+    """BL-0516 稽核必修：不以固定替身繞過遮蔽——L2 回含 secret 的 reason，走真的 load_live → _mask_view。"""
+    key = _rnd.token_hex(12)
+    fake_st.secrets = {"FRED_API_KEY": key}
+    raw = f"Yahoo failed key={key} <script>alert(1)</script> 其餘照留"
+    view = {"domains": [
+        {"domain": "vix", "status": "系統錯誤", "reason": raw, "reason_code": None, "source": None,
+         "fetched_at": None, "obs_date": None, "value_unit": None, "points": []},
+        {"domain": "taiex", "status": "資料未備", "reason": "沒有秘密", "reason_code": "x", "source": None,
+         "fetched_at": None, "obs_date": None, "value_unit": None, "points": []}],
+        "provenance": {}}
+    monkeypatch.setattr(source.market_view, "build_market_view", lambda: view)
+    monkeypatch.setattr(source.market_indicator, "build_market_indicator_table",
+                        _fake_table([], {}, {}))
+    out = source.load_live()["notes"]["market_view"]
+    assert key not in repr(out)
+    assert out["domains"][0]["reason"].endswith("其餘照留")
+    assert out["domains"][1]["reason"] == "沒有秘密"
+    assert key in repr(view)          # 原物件未被改動（複本）

@@ -23,6 +23,8 @@
 - `fund_keys`：試算表 `fund_code` → MoneyDJ `full_key`／`portal` 的決定性對照（hld 接真資料 S1；
   strip → upper → L1 `parse_moneydj_input` → `load_fund_code_mapping`，對不上回錯誤、不截斷不猜）。不接 UI。
 - `masking`：失敗原文的秘密值遮蔽（寫出點用）。
+- `market_view`：🌍 市場與趨勢頁「市場趨勢」區段的唯讀 Data View（2026-10-27 BL-0516 批 1，`DEC-2026-10-27-41`、`-42` (c)）：
+  VIX 序列（沿用 B 線 `vol_index` 的 L1 取數與收盤規則）＋尚無正式來源 domain 的 Missing 結構；**不寫 `market_indicator` 表、不改 `INDICATOR_SPECS`**。
 - `exp_universe`：標的探索（exp）正式模式的候選母體 —— 選股池只取代碼（L2 快取成功、失敗沿用 L1 冷卻鑰匙）。
 - `exp_profile`：exp 的 `fund_profile` 逐欄出處（C1 三支自報 L1 → 每格 ok／⬜／⛔ 與來源、原字、取得時間、原因；
   2026-10-14 C2，尚未接 UI）。

@@ -48,6 +48,9 @@ _FILE_ALLOWLIST = {
         "__future__", "os", "streamlit",
         "services.v2_tables.market_indicator", "services.v2_tables.masking",
         "services.v2_tables.settings_store", "ui_v2.mkt.live",
+        # 2026-10-27 BL-0516 批 1（客戶 `DEC-2026-10-27-41`、執行組讀法 `-42` (c)）：🌍 市場趨勢區段的唯讀 Data View
+        # （L2 新檔 `market_view`；只讀、不寫 `market_indicator` 表）。逐模組列名，不開整個 `services`。
+        "services.v2_tables.market_view",
     },
     "ui_v2/app_mkt_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.mkt.page", "ui_v2.mkt.source",

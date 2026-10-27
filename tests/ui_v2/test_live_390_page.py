@@ -60,6 +60,13 @@ _dataset = fixtures.dataset_all_ok()
 _notes = {"pending": {"leading_index": "ndc_no_release_date", "coincident_index": "ndc_no_release_date",
                       "fx_twd_per_usd": "fx_obs_date_rule"},
           "masked_keys": [], "cooldowns": []}
+# 2026-10-27 BL-0516 批 1：加上「市場趨勢」區段（L2 唯讀 Data View；合成序列、不打網路），讓 390 寬不橫捲的守衛涵蓋新區段。
+import pandas as _pd
+from services.v2_tables import market_view as _mv
+_s = _pd.Series([16.0 + (i % 9) * 0.3 for i in range(len(_pd.bdate_range("2024-10-24", "2026-10-23")))],
+                index=_pd.bdate_range("2024-10-24", "2026-10-23"), dtype=float, name="^VIX")
+_s.attrs.update({"fetched_at": "2026-10-27T06:00:00+00:00", "source": "Yahoo:^VIX", "exchange_tz": "Etc/UTC"})
+_notes["market_view"] = _mv.build_market_view(fetch_vix=lambda _t: (_s, None))
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """,
     "hld": _HEAD + """

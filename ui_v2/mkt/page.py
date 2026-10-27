@@ -16,7 +16,7 @@ from datetime import date, datetime, timezone
 import streamlit as st
 
 from .. import health, health_view, plain, readonly, sections, symbols
-from . import fixtures, live, logic, theme
+from . import chart, fixtures, live, logic, market_section, theme
 
 # 層 2／層 3 的斷點直接由 logic 那支**已被測試釘住**的純函式推出來，
 # 不在本檔另寫一份數字（同一個事實只准有一個真相源）。
@@ -126,6 +126,25 @@ def _base_css() -> str:
       color: {theme.TEXT_PRIMARY}; white-space: nowrap;
     }}
     .mkt-scroll {{ overflow-x: auto; }}
+    .mkt-trend-card {{
+      border: 1px solid {theme.BORDER}; background: {theme.SURFACE};
+      border-radius: 8px; padding: .8rem 1rem; margin: .5rem 0;
+    }}
+    .mkt-trend-grid {{
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: .5rem 0;
+    }}
+    .mkt-trend-grid .mkt-trend-card {{ margin: 0; }}
+    .mkt-trend-conclusion {{ font-weight: 600; margin-bottom: .4rem; }}
+    .mkt-trend-row {{
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: .2rem .8rem;
+      border-bottom: 1px dashed {theme.BORDER}; padding: .22rem 0; font-size: .84rem;
+    }}
+    .mkt-trend-row:last-child {{ border-bottom: none; }}
+    .mkt-trend-missing {{
+      border: 1px dashed {theme.BORDER}; border-radius: 6px; padding: .8rem; margin: .4rem 0;
+      color: {theme.TEXT_MUTED}; font-size: .86rem;
+    }}
+    .mkt-trend-note {{ color: {theme.TEXT_MUTED}; font-size: .74rem; margin: .1rem 0; }}
     .mkt-footer {{
       margin-top: 1.6rem; border-top: 1px solid {theme.BORDER}; padding-top: .7rem;
       color: {theme.TEXT_MUTED}; font-size: .8rem;
@@ -637,6 +656,75 @@ def _render_mkt7(block: dict, *, plain_mode: bool = False) -> None:
             st.caption(line)
 
 
+
+# ───────────────────────── 市場趨勢區段（BL-0516 批 1；客戶裁示 C，`DEC-2026-10-27-41`）─────────────────────────
+# 只負責畫：文案、期間切片、規格全在 `market_section` ／ `chart`（純函式，已被測試釘住）。
+# ⚠️ 本區段**不用 `st.columns`**：`_grid_css` 的 `.mkt-layer2 ~ div` 選擇器會把其後所有欄切成三欄，
+# 本區段用自己的 CSS grid（`.mkt-trend-grid`），窄螢幕自動堆成一欄。
+
+_VIX_PERIOD_KEY = "mkt_vix_period"
+
+
+def _trend_card(title: str, inner_html: str, section: str) -> str:
+    return _drop_blank_lines(
+        f'''<div class="mkt-trend-card" data-section="{_esc(section)}">
+          <div class="mkt-card-head"><span class="mkt-card-title">{_esc(title)}</span></div>
+          {inner_html}
+        </div>''')
+
+
+def _conclusion_html(view: dict) -> str:
+    model = market_section.conclusion_model(view)
+    rows = "".join(
+        f'<div class="mkt-trend-row"><span>{_esc(r["label"])}</span>'
+        f'<span style="color:{theme.tone_hex(r["tone"])}">{_esc(r["status_text"])}</span></div>'
+        for r in model["rows"])
+    inner = f'<div class="mkt-trend-conclusion">{_esc(model["text"])}</div>{rows}'
+    return _trend_card("市場結論", inner, "trend-conclusion")
+
+
+def _missing_card_html(domain: dict) -> str:
+    label = market_section.LABELS[domain["domain"]]
+    inner = f'<div class="mkt-trend-missing">{_esc(market_section.missing_copy(domain))}</div>'
+    return _trend_card(label, inner, f"trend-{domain['domain']}")
+
+
+@st.fragment
+def _render_vix_card(domain: dict) -> None:
+    """VIX 折線圖卡。期間切換在 fragment 內：只重跑這一張卡，不重跑整頁（§5 重繪成本）。"""
+    model = market_section.vix_model(domain, chart.DEFAULT_PERIOD)
+    with st.container(border=True):
+        st.markdown(
+            f'<div class="mkt-card-head" data-section="trend-vix"><span class="mkt-card-title">'
+            f'{_esc(market_section.LABELS["vix"])}</span></div>', unsafe_allow_html=True)
+        if domain["status"] == logic.STATE_OK:
+            avail = model["availability"]
+            period = st.radio(
+                "期間", chart.PERIODS, index=chart.PERIODS.index(chart.DEFAULT_PERIOD), horizontal=True,
+                key=_VIX_PERIOD_KEY, label_visibility="collapsed",
+                format_func=lambda p: market_section.period_option_label(p, avail[p]),
+            )
+            model = market_section.vix_model(domain, period)
+        if model["spec"] is not None:
+            st.vega_lite_chart(spec=model["spec"], width="stretch")
+        elif model["message"]:
+            st.markdown(f'<div class="mkt-trend-missing">{_esc(model["message"])}</div>', unsafe_allow_html=True)
+        for line in model["caption_lines"]:
+            st.markdown(f'<div class="mkt-trend-note">{_esc(line)}</div>', unsafe_allow_html=True)
+
+
+def _render_market_section(view: dict) -> None:
+    domains = market_section.domain_by_key(view)
+    st.markdown(f'<div class="mkt-layer-label">{_esc(market_section.SECTION_LABEL)}</div>', unsafe_allow_html=True)
+    st.markdown(_conclusion_html(view), unsafe_allow_html=True)
+    _render_vix_card(domains["vix"])
+    taiex = "".join(_missing_card_html(domains[k]) for k in ("taiex", "taiex_volume", "market_stats"))
+    st.markdown(f'<div class="mkt-trend-grid">{taiex}</div>', unsafe_allow_html=True)
+    intl = "".join(_missing_card_html(domains[k]) for k in ("nasdaq", "msci_world", "msci_em"))
+    st.markdown(f'<div class="mkt-trend-grid">{intl}</div>', unsafe_allow_html=True)
+    eps = "".join(_missing_card_html(domains[k]) for k in ("eps_pe_scenario", "implied_trailing_index_earnings"))
+    st.markdown(f'<div class="mkt-trend-grid">{eps}</div>', unsafe_allow_html=True)
+
 # ───────────────────────── 整頁 ─────────────────────────
 
 
@@ -754,6 +842,10 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         symbols.apply(model)
         # BL-0373（客戶 2026-10-18 裁示）：`MKT-6` 表上一筆觀測也沒有時，表尾那一句依成因改寫（全部失敗 ⛔；混合時另加一行 ⛔）。
         sections.mark_mkt6_fetch_failed(model)
+        # 市場趨勢區段的系統錯誤原文（44 P0-①）：一般畫面只寫「⛔ 取數失敗」，原文併入同一份跨頁原始訊息。
+        market_view_for_raw = notes.get("market_view")
+        if market_view_for_raw is not None:
+            raw = list(raw) + market_section.raw_entries(market_view_for_raw)
         plain.record_raw(st.session_state, "mkt", raw, datetime.now(timezone.utc))
         # Phase 3 P0-②（44 第七節第三小節之七其二第 3、4 條）：同源錯誤只在頁首資料狀態行摘要一次；
         # 核心卡的來源與新鮮度徽章移到 ④「證據／來源」。只改呈現：判定、狀態、顏色一個都不動（`ui_v2/health.py`）。
@@ -828,6 +920,10 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         health_view.render_attention(
             sections.attention_items(model, "mkt"), tone_hex=theme.tone_hex, label_class="mkt-layer-label"
         )
+        # BL-0516 批 1：市場趨勢區段（唯讀 Data View；`notes["market_view"]` 沒給〔舊替身、示範模式〕就整段不畫）。
+        market_view = live_input["notes"].get("market_view")
+        if market_view is not None:
+            _render_market_section(market_view)
         # ④詳細資料（預設收合）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
         st.markdown(f'<div class="mkt-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
     st.markdown(

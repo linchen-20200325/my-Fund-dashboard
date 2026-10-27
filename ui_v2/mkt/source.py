@@ -18,7 +18,8 @@
   `available_keys`（MKT-5 可勾清單：L2 `INDICATOR_SPECS` 裡**第一階段會取數**的鍵，見 `available_keys()`；
   客戶 2026-10-13 裁示「資料層實際可取得、可追溯」，此為總管依裁示的實作解讀）、
   `settings`（**已存**的 `mkt_` 三鍵，經 `live.parse_user_settings` 解析）、
-  `settings_error`（讀不到或解析不了時的訊息原文，已遮蔽；讀得到時為 None）。
+  `settings_error`（讀不到或解析不了時的訊息原文，已遮蔽；讀得到時為 None）、
+  `market_view`（BL-0516 批 1：L2 `market_view` 唯讀 Data View —— 「市場趨勢」區段用；`reason` 已遮蔽）。
 
 `save_setting(鍵, 值或 None, value_kind)` → L2 `save_setting_for_page` 的回傳（純 dict，訊息已遮蔽）；
 體例與 `ui_v2/alo/source.py::save_setting` 相同（同一個 L2 函式、同一份秘密值）。
@@ -31,7 +32,7 @@ import os
 
 import streamlit as st
 
-from services.v2_tables import market_indicator, masking, settings_store
+from services.v2_tables import market_indicator, market_view, masking, settings_store
 
 from . import live
 
@@ -65,6 +66,7 @@ def load_live() -> dict:
     errors = {key: masking.mask_message(message, values)
               for key, message in table["errors"].items()}
     settings, settings_error = _load_settings(values)
+    view = _mask_view(market_view.build_market_view(), values)
     return {
         "dataset": {
             "rows": [dict(row) for row in table["rows"]],
@@ -77,8 +79,20 @@ def load_live() -> dict:
             "available_keys": available_keys(table),
             "settings": settings,
             "settings_error": settings_error,
+            "market_view": view,
         },
     }
+
+
+def _mask_view(view: dict, values) -> dict:
+    """L2 Data View 的失敗原文經遮蔽（寫出點做一次；同 `errors` 的處理）。其餘欄位原樣。"""
+    domains = []
+    for domain in view["domains"]:
+        item = dict(domain)
+        if isinstance(item.get("reason"), str):
+            item["reason"] = masking.mask_message(item["reason"], values)
+        domains.append(item)
+    return {**view, "domains": domains}
 
 
 def available_keys(table) -> list:

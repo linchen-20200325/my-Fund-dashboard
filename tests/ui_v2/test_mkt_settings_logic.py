@@ -95,6 +95,8 @@ def sheet(monkeypatch):
     monkeypatch.setattr(S.store, "load_user_settings", fake.load)
     monkeypatch.setattr(S.store, "save_user_setting", fake.save)
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", list)
+    # 2026-10-27 BL-0516 批 1：load_live 另向 L2 `market_view` 要 Data View（會呼叫 L1 取 VIX）→ 換成固定替身、不打網路。
+    monkeypatch.setattr(source.market_view, "build_market_view", lambda: {"domains": [], "provenance": {}})
     fake.table_rows = fixtures.dataset_all_ok()["rows"]
 
     fake.pending = {}

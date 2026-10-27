@@ -100,6 +100,10 @@ def env(monkeypatch):
     monkeypatch.setattr(S.store, "load_user_settings", sheet.load)
     monkeypatch.setattr(S.store, "save_user_setting", sheet.save)
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", list)
+    # 2026-10-27 BL-0516 批 1：load_live 另向 L2 `market_view` 要 Data View（會呼叫 L1 取 VIX）→ 換成固定替身、不打網路。
+    monkeypatch.setattr(source.market_view, "build_market_view", lambda: {"domains": [], "provenance": {}})
+    # 本檔的 `page.st` 是記錄式替身（沒有 container／radio／vega_lite_chart）；市場趨勢區段另有自己的測試 → 這裡不畫。
+    monkeypatch.setattr(page, "_render_market_section", lambda _view: None)
     # 與正式環境同一組旗標：國發會兩鍵、匯率鍵第一階段不取數（N3：不進可勾清單）
     pending = {"leading_index": "ndc_no_release_date", "coincident_index": "ndc_no_release_date",
                "fx_twd_per_usd": "fx_obs_date_rule"}
