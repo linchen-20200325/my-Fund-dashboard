@@ -59,7 +59,7 @@ _BANNED_DIGESTS: tuple[str, ...] = (
 _INDEX = {d: i for i, d in enumerate(_BANNED_DIGESTS)}
 
 # 空白 + 常見零寬／格式字元
-_STRIP_RE = re.compile(r"[\s​‌‍⁠﻿­]+")
+_STRIP_RE = re.compile(r"[\s\u200b\u200c\u200d\u2060\ufeff\u00ad]+")
 # CJK 統一表意文字（含擴充 A）與相容表意文字
 _CJK_RUN_RE = re.compile(r"[㐀-䶿一-鿿豈-﫿]{2,}")
 _NGRAM_LENGTHS = (2, 3, 4)
@@ -111,7 +111,7 @@ def test_detector_clean_sample_and_strip():
     正控無法在不寫明文的前提下內建；改由 PR 驗證「同一守衛在遮蔽前的 origin/main 上會失敗」。
     """
     assert _line_hits("外部投資教材「挑三揀四」法則") == set()
-    assert _STRIP_RE.sub("", "甲​ 乙　丙") == "甲乙丙"
+    assert _STRIP_RE.sub("", "甲\u200b 乙\u3000丙") == "甲乙丙"
 
 
 def test_no_external_author_names_in_tracked_files():
