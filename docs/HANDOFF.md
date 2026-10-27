@@ -6,22 +6,24 @@
 > 文中若引「約 :N」行號，以 `git show d5d391b:<path>` 讀（本批合併後交接本等檔的行號已因指標行而位移）。
 
 > **⏯ Resume Checkpoint**（規則：`PROJECT_RULES.md` 第 6 節 6.1.2，`DEC-2026-10-26-02`；**總管提供**；接手先依該節恢復流程比對 GitHub，不一致以 GitHub 為準）
-> - **last checkpoint**：2026-10-26（批次 5 文件同步，docs 分支 `docs/handoff-batch4-20261026`；舊版 checkpoint 停在 `623f982e`、寫「批次 4 尚未開工」，已過期，以本區塊為準）
-> - **latest verified main**：`830f0bb2`（`git log origin/main` 查證，2026-10-26）。本階段已合併：#1066 SET-5 零寫入 `c98c9639`、#1067 Active Sheet 狀態機 `d2ca1933`、#1068 移除寫死 `POOL_SHEET_ID` 預設 `fbb08116`、#1069 本檔 checkpoint＋BL-0454～0459 `6f87123d`、#1070 批 3b-1 個人 Sheet 橋接 `8b500f63`、#1071 批 3b-2 設定頁 Google 登入卡 `f1313a8d`、#1072 批 3b-3 Sheet Picker＋「使用這一本」`ea283b8e`、#1073 批 3b-4 hld／alo 只讀 Active Sheet `623f982e`、#1074 本檔 checkpoint＋BL-0460～0469 `065726fe`、#1075 批次 4（個人 token 遮蔽於 5 個 ui_v2 頁、`PersonalSessionError.reason` 區分 `no_active`／`deploy_config`、AUTH_EXPIRED 單次登入提示 `KEY_LOGIN_NOTICE`、過期註解修正）`830f0bb2`
-> - **current branch／PR**：無 in-flight 實作 PR（`gh api` 查 open PR，2026-10-26；本文件批 docs 分支另開 draft PR，以 GitHub 為準）
-> - **current task**：新 B UI Implementation／Security Gate（`DEC-2026-10-26-03`）；批次 3b 已合併、**批次 4 = 完成（#1075）**、批次 5 文件同步 = 本 PR；現為**等待客戶裁示 Decision Gate**（BL-0470～BL-0474 字樣／行為、BL-0477 D1 線框，及既有 BL-0460～BL-0468）
-> - **exact stopping point**：#1075 合併（main `830f0bb2`）後；批次 4 已做完，獨立稽核的剩餘文字／行為項已登記為 BL-0470～BL-0475，待客戶裁示
-> - **next single action（可安全先做）**：D1 雙層側欄導覽殼設計 **Phase 1（只做設計）**（BL-0477）——出桌機＋手機線框、類別→子頁對應等交付物送客戶審；**客戶核准線框前不得寫任何版面程式碼**；凍結的 `docs/v2/44_fund_ui_ssot.md` 不得修改
-> - **需客戶裁示（Decision Gate，登記於 `docs/BACKLOG.md` BL-0460～BL-0468、BL-0470～BL-0474、BL-0477，皆未裁；BL-0470～BL-0474 為批次 4 稽核的字樣／行為項，BL-0475 為待查證）**：①`settings_store.refetch_nav` 仍走舊 `POLICY_SHEET_ID`／服務帳戶路徑、與 hld／alo 不一致（BL-0460）；②單頁入口 `app_hld_live.py`／`app_alo_live.py` 無登入／選本路徑，去留（BL-0461）；③「空白→0.0／100.0」是否與「缺值不等於 0」衝突（BL-0462，Audit First，無 Decision Gate 前不得改公式）；④個人讀取無冷卻／429 退避（BL-0463）；⑤標頭寬鬆度是否與舊路徑一起變嚴（BL-0464）；⑥驗證規則是否加強（BL-0466）；⑦3b-2 三處偏離 65 的處置（BL-0467）；⑧新增使用者可見字樣待客戶定字（BL-0468）；另 BL-0465（redirect_uri 部署清單）為部署事項、非裁示
-> - **下一個 AI 不得做**：不得為 hld／alo／refetch 加任何 `POLICY_SHEET_ID`／服務帳戶 fallback；不得新增或放寬 OAuth scope、不得寫入 Sheet、不得動 SET-4；不得自行改任何使用者可見字樣（含 `請…` 句型，須客戶定字）；不得改 `_normalize_float`／`_normalize_div_cash_pct` 或任何公式／門檻（Audit First＋Decision Gate）；不得編輯凍結的 `docs/v2/44_fund_ui_ssot.md`；不得替未裁示項「順手修」；不得把 PR 內自驗回修 delta 當成已獨立稽核
-> - **風險**：①#1072、#1073 的回修 delta 依各 PR 說明為自驗、未經第二組獨立複驗；②AppTest 頁面測試本機因缺 streamlit／相依只能 CI 驗，各 PR 的完整 slow lane 本機未跑完，本區塊不代為宣稱 CI 結果；③OAuth callback 只在 Google 導回落在設定頁（`/set`）時才處理（BL-0465），部署 `redirect_uri` 設錯登入不會完成；④單頁入口永遠顯示「尚未選定」（BL-0461）；⑤新字樣未經客戶確認（BL-0468）
-> - **開工先讀的 SSOT**：`docs/v2/65_set_wireframe_and_cap_gate_01_02.md`（設定頁最終 Wireframe、J-1～J-13）→ `docs/DECISIONS.md` `DEC-2026-10-26-03`（索引條目，原文在其 evidence 檔）→ `shared/active_sheet.py` 檔頭（Active 狀態機、J-13 畫面路徑）→ `ui_v2/active_gate.py` 檔頭 → `docs/v2/44_fund_ui_ssot.md`（凍結）
-> - **tests／CI**：以 GitHub check-run 逐條 `conclusion` 為準；上一版 checkpoint 查詢 `623f982e` 時 Schema gate success、Fast checks 仍 in_progress（2026-10-26）；`830f0bb2` 的 CI 本批未查，請重查，本區塊不代為宣稱
-> - **unresolved true Stop Gates**：無（上列 Decision Gate 為待客戶裁示登記，不是停住中的 Stop Gate）
-> - **uncommitted／unpushed work**：無
-> - **recommended Model／Effort**：Sonnet 5.5／Medium（D1 導覽設計 Phase 1，僅設計文件）
+> - **last checkpoint**：2026-10-27（客戶 D1 Gate 裁示落盤批，docs 分支 `docs/d1-rulings-44-unfreeze-20261027`；上一版 checkpoint（2026-10-26，`830f0bb2`，「批次 5 文件同步」）已過期，原文在 git 歷史，以本區塊為準）
+> - **latest verified main**：`22fcf724`（`git fetch` ＋ `git log origin/main` 查證，2026-10-27）＝ #1077 D1 雙層側欄導覽 Phase 1 設計草稿（`docs/design/D1_dual_sidebar_nav_phase1.md`）合併後；`830f0bb2` 之後的其他合併以 `git log` 為準
+> - **current branch／PR**：本 docs 分支 draft PR（純文件＋44 凍結守衛 md5／行數更新＋`tests/test_doc_counters.py` 新檔登記；production code 0）；其餘 in-flight PR 本區塊未查，以 GitHub 為準
+> - **客戶 2026-10-27 裁示（`docs/DECISIONS.md` `DEC-2026-10-27-01`～`-06`；逐字存檔 `docs/evidence/decisions/2026-10-27_d1_44_unfreeze_rulings.md`，作者姓名一處遮蔽）**：①「Gate 1 選 A」（方案 A 內容依 D1 草稿 §8.1 定義：殼層先行、不拆頁）；②Gate 2 ＝ 是：44 正式解凍，**只限**五頁頁序、五頁頁名、D1 導覽殼直接需要的條文／守衛，不得全面解凍或順帶改投資規則／資料契約／其他凍結內容；③正式頁序 🌍 市場與趨勢 → ⚖️ 資產配置 → 💼 我的持股 → 🔍 找基金 → ⚙️ 設定；④「移除台股趨勢」（`DEC-2026-10-23-01`）由本次取代；⑤🌍 後續規劃：市場總覽、台股大盤／台股趨勢、國際趨勢，需納入客戶提供的投資教學參考資料（作者；姓名依公開 repo 不入檔）（**尚未進 repo**），台股大盤含 EPS × 本益比 → 加權指數情境分析方向；⑥新內容先落正式規格（`docs/v2/66_market_trend_spec.md` 骨架），不靠聊天記憶；舊 UI 只參考已驗證邏輯／資料 mapping、不沿用舊視覺；⑦不做一鍵再平衡（邊界：偏離檢查／客觀對照／情境試算）
+> - **44 現況**：本批只動兩處 —— 第三節第零小節五頁總表五列格尾行內加註正式頁名與頁序、檔尾新增第七節第三小節之十七；其餘全部維持凍結並已重新凍結。**五頁總表第一欄字面與列序刻意未改**（被 `tests/ui_v2/test_preview_entry.py::test_頁序與頁名逐字對44的五頁總表` 與程式端 `PAGES` 一起鎖住），對齊批同批改
+> - **current task**：D1 Gate 裁示落盤（本 PR）；完成後進入頁序頁名對齊
+> - **exact stopping point**：本 docs PR 開成 draft、待獨立稽核（治理規則／frozen SSOT 修改 → 至少 1 組真正獨立稽核，`PROJECT_RULES.md` 第 8 節）與合併
+> - **next single action（可安全先做；BL-0478 先於 BL-0479＝總管排程決定，可被客戶推翻）**：本 PR 合併後，開 **BL-0478 頁序與頁名的程式＋守衛對齊批**：`ui_v2/app_preview.py::PAGES` 順序與頁名、`test_頁序與頁名逐字對44的五頁總表` 期望值、44 五頁總表第一欄字面與列序（劃線保留舊名）、`PREVIEW_NOTE`／`test_preview_page.py` 側欄斷言等舊頁名字面同批改；url_path 與 `/set` OAuth 落點不改；不得弱化守衛。**之後**才做 BL-0479 方案 A 殼層（先兩個 spike；客戶確認視覺前不寫正式導覽程式）
+> - **需客戶裁示／提供（Decision Gate）**：D1 草稿第 8.3 節 ④ 手機點擊數、⑥ 第二層字面、「風險觀察」是否進導覽（BL-0479）；🌍 參考資料提供與新資料源逐項 Decision Gate（BL-0480）；EPS × 本益比口徑與資料源（BL-0481）；既有 BL-0460～BL-0468、BL-0470～BL-0474 照舊未裁
+> - **下一個 AI 不得做**：不得把 44 解凍範圍擴大到頁序、頁名、D1 殼層直接需要的條文以外；不得改投資規則、資料契約、塊定義；不得在對齊批之外改 `PAGES` 或頁名守衛；不得自創 🌍 新內容的數字、公式、倍數或資料來源（`docs/v2/66` 未填者一律待客戶資料）；不得在正式產品出現參考資料作者或老師姓名；不得做一鍵再平衡；不得改 url_path／OAuth／Active Sheet／唯讀護欄；其餘上一版禁止事項（不寫 Sheet、不放寬 scope、不動 SET-4、不自行改使用者可見字樣、不改公式／門檻）照舊
+> - **風險**：①對齊批之前，44 第一欄與程式端仍是舊頁序頁名，正式頁序以 44 之十七其二為準（文件與程式暫時不一致，屬已登記的過渡）；②BL-0478 的舊頁名使用處清單未逐檔窮舉；③本批 DEC 引號內為逐字（姓名一處遮蔽），條文化與讀法為文件組單組寫成；④OAuth callback 只在 Google 導回落在設定頁（`/set`）時才處理，部署 `redirect_uri` 設錯登入不會完成（BL-0465）；⑤單頁入口 `app_hld_live.py`／`app_alo_live.py` 無登入／選本路徑、永遠顯示「尚未選定」（BL-0461）
+> - **開工先讀的 SSOT**：`docs/DECISIONS.md` `DEC-2026-10-27-01`～`-06` → `docs/v2/44_fund_ui_ssot.md` 第三節第零小節與第七節第三小節之十七 → `docs/design/D1_dual_sidebar_nav_phase1.md` 第 6～8 節 → `docs/BACKLOG.md` BL-0478～BL-0482 → `docs/v2/66_market_trend_spec.md`
+> - **tests／CI**：以 GitHub check-run 逐條 `conclusion` 為準；本機只跑了文件守衛與讀 44 的 logic 測試（見本 PR 說明），本區塊不代為宣稱 CI 結果
+> - **unresolved true Stop Gates**：無（上列為待客戶裁示／提供的登記，不是停住中的 Stop Gate）
+> - **uncommitted／unpushed work**：無（以本 PR head 為準）
+> - **recommended Model／Effort**：**Opus 5.5／Medium**（44 解凍＋長期 IA 階段，`DEC-2026-10-27-06`）；SSOT 收斂完成、進入一般 UI wiring 後重新評估是否可降回 Sonnet 5.5／Medium；**若需切換**，須主動通知客戶（依 `PROJECT_RULES.md` 第 5 節第 10 點 Change Gate 停手格式）
 > - **停止規則**：Stop Gate 必須顯式回報、禁止靜默停住（`DEC-2026-10-26-04`，`PROJECT_RULES.md` 6.1.3）
-> - ⚠️ **本區塊由文件組單組依 GitHub／讀碼寫成，未經第二組獨立驗證；各 BL 項細節與查證範圍見 `docs/BACKLOG.md`。**
+> - ⚠️ **本區塊由文件組單組依 GitHub／讀檔寫成，未經第二組獨立驗證；各 BL 項細節見 `docs/BACKLOG.md`。**
 > - ⚠️ **未完成項不可視為驗收。**
 
 ---
