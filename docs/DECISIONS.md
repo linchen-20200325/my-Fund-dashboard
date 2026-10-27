@@ -1129,6 +1129,19 @@
 | supersedes／superseded by | supersedes：無（套用既有 Gate 的階段指定）。superseded by：無 |
 | provenance | **逐字**：引號內文字。由文件組單組寫成，未經第二組驗證。 |
 
+### DEC-2026-10-27-07｜客戶核准 vNext 視覺藍圖為目標 UI（五頁藍圖＋One AI Brain＋資訊密度 guardrail＋不可偏離事項＋七批順序與每批驗收）；與 D1 草稿為 amendment、與 44／既有 DEC 的衝突須另開 Decision Gate（**不授權實作**）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字，全文見逐字存檔）**，要點句：「請把以下內容視為「客戶已核准的基金儀表板 vNext 視覺藍圖方向」，先正式寫入 GitHub design/spec，再依既有 roadmap 分批實作。」；「這不是抽象設計原則，而是目前目標畫面的具體 blueprint。除非遇到技術限制或與既有 SSOT 衝突，請不要自行換成另一套版型。」；「明確記錄：「此藍圖為 ChatGPT 協作助手與客戶已確認的目標 UI，不得在未經新 Decision Gate 下自行重新設計成不同 IA / visual hierarchy。」」；「若現有 D1 設計文件與本 blueprint 有衝突：不直接覆蓋歷史；明確記錄 supersede / amendment；GitHub 最新正式裁示優先」；「本批先落盤，不要求一次重寫全部 UI。」（各句原為分段或條列，這裡以分號或句號併列，字面見逐字存檔。）**藍圖內容**（總體視覺方向、🌍／⚖️／💼／🔍／⚙️ 各頁第一屏／摘要卡／核心圖／AI 區／頁尾收合、全站 One AI Brain 與固定六行輸出、桌機與手機首屏密度 guardrail、八項不可偏離事項）結構化落於 `docs/design/vnext_visual_blueprint.md` 第 2～6 節，不在本筆重抄。**批次順序（客戶所述）**：1 Shell／navigation → 2 🌍 市場與趨勢 → 3 ⚖️ 資產配置 → 4 💼 我的持股 → 5 🔍 找基金 → 6 ⚙️ 設定 → 7 One AI Brain integration。**每批驗收（客戶所述）**：targeted tests／responsive check／390px mobile check／desktop check／independent audit／CI／Auto-Ship if safe；維持 Silent Autonomous Cruise。**Model／Effort（客戶建議，逐字）**：「建議 Model：Sonnet 5.5／Effort：Medium」（兩行改以斜線併列，字面見逐字存檔）。 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）D1 Gate 1 選 A（`DEC-2026-10-27-01`）只定殼層；客戶同日再給具體目標畫面，要求先落 GitHub 再分批實作。文件組對照 repo 的衝突與缺口登記（69 列；48 列需 Gate）在設計規格第 8 節，**登記不裁決**。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-27_vnext_visual_blueprint.md`（客戶 2026-10-27 指示，經總管於派工單內逐字轉存；原文無作者姓名、無遮蔽）。落地：`docs/design/vnext_visual_blueprint.md`（設計規格＋衝突缺口登記）、`docs/design/D1_dual_sidebar_nav_phase1.md` 檔頭一行指標、`docs/BACKLOG.md` BL-0484～BL-0491 與 BL-0479 列尾補記、`docs/HANDOFF.md` Resume Checkpoint。 |
+| 影響範圍 | **目標畫面的設計規格落盤，不授權任何 production 實作、不改 `ui_v2/**`、不改測試。** 實作順序與驗收如上「客戶所述」；各批依賴的 Decision Gate 見 `docs/design/vnext_visual_blueprint.md` 第 8 節與 BL-0491。**本筆不構成**：新資料來源、新公式、新 threshold、EPS／本益比倍數、方向性輸出（續抱／減碼／降低曝險／替代比較／偏多／偏空／本期行動）、Risk Cap 定義、新 schema、44 任何條文的改寫、第一階段唯讀護欄（`DEC-2026-10-25-04` J-6）的鬆動、Active Sheet／OAuth 變更。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | **supersedes：無（不取代任何既有 DEC）。** **amendment：D1 設計草稿**（`docs/design/D1_dual_sidebar_nav_phase1.md`）第 2.1 節桌機線框（增加可選右側 AI 區）與第 2.2 節手機線框（新增底部導航選項）被本藍圖修正；草稿原文一字未改，只在檔頭加一行指標；第 8.3 節 ④（手機點擊數）、⑥（第二層字面）**只被部分回答、仍未裁**；第 8.4 節方案 A 邊界只約束殼層批（文件組讀法，可被客戶推翻）。**與 `docs/v2/44_fund_ui_ssot.md` 的衝突**：44 一個字未動；本藍圖**不**自行解凍 44——`DEC-2026-10-27-02` 的解凍射程仍只有頁序、頁名與 D1 導覽殼直接需要的條文／守衛；藍圖與 44 的結構衝突（一頁最多 10 塊、層 2 最多 3 張核心卡、一頁只回答自己那一句問題、🔍 不排名不標最佳、各頁邊界、圖表元件、AI 塊）須另開新的 44 解凍 Decision Gate（登記於 BL-0491）。**與既有 DEC 的牴觸**（例：`DEC-2026-10-23-01` 禁 composite 單一總分與建議資產水位、`DEC-2026-10-25-04` J-6 第一階段唯讀）：本筆**不**視為客戶已覆議——藍圖原文自己寫「與既有 SSOT 衝突」時不自行換版型；覆議須客戶明文並對舊條加刪除線保留（文件組讀法，可被客戶推翻）。**GitHub 最新正式裁示優先**（客戶原文）：D1 草稿與本藍圖衝突處，以本筆與 `DEC-2026-10-27-01`～`-06` 的最新者為準。**與 `DEC-2026-10-27-06` 並存**：該筆指定「frozen 44＋長期 IA 階段＝Opus 5.5／Medium」；本筆客戶建議 Sonnet 5.5／Medium。文件組讀法：本批（只寫文件、不碰 frozen 44）依客戶最新建議用 Sonnet 5.5／Medium；之後任何批次若涉及 44 解凍、Risk Cap 或投資核心語意，依 `PROJECT_RULES.md` 第 5 節第 10 點 Change Gate 停手等客戶切換（可被客戶推翻）。superseded by：無 |
+| provenance | **逐字**：引號內文字（全文見逐字存檔，無遮蔽）。「amendment 範圍」「方案 A 邊界只約束殼層批」「不視為客戶已覆議既有 DEC」「Model／Effort 並存讀法」為文件組讀法，可被客戶推翻；衝突缺口登記（69 列）為文件組單組依 `git grep`／讀檔寫成，**未經第二組獨立稽核**（`docs/design/vnext_visual_blueprint.md` 第 9 節）。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1267,3 +1280,4 @@
 - 第四節 `DEC-2026-10-26-03`：索引條目，內容摘自 PR #1062 的 evidence 檔（PR #1062 已合併，main `95a0a8ae`；以 main 上版本為準）；文件組未見客戶對話本身；由文件組單組寫成，未經第二組驗證。
 - 第五節標題：2026-10-26 恢復。該標題於 #1054（`9f6e91a0`）插入 `DEC-2026-10-25-03` 時被截斷，只剩殘片「，以及不屬客戶裁示的決策登記）」；以 pickaxe 搜尋（`log -S`）找到原文 `## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）`（首見 `cfebcc7c`／#997）逐字恢復，未改任何決策語意。另：`DEC-2026-10-25-04` 的 J-14 補記段（#1058）原本落在第五節標題之後（疑因標題殘缺而誤置）；經核對內文屬 `DEC-2026-10-25-04`，2026-10-26 移回該條目表格之後、`DEC-2026-10-26-01` 之前，內容一字未改。
 - 第四節 `DEC-2026-10-27-01`～`-06`：~~客戶 2026-10-27 裁示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；十一點裁示照總管轉達要點拆成六筆，照寫不增刪；~~（→ 2026-10-27 同 PR 稽核回修，有意識的更正，不是漏刪：逐字原文已存 `docs/evidence/decisions/2026-10-27_d1_44_unfreeze_rulings.md`（作者姓名一處遮蔽），六筆的引號內文字改為逐字；文件組仍未見客戶對話本身）`-03` 第 (4) 項「先前指定」的 repo 前例為文件組單組 `git grep`（不宣稱窮舉）；`-02` 的「(c) 在方案 A 下只有頁序、頁名兩項」為文件組判讀；`DEC-2026-10-23-01`、`-10` 的就地 supersede 標示為文件組依派工單寫成；由文件組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-27-07`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_vnext_visual_blueprint.md`，無遮蔽），引號內文字逐字；文件組仍未見客戶對話本身；amendment 範圍、與既有 DEC 的牴觸讀法、Model／Effort 並存讀法為文件組讀法；69 列衝突缺口登記由文件組單組寫成，未經第二組驗證。
