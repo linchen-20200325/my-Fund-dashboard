@@ -18,5 +18,5 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from ui_v2.mkt import page, source  # noqa: E402
 
-st.set_page_config(page_title="市場總覽", layout="wide")
+st.set_page_config(page_title="🌍 市場與趨勢", layout="wide")
 page.render(load_live=source.load_live, save_live=source.save_setting, mask_error=source.mask_error)

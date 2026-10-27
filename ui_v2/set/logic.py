@@ -287,7 +287,7 @@ ANSWERS = {
     "SET-7": "這一欄資料是餵給哪一塊的；這一塊的數字又是從哪幾欄來的",
 }
 
-PAGE_TITLE = "設定與診斷"
+PAGE_TITLE = "⚙️ 設定"
 PAGE_ANSWERS = "畫面上的數字現在可不可信，不可信是卡在哪一段"
 NOT_RESPONSIBLE = (
     "不解釋市場（那是市場總覽）",

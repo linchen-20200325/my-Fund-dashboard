@@ -30,7 +30,7 @@ from . import page_health
 TEXT_NO_ACTIVE = "⬜ 尚未選定持倉資料來源"
 LINK_LABEL = "前往 ⚙️ 設定"
 # 單頁入口（沒有 `st.navigation`，換不了頁）時的說明行。
-LINK_ELSEWHERE_TEXT = "請到「設定與診斷」頁選定持倉資料來源"
+LINK_ELSEWHERE_TEXT = "請到「設定」頁選定持倉資料來源"
 # 總表「尚未設定」那一族要寫哪一項（`page_health.make_item` 的 key）。
 UNCONFIGURED_KEY = "持倉資料來源"
 

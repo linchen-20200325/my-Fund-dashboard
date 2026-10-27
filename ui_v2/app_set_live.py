@@ -18,6 +18,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from ui_v2.set import page, source  # noqa: E402
 
-st.set_page_config(page_title="設定與診斷", layout="wide")
+st.set_page_config(page_title="⚙️ 設定", layout="wide")
 page.render(load_live=source.load_live, save_live=source.save_setting, refetch_live=source.refetch, mask_error=source.mask_error,
             login_live=source.login_live, picker_live=source.picker_live)

@@ -62,7 +62,7 @@ APPLY_DISABLED_REASON = "正式結果只讀已存設定：請按「存檔」，�
 # ~~SAVE_BLOCKED_READ_FAILED_REASON = "讀不到已存設定，為避免覆蓋原本的設定，暫不開放存檔"~~
 # → 總管 2026-10-16 判定（PR #976 稽核後；有意識的更正，不是漏刪）：`errors["user_setting"]` 也涵蓋「讀得到但有問題」
 #   （值解析不了、找不到設定分頁、別列設定鍵空白等，見 `parse_user_settings`），舊字面只說「讀不到」不準 ⇒ 改為涵蓋兩者。
-SAVE_BLOCKED_READ_FAILED_REASON = "已存設定讀取或解析有問題，為避免覆蓋原本的設定，暫不開放存檔；請到設定與診斷頁確認"
+SAVE_BLOCKED_READ_FAILED_REASON = "已存設定讀取或解析有問題，為避免覆蓋原本的設定，暫不開放存檔；請到設定頁確認"
 
 # 哪一類按鈕停用、原因是哪一句。以 `logic` 的按鈕類別（`44` 5.3）判，不以標籤字面判。
 # 「取數」類不在此：客戶 2026-10-09 裁示正式模式拿掉，見 `apply_live_notes`。

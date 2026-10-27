@@ -242,7 +242,7 @@ def test_第3條_總表與明細都寫同一句():
     box = next(e for e in at.expander if e.label == page_health.BLOCK_TITLE)
     texts = " ".join(" ".join(SCAN.markdown_text(m.value).split()) for m in box.markdown)
     assert texts.count("⛔ 本頁狀態無法彙整") == 2 and "MissingClassError" not in texts   # 總表那一列＋明細；不露出類別名
-    assert box.selectbox[0].value == "市場總覽"
+    assert box.selectbox[0].value == "🌍 市場與趨勢"  # 2026-10-27 BL-0478（DEC-2026-10-27-02，決策者：客戶）：頁名換成正式頁名；有意識的政策變更，不是漏刪。 ~~"市場總覽"~~
 
 
 def test_第3條_認不出資料類的取數失敗_逐處寫log(monkeypatch, caplog):

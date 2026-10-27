@@ -306,13 +306,13 @@ def test_設定與診斷頁總表_只開過市場總覽():
     at, _ = _run(SCAN.MKT["未設定"], SCAN.SET["正常"])
     texts, box = _total_texts(at, SCAN)
     table = " ".join(texts[0].split())
-    assert "市場總覽 尚未設定 2 項 ⛔ 取數失敗 1 項 ◇ 資料未備 1 項 ⛔ 主要原因：資料來源的金鑰尚未設定" in table
-    for name in ("持倉體檢", "標的探索", "資產配置"):
+    assert "🌍 市場與趨勢 尚未設定 2 項 ⛔ 取數失敗 1 項 ◇ 資料未備 1 項 ⛔ 主要原因：資料來源的金鑰尚未設定" in table
+    for name in ("💼 我的持股", "🔍 找基金", "⚖️ 資產配置"):  # 2026-10-27 BL-0478（DEC-2026-10-27-02，決策者：客戶）：頁名換正式頁名（舊：市場總覽／持倉體檢／標的探索）；同級順序（`PAGE_NAMES` 的鍵序）本批未動；有意識的政策變更，不是漏刪
         assert f"{name} — 本次尚未開過這一頁 —" in table
     assert page_health.TEXT_SCOPE in " ".join(texts)
     pick = box.selectbox[0]
-    assert pick.label == page_health.TEXT_PICK_LABEL and pick.value == "市場總覽"
-    assert pick.options[0] == "市場總覽"
+    assert pick.label == page_health.TEXT_PICK_LABEL and pick.value == "🌍 市場與趨勢"
+    assert pick.options[0] == "🌍 市場與趨勢"
     assert page_health.TEXT_LAMP_NOTE in " ".join(m.value for m in at.markdown)
 
 
@@ -321,7 +321,7 @@ def test_選單換一頁只換下面那張表_沒開過的頁寫沒有明細():
 
     at, _ = _run(SCAN.MKT["未設定"], SCAN.SET["正常"])
     box = _total_texts(at, SCAN)[1]
-    box.selectbox[0].select("持倉體檢").run()
+    box.selectbox[0].select("💼 我的持股").run()  # 2026-10-27 BL-0478（DEC-2026-10-27-02，決策者：客戶）：頁名換正式頁名（舊：市場總覽／持倉體檢／標的探索）；同級順序（`PAGE_NAMES` 的鍵序）本批未動；有意識的政策變更，不是漏刪
     texts, _box = _total_texts(at, SCAN)
     assert page_health.TEXT_DETAIL_EMPTY in " ".join(texts)
     assert not at.exception
@@ -343,7 +343,7 @@ def test_排序_有異常的頁在前_沒開過的在最後_同級依固定頁�
 
     at, _ = _run(SCAN.MKT["正常"], SCAN.HLD["stale"], SCAN.EXP["未設定"], SCAN.SET["正常"])
     pick = _total_texts(at, SCAN)[1].selectbox[0]
-    assert pick.options == ["標的探索", "持倉體檢", "市場總覽", "資產配置"]
+    assert pick.options == ["🔍 找基金", "💼 我的持股", "🌍 市場與趨勢", "⚖️ 資產配置"]  # 2026-10-27 BL-0478（DEC-2026-10-27-02，決策者：客戶）：頁名換正式頁名（舊：市場總覽／持倉體檢／標的探索）；同級順序（`PAGE_NAMES` 的鍵序）本批未動；有意識的政策變更，不是漏刪
 
 
 def test_不是最新整頁一項_取自卡上留著的時鐘記號():

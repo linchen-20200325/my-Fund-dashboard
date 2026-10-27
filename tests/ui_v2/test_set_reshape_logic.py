@@ -281,6 +281,22 @@ def test_SET3摘要_未設定與型別不符的鍵名寫出來():
 # ───────────────────────── 示範模式 ─────────────────────────
 
 
+def _restore_old_page_title(node, new: str, old: str) -> int:
+    """2026-10-27 BL-0478（`DEC-2026-10-27-02`，決策者：客戶）：頁名換成正式頁名後，模型頂層 `title` 是唯一改的一格。
+    把等於新頁名的 `title` 原地還原成舊頁名，回傳還原了幾格；呼叫端斷言 > 0，再拿舊基準值比 —— 證明模型只差頁名這一格。"""
+    count = 0
+    if isinstance(node, dict):
+        if node.get("title") == new:
+            node["title"] = old
+            count += 1
+        for value in node.values():
+            count += _restore_old_page_title(value, new, old)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            count += _restore_old_page_title(value, new, old)
+    return count
+
+
 def test_示範模型逐位元組不變():
     """示範模式不經過重排（44 之八開頭第 4 條）：logic 交出的示範模型序列化後的 md5 與 P1-⑥ 動工前相同。
     基準值於 c44e1551（P1-④ 稽核通過版）量得：17 情境 × 存檔失敗開關，共 34 個模型。"""
@@ -297,6 +313,8 @@ def test_示範模型逐位元組不變():
             light["text"] = "資料齊、來源皆可達"
             changed += 1
     assert changed > 0
+    # 2026-10-27 BL-0478：頁名「設定與診斷」→「⚙️ 設定」（34 個模型各一格 `title`）；還原後回到同一個舊基準值。
+    assert _restore_old_page_title(restored, "⚙️ 設定", "設定與診斷") == 34
     blob = json.dumps(restored, ensure_ascii=False, sort_keys=True, default=repr).encode()
     assert hashlib.md5(blob).hexdigest() == "e5f44896d645c8b04e342ac1dd720ce0"   # 舊基準值（c44e1551）
 

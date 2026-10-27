@@ -87,12 +87,14 @@ app_preview.main()
 """
 
 # 每一頁畫出來一定有的頁標題（各頁 `page.py` 的 `<div class="…title">頁名</div>`；hld 正式模式錯誤畫面同一個）。
+# 2026-10-27 BL-0478（DEC-2026-10-27-02，決策者：客戶）：頁名換成正式頁名（舊：市場總覽／持倉體檢／標的探索／資產配置／設定與診斷）；
+# 有意識的政策變更，不是漏刪。
 _TITLE = {
-    "mkt": '<div class="mkt-page-title">市場總覽</div>',
-    "hld": '<div class="hld-title">持倉體檢</div>',
-    "exp": '<div class="exp-title">標的探索</div>',
-    "alo": '<div class="alo-title">資產配置</div>',
-    "set": '<div class="set-title">設定與診斷</div>',
+    "mkt": '<div class="mkt-page-title">🌍 市場與趨勢</div>',
+    "hld": '<div class="hld-title">💼 我的持股</div>',
+    "exp": '<div class="exp-title">🔍 找基金</div>',
+    "alo": '<div class="alo-title">⚖️ 資產配置</div>',
+    "set": '<div class="set-title">⚙️ 設定</div>',
 }
 
 
@@ -192,7 +194,7 @@ def test_整個入口跑得起來_預設頁是市場總覽_側邊欄寫明非正
     assert "B 線 UI 預覽（非正式站）" in preview.PREVIEW_NOTE
     # ~~assert "標的探索為示意資料" in at.sidebar.info[0].value~~（2026-10-13 標的探索接上正式模式；狀態更新，不是漏刪）
     assert "示意資料" not in at.sidebar.info[0].value
-    assert '<div class="mkt-page-title">市場總覽</div>' in [e.value for e in at.main.markdown]
+    assert _TITLE["mkt"] in [e.value for e in at.main.markdown]   # 預設頁仍是 mkt（2026-10-27 BL-0478 起頁名為 🌍 市場與趨勢）
     assert not at.main.warning
 
 

@@ -18,5 +18,5 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from ui_v2.hld import page, source  # noqa: E402
 
-st.set_page_config(page_title="持倉體檢", layout="wide")
+st.set_page_config(page_title="💼 我的持股", layout="wide")
 page.render(load_live=source.load_live, mask_error=source.mask_error, save_live=source.save_setting)
