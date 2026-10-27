@@ -2448,6 +2448,7 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/65_set_wireframe_and_cap_gate_01_02.md",
     "docs/v2/66_market_trend_spec.md",   # 2026-10-27 🌍 市場與趨勢正式規格骨架（DEC-2026-10-27-03／-04）
     "docs/v2/67_ai_action_vocabulary.md",   # 2026-10-27 AI 行動語意 SSOT 與 One AI Brain（DEC-2026-10-27-18／-22）
+    "docs/v2/68_bl0509_eps_probe_result.md",   # 2026-10-27 BL-0509 EPS Data Source Probe 第一次真跑結果（DEC-2026-10-27-37／-40）
     "docs/v2/CONSTITUTION.md",
     "docs/v2/README_DRAFT_PACK.md",
 )

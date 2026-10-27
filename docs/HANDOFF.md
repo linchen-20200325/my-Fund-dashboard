@@ -6,18 +6,18 @@
 > 文中若引「約 :N」行號，以 `git show d5d391b:<path>` 讀（本批合併後交接本等檔的行號已因指標行而位移）。
 
 > **⏯ Resume Checkpoint**（規則：`PROJECT_RULES.md` 第 6 節 6.1.2，`DEC-2026-10-26-02`；**總管提供**；接手先依該節恢復流程比對 GitHub，不一致以 GitHub 為準；本區塊為結束對話版，**覆蓋**舊 checkpoint，不累加歷史，舊版在 git 歷史）
-> - **last checkpoint**：2026-10-27，客戶要求正式結束本對話（`DEC-2026-10-27-40`）；不再開始新實作
-> - **① latest verified main**：合併本 PR 前為 `6344cc8a`（#1085，`git fetch origin main` 查證，2026-10-27）；合併本 PR 後 SHA 會變，**以 `git log origin/main` 為準**
-> - **② Open／Draft PR**：除本結束對話文件同步 draft PR 外，GitHub 查證為 0（2026-10-27）；遠端無 `ccr-*` 殘留分支（本 PR 分支除外）
-> - **③ 本對話最後完成的批次／PR**：#1083（frozen 44 G-44 最小 amendment 1A～10A＋守衛，`75b8e7d6`）→ #1084（BL-0484 vNext 殼層：深色側欄、淺色主內容、手機底部導覽，`2d1d5e07`）→ #1085（殼層後續文件同步，`6344cc8a`）；近期 CI（Fast／Schema／Slow）皆 success（總管回報）
-> - **④ 已完成**：D1 殼層（BL-0478／BL-0479／BL-0484 closed）；44 G-44 最小 amendment（BL-0494 closed，44 已重新凍結）；`DEC-2026-10-27-01`～`-39` 裁示與讀法登記；隱私／SSOT 收斂文件批
-> - **⑤ 尚未完成**：BL-0509 EPS Data Source Probe；批次 2～6（BL-0485～BL-0489）；BL-0490 One AI Brain；BL-0492 隱私 forward-only cleanup 與 BL-0497／BL-0508 守衛（以 BACKLOG 實際狀態為準）；BL-0513～BL-0515 稽核非 blocking 小項；Risk Cap（BL-0495）、減碼 trigger（BL-0496）
-> - **⑥ 唯一下一接手點**：**BL-0509 EPS Data Source Probe／Shadow Research**（研究／規格專用；十項研究主題見 BL-0509；不得接正式 signal、不得接 AI Brain、不得用 actual data 冒充 forward forecast）
+> - **last checkpoint**：2026-10-27，BL-0509 第一次 probe 結果落盤（承接客戶結束對話指示 `DEC-2026-10-27-40`）；不開始新實作
+> - **① latest verified main**：合併本 PR 前為 `eb272e9`（#1087，BL-0509 probe 腳本與 workflow，`git log origin/main` 查證，2026-10-27）；合併本 PR 後 SHA 會變，**以 `git log origin/main` 為準**
+> - **② Open／Draft PR**：以 GitHub 實況為準（本批未查 Open PR 數）；遠端另有 probe 專用分支 `probe/twse-eps-trigger`（按鈕分支，內容等於 main `eb272e9`）與 `probe/twse-eps-results`（報告推送分支），皆為既有設計，不處理
+> - **③ 最後完成的批次／PR**：#1083（frozen 44 G-44 最小 amendment）→ #1084（BL-0484 vNext 殼層）→ #1085（殼層後續文件同步）→ #1086（session-close checkpoint）→ #1087（BL-0509 probe 腳本與 workflow，`eb272e9`）→ **本批（待開 PR）：BL-0509 第一次 probe 結果落盤**（GitHub Actions run `40521810949`；報告 `docs/evidence/probe_twse_eps/20261027T143156Z_run40521810949_report.json.gz`；結果文件 `docs/v2/68_bl0509_eps_probe_result.md`）
+> - **④ 已完成**：D1 殼層（BL-0478／BL-0479／BL-0484 closed）；44 G-44 最小 amendment（BL-0494 closed，44 已重新凍結）；`DEC-2026-10-27-01`～`-40` 裁示與讀法登記；隱私／SSOT 收斂文件批；**BL-0509 第一次 probe 完成**：16 個端點 direct 與 nas_proxy 兩路徑結果逐端點相同，TAIEX／個股本益比／單季 EPS／月營收端點可取得，官方未提供市場整體 trailing PE 欄位（⬜ 未證明流量經 NAS；授權、頻率、延遲、修正、universe 均未驗證；詳見 `docs/v2/68_bl0509_eps_probe_result.md`）
+> - **⑤ 尚未完成**：BL-0509 後續（多日重複 probe＋條款人工閱讀；`implied_trailing_index_earnings` 仍 ⬜ 無法判定、forward EPS 與 `g` 仍未取得）；BL-0501 Data Source Decision Gate（待評估）；批次 2～6（BL-0485～BL-0489）；BL-0490 One AI Brain；BL-0492 隱私 forward-only cleanup 與 BL-0497／BL-0508 守衛（以 BACKLOG 實際狀態為準）；BL-0513～BL-0515 稽核非 blocking 小項；Risk Cap（BL-0495）、減碼 trigger（BL-0496）
+> - **⑥ 唯一下一接手點**：**BL-0509 後續（多日重複 probe＋條款人工閱讀）與 Data Source Decision Gate（BL-0501）評估資料備妥後，才進入「🌍 市場與趨勢」正式資料內容**（研究／規格專用；不得接正式 signal、不得接 AI Brain、不得用 actual data 冒充 forward forecast）。**BL-0495（Risk Cap）、BL-0496（減碼 trigger）仍待客戶裁示，繼續阻擋方向性 AI action。**
 > - **⑦ BL-0512 裁示**：客戶逐字「頁內錨點：不另開獨立批次；等各頁內容 Batch 落地時順帶處理。」→ BL-0512 狀態 deferred（`DEC-2026-10-27-40`），未實作
-> - **⑧ 下一優先**：BL-0509（客戶 2026-10-27 指定）
+> - **⑧ 下一優先**：BL-0509 後續（客戶 2026-10-27 指定 BL-0509 為下一優先；第一次 probe 已完成，見 ⑥）
 > - **⑨ Risk Cap／減碼 trigger 未完成**：BL-0495、BL-0496 仍待客戶裁示；**方向性 AI Action 不得提前實作**（`DEC-2026-10-27-40`、`-22`、`-36`）
 > - **⑩ 建議 Model／Effort**：Sonnet 5.5／Medium（客戶 2026-10-27）；BL-0509 若涉及新資料來源評估的決策閘，仍照 Model Change Gate 通知（`PROJECT_RULES.md` 第 5 節）
-> - **⑪ 未提交／未 push／未合併工作**：無（以 GitHub 實況與本 PR head 為準）
+> - **⑪ 未提交／未 push／未合併工作**：本批（BL-0509 結果落盤）的檔案變更（報告檔本身已另行 commit `263cdc9`）；以 GitHub 實況與本 PR head 為準
 > - **⑫ blocker／Stop Gate**：無停住中的 Stop Gate。**待客戶裁示**：批次 2～6 的 G-DATA／G-FORM／G-DIR；BL-0495；BL-0496；BL-0498～BL-0507 Data Source Gates；BL-0491 其餘；各 Decision Gate 待簽字。**已知未驗證**：`alo`／`hld` 在真實 Active Sheet 資料下的淺色畫面未驗；預設頁直開 `/mkt` 出現 Page not found（base 即有，非殼層引入）；20 條瀏覽器測試僅 CI 跑過、本機未跑。**本機已知失敗 5 條**（環境因素，CI 綠）：`test_hld_logic`×2、`test_hld_read_failure_logic`×2、`test_rulings_2026_10_18b_logic`×1
 > - **新 AI 開工必讀順序**：`CLAUDE.md` → `PROJECT_RULES.md` → 本檔 → `docs/BACKLOG.md` → `docs/DECISIONS.md`（`DEC-2026-10-27-25`～`-40`，再往前 `-08`～`-24`、`-01`～`-07`）→ `docs/v2/66_market_trend_spec.md` 第 4 節（BL-0509 用）→ `docs/v2/67_ai_action_vocabulary.md` → `docs/design/vnext_visual_blueprint.md` 第 8 節
 > - **禁止事項**：不得重議已裁示 DEC；不得改 44（凍結，解凍須另行裁示）；commit／PR 不得含 AI 署名、session 網址、模型名；公開 repo 不得寫真人名；missing ≠ 0（不得 `EPS = 0`、不得 fillna(0)、不得假資料）；不得把 TAIEX／市場 PE 命名為正式 forward `EPS_base`；不得做方向性 AI Action
