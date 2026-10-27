@@ -48,21 +48,21 @@ _notes = {{"pending": {{"leading_index": "ndc_no_release_date", "coincident_inde
 
 _OK = _HEAD + """
 _notes["market_view"] = mv.build_market_view(fetch_vix=lambda _t: (_series(), None),
-                                             fetch_taiex=lambda _t: (_tw_series(), None))
+                                             fetch_taiex=lambda _t, _r=None: (_tw_series(), None))
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """
 
 _ERR = _HEAD + """
 _notes["market_view"] = mv.build_market_view(
     fetch_vix=lambda _t: (pd.Series(dtype=float), "Yahoo:^VIX 失敗：HTTP 429 Too Many Requests"),
-    fetch_taiex=lambda _t: (_tw_series(), None))
+    fetch_taiex=lambda _t, _r=None: (_tw_series(), None))
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """
 
 _TWERR = _HEAD + """
 _notes["market_view"] = mv.build_market_view(
     fetch_vix=lambda _t: (_series(), None),
-    fetch_taiex=lambda _t: (pd.Series(dtype=float), "Yahoo:^TWII 失敗：HTTP 429 Too Many Requests"))
+    fetch_taiex=lambda _t, _r=None: (pd.Series(dtype=float), "Yahoo:^TWII 失敗：HTTP 429 Too Many Requests"))
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """
 

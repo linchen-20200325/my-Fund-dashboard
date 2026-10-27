@@ -231,7 +231,7 @@ def test_預設走market_indicator的L1屬性_替身換在market_indicator上兩
 
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", stub)
     view = mv.build_market_view()
-    assert calls == [("^VIX", (), {}), ("^TWII", (), {})]      # TAIEX 與 VIX 同一支 L1，沒有第二套取數
+    assert calls == [("^VIX", (), {}), ("^TWII", ("5y",), {})]      # TAIEX 與 VIX 同一支 L1，沒有第二套取數
     assert _domain(view, "vix")["status"] == mv.STATE_OK
 
 
@@ -244,7 +244,7 @@ def test_TAIEX正常_Yahoo_TWII_逐日收盤_來源標示逐字_不是TWSE官方
     fetch = _Fetch((_tw_series(dates, values), None))
     view = mv.build_market_view(fetch_vix=_Fetch((_series(dates, [16.0] * len(dates)), None)), fetch_taiex=fetch)
     t = _domain(view, "taiex")
-    assert fetch.calls == [(("^TWII",), {})]
+    assert fetch.calls == [(("^TWII", "5y"), {})]          # 只有 TAIEX 要 5y；VIX 仍是單一位置參數
     assert t["status"] == mv.STATE_OK
     assert t["source"] == "Yahoo Finance (^TWII)" == mv.TAIEX_SOURCE_LABEL
     assert "TWSE" not in t["source"] and "證交所" not in t["source"]
@@ -306,3 +306,20 @@ def test_變異_成交量_市場統計_PE_EPS_即使TAIEX有資料也維持Missi
 def test_TAIEX沿用同一支L1_沒有第二套Yahoo取數_INDICATOR_SPECS沒有TAIEX鍵():
     assert not [k for k in mi.INDICATOR_SPECS if "twii" in k.lower() or "taiex" in k.lower()]
     assert not [spec for spec in mi.INDICATOR_SPECS.values() if "^TWII" in repr(spec)]
+
+
+def test_TAIEX要5y_VIX不變_約4年序列3Y可用_2年序列3Y資料不足():
+    """BL-0518：3Y 視窗要有夠長歷史。TAIEX 以 `(^TWII, '5y')` 取數；VIX 仍只傳 ticker（B 線快取鍵不變）。"""
+    from ui_v2.mkt import chart
+
+    assert mv.TAIEX_RANGE == "5y"
+    vix_fetch = _Fetch((_series(_weekdays("2026-10-01", "2026-10-23"), [16.0] * 17), None))
+    four = _weekdays("2022-10-03", "2026-10-23")          # 約 4 年
+    two = _weekdays("2024-10-24", "2026-10-23")           # 約 2 年（舊的預設範圍）
+    t_four = _Fetch((_tw_series(four, [20000.0 + i for i in range(len(four))]), None))
+    view = mv.build_market_view(fetch_vix=vix_fetch, fetch_taiex=t_four)
+    assert vix_fetch.calls == [(("^VIX",), {})] and t_four.calls == [(("^TWII", "5y"), {})]
+    assert chart.availability(_domain(view, "taiex")["points"]) == {"3M": True, "6M": True, "1Y": True, "3Y": True}
+    t_two = _Fetch((_tw_series(two, [20000.0 + i for i in range(len(two))]), None))
+    view2 = mv.build_market_view(fetch_vix=vix_fetch, fetch_taiex=t_two)
+    assert chart.availability(_domain(view2, "taiex")["points"]) == {"3M": True, "6M": True, "1Y": True, "3Y": False}

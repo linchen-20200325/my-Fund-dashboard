@@ -56,6 +56,8 @@ TAIEX_TICKER = "^TWII"
 # TAIEX 來源標示（客戶 2026-10-27 裁示，逐字）：Yahoo 的 ^TWII，不是 TWSE 官方；成交量／市場統計不由它延伸。
 TAIEX_SOURCE_LABEL = "Yahoo Finance (^TWII)"
 TAIEX_VALUE_UNIT = "index"
+# TAIEX 要 3M／6M／1Y／3Y（客戶 2026-10-27 裁示）：L1 預設 2y 不夠 3Y，故只有 ^TWII 這一支改要 5y（既有 `range_` 參數）。
+TAIEX_RANGE = "5y"
 
 # domain 鍵（固定順序＝畫面上狀態列的順序）。
 DOMAIN_VIX = "vix"
@@ -165,16 +167,19 @@ def build_market_view(*, fetch_vix: Optional[Callable] = None, fetch_taiex: Opti
     """組出本頁的 Data View。
 
     `fetch_vix`：測試替身（簽名同 `fetch_yf_close_with_error(ticker)`）；不傳＝L1 真函式。
-    `fetch_taiex`：同上，給 `^TWII`；不傳＝與 VIX 用**同一支**（`fetch_vix` 若有給就是它，否則 L1 真函式）——
-    TAIEX 沒有自己的取數架構。
-    呼叫時**只傳 ticker 一個位置參數**（與 `market_indicator.build_market_indicator_table` 同一個簽名，
+    `fetch_taiex`：同上，給 `^TWII`，簽名同 `fetch_yf_close_with_error(ticker, range_)`；不傳＝與 VIX 用**同一支**
+    （`fetch_vix` 若有給就是它，否則 L1 真函式）——TAIEX 沒有自己的取數架構。
+    VIX：呼叫時**只傳 ticker 一個位置參數**（與 `market_indicator.build_market_indicator_table` 同一個簽名，
     L1 快取鍵相同；多傳一個預設值也會落在不同的快取鍵，見 market_indicator 檔頭）。
+    TAIEX：呼叫 `(^TWII, "5y")`（`TAIEX_RANGE`），讓 3Y 視窗有足夠歷史；**這會讓 ^TWII 有自己的 L1 快取項與請求**
+    （與 B 線 `vol_index` 的 2y 快取鍵無關，B 線與 VIX 的取數完全不變）。同一支 L1、同一個 Yahoo 端點，不是第二套取數架構。
+    視窗切片在客戶端（`ui_v2/mkt/chart.py`）。
     """
     # 經 `market_indicator` 模組取 L1 函式（呼叫時才解析）：與 B 線 `vol_index` 用的是同一個屬性，
     # 測試替身換 `market_indicator.fetch_yf_close_with_error` 時兩邊一起換，不會一邊真打網路。
     fetch = fetch_vix if fetch_vix is not None else market_indicator.fetch_yf_close_with_error
     series, error = _call(fetch, VIX_TICKER)
-    t_series, t_error = _call(fetch_taiex if fetch_taiex is not None else fetch, TAIEX_TICKER)
+    t_series, t_error = _call(fetch_taiex if fetch_taiex is not None else fetch, TAIEX_TICKER, TAIEX_RANGE)
     domains = {DOMAIN_VIX: vix_domain_from_l1(series, error),
                DOMAIN_TAIEX: taiex_domain_from_l1(t_series, t_error)}
     for key in _MISSING_DOMAINS:
