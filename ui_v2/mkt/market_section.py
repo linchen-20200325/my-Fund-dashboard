@@ -158,4 +158,3 @@ def section_strings(view: dict, period: str) -> list:
     for key in _MISSING_COPY:
         out += [LABELS[key], missing_copy(domains[key])]
     return out
-
