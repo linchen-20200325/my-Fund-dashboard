@@ -181,7 +181,9 @@ GAPS = {
         "「本塊數字皆為示意值」，不逐數加註（同 ui_v2/alo）。"
     ),
     "SET-GAP-深色主題前提": (
-        "本頁的對比是在 repo 根的 .streamlit/config.toml（base = dark、textColor #e6edf3）之下量的；"
+        "~~本頁的對比是在 repo 根的 .streamlit/config.toml（base = dark、textColor #e6edf3）之下量的；~~"
+        "（2026-10-27 更正，`DEC-2026-10-27-09`，決策者：客戶；有意識的政策變更，不是漏刪：舊句在寫下當時為真，被權衡掉的是「主內容區也深色」）"
+        "本頁的對比現在是在 repo 根的 .streamlit/config.toml（base = light、backgroundColor #f6f8fa、textColor #1f2328；側欄另有深色一組）之下量的；"
         "Streamlit 元件（輸入欄、展開區標題、按鈕）的字色來自那份設定，不在本頁檔案裡。"
     ),
     "SET-GAP-窄寬度表格": "卡內表格在窄寬度怎麼塌 44 沒寫。本頁讓格內文字在任何字元處換行，不出橫向捲動、不藏欄。",

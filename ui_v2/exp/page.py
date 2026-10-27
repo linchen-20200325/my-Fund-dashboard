@@ -124,12 +124,12 @@ def _base_css() -> str:
     .stApp, .stApp p, .stApp span, .stApp label {{ color: {theme.TEXT_PRIMARY}; }}
     .exp-title {{
       font-size: 1.45rem; font-weight: 700; letter-spacing: .04em;
-      color: {theme.TEAL_BRIGHT}; border-bottom: 2px solid {theme.TEAL_DARK};
+      color: {theme.TEAL_DARK}; border-bottom: 2px solid {theme.TEAL_DARK};
       padding-bottom: .4rem; margin-bottom: .2rem;
     }}
     .exp-sub {{ color: {theme.TEXT_MUTED}; font-size: .82rem; margin-bottom: 1rem; }}
     .exp-layer-label {{
-      color: {theme.TEAL_BRIGHT}; font-size: .72rem; letter-spacing: .18em;
+      color: {theme.TEAL_DARK}; font-size: .72rem; letter-spacing: .18em;
       text-transform: uppercase; margin: 1.1rem 0 .35rem;
     }}
     .exp-lamp {{
@@ -164,7 +164,7 @@ def _base_css() -> str:
       border-bottom: 1px solid {theme.BORDER}; padding-bottom: .45rem; margin-bottom: .6rem;
     }}
     .exp-card-code {{ color: {theme.TEXT_MUTED}; font-size: .72rem; }}
-    .exp-card-title {{ font-weight: 700; color: {theme.TEAL_BRIGHT}; }}
+    .exp-card-title {{ font-weight: 700; color: {theme.TEAL_DARK}; }}
     .exp-note {{ font-size: .78rem; color: {theme.TEXT_SECOND}; margin: .25rem 0; }}
     .exp-detail {{
       border-top: 1px dashed {theme.BORDER}; margin-top: .6rem; padding-top: .5rem;
@@ -439,7 +439,7 @@ def _row_source_html(block: dict, row: dict, colspan: int) -> str:
         head = "".join(f'<th style="white-space:nowrap">{_esc(label)}</th>' for label in live.ROW_SOURCE_LABELS)
         body = "".join("<tr>" + "".join(f"<td>{_esc(cell)}</td>" for cell in line) + "</tr>" for line in rows)
         parts.append(
-            f'<details class="exp-rowsrc"><summary style="color:{theme.TEAL_BRIGHT};font-size:.74rem;cursor:pointer">'
+            f'<details class="exp-rowsrc"><summary style="color:{theme.TEAL_DARK};font-size:.74rem;cursor:pointer">'
             f"{_esc(live.ROW_SOURCE_TITLE)}</summary>"
             f'<div style="overflow-x:auto"><table class="exp-table" style="font-size:.72rem">'
             f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div></details>"

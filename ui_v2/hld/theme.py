@@ -2,6 +2,8 @@
 """色票常數 ＋ WCAG 2.2 AA 對比計算。零 streamlit import。
 
 客戶逐字指定三個色：深色 app 底色 `#0e1117`、青色主色 `#0f6b6c`（深）／`#5fd3d0`（亮）。
+（⚠️ 2026-10-27 更正，`DEC-2026-10-27-09`，決策者：客戶：「深色 app 底色」一項已取代為淺色主內容區（深色只在殼層側欄）；
+本句與下面「這三個一個字都不動」描述的是當時的指定，青色兩值仍然有效。見下方 token 區的說明。）
 **這三個一個字都不動**；其餘的色由草稿 `ui_prototype_hld.html` §J 調校過並在本檔沿用。
 
 客戶 2026-09-22【基金頁設計引導】逐字：
@@ -23,32 +25,36 @@
 
 from __future__ import annotations
 
-# ── 客戶逐字指定（不得更動） ──
-APP_BG = "#0e1117"
+# ── 2026-10-27 殼層批（BL-0484；`DEC-2026-10-27-09`，決策者：客戶；**只限視覺 theme**）：主內容區改淺色（深色在側欄，殼層自己的一組色）。
+# 下面各 token 的值由深色版換成淺色版；舊值在寫下當時為真，被權衡掉的是「主內容區也深色」。**未動**：客戶逐字指定的青色
+# `TEAL_DARK`／`TEAL_BRIGHT` 兩個值（`TEAL_DARK` 在淺底上當青色標題字，`TEAL_BRIGHT` 留給深色側欄）、任何判定、文案、44 塊定義。
+# 每一組前景／背景的對比仍由本檔的 `CONTRAST_PAIRS` 逐組重算（測試母體），數值取自 GitHub Primer 的淺色色階。 ──
+# ── 客戶逐字指定（青色兩值不得更動；`APP_BG` 的深色已由 `DEC-2026-10-27-09` 取代為淺色，見上方說明） ──
+APP_BG = "#f6f8fa"
 TEAL_DARK = "#0f6b6c"
 TEAL_BRIGHT = "#5fd3d0"
 
 # ── 由草稿 §J 沿用的其餘色（皆已逐組算過對比） ──
-SURFACE = "#161b22"        # 卡底
-INPUT_BG = "#11161d"       # 輸入框底
-BUTTON_BG = "#21262d"      # 按鈕底（對比最嚴的一組底色）
-BORDER = "#30363d"         # 純裝飾分隔線（草稿 §J 判為非 UI 元件，門檻不適用）
-EDGE = "#6b7682"           # 可操作控制項與狀態容器的邊界（≥3）
-PLACEHOLDER = "#7d858e"    # 輸入提示字（草稿 §J：#5c666f → #7d858e）
+SURFACE = "#ffffff"        # 卡底
+INPUT_BG = "#ffffff"       # 輸入框底
+BUTTON_BG = "#eaeef2"      # 按鈕底（對比最嚴的一組底色）
+BORDER = "#d0d7de"         # 純裝飾分隔線（草稿 §J 判為非 UI 元件，門檻不適用）
+EDGE = "#6e7781"           # 可操作控制項與狀態容器的邊界（≥3）
+PLACEHOLDER = "#59636e"    # 輸入提示字（草稿 §J：#5c666f → #7d858e）
 
-TEXT_PRIMARY = "#e6edf3"
-TEXT_SECOND = "#c9d1d9"
-TEXT_MUTED = "#8b949e"
+TEXT_PRIMARY = "#1f2328"
+TEXT_SECOND = "#424a53"
+TEXT_MUTED = "#59636e"
 
 # ── 四狀態的顏色語意 → 色碼（語意見 `44` 5.1 卡片表） ──
-STATE_GRAY = "#8b949e"
-STATE_WARN = "#e3b341"
-STATE_WARN_BG = "#241d07"
-STATE_ERR = "#ff4b4b"
-STATE_ERR_BG = "#2b1114"
-ERR_MSG_FG = "#ffb4b4"     # 失敗訊息原文
-ERR_MSG_BG = "#1b1114"
-ERR_MSG_EDGE = "#a24651"   # 失敗訊息框線（草稿 §J：#4a2029 → #a24651）
+STATE_GRAY = "#59636e"
+STATE_WARN = "#8a5a00"
+STATE_WARN_BG = "#fff8c5"
+STATE_ERR = "#cf222e"
+STATE_ERR_BG = "#ffebe9"
+ERR_MSG_FG = "#82071e"     # 失敗訊息原文
+ERR_MSG_BG = "#fff1f0"
+ERR_MSG_EDGE = "#cf222e"   # 失敗訊息框線（草稿 §J：#4a2029 → #a24651）
 
 TONE_HEX = {
     "中性": TEXT_PRIMARY,
@@ -60,7 +66,8 @@ TONE_HEX = {
 ALL_COLORS = (
     APP_BG,
     TEAL_DARK,
-    TEAL_BRIGHT,
+    # `TEAL_BRIGHT`（客戶逐字指定的亮青）2026-10-27 起不再畫在主內容區（淺底上改用 `TEAL_DARK` 當青色標題字，見上方說明），
+    # 只留給殼層的深色側欄（`ui_v2/shell_nav.py::NAV_ACCENT`，同值）；故不在本母體裡。常數本身仍保留（值仍鎖在測試裡）。
     SURFACE,
     INPUT_BG,
     BUTTON_BG,
@@ -133,9 +140,9 @@ CONTRAST_PAIRS = (
     ("取數失敗的紅／頁底", STATE_ERR, APP_BG, TEXT_FLOOR),
     ("失敗訊息原文／訊息底", ERR_MSG_FG, ERR_MSG_BG, TEXT_FLOOR),
     ("輸入提示字／輸入框底", PLACEHOLDER, INPUT_BG, TEXT_FLOOR),
-    ("青色標題／頁底", TEAL_BRIGHT, APP_BG, TEXT_FLOOR),
-    ("青色標題／卡底", TEAL_BRIGHT, SURFACE, TEXT_FLOOR),
-    ("青色標題／按鈕底", TEAL_BRIGHT, BUTTON_BG, TEXT_FLOOR),
+    ("青色標題／頁底", TEAL_DARK, APP_BG, TEXT_FLOOR),
+    ("青色標題／卡底", TEAL_DARK, SURFACE, TEXT_FLOOR),
+    ("青色標題／按鈕底", TEAL_DARK, BUTTON_BG, TEXT_FLOOR),
     # ── 非文字 UI 元件（門檻 3） ──
     ("控制項邊界／頁底", EDGE, APP_BG, UI_FLOOR),
     ("控制項邊界／卡底", EDGE, SURFACE, UI_FLOOR),
@@ -148,7 +155,7 @@ CONTRAST_PAIRS = (
     ("失敗訊息框線／訊息底", ERR_MSG_EDGE, ERR_MSG_BG, UI_FLOOR),
     ("灰燈圓點／卡底", STATE_GRAY, SURFACE, UI_FLOOR),
     ("青色髮絲線／頁底", TEAL_DARK, APP_BG, UI_FLOOR),
-    ("青色髮絲線／卡底", TEAL_BRIGHT, SURFACE, UI_FLOOR),
+    ("青色髮絲線／卡底", TEAL_DARK, SURFACE, UI_FLOOR),
 )
 
 # ⚠️ `BORDER`（`#30363d`）刻意**不在**上表裡：草稿 §J 把它與同型的幾條

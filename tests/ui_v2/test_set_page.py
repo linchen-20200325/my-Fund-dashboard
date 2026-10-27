@@ -368,7 +368,7 @@ def test_瀏覽器量到燈的三種顏色與卡片標題真的是那個顏色(b
         assert color(tab, ".set-lamp-text") == _rgb(hex_color), name
         assert color(tab, ".set-stword") == _rgb(hex_color), name
         if name == "ok":
-            assert color(tab, ".set-card-title") == _rgb(theme.TEAL_BRIGHT)
+            assert color(tab, ".set-card-title") == _rgb(theme.TEAL_DARK)
         tab.close()
 
 

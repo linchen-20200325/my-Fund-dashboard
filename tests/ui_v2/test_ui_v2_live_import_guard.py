@@ -117,6 +117,10 @@ _FILE_ALLOWLIST = {
         "ui_v2.exp.page", "ui_v2.exp.source",
         "ui_v2.alo.page", "ui_v2.alo.source",
         "ui_v2.set.page", "ui_v2.set.source",
+        # 2026-10-27 殼層批（BL-0484／BL-0479；D1 方案 A，客戶 `DEC-2026-10-27-01`；D1 草稿第 8.4 節「改守衛，明載於 PR」）：
+        # 只多這**一個**口子 `ui_v2.shell`（純導覽；自己只 import `streamlit` 與 `ui_v2.shell_nav`，不碰任何頁、`source`、`fixtures`）。
+        # 白名單其餘一個字沒放寬；`shell` 本身受同一份守衛（舊樹／網路／動態 import／`ui_v2.app_*`）掃描。
+        "ui_v2.shell",
     },
 }
 

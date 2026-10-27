@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import re
 import sys
 
 import pytest
@@ -174,6 +175,7 @@ def _restore_all_clear(markup: str) -> str:
 
 
 _SET_TITLE_NEW = '<div class="set-title">⚙️ 設定</div>'
+_HEX = re.compile(r"#[0-9a-fA-F]{6}\b")
 _SET_TITLE_OLD = '<div class="set-title">設定與診斷</div>'
 
 
@@ -198,12 +200,18 @@ def test_示範模式畫面逐位元組不變():
             # 證明示範畫面只差頁名這一格（每個畫面恰一格）。
             assert restored_md.count(_SET_TITLE_NEW) == 1, name
             restored_md = [_SET_TITLE_OLD if m == _SET_TITLE_NEW else m for m in restored_md]
+            # 2026-10-27 BL-0484（DEC-2026-10-27-09，決策者：客戶；有意識的更正，不是漏刪）：主內容區改淺色，頁面 CSS 裡的色碼
+            # （theme token 值）全換；色碼一律換成佔位再取摘要。證明「只差色碼」：同一支腳本在改動前的 main（75b8e7d6）上
+            # 以同樣方式（色碼換佔位）量得 `a0b1d5c5b527d47e1433e0dac1d858d8`，與本檔現值相同；改動前的完整 md5
+            # `1e269cdf55b4f1078cd9624bb6d88ec8` 含色碼，已不適用（舊句在寫下當時為真，被權衡掉的是色碼不得變）。
+            restored_md = [_HEX.sub("#HEX", m) for m in restored_md]
             out.append([name, save_failed, restored_md, [e.label for e in at.expander],
                         [(b.label, b.disabled, b.help) for b in at.button], [c.value for c in at.caption],
                         [r.label for r in at.radio], [t.label for t in at.text_input] + [t.label for t in at.text_area]])
     digest = hashlib.md5(json.dumps(out, ensure_ascii=False).encode()).hexdigest()
     assert _RESTORED, "一盞齊燈也沒還原 —— 這一條會變成空掃"
-    assert digest == "1e269cdf55b4f1078cd9624bb6d88ec8", digest   # 舊基準值（還原 BL-0371 那一句之後）
+    # ~~assert digest == "1e269cdf55b4f1078cd9624bb6d88ec8"~~（含色碼的舊基準值，還原 BL-0371 那一句之後；見上方 2026-10-27 說明）
+    assert digest == "a0b1d5c5b527d47e1433e0dac1d858d8", digest   # 色碼換佔位後的基準值
 
 
 def test_示範模式不重排_沒有需要注意_沒有導覽():

@@ -1,6 +1,16 @@
+# 2026-10-27 殼層批（BL-0484；`DEC-2026-10-27-09`，決策者：客戶；只限視覺 theme）：
+# 主內容區淺色、側欄深色。~~base = "dark"／backgroundColor = "#0e1117"／secondaryBackgroundColor = "#161b22"／textColor = "#e6edf3"~~
+# （有意識的政策變更，不是漏刪：舊值在寫下當時是客戶逐字指定的全深色方向；被權衡掉的是「主內容區也深色」，
+# 客戶 2026-10-27 裁示不要先維持全深色再做第二次 theme migration）。
+# 深色側欄的色票與 `ui_v2/shell_nav.py` 的 NAV_* 同值（Streamlit 原生元件吃這裡，殼層自繪的連結吃 shell_nav 的 CSS）。
 [theme]
-base = "dark"
+base = "light"
 primaryColor = "#1f6feb"
+backgroundColor = "#f6f8fa"
+secondaryBackgroundColor = "#eef1f4"
+textColor = "#1f2328"
+
+[theme.sidebar]
 backgroundColor = "#0e1117"
 secondaryBackgroundColor = "#161b22"
 textColor = "#e6edf3"
