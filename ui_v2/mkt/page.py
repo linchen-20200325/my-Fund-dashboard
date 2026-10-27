@@ -663,6 +663,7 @@ def _render_mkt7(block: dict, *, plain_mode: bool = False) -> None:
 # 本區段用自己的 CSS grid（`.mkt-trend-grid`），窄螢幕自動堆成一欄。
 
 _VIX_PERIOD_KEY = "mkt_vix_period"
+_TAIEX_PERIOD_KEY = "mkt_taiex_period"
 
 
 def _trend_card(title: str, inner_html: str, section: str) -> str:
@@ -690,25 +691,28 @@ def _missing_card_html(domain: dict) -> str:
 
 
 @st.fragment
-def _render_vix_card(domain: dict) -> None:
-    """VIX 折線圖卡。期間切換在 fragment 內：只重跑這一張卡，不重跑整頁（§5 重繪成本）。"""
-    model = market_section.vix_model(domain, chart.DEFAULT_PERIOD)
+def _render_price_card(domain: dict, key: str, model_fn, period_key: str) -> None:
+    """日頻收盤折線圖卡（VIX、TAIEX 共用，同一個 `chart`）。期間切換在 fragment 內：只重跑這一張卡，不重跑整頁（§5 重繪成本）。"""
+    model = model_fn(domain, chart.DEFAULT_PERIOD)
     with st.container(border=True):
         st.markdown(
-            f'<div class="mkt-card-head" data-section="trend-vix"><span class="mkt-card-title">'
-            f'{_esc(market_section.LABELS["vix"])}</span></div>', unsafe_allow_html=True)
+            f'<div class="mkt-card-head" data-section="trend-{_esc(key)}"><span class="mkt-card-title">'
+            f'{_esc(market_section.LABELS[key])}</span></div>', unsafe_allow_html=True)
         if domain["status"] == logic.STATE_OK:
             avail = model["availability"]
             period = st.radio(
                 "期間", chart.PERIODS, index=chart.PERIODS.index(chart.DEFAULT_PERIOD), horizontal=True,
-                key=_VIX_PERIOD_KEY, label_visibility="collapsed",
+                key=period_key, label_visibility="collapsed",
                 format_func=lambda p: market_section.period_option_label(p, avail[p]),
             )
-            model = market_section.vix_model(domain, period)
+            model = model_fn(domain, period)
         if model["spec"] is not None:
             st.vega_lite_chart(spec=model["spec"], width="stretch")
         elif model["message"]:
             st.markdown(f'<div class="mkt-trend-missing">{_esc(model["message"])}</div>', unsafe_allow_html=True)
+        if model.get("period_return") is not None:
+            st.markdown(f'<div class="mkt-trend-note" data-section="trend-{_esc(key)}-return">'
+                        f'{_esc(model["period_return"]["text"])}</div>', unsafe_allow_html=True)
         for line in model["caption_lines"]:
             st.markdown(f'<div class="mkt-trend-note">{_esc(line)}</div>', unsafe_allow_html=True)
 
@@ -717,8 +721,9 @@ def _render_market_section(view: dict) -> None:
     domains = market_section.domain_by_key(view)
     st.markdown(f'<div class="mkt-layer-label">{_esc(market_section.SECTION_LABEL)}</div>', unsafe_allow_html=True)
     st.markdown(_conclusion_html(view), unsafe_allow_html=True)
-    _render_vix_card(domains["vix"])
-    taiex = "".join(_missing_card_html(domains[k]) for k in ("taiex", "taiex_volume", "market_stats"))
+    _render_price_card(domains["vix"], "vix", market_section.vix_model, _VIX_PERIOD_KEY)
+    _render_price_card(domains["taiex"], "taiex", market_section.taiex_model, _TAIEX_PERIOD_KEY)
+    taiex = "".join(_missing_card_html(domains[k]) for k in ("taiex_volume", "market_stats"))
     st.markdown(f'<div class="mkt-trend-grid">{taiex}</div>', unsafe_allow_html=True)
     intl = "".join(_missing_card_html(domains[k]) for k in ("nasdaq", "msci_world", "msci_em"))
     st.markdown(f'<div class="mkt-trend-grid">{intl}</div>', unsafe_allow_html=True)

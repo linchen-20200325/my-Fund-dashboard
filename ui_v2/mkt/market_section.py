@@ -27,9 +27,9 @@ TEXT_NO_CONCLUSION = "暫無完整市場綜合判定（缺正式 aggregation rul
 TEXT_EPS_PE_MISSING = "⬜ EPS 預估資料未取得，無法計算正式指數情境"
 TEXT_IMPLIED_UNDETERMINABLE = "⬜ 無法判定"
 TEXT_INTL_MISSING = "⬜ Missing／Data Gap：目前沒有正式資料來源"
-TEXT_TAIEX_PENDING = "⬜ 資料來源待確認"
 TEXT_DATA_GAP = "⬜ Data Gap：目前沒有已核准的資料來源"
 TEXT_FRESHNESS_THRESHOLD = "新鮮度門檻 ⬜ 門檻待裁示：本圖只顯示資料日期與經過天數，不判新舊"
+TEXT_PERIOD_RETURN_UNDETERMINABLE = "⬜ 無法判定"
 TEXT_GAP_NOTE = "圓點為實際觀測日；相鄰觀測之間的連線不代表中間日有資料；缺值日不補值"
 
 # domain → 畫面名稱
@@ -47,7 +47,6 @@ LABELS = {
 
 # 沒有正式來源的 domain → 固定文案（只在 view 的 status 為 `資料未備` 時使用；其他狀態一律照狀態字面，不套用）
 _MISSING_COPY = {
-    "taiex": TEXT_TAIEX_PENDING,
     "taiex_volume": TEXT_DATA_GAP,
     "market_stats": TEXT_DATA_GAP,
     "nasdaq": TEXT_INTL_MISSING,
@@ -107,15 +106,35 @@ def freshness_text(obs_date: str, fetched_at: str) -> str:
     return "經過 0 日" if delay == 0 else "未定義"
 
 
-def vix_model(domain: dict, period: str) -> dict:
-    """VIX 圖卡模型。`period` 是目前選的期間。
+def period_return(points: list) -> dict:
+    """期間漲跌（確定性、只用已觀測的點）：視窗內最後一個有值收盤 vs 第一個有值收盤。
 
-    - `domain.status != ok`：沒有圖，`message` 是原因（系統錯誤照 `logic.fetch_failed_text` 原文；資料未備寫原因）。
+    `points` 是 `chart.slice_period` 在 `status == "ok"` 時交回的視窗內點（可含 None 的點；None 不算觀測）。
+    有值的點少於 2 個、或起點收盤不為正 → `{"status": "undeterminable", "text": "⬜ 無法判定"}`；不補值、不內插。
+    成功 → `{"status": "ok", "pct": float, "first_obs", "last_obs", "text": "期間漲跌 +x.x%（起日 至 迄日，收盤）"}`。
+    這是價格算術，不是判定：不分偏多偏空、不上方向顏色。
+    """
+    valued = [p for p in points if isinstance(p.get("value_num"), (int, float))]
+    if len(valued) < 2 or valued[0]["value_num"] <= 0:
+        return {"status": "undeterminable", "pct": None, "first_obs": None, "last_obs": None,
+                "text": TEXT_PERIOD_RETURN_UNDETERMINABLE}
+    first, last = valued[0], valued[-1]
+    pct = (last["value_num"] / first["value_num"] - 1.0) * 100.0
+    return {"status": "ok", "pct": pct, "first_obs": first["obs_date"], "last_obs": last["obs_date"],
+            "text": f"期間漲跌 {pct:+.1f}%（{first['obs_date']} 至 {last['obs_date']}，收盤價）"}
+
+
+def _price_model(domain: dict, period: str, *, key: str, short_label: str, value_title: str,
+                 with_return: bool = False) -> dict:
+    """日頻收盤折線圖卡模型（VIX、TAIEX 共用，同一份 `chart`）。`period` 是目前選的期間。
+
+    - `domain.status != ok`：沒有圖，`message` 是原因（系統錯誤只寫「⛔ 取數失敗」，原文走 `raw_entries`；資料未備寫原因）。
     - ok：`slice` 是 `chart.slice_period` 的結果；`slice.status == insufficient` → 沒有圖，message 為固定文案。
     """
     avail = chart.availability(domain["points"]) if domain["status"] == logic.STATE_OK else {p: False for p in chart.PERIODS}
-    model = {"label": LABELS["vix"], "status": domain["status"], "availability": avail, "period": period,
-             "slice": None, "spec": None, "message": None, "caption_lines": [], "freshness": None}
+    model = {"label": LABELS[key], "status": domain["status"], "availability": avail, "period": period,
+             "slice": None, "spec": None, "message": None, "caption_lines": [], "freshness": None,
+             "period_return": None}
     if domain["status"] == logic.STATE_ERROR:
         # 44 第七節 P0-①：原文不上一般畫面，只寫狀態字；原文走 `raw_entries` 進跨頁原始訊息。
         model["message"] = _STATUS_TEXT[logic.STATE_ERROR]
@@ -140,9 +159,22 @@ def vix_model(domain: dict, period: str) -> dict:
         model["message"] = chart.TEXT_EMPTY
     else:
         model["spec"] = chart.build_spec(
-            sliced["points"], label="VIX", value_title="指數點位（index）", color=theme.TEAL_DARK,
-            description=f"{LABELS['vix']}近 {period} 日收盤折線圖，資料日期至 {domain['obs_date']}")
+            sliced["points"], label=short_label, value_title=value_title, color=theme.TEAL_DARK,
+            description=f"{LABELS[key]}近 {period} 日收盤折線圖，資料日期至 {domain['obs_date']}")
+        if with_return:
+            model["period_return"] = period_return(sliced["points"])
     return model
+
+
+def vix_model(domain: dict, period: str) -> dict:
+    """VIX 圖卡模型。"""
+    return _price_model(domain, period, key="vix", short_label="VIX", value_title="指數點位（index）")
+
+
+def taiex_model(domain: dict, period: str) -> dict:
+    """TAIEX 圖卡模型（來源 Yahoo `^TWII`，標示由 L2 的 `source` 帶入；另有期間漲跌，確定性算術）。"""
+    return _price_model(domain, period, key="taiex", short_label="TAIEX", value_title="指數點位（index）",
+                        with_return=True)
 
 
 def period_option_label(period: str, available: bool) -> str:
@@ -162,6 +194,14 @@ def section_strings(view: dict, period: str) -> list:
         out.append(vix["message"])
     if vix["spec"] is not None:
         out += chart.spec_strings(vix["spec"])
+    taiex = taiex_model(domains["taiex"], period)
+    out += [taiex["label"], *taiex["caption_lines"]]
+    if taiex["message"]:
+        out.append(taiex["message"])
+    if taiex["period_return"] is not None:
+        out.append(taiex["period_return"]["text"])
+    if taiex["spec"] is not None:
+        out += chart.spec_strings(taiex["spec"])
     for key in _MISSING_COPY:
         out += [LABELS[key], missing_copy(domains[key])]
     return out
