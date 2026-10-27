@@ -548,13 +548,13 @@
 
 > **出處**：客戶 2026-10-27 正式裁示，逐字存檔 `docs/evidence/decisions/2026-10-27_vnext_gate_rulings.md` 第十一、十二節；決策者：**客戶**。位階同第 3 節 3.1。
 
-1. **核心原則**：公開 GitHub repo 不得公開外部教材作者／老師的真實姓名，也不得讓人從上下文反推出作者身分。
+1. **核心原則**：公開 GitHub repo 不得公開外部教材作者／老師的真實姓名，也不得讓人從上下文反推出作者身分。**射程及於未來的新對話與新專案 AI**（客戶原話：「確保未來新對話／新專案 AI 不會再次把教材作者姓名寫進公開 repo。」）——接手的 AI 不論是否讀過本次對話，一律適用。
 2. **一律用中性名稱**，例如：「外部投資教材」「客戶提供之投資教材」「台股大盤／國際趨勢參考教材」「External Investment Reference」。
 3. **射程（新增或修改內容一律不得出現真實姓名）**：`PROJECT_RULES.md`、`docs/DECISIONS.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md`、design／spec、evidence、程式碼、helper／function／class／constant 名稱、註解、測試名稱、fixture、PR title、PR body、commit message、review comment、audit report、issue、branch name。
 4. **可以保存**：公式、方法、原始數值、日期、資料口徑、source evidence、教材頁面／章節位置；**不得保存作者姓名**。
 5. **既有內容（歷史姓名處理，`DEC-2026-10-27-16`）**：不 force-push、不 rewrite Git history；對 default branch 目前可見的文件、程式碼、註解、helper 名稱、測試、evidence 做 **forward-only cleanup** —— 姓名不是程式必要識別者一律改中性名稱；已公開、須改寫歷史才能移除的 commit／PR metadata 只登記 historical exposure、不改寫、不再擴散，新文件不得再次引用。待辦：`docs/BACKLOG.md` BL-0492（cleanup）、BL-0493（historical exposure）、BL-0497（守衛測試）。
-6. **轉存客戶原文時**：原文含姓名者，以「〔作者姓名：公開 repo 不入檔〕」之類的遮蔽字樣取代並在檔頭登記（前例 `docs/evidence/decisions/2026-10-27_d1_44_unfreeze_rulings.md`）；遮蔽是本規則要求的格式處理，不算改動裁示字句。
-7. **自查**：送出 commit、PR 或檔案前，確認上列射程內沒有真實姓名；守衛測試落地前（BL-0497）靠人工自查，不宣稱已有機器守衛。
+6. **轉存客戶原文時**（文件組讀法，可被客戶推翻）：原文含姓名者，以「〔作者姓名：公開 repo 不入檔〕」之類的遮蔽字樣取代並在檔頭登記（前例 `docs/evidence/decisions/2026-10-27_d1_44_unfreeze_rulings.md`）；遮蔽是本規則要求的格式處理，不算改動裁示字句。
+7. **自查**（文件組讀法，可被客戶推翻）：送出 commit、PR 或檔案前，確認上列射程內沒有真實姓名；守衛測試落地前（BL-0497）靠人工自查，不宣稱已有機器守衛。
 8. 本節與 `DEC-2026-10-22-05` (5)（正式產品命名不得用作者／老師姓名）同向，是射程擴大，不取代。不構成動工授權（`CLAUDE.md` §-1）。
 
 ## 第 13 節｜Domain-rule 索引（基金領域護欄 14 條）
