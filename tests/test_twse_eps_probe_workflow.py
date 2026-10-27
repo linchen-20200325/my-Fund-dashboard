@@ -6,7 +6,10 @@
 加了 `push` 到 `probe/twse-eps-trigger`（按鈕分支）。這條觸發只能當「按鈕」：
 
 1. `on.push.branches` **只有** `probe/twse-eps-trigger`（不得擴成 main 或萬用字元）；
-   `workflow_dispatch` 保留；沒有排程、沒有 pull_request。
+   `workflow_dispatch` 保留；沒有 pull_request。
+   **2026-10-27 起（客戶裁示 A）新增固定排程 `schedule`**：恰好兩條 cron、僅週一至週五、分鐘不落在整點／半點、
+   小時與分鐘皆為固定整數（無 `*`／步進）。排程事件走與手動相同的路徑（同樣 checkout main、同樣 secret 範圍）。
+   停用方式：刪除 `schedule:` 區塊並 PR（見 yml 檔頭）；停用時本檔 `test_schedule_*` 需一併改為斷言無排程。
 2. **恰好一個** `actions/checkout`，且明確 `ref: main` —— 執行的永遠是 main 上的腳本。
 3. step 的 `run` / `with` / `env` 與 job `env` **不得引用觸發端的 ref／SHA**
    （`github.sha` / `github.ref` / `github.head_ref` / `GITHUB_SHA` / `GITHUB_REF` / `head_ref`）
@@ -146,8 +149,51 @@ def test_push_trigger_only_button_branch(wf):
     assert isinstance(push, dict), "應有 push 觸發（按鈕分支）"
     assert set(push) == {"branches"}, f"push 只允許 branches 篩選，實際 {sorted(push)}"
     assert push["branches"] == [_TRIGGER]
-    for forbidden in ("schedule", "pull_request", "pull_request_target", "workflow_run"):
+    for forbidden in ("pull_request", "pull_request_target", "workflow_run", "issue_comment", "repository_dispatch"):
         assert forbidden not in on, f"不得有 {forbidden} 觸發"
+    assert set(on) == {"push", "schedule", "workflow_dispatch"}, f"on: 只允許 push／schedule／workflow_dispatch：{sorted(on, key=str)}"
+
+
+_EXPECTED_CRONS = ["37 11 * * 1-5", "43 22 * * 1-5"]   # 台北週一至週五 19:37／週二至週六 06:43
+
+
+def test_schedule_exactly_two_weekday_crons_off_the_hour(wf):
+    sched = _on(wf).get("schedule")
+    assert isinstance(sched, list), "應有 schedule（2026-10-27 客戶裁示 A）"
+    assert all(isinstance(x, dict) and set(x) == {"cron"} for x in sched), f"schedule 項目只允許 cron：{sched!r}"
+    crons = [x["cron"] for x in sched]
+    assert crons == _EXPECTED_CRONS, f"cron 與裁示不符：{crons}"
+    for c in crons:
+        f = c.split()
+        assert len(f) == 5, f"cron 應為 5 欄：{c}"
+        minute, hour, dom, mon, dow = f
+        assert minute.isdigit() and hour.isdigit(), f"分鐘／小時須為固定整數：{c}"
+        assert int(minute) not in (0, 30), f"分鐘不得落在整點／半點：{c}"
+        assert (dom, mon) == ("*", "*"), f"不得限定日期／月份：{c}"
+        assert dow == "1-5", f"僅週一至週五：{c}"
+
+
+def test_schedule_utc_to_taipei_matches_header_comment(wf):
+    """cron 為 UTC；換算成台北（UTC+8，可能跨日）後的星期範圍與時刻，必須與檔頭註解逐條一致。"""
+    names = "日一二三四五六"
+    head = _WF.read_text(encoding="utf-8").split("\non:\n", 1)[0]
+    for item in _on(wf)["schedule"]:
+        cron = item["cron"]
+        minute, hour, _dom, _mon, dow = cron.split()
+        lo, hi = (int(x) for x in dow.split("-"))
+        total = int(hour) + 8
+        shift = 1 if total >= 24 else 0
+        tp_h, tp_m = total % 24, int(minute)
+        lo2, hi2 = (lo + shift) % 7, (hi + shift) % 7
+        expect = f"`{cron}` ＝ 台北週{names[lo2]}至週{names[hi2]} {tp_h:02d}:{tp_m:02d}"
+        assert expect in head, f"檔頭註解與 cron 換算不符，應含：{expect}"
+
+
+def test_schedule_is_documented_in_header_with_disable_instruction():
+    head = _WF.read_text(encoding="utf-8").split("\non:\n", 1)[0]
+    for needle in ("shadow probe", "2026-10-27", "如何停用", "schedule:", "不接正式 signal"):
+        assert needle in head, f"yml 檔頭缺少排程說明：{needle}"
+    assert "沒有排程" not in head, "檔頭仍寫著『沒有排程』（過期敘述）"
 
 
 def test_exactly_one_checkout_and_it_pins_main(wf):
