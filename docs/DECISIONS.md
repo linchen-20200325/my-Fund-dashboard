@@ -1571,6 +1571,32 @@
 | supersedes／superseded by | supersedes：BL-0512「待確認」狀態（`DEC-2026-10-27-10`／`-11` 本身不變）。superseded by：無 |
 | provenance | **逐字**（四句引號內文字）；「結束對話」為客戶要求的轉述；影響範圍欄為文件組讀法，可推翻。 |
 
+### DEC-2026-10-27-41｜客戶裁示 A＋C 並行：BL-0509 多日 probe（可啟用固定每日排程、授權條款不阻塞 C）與 🌍 不依賴 EPS 的內容同步開始；EPS×PE 與 `implied_trailing_index_earnings` 維持 Missing；A、C 分開 PR／evidence
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **客戶原話（逐字，要點句；全文見逐字存檔）**：「正式裁示：A + C 並行。」**A｜BL-0509 多日 probe**：「請再跑 3～5 個交易日的唯讀 probe」，補齊「update frequency、publication lag、revision behavior、openapi / rwd 資料時間差、schema stability、Missing behavior」；「可以沿用既有 trigger branch / workflow 模式。」固定每日排程「可以做，但限制：僅 BL-0509 shadow probe；checkout main；不接正式 signal；不接 AI Brain；不寫正式資料層；不暴露 secret；不新增付費來源；結果仍落到 probe results branch / evidence」；「不需要每天回報客戶；累積到足夠樣本後一次回報。」**授權／條款**：「不要因 TWSE 條款頁 redirect 沒讀到，就永久卡住整個頁面。」先研究 TWSE OpenAPI / Open Data 官方公開說明與資料使用條款；workflow 能安全跟隨到官方同網域／官方條款頁時「可另做最小唯讀研究」；仍取不到正式條款內容則「明確標：「⬜ 授權條款尚未完成驗證」」；「不要自行推定「可商用」或「不可商用」」；若需客戶人工閱讀，「最後只提供：精確頁面；要確認的條款項目；為什麼它會影響正式接入」；「不要現在因此阻塞 C。」**C｜同步開始 🌍 不依賴 EPS 的內容**：「可以先進行 🌍 市場與趨勢頁中「不需要 forward EPS / g」的部分。優先盤點並重用舊 UI 已存在且可追溯的資料取得邏輯，但必須重新驗證 B 線 Data Contract。」可先做：(1) 台股市場資料（TAIEX、期間走勢、市場成交／市場統計、已驗證的 trailing / actual 指標、資料日期與 freshness）；(2) 國際市場「只使用 repo 已存在且有可靠來源的資料」（例：S&P 500、美債殖利率、VIX、其他正式 macro / market series 可盤點並接入新的 Data View），「不新增未核准 API；NASDAQ / MSCI World / MSCI EM 若目前沒有正式來源，維持 Missing / Data Gap；不為了符合藍圖而補假資料」；(3) 圖表層（TAIEX 3M / 6M / 1Y / 3Y；已有的國際市場指數／風險指標圖；freshness / source / Missing 顯示）；(4) 市場結論「目前只能顯示 deterministic / rule-supported 的局部狀態」，完整「中性偏多／中性偏空」缺正式 aggregation rule 時「不要讓 AI 自行判斷」，可顯示「各 domain 狀態；資料不足；暫無完整市場綜合判定」。**EPS×PE 區塊**維持「⬜ EPS 預估資料未取得，無法計算正式指數情境」；「不要因 actual / trailing EPS 已取得就把它升格成 forward EPS」；不用歷史成長率當 g、不 AI 外推 g、不用教材案例值當永久預估、不反推教材矩陣作正式模型；「未來正式 forward EPS / g 必須再走 Data Source Decision Gate」。**`implied_trailing_index_earnings`** 維持「⬜ 無法判定」（缺官方市場整體 trailing PE、可驗證 denominator / universe、股本權重或等價方法）；「不要把個股 1084 筆 PE 做簡單平均來代替市場 PE」；「若後續研究找到官方市場 PE 或正式計算口徑，再另行驗證」。**里程碑**：「A 與 C 可平行，但請分開 PR / evidence：BL-0509 = data source evidence / shadow research；🌍 page batch = UI / Data View implementation。不要混成一個大 PR。每批仍遵守：targeted tests → independent audit → CI → Auto-Ship → HANDOFF / BACKLOG sync。」**Model／Effort**：目前 Sonnet 5.5 + Medium；涉及「正式市場綜合判斷公式；forward EPS model；Risk Cap；investment-core semantics」時再走 Model / Effort Change Gate；「維持 Silent Autonomous Cruise。」 |
+| 理由／背景 | 客戶原話未逐項附理由。（執行組背景說明，不是客戶原話）承接 `DEC-2026-10-27-37`（EPS_base／g Phase 1 研究範圍）、`-40`（BL-0509 為下一優先）；BL-0509 第一次 probe 結果見 `docs/v2/68_bl0509_eps_probe_result.md`（授權條款未讀到、頻率／延遲／修正均未驗證）。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-27_a_c_parallel_rulings.md`。落地：`docs/BACKLOG.md` BL-0509 列尾、BL-0516～BL-0518（新增）、BL-0485 列尾；`docs/v2/66` 區段 B／C 補記；`docs/HANDOFF.md` Resume Checkpoint。BL-0509 多日排程已啟用（PR #1089，`.github/workflows/twse_eps_probe.yml` 的 `schedule`，台北週一至週五 19:37 與週二至週六 06:43）。 |
+| 影響範圍 | A：BL-0509 多日 probe 與條款研究，仍是唯讀 shadow research，**不授權接任何正式來源**（升格為正式來源仍走 Data Source Decision Gate，BL-0501）。C：🌍 頁不依賴 EPS 的部分可開始實作，但**本筆不授權新增未核准 API／新 host**；EPS×PE 區塊與 `implied_trailing_index_earnings` 維持 Missing／無法判定；NASDAQ／MSCI World／MSCI EM 無正式來源維持 Missing／Data Gap。A、C 分開 PR／evidence。不改 44、不改 `CLAUDE.md`。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：`docs/HANDOFF.md` 舊 Resume Checkpoint ⑥「BL-0509 後續與 BL-0501 評估資料備妥後，才進入『🌍 市場與趨勢』正式資料內容」的先後順序（客戶改為 A、C 並行）；`docs/v2/68` 第 8 節建議下一步 2「條款頁人工閱讀」的「不要由自動化腳本跟隨轉址去讀」建議（改為：先研究官方公開說明，workflow 能安全跟隨同網域官方條款頁時可另做最小唯讀研究；該建議本為 RECOMMENDATION，非裁示）。不取代 `DEC-2026-10-27-37`、`-40`、`-22`、`-36`（方向性 AI Action 仍不得提前實作）。superseded by：無 |
+| provenance | **逐字**：引號內文字（字面見逐字存檔）；各句的重組與分段為執行組摘要。由執行組單組寫成，未經第二組驗證（data semantics 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核）。 |
+
+### DEC-2026-10-27-42｜執行組讀法登記（**不是客戶裁示**，可推翻）：A＋C 並行的四項實作層級讀法（既有通道序列、TAIEX 來源待確認、不動 INDICATOR_SPECS、不另開草稿 gate）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **執行組讀法，可推翻；不是客戶裁示**（客戶裁示是 `DEC-2026-10-27-41`；以下只是把它落成實作時的讀法）：(a) 客戶 C 裁示點名的 S&P 500、美債殖利率、VIX 是 repo 既有 Yahoo／FRED 通道上的序列（`^GSPC` 走 `repositories/macro/yf.py::fetch_yf_close`、`^VIX` 走同一 Yahoo 通道、`DGS10`／`DGS2` 在 `shared/fred_series.py`），**客戶原文為條件式**（「若既有 source 已有…可以盤點並接入新的 Data View」）；執行組讀法＝在 BL-0517 盤點確認各序列確屬 repo 既有 Yahoo／FRED 通道後才接入，確認後不構成新 host、新 API；盤點確認前不接入；(b) TAIEX 正式取數：repo 目前**沒有** production 來源（BL-0509 probe 只證明 TWSE 端點可取，且 probe 是 shadow research、不是 production 授權）；Yahoo `^TWII` 與 `^VIX`／`^GSPC` 走同一個 Yahoo 端點，但 `docs/v2/66` 區段 B 與藍圖 `MK-7` 已把 `^TWII` 接進 B 線列為須 Decision Gate，故 **TAIEX 資料接入待客戶一行確認方案 A（Yahoo `^TWII`；成交量維持 Data Gap）**，登記 BL-0518；確認前 TAIEX 圖只放骨架與 Missing；(c) 本批不改 `INDICATOR_SPECS`／`market_indicator` 表（那是 44 資料契約，改動須另開 44 一輪，`DEC-2026-10-27-13`），改為另建 L2 Data View（唯讀、不寫表）；(d) 藍圖 `docs/design/vnext_visual_blueprint.md` 第 3.1 節是客戶核准的線框，本批為其「減卡子集」（只做不依賴 EPS 的部分，卡數少於藍圖），不另開草稿 gate，PR 附文字示意（`CLAUDE.md` §-1.5.4 兩步判定：未新增藍圖以外的版面元件）。建議 BL-0516 開工前由獨立稽核再看一次此治理邊界讀法。 |
+| 理由／背景 | （執行組背景說明）客戶 C 裁示說「只使用 repo 已存在且有可靠來源的資料」「不新增未核准 API」，沒有逐項列出 TAIEX 取數用哪個端點；把 TAIEX 當成已授權會踩到 66 區段 B 與 `MK-7` 的既有 Gate 註記，因此只請客戶一行確認。 |
+| evidence／source | `docs/v2/66` 區段 B（資料來源列）；`docs/design/vnext_visual_blueprint.md` 第 8.10 節 `MK-7`、`MK-9` 與資料缺口段；`docs/v2/68`（TWSE 端點可取，非 production 授權）；`shared/fred_series.py`；`services/v2_tables/market_indicator.py::INDICATOR_SPECS`（七鍵無台股指數鍵、無 `^GSPC`）；落地：`docs/BACKLOG.md` BL-0516～BL-0518。 |
+| 影響範圍 | 只影響 🌍 頁批次的實作切分與 TAIEX 的等待點；不改任何資料來源登記、不改 44、不改公式。(b) 確認前 BL-0518 狀態為待客戶裁示，BL-0516（骨架）與 BL-0517（國際）不受阻。 |
+| 是否可逆 | 可逆（客戶可另行裁示；(c) 若客戶要進 `market_indicator` 表，另開 44 一輪） |
+| supersedes／superseded by | supersedes：無。superseded by：無（客戶回覆 (b) 後以新 DEC 登記並回頭更新本筆） |
+| provenance | **執行組單組讀法，未經第二組獨立驗證**；(a) 的通道歸屬為執行組讀碼（`git grep`，不宣稱窮舉）；(b)～(d) 為執行組推論。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1712,3 +1738,4 @@
 - 第四節 `DEC-2026-10-27-07`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_vnext_visual_blueprint.md`，無遮蔽），引號內文字逐字；文件組仍未見客戶對話本身；amendment 範圍、與既有 DEC 的牴觸讀法、Model／Effort 並存讀法為文件組讀法；69 列衝突缺口登記由文件組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-27-08`～`-24`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_vnext_gate_rulings.md`，無遮蔽），引號內文字逐字；文件組仍未見客戶對話本身；十五節裁示拆成十七筆的切分、各筆「文件組讀法」、`DEC-2026-10-23-01`／`-22-05`／`-27-07` 的就地 amendment 標示與 supersede 範圍為文件組依派工單寫成；`-14`、`-21`、`-22` 屬 investment meaning／formula 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核，本批由文件組單組寫成，**未經第二組驗證**；`-16` 的「`a28c5a2d` 曾出現姓名」為總管轉達，文件組只實測該 commit 的位置、未讀其內容。
 - 第四節 `DEC-2026-10-27-25`～`-38`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_g44_amendment_rulings.md`，無遮蔽），引號內文字逐字（條列改以引號併列）；執行組仍未見客戶對話本身；拆成十四筆的切分與各筆「執行組讀法」為執行組依派工單寫成；44 解凍屬治理／UI SSOT 等級、`-35`／`-37` 屬 formula／data source 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核；由執行組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-27-41`、`-42`：`-41` 客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_a_c_parallel_rulings.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與 supersedes 欄為執行組讀法；`-42` 整筆是執行組讀法、不是客戶裁示，通道歸屬為執行組單次讀碼；`-41` 屬 data semantics 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核；由執行組單組寫成，未經第二組驗證。
