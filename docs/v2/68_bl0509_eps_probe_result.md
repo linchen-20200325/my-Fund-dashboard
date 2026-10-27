@@ -40,7 +40,7 @@
 
 | # | `DEC-2026-10-27-37` 研究項 | 狀態 | 證據與限制 |
 |---|---|---|---|
-| 1 | TWSE TAIEX | ✅ 有證據 | FACT：`openapi_MI_INDEX` 有「發行量加權股價指數」收盤列；`rwd_MI_INDEX_IND`、`rwd_FMTQIK`、`openapi_FMTQIK`（欄 `TAIEX`）、`openapi_MI_5MINS_HIST`（O／H／L／C）也含指數。這只證明「可取得」，不是正式 signal。 |
+| 1 | TWSE TAIEX | ✅ 有證據 | FACT：`openapi_MI_INDEX` 有「發行量加權股價指數」收盤列；`rwd_MI_INDEX_IND`、`rwd_FMTQIK`、`openapi_FMTQIK`（欄 `TAIEX`）也含指數；`openapi_MI_5MINS_HIST`（O／H／L／C）INFERENCE：報告該端點 `contains_taiex_row`＝false，是否為加權指數只由欄名與 swagger 摘要「發行量加權股價指數歷史資料」推斷。這只證明「可取得」，不是正式 signal。 |
 | 2 | TWSE 市場 trailing P/E | ⬜ 市場層欄位未提供；✅ 個股層有 | FACT：`research_metric.market_level_trailing_pe_field_provided` ＝ false。個股本益比在 `openapi_BWIBBU_ALL`（欄 `PEratio`）與 `rwd_BWIBBU_d`（欄 `本益比`）。 |
 | 3 | MOPS／TWSE earnings、EPS 實際值 | ✅（TWSE OpenAPI 側）／⬜（MOPS 明細） | FACT：`openapi_t187ap14_L`、`openapi_t187ap06_L_ci` 有已公布 actual 單季 EPS 與損益欄位。`mopsov_index` 只驗可達，**未探 MOPS 財報明細**。 |
 | 4 | 能否建立 `implied_trailing_index_earnings = TAIEX / trailing_market_PE` | ⬜ 無法判定 | 分母無官方市場層來源；自行由個股聚合需股本或市值權重與 universe 對齊，本 probe 未取得，口徑未驗證。報告內該值恆為 null。 |
@@ -48,7 +48,7 @@
 | 6 | 更新頻率 | ⬜ 未驗證 | 單次快照，無法推頻率。 |
 | 7 | 發布延遲 | ⬜ 未驗證 | 同上；只有單次觀察（第 5 節）。 |
 | 8 | 修正行為 | ⬜ 未驗證 | 需跨日比對 `body_sha256` 與值。 |
-| 9 | Missing／stale 政策 | ⬜ 政策未訂；已見到的缺值樣態 ✅ | FACT：`openapi_BWIBBU_ALL` 的 `PEratio` 於虧損公司為空字串，`rwd_BWIBBU_d` 同欄為 `-`。**必須視為 missing，不是 0**。`出表日期` 是發布日而非財報期間，報告對此類端點標 `publication_date_not_period`，不判 stale。 |
+| 9 | Missing／stale 政策 | ⬜ 政策未訂；已見到的缺值樣態 ✅ | FACT：`openapi_BWIBBU_ALL` 樣本第 1 筆（1101 台泥）的 `PEratio` 為空字串，`rwd_BWIBBU_d` 同一代號同欄為 `-`（為何缺值，例如是否虧損，報告沒有損益資料，INFERENCE，未驗證）。**必須視為 missing，不是 0**。`出表日期` 是發布日而非財報期間，報告對此類端點標 `publication_date_not_period`，不判 stale。 |
 | 10 | 授權／使用限制 | ⬜ 未驗證 | 見第 6 節。 |
 
 ---
@@ -66,7 +66,7 @@
 
 INFERENCE（可能錯）：
 
-- 兩路徑結果相同，表示 NAS proxy 路徑「可用」。
+- 標記為 `nas_proxy` 的路徑，其回應與直連相同；是否實際經過 NAS 未證明（報告只證明 `PROXY_URL` 已設、`proxy.enabled`＝true）。
 - Actions runner 直連目前也能取得這些端點，**目前沒有證據顯示 TWSE 擋 Actions IP**（僅單次快照）。
 - 延遲分佈不同只是旁證，不能當作「流量經 NAS」的證明。
 - 若未來 production 端需要依賴 NAS 才能取得資料，需另行取證。
@@ -139,7 +139,7 @@ INFERENCE（可能錯）：
 | 歷史 EPS 成長 ≠ forward `g` | 本次取得的是 actual 單季與月營收，未推算任何成長率，也不作為 `g`。 |
 | 不接正式 signal、不接 AI Brain、不接 production 資料來源 | probe 腳本只做唯讀 GET；本文件不授權接線。 |
 | 付費／授權預估源另回 Data Source Decision Gate | 本次未涉及，仍走 BL-0501。 |
-| missing ≠ 0 | 報告對無來源日期標 `no_source_date`，不補值；第 2 節第 9 項明記空字串與 `-` 為 missing。 |
+| missing ≠ 0 | 腳本設計為無來源日期時標 `no_source_date`、不補值（本次報告無此狀態）；第 2 節第 9 項明記空字串與 `-` 為 missing。 |
 
 ---
 
