@@ -1652,6 +1652,20 @@
 | supersedes／superseded by | supersedes：無。不取代 BL-0509；與 `DEC-2026-10-27-18`（One AI Brain）、`DEC-2026-10-24-02`（資料先行順序）同向（文件組讀法，可被客戶推翻）。superseded by：無。 |
 | provenance | 客戶需求原文逐字存於 `docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；`docs/v2/69` 的 gap 編號、Consistent? 欄與「總管推薦」為寫作組判讀（推薦只是 RECOMMENDATION，不是已決定，可被客戶推翻）；四份審計均為唯讀、無網路、未觀察任何數值落差；由文件組單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-28-02｜客戶裁示（永久）：新增永久 Context Efficiency 規則（自動 compact、最小必要讀取、frozen 44 局部讀取、GitHub 為長期記憶）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-28 |
+| 決策者 | **客戶**（本筆為客戶裁示；客戶對話本身執行組未見；原文由總管於派工單內逐字轉存，見 `docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`） |
+| 決策內容摘要 | **客戶裁示（永久）**，目的為降低 token 浪費與避免不必要的大範圍重讀，共十點：(1) 執行環境允許時建議設 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=75`；不得設 `DISABLE_AUTO_COMPACT=1`、`DISABLE_COMPACT=1`，除非有明確除錯理由；環境不便改變數時，於 context 明顯變大、完成重要 batch 或進入新階段時可主動 `/compact`，但 compact 前須確保 GitHub SSOT 已同步、HANDOFF／Resume Checkpoint 足以接手、未提交工作狀態清楚、重要客戶裁示已落盤；compact 不得取代 GitHub persistence。(2) 手動 compact 摘要優先保留 repo／branch／main SHA、當前 batch、Open PR、已核准 Decision、尚未完成 Stop Gate、下一個唯一 action、Model／Effort、Data／AI boundary、frozen 44 限制、Missing／Risk Cap 等治理、未提交工作；不保留大量已完成的逐步紀錄。(3) 搜尋優先、針對性讀取、必要時才擴大；每次 GitHub Verification Gate 只先讀 current main SHA、Open／Draft PR、與當前 task 相關的 commits／diff／CI、HANDOFF current checkpoint／next action、BACKLOG 當前 BL 編號、相關 DECISION；不預設全文讀取整份 BACKLOG／DECISIONS／HANDOFF 歷史／frozen 44／所有 spec／全 repo。(4) frozen 44 只有真的碰到條款時才先搜 heading／keyword／clause，只讀必要段落與上下文，不得每輪重讀 5,000+ 行全文；只有 integrity audit、md5／line guard、大規模 amendment 才允許全文檢查。(5) BL-XXXX 先搜 "BL-XXXX" 再讀附近；需裁示只讀直接相關 DEC 編號與 supersede chain。(6) code 先 grep／search symbol、找 caller／callee、找 tests，再讀精確檔案與函式，禁止為了解一個 function 先掃完整 repo。(7) 已 merge 且 HANDOFF 已記錄的舊 batch 原則上只看 commit summary、必要 diff、Decision reference，不重建整個歷史推理。(8) 新對話／compact 後恢復順序：GitHub Verification Gate → HANDOFF current checkpoint → current BACKLOG item → direct DECISION／spec → 當前 task 需要的 code；不重做全專案 onboarding。(9) Silent Cruise：不回報「我要 compact」「context 變大」「我正在讀檔」「我讀了哪些文件」，除非 context／quota 已危及正確性、必須換新對話、或 compact 無法安全繼續。(10) 原則：GitHub 是長期記憶、conversation context 只是工作快取，不用巨大 context 取代良好的 SSOT／targeted retrieval。客戶要求加入 PROJECT_RULES 永久 AI 工作規範，HANDOFF 僅保留簡短指標。Model／Effort：Sonnet 5.5／Low～Medium。 |
+| 理由／背景 | 客戶原話：降低 token 浪費與避免不必要的大範圍重讀；「GitHub 是長期記憶；conversation context 只是工作快取。」（執行組背景說明）與 `PROJECT_RULES.md` 第 11 節（Conversation／Context Lifecycle）、第 9 節 9.1、第 6 節 6.1.1／6.1.2 同向。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`；落地 `PROJECT_RULES.md` 11.1 與第 0.5 節索引一列、`docs/HANDOFF.md` 第 0 節第 7 點（簡短指標）。 |
+| 影響範圍 | 所有未來新對話、總管與所有 agent 的讀取範圍與 compact 時機。環境變數設定是否可行取決於執行環境，本批未改任何設定檔。不影響資料、公式、UI、`CLAUDE.md`、44。 |
+| 是否可逆 | 可逆（客戶可另行裁示）；客戶標示為永久規則 |
+| supersedes／superseded by | supersedes：無。**不削弱** `PROJECT_RULES.md` 3.1／3.2 的揭露義務與 Stop／Decision／Model Gate（文件組讀法，可被客戶推翻；與 `CLAUDE.md` §-1.5.3 B 一致）；與第 11 節既有「milestone 建議開新對話」並存。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 `docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；與 3.1／3.2 及 `CLAUDE.md` 的關係為文件組判讀，可被客戶推翻；由文件組單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1796,3 +1810,4 @@
 - 第四節 `DEC-2026-10-27-41`、`-42`：`-41` 客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_a_c_parallel_rulings.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與 supersedes 欄為執行組讀法；`-42` 整筆是執行組讀法、不是客戶裁示，通道歸屬為執行組單次讀碼；`-41` 屬 data semantics 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核；由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-27-44`：整筆是執行組讀法（不是客戶裁示），承接 `-42` (a)；通道盤點為讀碼、未連線實測；新文案為總管擬待覆核；由執行組單組寫成，未經第二組獨立驗證。
 - 第四節 `DEC-2026-10-28-01`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段、與既有 DEC 的同向關係及 `docs/v2/69` 的歸類為文件組讀法；四份審計無網路、未觀察任何數值落差；由文件組單組寫成，未經第二組獨立驗證。
+- 第四節 `DEC-2026-10-28-02`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；十點的整理與和 3.1／3.2 的關係為文件組讀法；環境變數是否可設未查證；由文件組單組寫成，未經第二組獨立驗證。

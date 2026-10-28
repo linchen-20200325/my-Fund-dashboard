@@ -35,6 +35,7 @@
 4. 交接本 §0.6「交接讀取 · 省額度」所稱「HANDOFF 第一節」，自 2026-10-16 起讀作**本檔**（交接本第 0 節開頭已加註；圍欄內逐字原文未改）。
 5. 會漂移的數字一律附查詢時間與 SHA；過期就重查，不要引用舊值。
 6. **工作模式：Silent Autonomous Cruise，嚴格執行、永久**（客戶 2026-10-27，`DEC-2026-10-27-45`；規則本文 `PROJECT_RULES.md` 第 3 節 3.2，逐字存檔 `docs/evidence/decisions/2026-10-28_silent_cruise_rule.md`）。主動回報**只有四種**：(1) 完整 batch／stage 已完成（PR、audit、CI 結果已知、merge／Auto-Ship 已完成或明確被阻擋）；(2) 真正 Stop Gate；(3) Model／Effort Change Gate；(4) 真正 blocker（無法安全自行解決且會實際阻止下一步）。其餘一律靜默：PR 正在寫、PR 已開但 CI 在跑、audit 已派出、agent 工作中、跑測試、等 workflow／reviewer／mergeability、同步 BACKLOG／HANDOFF、「只是通知」、「不需要你回覆」、重複確認 merged／ready-for-review／subscribed／unsubscribed、沒有新決策的新狀態。不要用「🟢 不需要你回覆」包裝中途進度；不需要客戶回覆又沒有完整 batch 就不發訊息。整批結束時一次回報：第一行 🟢／🟡／🔴；main SHA；PR；完成內容；audit；CI；是否需要客戶回覆；下一個唯一接手點；Model／Effort（只有需要改變時才標）。**揭露義務不因靜默消失**：未驗證／沒查證的部分寫進 PR description、audit evidence 與本檔等正式紀錄，批次回報的 audit 一行指向它們（`CLAUDE.md` §-2 規則 6）。
+7. **Context Efficiency（永久）**：搜尋優先、針對性讀取、compact 前先落盤 GitHub、GitHub 是長期記憶（客戶 2026-10-28，`DEC-2026-10-28-02`；規則本文 `PROJECT_RULES.md` 11.1，逐字存檔 `docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`）。
 
 ## 1. 必讀順序（新對話或換人接手時）
 
