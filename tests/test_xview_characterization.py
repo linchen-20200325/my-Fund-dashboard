@@ -81,7 +81,8 @@ def _install_bline_and_view(monkeypatch, series_by_ticker):
 
 
 def test_char_agreement_c1_vix_value_and_obs_date_equal_between_bline_and_view(monkeypatch):
-    """描述現況，不代表核准現況語意。C1：同一個替身餵 B 線 `vol_index` 與 🌍 `market_view` 的 VIX：obs_date、值、取得時間相等。"""
+    """描述現況，不代表核准現況語意。C1：同一個替身餵 B 線 `vol_index` 與 🌍 `market_view` 的 VIX：obs_date、值、取得時間相等。
+    這只證明「下游轉換邏輯在共用同一個替身時一致」，不是兩次獨立取數的來源一致；替身 `exchange_tz` 為 `Etc/UTC`，交易所時區換算規則在此未被施測。"""
     from services.v2_tables import market_indicator as mi, market_view as mv
     _install_bline_and_view(monkeypatch, {"^VIX": yf_series("^VIX", *_VIX_CLOSED),
                                           "^TWII": yf_series("^TWII", *_VIX_CLOSED),
@@ -127,7 +128,8 @@ def test_char_agreement_c2_no_second_path_exists_for_twii_gspc_us10y_us2y_in_bli
 
 
 def test_char_agreement_c2_view_twii_and_gspc_use_five_year_range_and_report_stub_last_bar(monkeypatch):
-    """描述現況，不代表核准現況語意。C2：`market_view` 的 `^TWII`／`^GSPC` 以 `"5y"` 取數，最新觀測日與值＝替身最後一根已收盤的 K 棒。"""
+    """描述現況，不代表核准現況語意。C2：`market_view` 的 `^TWII`／`^GSPC` 以 `"5y"` 取數，最新觀測日與值＝替身最後一根已收盤的 K 棒
+    （轉換邏輯對替身的反應；替身 `exchange_tz` 為 `Etc/UTC`，台北／紐約時區規則未被施測，也不是來源一致的證明）。"""
     from services.v2_tables import market_view as mv
     calls = _install_bline_and_view(monkeypatch, {
         "^VIX": yf_series("^VIX", *_VIX_CLOSED),
@@ -206,11 +208,11 @@ def test_char_agreement_c4_same_call_form_shares_one_cache_entry_with_identical_
 
 def test_char_agreement_c9_direct_literal_vix_fetch_call_sites_match_the_current_list():
     """描述現況，不代表核准現況語意。C9：以 AST 數出 production 程式中「第一個參數是字面 `"^VIX"` 的 `fetch_yf_close*` 呼叫」，
-    目前恰為四處（下列清單是現況棘輪，不是核准；新增直接呼叫點會紅，逼人登記）。
-    限制：只抓字面第一參數；以常數（如 `VIX_TICKER`）或變數傳入的呼叫抓不到，所以這不是「全站只有這幾處」的證明。"""
+    目前恰為五處（下列清單是現況棘輪，不是核准；新增直接呼叫點會紅，逼人登記）。其中 `services/macro/us_indicators.py` 是經包裝函式 `_yf_iso("^VIX","5y")` 的字面呼叫。
+    限制：只抓名稱在集合內（含包裝 `_yf_iso`／`_yf_s`）且第一參數為字面的呼叫；以常數（如 `market_view.VIX_TICKER`）或變數傳入、或其他包裝名稱的呼叫抓不到，所以這不是「全站只有這幾處」的證明。"""
     import subprocess
     files = subprocess.check_output(["git", "ls-files", "*.py"], cwd=_ROOT, text=True).split()
-    names = {"fetch_yf_close", "fetch_yf_close_with_error", "_yf_close"}
+    names = {"fetch_yf_close", "fetch_yf_close_with_error", "_yf_close", "_yf_iso", "_yf_s"}
     hits = []
     for rel in files:
         if rel.startswith("tests/"):
@@ -226,7 +228,9 @@ def test_char_agreement_c9_direct_literal_vix_fetch_call_sites_match_the_current
                 if nm in names and node.args and isinstance(node.args[0], ast.Constant) and node.args[0].value == "^VIX":
                     hits.append(rel)
     assert sorted(hits) == ["services/fund_service.py", "services/liquidity_engine.py",
-                            "services/risk_radar.py", "services/risk_radar.py"]
+                            "services/macro/us_indicators.py", "services/risk_radar.py", "services/risk_radar.py"]
+    from services.v2_tables import market_view as mv
+    assert mv.VIX_TICKER == "^VIX"  # 非字面（常數）的呼叫點：上面的掃描看不到它
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -397,8 +401,8 @@ def _guard_other_nav_sources(monkeypatch):
 
 def test_char_divergence_c5_get_latest_nav_prefers_yahoo_and_returns_bare_float_unlike_the_a_chain(monkeypatch):
     """描述現況，不代表核准現況語意。C5／G-NAV-3：Yahoo 以基金代碼為 ticker 有值（替身 11.11）時，`get_latest_nav` 直接回 11.11（裸 float，無日期、無來源）；
-    同一檔基金的 A 鏈（FundClear 替身）回 12.99／2026-02-27／`FundClear:GetFundNAV`。T7 市值走前者、單一基金頁走後者（會造成使用者看到不同數值；
-    前提：Yahoo 與 FundClear 對同一代碼給不同值，屬替身假設，兩個 stub 值是刻意設成不同的）。"""
+    同一檔基金的 A 鏈（FundClear 替身）回 12.99／2026-02-27／`FundClear:GetFundNAV`。T7 市值走前者、單一基金頁走後者。
+    機制已證實（來源優先序不同）；11.11 vs 12.99 的數值差異來自兩個 stub 輸入刻意設成不同，**不是**「同一輸入、兩條路徑」的證據。"""
     import repositories.macro_repository as mr
     from services.fund_service import fetch_fund_from_moneydj_url_enriched as enr, get_latest_nav
     _install_chain(monkeypatch)
@@ -543,14 +547,20 @@ def _daily_series():
 
 def test_char_divergence_c6_weekly_series_row_window_one_year_versus_calendar_window(monkeypatch):
     """描述現況，不代表核准現況語意。C6／G-RET-3：150 個每週點（約 2.9 年）。`calc_metrics` 的 `ret_1y`（252 列窗）＝None；
-    `ret_1y_total` 也用列數窗，實際窗口 1043 天、值 74.5%；vNext hld 的 `return_pct` 取最近 365 日曆日內首末兩筆＝17.5%；
+    `ret_1y_total` 也用列數窗，實際窗口 1043 天、值 74.5%；vNext hld 的 `fund_metrics`（區間＝使用者選的日曆窗，此處取最後 365 日曆日）區間首末兩筆報酬＝17.5%；
     `ret_1m` 用 22 列＝約 22 週。同一個 NAV 序列、三種「近一年」口徑、三個數字（會造成使用者看到不同數值；週頻序列是替身假設，真實基金是否出現此稀疏度未驗）。"""
     from services.fund_service import calc_metrics
-    from ui_v2.hld.logic import return_pct
+    from ui_v2.hld.logic import fund_metrics
     s = _weekly_series()
     m = calc_metrics(s, [])
-    window = s.loc[s.index >= s.index[-1] - pd.Timedelta(days=365)]
-    hld = return_pct([float(v) for v in window])
+    dataset = {"nav": [{"fund_code": "ZZF100", "nav_date": d.strftime("%Y-%m-%d"), "nav_orig_ccy": float(v), "ccy": "USD"}
+                       for d, v in s.items()],
+               "dividend": [], "holding": [{"fund_code": "ZZF100"}], "errors": {}}
+    fund = {"fund_code": "ZZF100", "ccy": "USD", "units_shares": 100.0, "cost_twd": 1.0, "holding_id": "h1",
+            "fund_name": "替身", "policy_id": "p", "category": "c"}
+    # 視窗＝使用者選的區間；此處選「最後一筆往前 365 日曆日」（production 視窗來自 saved_window，不是固定 365 天）
+    window = ((s.index[-1] - pd.Timedelta(days=365)).strftime("%Y-%m-%d"), s.index[-1].strftime("%Y-%m-%d"))
+    hld = fund_metrics(dataset, fund, window)["區間報酬率"]["_raw"]
     assert m["ret_1y"] is None
     assert m["ret_1y_window_days"] == 1043 and _close(m["ret_1y_total"], 74.5)
     assert _close(hld, 17.508417508417494)
@@ -596,7 +606,7 @@ def test_char_agreement_c6_dense_daily_series_ret_1y_equals_ret_1y_total_without
 def test_char_divergence_c6_one_month_checkup_prefers_wb01_but_mk_dashboard_uses_self_calc(monkeypatch):
     """描述現況，不代表核准現況語意。C6／G-RET-1：同一個 fund dict：wb01 官方 `perf["1M"]`＝9.99、自算 `metrics["ret_1m"]`＝1.64。
     健診表的 `_period_ret` 回 9.99；衛星戰情室 `build_mk_dataframe` 的「近1M(%)」欄回 1.64。
-    同一檔基金、兩張表、兩個「近 1M」（會造成使用者看到不同數值；wb01 與自算不同值是替身假設）。"""
+    機制已證實（欄位選擇不同：wb01 優先 vs 只用自算）；9.99 vs 1.64 的數值差異來自 stub 輸入刻意設成不同，**不是**同一輸入的證據。"""
     log = []
     _fake, restore = X.swap_in_fake_streamlit(log)
     try:
@@ -660,8 +670,10 @@ def test_char_divergence_c7_gate_open_vnext_fx_obs_date_is_previous_weekday_of_t
 
 def test_char_divergence_c7_valuation_alo_fx_by_nav_date_versus_legacy_latest_fx(monkeypatch):
     """描述現況，不代表核准現況語意。C7／G-VAL-1／G-FX-1：持有 100 單位、NAV 10.0 USD、NAV 日 2026-10-22。
+    ⚠️ 31350 只在**測試人為把 `FX_OBS_DATE_RULE_VERIFIED` 打開**時才存在；production 閘門關閉，vNext 目前對美元持股顯示「缺換算匯率」（函式層，見上一個 C7 測試），
+    所以本測試證明的是「閘門開啟後的機制差異」，不是現況畫面上的數字差異。
     ⚖️ alo `basis_value` 取「obs_date ≤ NAV 日」的匯率列（2026-10-22／31.35）＝31350；舊版 `FundPosition.value_twd`／`enrich_returns` 用最新價 31.4＝31400。
-    兩套實作對同一組替身給不同市值（差 50 元，約 0.16%；NAV 日落後於最新匯率日時才出現，屬替身情境）。"""
+    閘門人為開啟下兩套實作對同一組替身給不同市值（差 50 元，約 0.16%；NAV 日落後於最新匯率日時才出現，屬替身情境）。"""
     from models.ledger import FundPosition
     from services.portfolio_csv import enrich_returns
     from ui_v2.alo import logic as alo
@@ -839,7 +851,7 @@ def test_desired_x2_ai_summary_must_not_show_text_generated_for_a_different_snap
 
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason="X3 " + _X_REASON)
 def test_desired_x3_valuation_nav_equals_single_fund_nav_for_same_instrument(monkeypatch):
-    """描述現況，不代表核准現況語意。X3（期望）：T7 估值用的 `get_latest_nav` 應等於單一基金頁（A 鏈）的 NAV。現況見 C5：11.11 vs 12.99。"""
+    """描述現況，不代表核准現況語意。X3（期望）：T7 估值用的 `get_latest_nav` 應等於單一基金頁（A 鏈）的 NAV。現況見 C5：11.11 vs 12.99（stub 輸入本就不同，機制為來源優先序）。"""
     import repositories.macro_repository as mr
     from services.fund_service import fetch_fund_from_moneydj_url_enriched as enr, get_latest_nav
     _install_chain(monkeypatch)
@@ -851,7 +863,7 @@ def test_desired_x3_valuation_nav_equals_single_fund_nav_for_same_instrument(mon
 
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason="X4 " + _X_REASON)
 def test_desired_x4_alo_valuation_equals_legacy_valuation_at_same_as_of(monkeypatch):
-    """描述現況，不代表核准現況語意。X4（期望）：同一組持倉與 NAV，⚖️ alo 的市值應等於舊版市值（同 as-of、同 FX 切日）。現況見 C7：31350 vs 31400。"""
+    """描述現況，不代表核准現況語意。X4（期望）：同一組持倉與 NAV，⚖️ alo 的市值應等於舊版市值（同 as-of、同 FX 切日）。現況見 C7：閘門人為開啟下 31350 vs 31400（production 閘門關閉時 vNext 無 USD 匯率列，不是 31350）。"""
     from models.ledger import FundPosition
     from ui_v2.alo import logic as alo
     rows = _fx_rows_with_gate_open(monkeypatch)
