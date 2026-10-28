@@ -81,6 +81,7 @@
 | GitHub Discussion Persistence Gate（協作助手與客戶的討論結論須在下一個相關實作批次前落 GitHub SSOT） | 第 12 節 12.2（`DEC-2026-10-27-19`） |
 | Public Repository Personal Name Redaction Rule（公開 repo 不得出現外部教材作者／老師真實姓名） | 第 12 節 12.3（`DEC-2026-10-27-20`） |
 | Cross-View Data Consistency Gate（同 canonical instrument＋metric＋as-of＋currency／share class ＝ 各 view 同一值；禁止各頁自選來源或平行計算；衝突不得靜默選一） | 第 13 節 13.3（`DEC-2026-10-28-01`） |
+| Anti-Bloat / Minimum Governance Overhead（最小充分 audit／PR／evidence、BACKLOG 不碎片化、完成後停止、少回報） | 第 13 節 13.4（`DEC-2026-10-28-04`） |
 | Context Efficiency（自動 compact 建議、最小必要讀取、frozen 44 局部讀取、compact 後恢復順序、GitHub = 長期記憶） | 第 11 節 11.1（`DEC-2026-10-28-02`） |
 
 **Supersession hygiene（同裁示）**：(1) 舊內容保留歷史，不刪；(2) 被新裁示取代時，在舊內容就地標示「superseded by <DEC-ID>」；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只能指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（現行四份見 0.4）。
@@ -691,6 +692,25 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 5. **需要更改 source precedence、canonical identity、valuation methodology、FX cutoff、formula 時，走 Decision Gate**（第 4 節）。已確認 bug 且只有一個明確安全修法者，不得包裝成客戶裁示（第 4 節反向禁令）。
 6. **登記不構成動工授權**（`CLAUDE.md` §-1）。本規則不取代 BL-0509；兩者獨立進行。進入 canonical data contract／source precedence 實作時，依第 5 節 Model Gate 評估是否升 Opus。
 7. **不削弱揭露義務**：audit 的結論以機制層級（FACT／INFERENCE／UNVERIFIED）標示；沒有執行期觀察到的數值落差不得寫成已發生的不一致（`CLAUDE.md` §-2 規則 6）。
+
+### 13.4 長期規則：Anti-Bloat / Minimum Governance Overhead（客戶 2026-10-28 永久規則，`DEC-2026-10-28-04`）
+
+> **出處**：客戶 2026-10-28 裁示，逐字存檔 `docs/evidence/decisions/2026-10-28_anti_bloat_rule.md`。目的：避免治理、審計、文件、BACKLOG、Evidence 與 PR 數量膨脹到治理成本超過實作成本。與 Silent Autonomous Cruise、Context Efficiency（11.1）、Minimum Sufficient Work／Test Scope、GitHub-first Verification Gate 並行。
+
+**不得降低必要的正確性、安全性或 Stop Gate；不削弱第 4 節 Stop／Decision Gate、3.1／3.2 揭露義務，也不削弱下列高風險項的第 2 組獨立 audit。**
+
+1. **最小充分 audit**：文件、小修、純 UI、metadata、低風險 deterministic change 最多 1 組獨立 audit；一般跨模組但不涉及核心投資語意，1 組即可。只有下列高風險項才考慮第 2 組：Risk Cap、投資核心判定、source precedence、canonical data contract、canonical identity migration、valuation methodology、FX cutoff、公式／門檻、credential／security、不可逆資料遷移、frozen SSOT amendment。禁止因「多驗比較安心」固定派 3～5 組。audit 發現問題：原實作組修正後，原 audit 或 1 組獨立複驗即可；除非出現新的高風險範圍，不得無限追加。
+2. **PR 最小化**：implementation、tests、BACKLOG、HANDOFF、DECISION reference 能安全同批完成的，放同一 PR；不形成「功能 PR → HANDOFF PR → BACKLOG PR → evidence PR」。例外：功能 PR 已合併且當時客觀上無法同步、文件修改需獨立 Decision Gate、frozen／protected file 必須獨立流程。
+3. **BACKLOG 不碎片化**：audit should-fix、小註解、wording、minor cleanup、evidence 補充、順手可修的小缺口不各拆成新 BL。只有符合其一才新增：可獨立排程、有不同 acceptance criteria、有獨立 Decision Gate、有不同風險等級、無法在目前 batch 安全完成、需要新資料源／credential／人工操作、明確屬另一個產品需求。其餘放在目前 BL 的 subtask／follow-up。
+4. **最小充分 evidence**：只留足以重現、稽核、驗收、追溯 Decision 的最小證據；同一事實不重複建立內容高度重疊的 audit report、checkpoint、evidence note、summary、handoff copy；已有正式 SSOT 時引用、不複製全文。逐字存證只限客戶正式裁示與法規／授權／高風險治理需要。
+5. **Batch 大小**：預設每 batch 最多 3 個實際工作項目（1 個功能＋tests＋docs，或 2～3 個高度相關小項）；不把 8～10 個互不相干的 backlog 塞一批，也不把很小的工作拆成 5 個 PR。原則：最小但完整的可驗收批次。
+6. **Decision Gate 不氾濫**：只有真正改變產品語意、投資邏輯、資料契約、source precedence、公式／門檻、UX 核心行為、安全／不可逆操作才升 Gate。已確認 bug 且只有一個明確安全修法，自行修，不得包裝成客戶裁示；純實作選擇由 AI 總管依既有規格決定。
+7. **文件不重複 SSOT**：`PROJECT_RULES` 只放永久治理；`DECISIONS` 只放正式裁示與 supersede 關係；`BACKLOG` 只放尚未完成工作；`HANDOFF` 只放目前狀態與下一接手點；Spec 只放該領域正式設計；Evidence 只放驗證證據。同一內容不在多份文件各放一份完整版本。不另建新的治理 SSOT。
+8. **完成後停止**：acceptance criteria、targeted tests、必要 audit、CI、GitHub SSOT 同步都通過就結束；不因「還可以再整理」擴大 cleanup、refactor、naming、extra tests、extra docs、neighboring backlog。非必要改善進既有 backlog 或忽略。
+9. **少回報**：不主動回報 audit 派了幾組、reviewer 在跑、CI 還在等、文件正在同步、又新增哪些小 BL；只有 Silent Cruise 允許的四種情況才回報。
+10. **開工前內部自問（不回報客戶）**：真的需要獨立 BL？另一個 PR？第二組 audit？已有 SSOT 可引用？能否在目前 batch 安全完成？是否正在把治理本身變成主要工作？答案顯示流程膨脹時，優先縮減流程。
+
+**邊界**：本規則只落盤，不回頭重整既有 BACKLOG、歷史 evidence 或舊 PR。與 `DEC-2026-10-16-05` 的風險分級同向；高風險項的獨立 audit 要求以本節與該 DEC 的較嚴者為準（文件組讀法，可被客戶推翻）。
 
 ## 第 14 節｜已裁示的治理衝突（2026-10-16 收斂）~~與尚待程序完成者~~（2026-10-16 全結，`DEC-2026-10-16-14`；有意識的狀態變更，不是漏刪；2026-10-16；決策者：客戶（#8 核准裁示，`DEC-2026-10-16-14`））
 
