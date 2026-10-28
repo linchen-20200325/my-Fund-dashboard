@@ -39,7 +39,22 @@ def _taiex_ok(points=None):
                 obs_date="2026-10-23", value_unit="index", points=points if points is not None else _points())
 
 
-def _view(vix=None, taiex=None):
+def _sp500_ok(points=None):
+    return _dom("sp500", "ok", source="Yahoo Finance (^GSPC)", fetched_at="2026-10-27T06:00:00+00:00",
+                obs_date="2026-10-23", value_unit="index", points=points if points is not None else _points())
+
+
+def _yield_points(start="2024-10-24", end="2026-10-23"):
+    return [{"obs_date": p["obs_date"], "value_num": 4.0 + (i % 9) * 0.01}
+            for i, p in enumerate(_points(start, end))]
+
+
+def _yield_ok(key, label, points=None):
+    return _dom(key, "ok", source=label, fetched_at="2026-10-27T06:00:00+00:00",
+                obs_date="2026-10-23", value_unit="%", points=points if points is not None else _yield_points())
+
+
+def _view(vix=None, taiex=None, sp500=None, us10y=None, us2y=None):
     vix = vix or _dom("vix", "ok", source="Yahoo:^VIX", fetched_at="2026-10-27T06:00:00+00:00",
                       obs_date="2026-10-23", value_unit="index", points=_points())
     return {"domains": [
@@ -47,6 +62,9 @@ def _view(vix=None, taiex=None):
         taiex or _taiex_ok(),
         _dom("taiex_volume", reason_code="no_official_source", reason="x"),
         _dom("market_stats", reason_code="no_official_source", reason="x"),
+        sp500 or _sp500_ok(),
+        us10y or _yield_ok("us10y", "FRED (DGS10)"),
+        us2y or _yield_ok("us2y", "FRED (DGS2)"),
         _dom("nasdaq", reason_code="no_official_source", reason="x"),
         _dom("msci_world", reason_code="no_official_source", reason="x"),
         _dom("msci_em", reason_code="no_official_source", reason="x"),
@@ -108,7 +126,10 @@ def test_市場結論_一句固定話_加各domain狀態列_只列狀態():
     assert [r["domain"] for r in model["rows"]] == [d["domain"] for d in _view()["domains"]]
     assert model["rows"][0]["status_text"] == "有資料（2026-10-23）"
     assert model["rows"][1]["domain"] == "taiex" and model["rows"][1]["status_text"] == "有資料（2026-10-23）"
-    assert all(r["status_text"] == "⬜ 資料未備" for r in model["rows"][2:])
+    assert [r["domain"] for r in model["rows"][4:7]] == ["sp500", "us10y", "us2y"]
+    assert all(r["status_text"] == "有資料（2026-10-23）" for r in model["rows"][4:7])    # 新 domain 列的是真實狀態
+    missing_rows = [r for r in model["rows"] if r["domain"] not in ("vix", "taiex", "sp500", "us10y", "us2y")]
+    assert len(missing_rows) == 7 and all(r["status_text"] == "⬜ 資料未備" for r in missing_rows)
     assert set(model["rows"][0]) == {"domain", "label", "status", "status_text", "tone"}   # 沒有分數欄
 
 
@@ -284,3 +305,163 @@ def test_成交量_市場統計_PE_EPS_Missing文案不因TAIEX接入而改():
     assert ms.missing_copy(by["implied_trailing_index_earnings"]) == "⬜ 無法判定"
     assert set(ms._MISSING_COPY) == {"taiex_volume", "market_stats", "nasdaq", "msci_world", "msci_em",
                                      "eps_pe_scenario", "implied_trailing_index_earnings"}
+
+
+# ───────────────────────── S&P 500／美債殖利率（BL-0517）─────────────────────────
+
+
+def test_BL0517新文案_標籤與註記_總管擬待覆核():
+    assert ms.LABELS["sp500"] == "標普 500 指數（S&P 500）"
+    assert ms.LABELS["us10y"] == "美國 10 年期公債殖利率"
+    assert ms.LABELS["us2y"] == "美國 2 年期公債殖利率"
+    assert ms.TEXT_FRED_OBS_NOTE == "資料日期為 FRED 觀測日（不是公布日）；單位為百分比（%），不是價格"
+    assert "現行版次" not in ms.TEXT_FRED_OBS_NOTE and "版次" not in ms.TEXT_FRED_OBS_NOTE   # 不再讀 vintage，該句不再為真
+
+
+def test_SP500圖卡_同TAIEX規格_期間漲跌是百分比報酬_來源標示逐字():
+    d = ms.domain_by_key(_view())["sp500"]
+    one = ms.sp500_model(d, "1Y")
+    assert one["spec"] is not None and one["label"] == "標普 500 指數（S&P 500）"
+    assert one["availability"] == {"3M": True, "6M": True, "1Y": True, "3Y": False}
+    assert one["caption_lines"][1] == "來源 Yahoo Finance (^GSPC)　取得時間 2026-10-27 14:00（UTC+8）"
+    assert one["period_return"]["text"].startswith("期間漲跌 ") and "%（" in one["period_return"]["text"]
+    assert ms.TEXT_FRED_OBS_NOTE not in one["caption_lines"]      # 價格卡不帶殖利率註記
+    assert ms.sp500_model(d, "3Y")["message"] == "資料不足以呈現此期間"
+
+
+def test_SP500系統錯誤_一般畫面只寫取數失敗_原文走原始訊息():
+    bad = _dom("sp500", "系統錯誤", source="Yahoo Finance (^GSPC)", reason="Yahoo:^GSPC 失敗：HTTP 429")
+    view = _view(sp500=bad)
+    model = ms.sp500_model(bad, "1Y")
+    assert model["message"] == "⛔ 取數失敗" and model["spec"] is None and model["period_return"] is None
+    assert "429" not in "".join(ms.section_strings(view, "1Y"))
+    assert [r["text"] for r in ms.raw_entries(view)] == ["⛔ 取數失敗：Yahoo:^GSPC 失敗：HTTP 429"]
+
+
+def test_殖利率圖卡_單位是百分比_期間指標是百分點pp_不是百分比報酬():
+    pts = [{"obs_date": "2026-10-01", "value_num": 4.00}, {"obs_date": "2026-10-02", "value_num": None},
+           {"obs_date": "2026-10-05", "value_num": 4.10}, {"obs_date": "2026-10-06", "value_num": 4.15}]
+    r = ms.period_change_pp(pts)
+    assert r["status"] == "ok" and r["kind"] == "pp" and r["pct"] is None
+    assert r["pp"] == pytest.approx(0.15)                          # 4.15 - 4.00，不是 +3.75%
+    assert r["text"] == "期間變動 +0.15 個百分點（pp）（2026-10-01 至 2026-10-06，FRED 觀測值）"
+    assert "%" not in r["text"]                                      # 沒有任何「百分比報酬」字樣
+    down = ms.period_change_pp([{"obs_date": "2026-10-01", "value_num": 4.20},
+                                {"obs_date": "2026-10-02", "value_num": 3.95}])
+    assert down["text"].startswith("期間變動 -0.25 個百分點")
+    assert logic.scan_forbidden([r["text"], down["text"]]) == {}
+
+
+def test_殖利率pp_起點為0或負值也有定義_不像百分比報酬會拒絕():
+    r = ms.period_change_pp([{"obs_date": "2026-10-01", "value_num": 0.0},
+                             {"obs_date": "2026-10-02", "value_num": 0.30}])
+    assert r["status"] == "ok" and r["pp"] == pytest.approx(0.30)
+    n = ms.period_change_pp([{"obs_date": "2026-10-01", "value_num": -0.10},
+                             {"obs_date": "2026-10-02", "value_num": 0.20}])
+    assert n["pp"] == pytest.approx(0.30)
+    assert ms.period_return([{"obs_date": "2026-10-01", "value_num": 0.0},
+                             {"obs_date": "2026-10-02", "value_num": 0.30}])["status"] == "undeterminable"
+
+
+@pytest.mark.parametrize("pts", [
+    [],
+    [{"obs_date": "2026-10-01", "value_num": 4.0}],
+    [{"obs_date": "2026-10-01", "value_num": 4.0}, {"obs_date": "2026-10-02", "value_num": None}],
+    [{"obs_date": "2026-10-01", "value_num": _NAN}, {"obs_date": "2026-10-02", "value_num": 4.0}],
+    [{"obs_date": "2026-10-01", "value_num": 4.0}, {"obs_date": "2026-10-02", "value_num": _INF}],
+    [{"obs_date": "2026-10-01", "value_num": True}, {"obs_date": "2026-10-02", "value_num": 4.0}],
+])
+def test_殖利率pp_不足兩點或非有限數或布林_無法判定_不補值(pts):
+    assert ms.period_change_pp(pts) == {"status": "undeterminable", "kind": "pp", "pp": None, "pct": None,
+                                        "first_obs": None, "last_obs": None, "text": "⬜ 無法判定"}
+
+
+def test_殖利率圖卡_單位標示_觀測日註記_來源逐字_不宣稱公布延遲():
+    by = ms.domain_by_key(_view())
+    for fn, key, label, short in ((ms.us10y_model, "us10y", "FRED (DGS10)", "US10Y"),
+                                  (ms.us2y_model, "us2y", "FRED (DGS2)", "US2Y")):
+        m = fn(by[key], "1Y")
+        assert m["spec"] is not None
+        assert m["caption_lines"][1] == f"來源 {label}　取得時間 2026-10-27 14:00（UTC+8）"
+        assert ms.TEXT_FRED_OBS_NOTE in m["caption_lines"]
+        assert m["period_return"]["kind"] == "pp"
+        enc = m["spec"]["layer"][0]["encoding"]["y"]
+        assert enc["title"] == "殖利率（%）"                          # 軸標題寫百分比，不是價格「指數點位」
+        assert "指數點位" not in "".join(chart.spec_strings(m["spec"]))
+        assert m["spec"]["layer"][2]["data"]["values"][0]["text"].startswith(f"{short} ")
+        blob = "".join(m["caption_lines"]) + m["period_return"]["text"]
+        for word in ("公布延遲", "發布延遲", "T+", "落後"):
+            assert word not in blob
+        assert m["availability"] == {"3M": True, "6M": True, "1Y": True, "3Y": False}
+
+
+def test_殖利率系統錯誤_缺金鑰_一般畫面只寫取數失敗_原文走原始訊息():
+    bad = _dom("us10y", "系統錯誤", source="FRED (DGS10)", reason="未設定 FRED_API_KEY")
+    view = _view(us10y=bad)
+    m = ms.us10y_model(bad, "1Y")
+    assert m["message"] == "⛔ 取數失敗" and m["spec"] is None and m["period_return"] is None
+    assert not any("FRED_API_KEY" in s for s in ms.section_strings(view, "1Y"))
+    assert [r["text"] for r in ms.raw_entries(view)] == ["⛔ 取數失敗：未設定 FRED_API_KEY"]
+    assert ms.conclusion_model(view)["rows"][5]["status_text"] == "⛔ 取數失敗"
+    assert ms.conclusion_model(view)["text"] == "暫無完整市場綜合判定（缺正式 aggregation rule）"
+
+
+def test_殖利率資料未備_卡上寫原因_沒有圖():
+    miss = _dom("us2y", "資料未備", reason_code="no_closed_observation", reason="現行版次的值為缺值 3 個觀測日不寫")
+    m = ms.us2y_model(miss, "1Y")
+    assert m["spec"] is None and m["message"] == "⬜ 資料未備：現行版次的值為缺值 3 個觀測日不寫"
+
+
+def test_NASDAQ_MSCI仍是Missing_不被SP500或殖利率頂替():
+    by = ms.domain_by_key(_view())
+    for key in ("nasdaq", "msci_world", "msci_em"):
+        assert ms.missing_copy(by[key]) == ms.TEXT_INTL_MISSING
+        assert by[key]["points"] == []
+    blob = repr(ms.section_strings(_view(), "1Y"))
+    for token in ("QQQ", "SPY", "URTH", "ACWI", "IXIC", "^GSPC 代"):
+        assert token not in blob
+
+
+def test_Mutation_把所有新domain換成系統錯誤_既有Missing文案與結論句不變():
+    bad = {k: _dom(k, "系統錯誤", reason=f"{k} boom") for k in ("sp500", "us10y", "us2y")}
+    view = _view(**bad)
+    by = ms.domain_by_key(view)
+    assert ms.missing_copy(by["eps_pe_scenario"]) == ms.TEXT_EPS_PE_MISSING
+    assert ms.missing_copy(by["nasdaq"]) == ms.TEXT_INTL_MISSING
+    assert ms.conclusion_model(view)["text"] == ms.TEXT_NO_CONCLUSION
+    assert len(ms.raw_entries(view)) == 3
+
+
+def test_S2略過觀測的安靜說明_ok的殖利率卡帶reason時多一行_沒有reason時不多():
+    quiet = ms.us10y_model(_yield_ok("us10y", "FRED (DGS10)"), "1Y")
+    assert not [c for c in quiet["caption_lines"] if "略過" in c]
+    d = _yield_ok("us10y", "FRED (DGS10)")
+    d["reason"] = "已略過 3 筆無法採用的觀測"
+    m = ms.us10y_model(d, "1Y")
+    assert m["status"] == "ok" and m["spec"] is not None             # 狀態仍是 ok，圖照畫
+    assert m["caption_lines"][-1] == "已略過 3 筆無法採用的觀測" and m["message"] is None
+    assert logic.scan_forbidden(m["caption_lines"]) == {}
+    assert "已略過 3 筆無法採用的觀測" in ms.section_strings(_view(us10y=d), "1Y")
+
+
+def test_S2非ok的domain不加說明行_原因照舊走message():
+    bad = _dom("us10y", "資料未備", reason="值為缺值或非有限數字 2 筆不寫", reason_code="no_closed_observation")
+    m = ms.us10y_model(bad, "1Y")
+    assert m["caption_lines"] == [] and m["message"].endswith("值為缺值或非有限數字 2 筆不寫")
+
+
+def test_pp四捨五入為零不印負號_N2():
+    mk = lambda a, b: ms.period_change_pp([{"obs_date": "2026-10-01", "value_num": a}, {"obs_date": "2026-10-02", "value_num": b}])
+    for delta in (-0.004, 0.004, 0.0, -1e-12):
+        t = mk(4.0, 4.0 + delta)["text"]
+        assert t.startswith("期間變動 0.00 個百分點") and "-0.00" not in t and "+0.00" not in t, t
+    assert mk(4.0, 4.006)["text"].startswith("期間變動 +0.01 個百分點")
+    assert mk(4.0, 3.994)["text"].startswith("期間變動 -0.01 個百分點")
+
+
+def test_圖上最後一點標籤_接近零的殖利率不印負零():
+    from ui_v2.mkt import chart as ch
+    pts = [{"obs_date": "2026-10-01", "value_num": 0.1}, {"obs_date": "2026-10-02", "value_num": -0.003}]
+    spec = ch.build_spec(pts, label="US2Y", value_title="殖利率（%）", color="#000000", description="x")
+    texts = [t for t in ch.spec_strings(spec) if t.startswith("US2Y ")]
+    assert texts == ["US2Y 0.00"], texts

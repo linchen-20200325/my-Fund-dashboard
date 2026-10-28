@@ -11,7 +11,10 @@ BL-0516 批 1（客戶裁示 C，`DEC-2026-10-27-41`；`docs/v2/66` 第 3.1 節�
   `DEC-2026-10-27-41`；`docs/v2/66` 3.1「不可顯示」）。
 - **Missing 就是 Missing**：沒有正式來源的 domain 不補值、不用 0、不拿別的代號頂替（例：不以 QQQ 代 NASDAQ）。
 - **已知限制（期間邊界）**：視窗起點若落在週末／假日，最早一筆有值觀測日必晚於起點，會被判「資料不足」；
-  不另發明容忍規則。VIX 的 L1 抓 2y（3Y 本來就不足）；TAIEX 抓 5y（`market_view.TAIEX_RANGE`），3Y 在歷史夠長時可用。
+  不另發明容忍規則。VIX、TAIEX、S&P 500 本頁都抓 5y（`market_view.VIX_RANGE`／`TAIEX_RANGE`／`SP500_RANGE`），
+  3Y 在歷史夠長時可用；美債殖利率 FRED 抓約 5 年（`market_view.FRED_VIEW_LOOKBACK_DAYS`）。
+- **殖利率不是價格**（BL-0517 (2)）：單位是百分比（`%`），期間指標是**百分點變動（pp，末值減首值）**，不是報酬率；
+  不算 `%` 漲跌、不除以起點（起點為 0 或負也有定義）。資料日期是 FRED **觀測日**，不是公布日，本檔不宣稱任何公布延遲。
 - **新鮮度只顯示資料日期與經過天數，不判新舊、不上顏色**（門檻 ⬜ 門檻待裁示，不自創）；
   經過天數沿用 `logic.delay_days`／`logic.freshness_badge_text`，台北日期（同 `live.DISPLAY_TZ`）。
 """
@@ -33,11 +36,16 @@ TEXT_DATA_GAP = "⬜ Data Gap：目前沒有已核准的資料來源"
 TEXT_FRESHNESS_THRESHOLD = "新鮮度門檻 ⬜ 門檻待裁示：本圖只顯示資料日期與經過天數，不判新舊"
 TEXT_PERIOD_RETURN_UNDETERMINABLE = "⬜ 無法判定"
 TEXT_GAP_NOTE = "圓點為實際觀測日；相鄰觀測之間的連線不代表中間日有資料；缺值日不補值"
+TEXT_FRED_OBS_NOTE = "資料日期為 FRED 觀測日（不是公布日）；單位為百分比（%），不是價格"
+# ~~「…；只取現行版次；…」~~：2026-10-28 改走 `fetch_fred_with_error`（不讀 vintage），該句不再為真（總管擬，待覆核；有意識的更正，不是漏刪）。
 
 # domain → 畫面名稱
 LABELS = {
     "vix": "波動度指數（VIX）",
     "taiex": "台股加權指數（TAIEX）",
+    "sp500": "標普 500 指數（S&P 500）",
+    "us10y": "美國 10 年期公債殖利率",
+    "us2y": "美國 2 年期公債殖利率",
     "taiex_volume": "台股成交量",
     "market_stats": "台股市場統計",
     "nasdaq": "NASDAQ",
@@ -131,9 +139,32 @@ def period_return(points: list) -> dict:
             "text": f"期間漲跌 {pct:+.1f}%（{first['obs_date']} 至 {last['obs_date']}，收盤價）"}
 
 
+def period_change_pp(points: list) -> dict:
+    """殖利率（單位 %）的期間變動：視窗內最後一個有值觀測 **減** 第一個有值觀測，單位**百分點（pp）**。
+
+    這不是報酬率：不除以起點、不乘 100，所以起點為 0 或負值也有定義（殖利率可為負）。
+    有值的點少於 2 個 → `{"status": "undeterminable", ...}`，不補值、不內插。NaN／inf／bool／None 不是觀測。
+    成功 → `{"status": "ok", "kind": "pp", "pp": float, "pct": None, "first_obs", "last_obs", "text": "期間變動 +0.15 pp（…）"}`。
+    確定性算術，不是判定：不分偏多偏空、不上方向顏色。
+    """
+    valued = [p for p in points if _is_observed_number(p.get("value_num"))]
+    if len(valued) < 2:
+        return {"status": "undeterminable", "kind": "pp", "pp": None, "pct": None, "first_obs": None,
+                "last_obs": None, "text": TEXT_PERIOD_RETURN_UNDETERMINABLE}
+    first, last = valued[0], valued[-1]
+    pp = last["value_num"] - first["value_num"]
+    pp_text = "0.00" if abs(pp) < 0.005 else f"{pp:+.2f}"      # 四捨五入後為零不印正負號（避免「-0.00」）
+    return {"status": "ok", "kind": "pp", "pp": pp, "pct": None, "first_obs": first["obs_date"],
+            "last_obs": last["obs_date"],
+            "text": f"期間變動 {pp_text} 個百分點（pp）（{first['obs_date']} 至 {last['obs_date']}，FRED 觀測值）"}
+
+
 def _price_model(domain: dict, period: str, *, key: str, short_label: str, value_title: str,
-                 with_return: bool = False) -> dict:
-    """日頻收盤折線圖卡模型（VIX、TAIEX 共用，同一份 `chart`）。`period` 是目前選的期間。
+                 with_return: bool = False, change: str = "pct", observation_word: str = "收盤") -> dict:
+    """日頻折線圖卡模型（VIX、TAIEX、S&P 500、美債殖利率共用，同一份 `chart`）。`period` 是目前選的期間。
+
+    `change`：`"pct"`＝價格報酬（`period_return`）；`"pp"`＝百分點變動（`period_change_pp`，殖利率用）。
+    `observation_word`：圖說明用字（價格「收盤」、殖利率「觀測值」）。
 
     - `domain.status != ok`：沒有圖，`message` 是原因（系統錯誤只寫「⛔ 取數失敗」，原文走 `raw_entries`；資料未備寫原因）。
     - ok：`slice` 是 `chart.slice_period` 的結果；`slice.status == insufficient` → 沒有圖，message 為固定文案。
@@ -160,6 +191,11 @@ def _price_model(domain: dict, period: str, *, key: str, short_label: str, value
         TEXT_FRESHNESS_THRESHOLD,
         TEXT_GAP_NOTE,
     ]
+    if change == "pp":
+        model["caption_lines"].append(TEXT_FRED_OBS_NOTE)
+    if domain.get("reason"):
+        # S2：有點留下、但有觀測被略過 → 安靜的一行說明（文案由 L2 `skipped_observations_text` 產生，總管擬，待覆核）。
+        model["caption_lines"].append(domain["reason"])
     if sliced["status"] == chart.STATUS_INSUFFICIENT:
         model["message"] = chart.TEXT_INSUFFICIENT
     elif sliced["status"] == chart.STATUS_EMPTY:
@@ -167,9 +203,9 @@ def _price_model(domain: dict, period: str, *, key: str, short_label: str, value
     else:
         model["spec"] = chart.build_spec(
             sliced["points"], label=short_label, value_title=value_title, color=theme.TEAL_DARK,
-            description=f"{LABELS[key]}近 {period} 日收盤折線圖，資料日期至 {domain['obs_date']}")
+            description=f"{LABELS[key]}近 {period} {observation_word}折線圖，資料日期至 {domain['obs_date']}")
         if with_return:
-            model["period_return"] = period_return(sliced["points"])
+            model["period_return"] = (period_change_pp if change == "pp" else period_return)(sliced["points"])
     return model
 
 
@@ -184,6 +220,24 @@ def taiex_model(domain: dict, period: str) -> dict:
                         with_return=True)
 
 
+def sp500_model(domain: dict, period: str) -> dict:
+    """S&P 500 圖卡模型（來源 Yahoo `^GSPC`，標示由 L2 帶入；有期間漲跌，同 TAIEX）。"""
+    return _price_model(domain, period, key="sp500", short_label="S&P 500", value_title="指數點位（index）",
+                        with_return=True)
+
+
+def us10y_model(domain: dict, period: str) -> dict:
+    """美國 10 年期公債殖利率圖卡模型（FRED DGS10；單位 %；期間指標為百分點變動 pp）。"""
+    return _price_model(domain, period, key="us10y", short_label="US10Y", value_title="殖利率（%）",
+                        with_return=True, change="pp", observation_word="觀測值")
+
+
+def us2y_model(domain: dict, period: str) -> dict:
+    """美國 2 年期公債殖利率圖卡模型（FRED DGS2；單位 %；期間指標為百分點變動 pp）。"""
+    return _price_model(domain, period, key="us2y", short_label="US2Y", value_title="殖利率（%）",
+                        with_return=True, change="pp", observation_word="觀測值")
+
+
 def period_option_label(period: str, available: bool) -> str:
     """期間按鈕字面：資料不足的期間在按鈕上就說明，不等按下去才發現。"""
     return period if available else f"{period}（資料不足）"
@@ -192,7 +246,7 @@ def period_option_label(period: str, available: bool) -> str:
 def section_strings(view: dict, period: str) -> list:
     """本區段所有面向使用者的字串（供禁詞／箭頭／目標價掃描）。"""
     domains = domain_by_key(view)
-    out = [SECTION_LABEL, TEXT_NO_CONCLUSION, TEXT_FRESHNESS_THRESHOLD, TEXT_GAP_NOTE]
+    out = [SECTION_LABEL, TEXT_NO_CONCLUSION, TEXT_FRESHNESS_THRESHOLD, TEXT_GAP_NOTE, TEXT_FRED_OBS_NOTE]
     for row in conclusion_model(view)["rows"]:
         out += [row["label"], row["status_text"]]
     vix = vix_model(domains["vix"], period)
@@ -209,6 +263,15 @@ def section_strings(view: dict, period: str) -> list:
         out.append(taiex["period_return"]["text"])
     if taiex["spec"] is not None:
         out += chart.spec_strings(taiex["spec"])
+    for fn, key in ((sp500_model, "sp500"), (us10y_model, "us10y"), (us2y_model, "us2y")):
+        card = fn(domains[key], period)
+        out += [card["label"], *card["caption_lines"]]
+        if card["message"]:
+            out.append(card["message"])
+        if card["period_return"] is not None:
+            out.append(card["period_return"]["text"])
+        if card["spec"] is not None:
+            out += chart.spec_strings(card["spec"])
     for key in _MISSING_COPY:
         out += [LABELS[key], missing_copy(domains[key])]
     return out

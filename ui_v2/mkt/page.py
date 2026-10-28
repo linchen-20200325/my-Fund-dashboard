@@ -664,6 +664,9 @@ def _render_mkt7(block: dict, *, plain_mode: bool = False) -> None:
 
 _VIX_PERIOD_KEY = "mkt_vix_period"
 _TAIEX_PERIOD_KEY = "mkt_taiex_period"
+_SP500_PERIOD_KEY = "mkt_sp500_period"
+_US10Y_PERIOD_KEY = "mkt_us10y_period"
+_US2Y_PERIOD_KEY = "mkt_us2y_period"
 
 
 def _trend_card(title: str, inner_html: str, section: str) -> str:
@@ -692,7 +695,7 @@ def _missing_card_html(domain: dict) -> str:
 
 @st.fragment
 def _render_price_card(domain: dict, key: str, model_fn, period_key: str) -> None:
-    """日頻收盤折線圖卡（VIX、TAIEX 共用，同一個 `chart`）。期間切換在 fragment 內：只重跑這一張卡，不重跑整頁（§5 重繪成本）。"""
+    """日頻折線圖卡（VIX、TAIEX、S&P 500、美債殖利率共用，同一個 `chart`）。期間切換在 fragment 內：只重跑這一張卡，不重跑整頁（§5 重繪成本）。"""
     model = model_fn(domain, chart.DEFAULT_PERIOD)
     with st.container(border=True):
         st.markdown(
@@ -725,6 +728,9 @@ def _render_market_section(view: dict) -> None:
     _render_price_card(domains["taiex"], "taiex", market_section.taiex_model, _TAIEX_PERIOD_KEY)
     taiex = "".join(_missing_card_html(domains[k]) for k in ("taiex_volume", "market_stats"))
     st.markdown(f'<div class="mkt-trend-grid">{taiex}</div>', unsafe_allow_html=True)
+    _render_price_card(domains["sp500"], "sp500", market_section.sp500_model, _SP500_PERIOD_KEY)
+    _render_price_card(domains["us10y"], "us10y", market_section.us10y_model, _US10Y_PERIOD_KEY)
+    _render_price_card(domains["us2y"], "us2y", market_section.us2y_model, _US2Y_PERIOD_KEY)
     intl = "".join(_missing_card_html(domains[k]) for k in ("nasdaq", "msci_world", "msci_em"))
     st.markdown(f'<div class="mkt-trend-grid">{intl}</div>', unsafe_allow_html=True)
     eps = "".join(_missing_card_html(domains[k]) for k in ("eps_pe_scenario", "implied_trailing_index_earnings"))
