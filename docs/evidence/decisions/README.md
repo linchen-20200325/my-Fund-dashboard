@@ -20,6 +20,8 @@
 | `2026-10-27_a_c_parallel_rulings.md` | 客戶 2026-10-27「A＋C 並行」正式裁示全文（A：BL-0509 多日 probe 與授權／條款研究；C：🌍 不依賴 EPS 的內容；EPS×PE 與 `implied_trailing_index_earnings` 維持 Missing／無法判定；A、C 分開 PR；Model／Effort；`docs/DECISIONS.md` `DEC-2026-10-27-41`，執行組讀法 `-42`）；全文逐字，無遮蔽（原文無作者姓名） | 客戶 2026-10-27 對話中正式裁示，經總管於派工單內逐字轉存 | 2026-10-27 | main `2147ff3c`（全長 `2147ff3ca2aac711175996779d671aae215dc2bc`） | 4339 | `6dc6956a677c3c427118cb9c6c24a798546a8ccde8a2e471033c0eecd9bb1c42` |
 | `2026-10-27_bl0518_twii_ruling.md` | 客戶 2026-10-27 BL-0518 核准裁示全文（僅以 Yahoo `^TWII` 作 TAIEX 指數價格／歷史 Data View 來源；禁止延伸為成交量、市場 PE、EPS、forward EPS、g、市場廣度、TWSE 官方統計；重用既有 Yahoo fetcher；`source = Yahoo Finance (^TWII)`；BL-0517 繼續盤點；`docs/DECISIONS.md` `DEC-2026-10-27-43`）；全文逐字，無遮蔽（原文無作者姓名） | 客戶 2026-10-27 對話中正式裁示，經總管於派工單內逐字轉存 | 2026-10-27 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72` `e71719e4` | 1784 | `35705b895f772f3336c1283ddfcadd7bb2d4adbc3732c58b005a57fe9023677e` |
 | `2026-10-28_silent_cruise_rule.md` | 客戶 2026-10-27 永久工作規則裁示全文：恢復並嚴格執行 Silent Autonomous Cruise（主動回報僅四種情況、一律靜默清單、完整批次回報格式、永久非臨時；`docs/DECISIONS.md` `DEC-2026-10-27-45`；落地為 `PROJECT_RULES.md` 3.2 與 `docs/HANDOFF.md` 第 0 節第 6 點）；全文逐字，無遮蔽（原文無作者姓名） | 客戶 2026-10-27 對話中正式裁示，經總管於派工單內逐字轉存 | 2026-10-28 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72` `efda57e5`（全長 `efda57e5956e5ced637e305a607c080af12e194b`） | 2883 | `4c6f3c7f75875efcfede034d4d18b5c6447da9db63c5dc31b7b186d3281b5045` |
+| `2026-10-28_cross_view_consistency_ruling.md` | 客戶 2026-10-28 新增正式高優先需求 Cross-View Data Consistency Gate 全文（核心規則、正式架構鏈、12 項盤點、Cross-View Data Consistency Matrix 欄位、多來源衝突處理、automated consistency test proposal、本輪僅 audit／matrix／gap／test proposal、Decision Gate 觸發項、不取代 BL-0509、Model／Effort；`docs/DECISIONS.md` `DEC-2026-10-28-01`；落地為 `PROJECT_RULES.md` 13.3 與 `docs/v2/69_cross_view_consistency_spec.md`）；全文逐字，無遮蔽（原文無作者姓名） | 客戶 2026-10-28 對話中正式需求指示，經總管於派工單內逐字轉存 | 2026-10-28 | main `10e4670c`（全長 `10e4670c7e14511c6cf07dc67a26b8da74896041`） | 4156 | `f4a555e91997a44a4d524937a7b6b8ab07300e1fe6d51b56952d9fe5a1d9f959` |
+| `2026-10-28_context_efficiency_rule.md` | 客戶 2026-10-28 永久 Context Efficiency 規則全文（自動 compact 設定建議與禁止、compact 前提與保留重點、Minimum Necessary Read Scope、frozen 44 局部讀取、BACKLOG／DECISIONS 針對性查詢、code grep-first、已完成歷史只看摘要、compact 後恢復順序、靜默處理、GitHub 為長期記憶；`docs/DECISIONS.md` `DEC-2026-10-28-02`；落地為 `PROJECT_RULES.md` 11.1）；全文逐字，無遮蔽（原文無作者姓名） | 客戶 2026-10-28 對話中永久規則指示，經總管於派工單內逐字轉存 | 2026-10-28 | main `10e4670c`（全長 `10e4670c7e14511c6cf07dc67a26b8da74896041`） | 4498 | `799439e5d1d20fc86a1ae170a2042369c3400cd8b94b30807dcfde0f30f38e54` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 
@@ -144,6 +146,28 @@
 - 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-28_silent_cruise_rule.md`。
 - 雜湊為 2026-10-28 實跑。
 
+### `2026-10-28_cross_view_consistency_ruling.md` 的兩個雜湊
+
+| 對象 | 大小（bytes） | sha256 |
+|---|---|---|
+| 整檔（檔頭說明＋圍欄） | 4156 | `f4a555e91997a44a4d524937a7b6b8ab07300e1fe6d51b56952d9fe5a1d9f959` |
+| 圍欄內文（＝檔內實際位元組；無跳脫碼，故沒有「換回原字」那一列） | 3024 | `cf764a431f42db59d8d84b07b2e0e295e90a246a7e604feb73f78c5ff3497617` |
+
+- 圍欄內文照總管派工單內客戶原文照抄；唯一格式處理：無（原文無只含空白的行，行尾空白：0 行）。轉存原文不入 repo，故執行組無法逐位元組比對，只能保證存檔圍欄與上表雜湊一致。
+- 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`。
+- 雜湊為 2026-10-28 實跑。
+
+### `2026-10-28_context_efficiency_rule.md` 的兩個雜湊
+
+| 對象 | 大小（bytes） | sha256 |
+|---|---|---|
+| 整檔（檔頭說明＋圍欄） | 4498 | `799439e5d1d20fc86a1ae170a2042369c3400cd8b94b30807dcfde0f30f38e54` |
+| 圍欄內文（＝檔內實際位元組；無跳脫碼，故沒有「換回原字」那一列） | 3456 | `fa959c7305a269c4d75188d75fff33a2a8e57b778bc9e6849b95129aca95fe4d` |
+
+- 圍欄內文照總管派工單內客戶原文照抄；唯一格式處理：無（原文無只含空白的行，行尾空白：0 行）。轉存原文不入 repo，故執行組無法逐位元組比對，只能保證存檔圍欄與上表雜湊一致。
+- 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`。
+- 雜湊為 2026-10-28 實跑。
+
 ## 撞字登記
 
 全文含交接本第 7 節〈客戶 2026-10-05 接手訊息：禁詞〉詞表的**第 7、8 個詞**，共 3 處，都在治理第 6 項「未來允許的方向」列舉內（圍欄內第 114、116、117 行）。依該節〈禁詞〉體例以 Unicode 跳脫碼書寫（`\u52a0\u78bc`、`\u6e1b\u78bc`），其餘一字未改。第 1～6 個詞以 2026-10-16 碼位組字掃描 0 命中。依客戶 2026-10-15 Phase 1.5（A+ 修正版）裁示，第 5～8 個詞已不是永久禁詞；本批新增行仍以 0 命中為目標，故改用跳脫碼並在此登記（與 `branch_archive/pr838/README.md` 不同：那裡是逐字摘錄照字面保留、只做登記）。
@@ -165,6 +189,10 @@
 `2026-10-27_bl0518_twii_ruling.md`：圍欄內以詞表第 7、8 個詞碼位組字掃描 0 命中（2026-10-27 實跑）；無撞字、無跳脫碼。
 
 `2026-10-28_silent_cruise_rule.md`：圍欄內以詞表第 7、8 個詞碼位組字掃描 0 命中（2026-10-28 實跑）；無撞字、無跳脫碼。
+
+`2026-10-28_cross_view_consistency_ruling.md`：圍欄內以詞表第 7、8 個詞碼位組字掃描 0 命中（2026-10-28 實跑）；無撞字、無跳脫碼。
+
+`2026-10-28_context_efficiency_rule.md`：圍欄內以詞表第 7、8 個詞碼位組字掃描 0 命中（2026-10-28 實跑）；無撞字、無跳脫碼。
 
 已實測：無行尾空白、結尾單一換行、無 session 識別碼、無合併衝突標記。
 

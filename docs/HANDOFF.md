@@ -6,7 +6,7 @@
 > 文中若引「約 :N」行號，以 `git show d5d391b:<path>` 讀（本批合併後交接本等檔的行號已因指標行而位移）。
 
 > **⏯ Resume Checkpoint**（規則：`PROJECT_RULES.md` 第 6 節 6.1.2，`DEC-2026-10-26-02`；**總管提供**；接手先依該節恢復流程比對 GitHub，不一致以 GitHub 為準；本區塊為結束對話版，**覆蓋**舊 checkpoint，不累加歷史，舊版在 git 歷史）
-> - **last checkpoint**：2026-10-28，BL-0517 已合併（#1094，`b7b59363`）後；本批＝文件同步（BACKLOG／HANDOFF）；承接 A＋C 並行裁示（`DEC-2026-10-27-41`、`-42`、`-43`、執行組讀法 `-44`）與 #1089（BL-0509 多日排程已啟用）
+> - **last checkpoint**：2026-10-28，BL-0517 已合併（#1094，`b7b59363`）後；本批＝文件同步（BACKLOG／HANDOFF）；加記 Cross-View Data Consistency Gate 落盤批（2026-10-28，`DEC-2026-10-28-01`，僅文件）；承接 A＋C 並行裁示（`DEC-2026-10-27-41`、`-42`、`-43`、執行組讀法 `-44`）與 #1089（BL-0509 多日排程已啟用）
 > - **① latest verified main**：`b7b59363`（#1094，BL-0517 國際圖卡＋Silent Cruise 永久規則，`git fetch`＋`git rev-parse origin/main` 查證，2026-10-28 本批開工時）；合併本批後 SHA 會變，**以 `git log origin/main` 為準**
 > - **② Open／Draft PR**：撰寫時以 REST（`gh api repos/.../pulls?state=open`）查得 0 個（2026-10-28；本批文件 PR 待開，以 GitHub 實況為準）；遠端另有 probe 專用分支 `probe/twse-eps-trigger`（按鈕分支）與 `probe/twse-eps-results`（報告推送分支，排程報告落此），皆為既有設計，不處理
 > - **③ 最後完成的批次／PR**：#1083（frozen 44 G-44 最小 amendment）→ #1084（BL-0484 vNext 殼層）→ #1085 → #1086 → #1087（BL-0509 probe 腳本與 workflow）→ #1088（BL-0509 第一次 probe 結果落盤，`docs/v2/68`）→ #1089（BL-0509 多日排程、同網域條款研究、series analyzer，`2147ff3c`；#1087、#1088、#1089 皆已合併）→ #1090（A＋C 並行裁示落盤：`DEC-2026-10-27-41`、`-42`；BL-0516～BL-0518；`docs/v2/66` 區段 B／C 補記，`d6736a53`，已合併）→ #1091（BL-0516 批 1：VIX 圖＋Missing domain，`b14f642c`，已合併）→ #1093（BL-0518：TAIEX 折線圖卡，`dc0eb59c`，已合併）→ #1094（BL-0517：S&P 500／美債 10Y·2Y／VIX 3Y＋Silent Cruise 永久規則，`b7b59363`，已合併）；本批僅文件同步
@@ -19,8 +19,9 @@
 > - **⑩ 建議 Model／Effort**：Sonnet 5.5／Medium（客戶 2026-10-27）；涉及正式市場綜合判斷公式、forward EPS model、Risk Cap、investment-core semantics 時，照 Model／Effort Change Gate 通知（`PROJECT_RULES.md` 第 5 節）
 > - **⑪ 未提交／未 push／未合併工作**：無程式碼層未合併工作；唯一待合併＝本文件同步批；#1090、#1091、#1093、#1094 已合併，以 GitHub 實況與本分支 head 為準
 > - **⑫ blocker／Stop Gate**：無停住中的 Stop Gate。**待客戶裁示**：批次 2～6 的 G-DATA／G-FORM／G-DIR；BL-0495；BL-0496；BL-0498～BL-0507 Data Source Gates；BL-0491 其餘；各 Decision Gate 待簽字。**已知未驗證**：`alo`／`hld` 在真實 Active Sheet 資料下的淺色畫面未驗；預設頁直開 `/mkt` 出現 Page not found（base 即有，非殼層引入）；20 條瀏覽器測試僅 CI 跑過、本機未跑。**本機失敗記錄更新**：先前記錄的「`tests/ui_v2` 內 6 條在本機失敗」中，83 條 stub 相關失敗已於 #1094 修復（據派工單，本批未重跑）；該「6 條本機失敗」對 main **仍未驗證**（含 `test_rulings_2026_10_18b_logic` 的 md5 測試與 `test_ui_v2_lane_guards` 的 urllib-proxy 測試；環境因素，CI 綠）
+> - **⑬ Cross-View Data Consistency Gate（客戶 2026-10-28 新增正式高優先需求，`DEC-2026-10-28-01`，永久原則 `PROJECT_RULES.md` 13.3）**：本批只落盤 audit／Matrix／gap／test proposal（`docs/v2/69_cross_view_consistency_spec.md`；BL-0519～BL-0524）。四份審計唯讀、無網路，**沒有觀察到任何數值落差**，所列不一致皆為機制層級。**BL-0509 不變，仍是下一步（⑥）**；Cross-View 是獨立的下一個資料治理 batch。**待客戶裁示（Decision Gate）**：source precedence、canonical identity、valuation methodology、FX cutoff、formula（BL-0519／0521／0522／0524）；第一步排序只有總管推薦（先做 BL-0520 特徵化測試，再就 canonical identity 請客戶簽），未決定。**未經 Decision Gate 不得改**：NAV 來源次序、基金識別鍵推導、`get_latest_nav`／估值／FX 日期規則、報酬公式、benchmark 對應，也不得新增自帶第二套來源或公式的 view。下一個唯一且安全的接手點仍是 BL-0509 序列分析；若客戶指派 Cross-View，先做 BL-0520（僅測試，不動行為）。
 > - **新 AI 開工必讀順序**：`CLAUDE.md` → `PROJECT_RULES.md` → 本檔 → `docs/BACKLOG.md` → `docs/DECISIONS.md`（`DEC-2026-10-27-41`～`-44`，再往前 `-25`～`-40`、`-08`～`-24`、`-01`～`-07`）→ `docs/v2/66_market_trend_spec.md` 區段 B／C 與 3.1 → `docs/v2/68_bl0509_eps_probe_result.md` → `docs/v2/67_ai_action_vocabulary.md` → `docs/design/vnext_visual_blueprint.md` 第 8 節
-> - **禁止事項**：不得重議已裁示 DEC；不得改 44（凍結，解凍須另行裁示）；commit／PR 不得含 AI 署名、session 網址、模型名；公開 repo 不得寫真人名、proxy／NAS host、credential；missing ≠ 0（不得 `EPS = 0`、不得 fillna(0)、不得假資料）；不得把 TAIEX／市場 PE 命名為正式 forward `EPS_base`；不得把個股本益比簡單平均當市場 PE；不得讓 AI 自行判斷市場綜合結論；不得新增未核准 API；不得做方向性 AI Action（Risk Cap／減碼 trigger 前）；不得做 forward EPS；不得平均 1084 檔個股 PE；不得動凍結的 `docs/v2/44`；BL-0509 與 🌍 頁實作不得混成一個 PR
+> - **禁止事項**：不得重議已裁示 DEC；不得改 44（凍結，解凍須另行裁示）；commit／PR 不得含 AI 署名、session 網址、模型名；公開 repo 不得寫真人名、proxy／NAS host、credential；missing ≠ 0（不得 `EPS = 0`、不得 fillna(0)、不得假資料）；不得把 TAIEX／市場 PE 命名為正式 forward `EPS_base`；不得把個股本益比簡單平均當市場 PE；不得讓 AI 自行判斷市場綜合結論；不得新增未核准 API；不得做方向性 AI Action（Risk Cap／減碼 trigger 前）；不得做 forward EPS；不得平均 1084 檔個股 PE；不得動凍結的 `docs/v2/44`；BL-0509 與 🌍 頁實作不得混成一個 PR；Cross-View 未經 Decision Gate 不得改 source precedence／canonical identity／FX／公式（⑬）
 > - **停止規則**：Stop Gate 必須顯式回報、禁止靜默停住（`DEC-2026-10-26-04`，`PROJECT_RULES.md` 6.1.3）
 > - ⚠️ **本區塊由文件組單組依 GitHub／讀檔寫成，未經第二組獨立驗證；各 BL 項細節見 `docs/BACKLOG.md`。**
 > - ⚠️ **未完成項不可視為驗收。**
@@ -34,6 +35,7 @@
 4. 交接本 §0.6「交接讀取 · 省額度」所稱「HANDOFF 第一節」，自 2026-10-16 起讀作**本檔**（交接本第 0 節開頭已加註；圍欄內逐字原文未改）。
 5. 會漂移的數字一律附查詢時間與 SHA；過期就重查，不要引用舊值。
 6. **工作模式：Silent Autonomous Cruise，嚴格執行、永久**（客戶 2026-10-27，`DEC-2026-10-27-45`；規則本文 `PROJECT_RULES.md` 第 3 節 3.2，逐字存檔 `docs/evidence/decisions/2026-10-28_silent_cruise_rule.md`）。主動回報**只有四種**：(1) 完整 batch／stage 已完成（PR、audit、CI 結果已知、merge／Auto-Ship 已完成或明確被阻擋）；(2) 真正 Stop Gate；(3) Model／Effort Change Gate；(4) 真正 blocker（無法安全自行解決且會實際阻止下一步）。其餘一律靜默：PR 正在寫、PR 已開但 CI 在跑、audit 已派出、agent 工作中、跑測試、等 workflow／reviewer／mergeability、同步 BACKLOG／HANDOFF、「只是通知」、「不需要你回覆」、重複確認 merged／ready-for-review／subscribed／unsubscribed、沒有新決策的新狀態。不要用「🟢 不需要你回覆」包裝中途進度；不需要客戶回覆又沒有完整 batch 就不發訊息。整批結束時一次回報：第一行 🟢／🟡／🔴；main SHA；PR；完成內容；audit；CI；是否需要客戶回覆；下一個唯一接手點；Model／Effort（只有需要改變時才標）。**揭露義務不因靜默消失**：未驗證／沒查證的部分寫進 PR description、audit evidence 與本檔等正式紀錄，批次回報的 audit 一行指向它們（`CLAUDE.md` §-2 規則 6）。
+7. **Context Efficiency（永久）**：搜尋優先、針對性讀取、compact 前先落盤 GitHub、GitHub 是長期記憶（客戶 2026-10-28，`DEC-2026-10-28-02`；規則本文 `PROJECT_RULES.md` 11.1，逐字存檔 `docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`）。
 
 ## 1. 必讀順序（新對話或換人接手時）
 

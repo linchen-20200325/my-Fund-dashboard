@@ -80,6 +80,8 @@
 | Minimum Sufficient Test Scope | 第 9 節 9.1 第 2～4 點（`DEC-2026-10-24-04`） |
 | GitHub Discussion Persistence Gate（協作助手與客戶的討論結論須在下一個相關實作批次前落 GitHub SSOT） | 第 12 節 12.2（`DEC-2026-10-27-19`） |
 | Public Repository Personal Name Redaction Rule（公開 repo 不得出現外部教材作者／老師真實姓名） | 第 12 節 12.3（`DEC-2026-10-27-20`） |
+| Cross-View Data Consistency Gate（同 canonical instrument＋metric＋as-of＋currency／share class ＝ 各 view 同一值；禁止各頁自選來源或平行計算；衝突不得靜默選一） | 第 13 節 13.3（`DEC-2026-10-28-01`） |
+| Context Efficiency（自動 compact 建議、最小必要讀取、frozen 44 局部讀取、compact 後恢復順序、GitHub = 長期記憶） | 第 11 節 11.1（`DEC-2026-10-28-02`） |
 
 **Supersession hygiene（同裁示）**：(1) 舊內容保留歷史，不刪；(2) 被新裁示取代時，在舊內容就地標示「superseded by <DEC-ID>」；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只能指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（現行四份見 0.4）。
 
@@ -548,6 +550,23 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 
 **既有錨點**：`PROCESS.md` §1「冷熱資料分離，嚴禁要求使用者重複解釋」（約 :69）、「主動壓縮」（約 :71）；交接本 §0.6〈交接讀取 · 省額度〉（約 :92-96；該處所稱「HANDOFF 第一節」自本批起讀作 `docs/HANDOFF.md`，~~由總管設計基準第 4 點決定~~ 由客戶治理第 5、10 項確認（`DEC-2026-10-16-07`、`-12`）（有意識的政策變更，不是漏刪；2026-10-16；決策者：客戶（治理第 10 項，`DEC-2026-10-16-12`）），交接本就地加註由同批另組負責）。開工必讀順序見 `docs/HANDOFF.md` 第 1 節（客戶治理第 11 項，`DEC-2026-10-16-13`）。
 
+### 11.1 長期規則：Context Efficiency（客戶 2026-10-28 永久規則，`DEC-2026-10-28-02`，永久）
+
+> **出處**：客戶 2026-10-28 裁示，逐字存檔 `docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`。位階同 3.1：受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄（第 0.1 節）。目的：降低 token 浪費、避免不必要的大範圍重讀。**不削弱** 3.1／3.2 的揭露義務、第 4 節 Stop／Decision Gate、第 5 節 Model／Effort Gate（文件組讀法，可被客戶推翻）。
+
+1. **自動 compact**：環境允許時建議 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=75`（約 75% 時提前 compact）。**不得**設 `DISABLE_AUTO_COMPACT=1`、`DISABLE_COMPACT=1`，除非有明確除錯理由。環境不便改變數時，context 明顯變大、完成重要 batch 或進入新階段，可主動 `/compact`；**compact 前**須確保 GitHub SSOT 已同步、HANDOFF／Resume Checkpoint 足以接手、未提交工作狀態清楚、重要客戶裁示已落盤。**compact 不得取代 GitHub persistence。**
+2. **compact 摘要保留**：repo／branch／main SHA；當前 batch；Open PR；已核准 Decision；尚未完成 Stop Gate；下一個唯一 action；Model／Effort；Data／AI boundary；frozen 44 限制；Missing／Risk Cap 等關鍵治理；未提交工作。不保留大量已完成的逐步執行紀錄。
+3. **Minimum Necessary Read Scope**：Search first → targeted read → expand only when needed。每次 GitHub Verification Gate 只先讀：current main SHA；Open／Draft PR；與當前 task 相關的 commits／diff／CI；HANDOFF current checkpoint／next action；BACKLOG 當前 BL 編號；相關 DECISION。**不預設全文讀取**整份 BACKLOG、整份 DECISIONS、整份 HANDOFF 歷史、整份 frozen 44、所有 spec、全 repo。
+4. **frozen 44**：只有本次工作真的碰到條款時，先搜尋 heading／keyword／clause，只讀必要段落與上下文，不得每輪重讀 5,000+ 行全文。**只有** integrity audit、md5／line guard、大規模 amendment 才允許全文檢查。
+5. **BACKLOG／DECISIONS**：工作是 BL-XXXX 時先搜 "BL-XXXX"，再讀附近必要上下文；需裁示時只讀直接相關 DEC 編號與 supersede chain。
+6. **Code**：先 grep／search symbol、找 caller／callee、找 tests，再讀精確檔案與函式；禁止為了解一個 function 先掃完整 repo。
+7. **已完成歷史**：已 merge 且 HANDOFF 已記錄的舊 batch，原則上只看 commit summary、必要 diff、Decision reference，不重建整個歷史推理。
+8. **新對話／compact 後恢復順序**：GitHub Verification Gate → HANDOFF current checkpoint → current BACKLOG item → direct DECISION／spec → 當前 task 需要的 code。不重做全專案 onboarding。
+9. **靜默**：不回報「我要 compact」「context 變大」「我正在讀檔」「我讀了哪些文件」；除非 context／quota 已危及正確性、必須換新對話、或 compact 無法安全繼續（此時屬 3.2 的真正 blocker）。平常全部靜默處理。
+10. **原則**：GitHub 是長期記憶；conversation context 只是工作快取。不用巨大 context 取代良好的 SSOT／targeted retrieval。
+
+**與既有規則的關係（文件組判讀，可被客戶推翻）**：本節是 3.2「不為過程發訊息」在 context 管理上的具體化；縮小讀取範圍**不得**變成略過必要驗證——第 2 節 GitHub-first 驗證、第 8 節稽核、`CLAUDE.md` §-2 規則 3／6 的複驗與揭露照舊；碰到高風險語意變更時，必要的讀取範圍由該變更的風險決定，不由本節縮小。
+
 ## 第 12 節｜新發現落盤規則
 
 新發現不得只存在聊天裡：
@@ -658,6 +677,20 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 **大規模資訊架構改版只在四種情況允許**：使用者核心任務明顯改變；五頁已無法合理容納主要任務；有經驗證的 usability 問題；現行架構造成明確的資訊衝突。換 API／AI、新增單一功能、某頁難寫、資料暫時不足，都不是理由。
 
 **舊 UI 退役原則**：舊 UI 只能參考已驗證邏輯與資料流程，不是新 UI 視覺或資訊架構來源；只提供已驗證公式、deterministic logic、已證實資料 mapping、已通過測試的行為；不自動提供新 UI 版型、導覽、文案、interaction pattern、寫入權限。新 UI 覆蓋必要邏輯後才切正式入口、移除舊頁、清 legacy wiring 與死碼，並保留必要 regression tests／domain rules。**退役與刪除仍受既有閘門約束**（第 13 節第 11、12 條、第 4 節停下清單、`CLAUDE.md` §-1.5.1c 判定 3）；本小節不授權任何刪除（最保守讀法，可被客戶推翻）。
+
+### 13.3 長期規則：Cross-View Data Consistency Gate（客戶 2026-10-28 新增正式高優先需求，`DEC-2026-10-28-01`，永久）
+
+> **出處**：客戶 2026-10-28 裁示，逐字存檔 `docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`。audit、Matrix、gap、test proposal 見 `docs/v2/69_cross_view_consistency_spec.md`；工作項 `docs/BACKLOG.md` BL-0519～BL-0524。位階同 3.1：受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄（第 0.1 節）。**本節不授權任何實作**，只定義「之後新增或修改資料時必須維持什麼」。
+
+**核心規則**：同一 canonical instrument＋同一 metric＋同一 as-of＋同一 currency／share class，在所有 view 必須得到同一個 canonical value。
+
+1. **架構鏈**：Raw Sources → Source Resolution／Validation → Canonical Instrument Data → Domain Calculation → 各 Page Data View → One AI Brain。
+2. **禁止各頁自行選來源，也禁止各頁平行計算同一 metric。** 來源優先序、新鮮度、identity 驗證、衝突處理集中在資料層（L1 供候選值、L2 解析與計算、L3 只渲染），頁面不得自行決定。
+3. **同 as-of 來源數值衝突時不得靜默選一個**：至少留下 selected source／rejected source／difference／reason／freshness。尚無法判斷時顯示「⬜ 資料來源不一致，暫無法判定」，不顯示任何一個來源的值。
+4. **新增或修改 NAV、報酬、估值、FX、benchmark、identity、AI 輸入的工作**，開工前須對照 `docs/v2/69` 的 Matrix 與 gap 清單，並說明是否擴大或縮小跨 view 分歧；新增 view 不得再自帶第二套來源選擇或第二套公式。
+5. **需要更改 source precedence、canonical identity、valuation methodology、FX cutoff、formula 時，走 Decision Gate**（第 4 節）。已確認 bug 且只有一個明確安全修法者，不得包裝成客戶裁示（第 4 節反向禁令）。
+6. **登記不構成動工授權**（`CLAUDE.md` §-1）。本規則不取代 BL-0509；兩者獨立進行。進入 canonical data contract／source precedence 實作時，依第 5 節 Model Gate 評估是否升 Opus。
+7. **不削弱揭露義務**：audit 的結論以機制層級（FACT／INFERENCE／UNVERIFIED）標示；沒有執行期觀察到的數值落差不得寫成已發生的不一致（`CLAUDE.md` §-2 規則 6）。
 
 ## 第 14 節｜已裁示的治理衝突（2026-10-16 收斂）~~與尚待程序完成者~~（2026-10-16 全結，`DEC-2026-10-16-14`；有意識的狀態變更，不是漏刪；2026-10-16；決策者：客戶（#8 核准裁示，`DEC-2026-10-16-14`））
 
