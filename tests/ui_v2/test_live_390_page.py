@@ -66,7 +66,7 @@ from services.v2_tables import market_view as _mv
 _s = _pd.Series([16.0 + (i % 9) * 0.3 for i in range(len(_pd.bdate_range("2024-10-24", "2026-10-23")))],
                 index=_pd.bdate_range("2024-10-24", "2026-10-23"), dtype=float, name="^VIX")
 _s.attrs.update({"fetched_at": "2026-10-27T06:00:00+00:00", "source": "Yahoo:^VIX", "exchange_tz": "Etc/UTC"})
-_notes["market_view"] = _mv.build_market_view(fetch_vix=lambda _t: (_s, None))
+_notes["market_view"] = _mv.build_market_view(fetch_vix=lambda _t, _r=None: (_s, None))
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """,
     "hld": _HEAD + """

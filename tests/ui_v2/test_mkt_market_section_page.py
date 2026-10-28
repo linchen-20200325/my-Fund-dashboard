@@ -35,19 +35,34 @@ def _series():
     s.attrs.update({{"fetched_at": "2026-10-27T06:00:00+00:00", "source": "Yahoo:^VIX", "exchange_tz": "Etc/UTC"}})
     return s
 
+def _tw_series():
+    idx = pd.bdate_range("2024-10-24", "2026-10-23") + pd.Timedelta(hours=1)
+    s = pd.Series([22000.0 + i * 3 for i in range(len(idx))], index=idx, dtype=float, name="^TWII")
+    s.attrs.update({{"fetched_at": "2026-10-27T06:00:00+00:00", "source": "Yahoo:^TWII", "exchange_tz": "Asia/Taipei"}})
+    return s
+
 _dataset = fixtures.dataset_all_ok()
 _notes = {{"pending": {{"leading_index": "ndc_no_release_date", "coincident_index": "ndc_no_release_date",
                       "fx_twd_per_usd": "fx_obs_date_rule"}}, "masked_keys": [], "cooldowns": []}}
 """
 
 _OK = _HEAD + """
-_notes["market_view"] = mv.build_market_view(fetch_vix=lambda _t: (_series(), None))
+_notes["market_view"] = mv.build_market_view(fetch_vix=lambda _t: (_series(), None),
+                                             fetch_taiex=lambda _t, _r=None: (_tw_series(), None))
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """
 
 _ERR = _HEAD + """
 _notes["market_view"] = mv.build_market_view(
-    fetch_vix=lambda _t: (pd.Series(dtype=float), "Yahoo:^VIX 失敗：HTTP 429 Too Many Requests"))
+    fetch_vix=lambda _t: (pd.Series(dtype=float), "Yahoo:^VIX 失敗：HTTP 429 Too Many Requests"),
+    fetch_taiex=lambda _t, _r=None: (_tw_series(), None))
+page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
+"""
+
+_TWERR = _HEAD + """
+_notes["market_view"] = mv.build_market_view(
+    fetch_vix=lambda _t: (_series(), None),
+    fetch_taiex=lambda _t, _r=None: (pd.Series(dtype=float), "Yahoo:^TWII 失敗：HTTP 429 Too Many Requests"))
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """
 
@@ -84,9 +99,9 @@ def test_正式模式_新區段出現_Missing文案逐字在():
     assert not at.exception, [e.value for e in at.exception]
     text = "\n".join(_texts(at))
     for needle in ("市場趨勢", "暫無完整市場綜合判定（缺正式 aggregation rule）",
-                   "⬜ EPS 預估資料未取得，無法計算正式指數情境", "⬜ 無法判定", "⬜ 資料來源待確認",
+                   "⬜ EPS 預估資料未取得，無法計算正式指數情境", "⬜ 無法判定",
                    market_section.TEXT_INTL_MISSING, market_section.TEXT_DATA_GAP,
-                   "資料日期（最後觀測日）2026-10-23", "來源 Yahoo:^VIX", "⬜ 門檻待裁示"):
+                   "資料日期（最後觀測日）2026-10-23", "來源 Yahoo:^VIX", "來源 Yahoo Finance (^TWII)", "期間漲跌 +", "⬜ 門檻待裁示"):
         assert needle in text, needle
     assert ">市場結論</span>" in text and ">市場綜合判定</span>" not in text      # 卡名同 docs/v2/66 §3.1
     assert "缺值日不補值" in text and "折線斷開" not in text
@@ -106,39 +121,80 @@ def test_正式模式_新區段無方向詞_無偏多偏空_無目標價():
 
 def test_預設1Y_一張圖_期間按鈕四個_3Y標資料不足():
     at = _run(_OK)
-    assert len(_charts(at)) == 1
-    radios = [r for r in at.radio if r.key == "mkt_vix_period"]
-    assert len(radios) == 1
-    radio = radios[0]
-    assert radio.value == "1Y"
-    assert list(radio.options) == ["3M", "6M", "1Y", "3Y（資料不足）"]
+    assert len(_charts(at)) == 2          # VIX 與 TAIEX 各一張
+    for key in ("mkt_vix_period", "mkt_taiex_period"):
+        radios = [r for r in at.radio if r.key == key]
+        assert len(radios) == 1, key
+        radio = radios[0]
+        assert radio.value == "1Y"
+        assert list(radio.options) == ["3M", "6M", "1Y", "3Y（資料不足）"]
 
 
 @pytest.mark.parametrize("label", ["3M", "6M", "1Y"])
-def test_期間切換_不報錯_仍是一張圖(label):
+@pytest.mark.parametrize("key", ["mkt_vix_period", "mkt_taiex_period"])
+def test_期間切換_不報錯_仍是兩張圖(label, key):
     at = _run(_OK)
-    radio = next(r for r in at.radio if r.key == "mkt_vix_period")
+    radio = next(r for r in at.radio if r.key == key)
     radio.set_value(label).run()
     assert not at.exception, [e.value for e in at.exception]
-    assert len(_charts(at)) == 1
+    assert len(_charts(at)) == 2
 
 
-def test_3Y_誠實顯示資料不足_沒有縮短冒充的圖():
+@pytest.mark.parametrize("key", ["mkt_vix_period", "mkt_taiex_period"])
+def test_3Y_誠實顯示資料不足_沒有縮短冒充的圖(key):
     at = _run(_OK)
-    radio = next(r for r in at.radio if r.key == "mkt_vix_period")
+    radio = next(r for r in at.radio if r.key == key)
     radio.set_value("3Y（資料不足）").run()
     assert not at.exception, [e.value for e in at.exception]
-    assert len(_charts(at)) == 0
+    assert len(_charts(at)) == 1          # 只有被切到 3Y 的那張消失；另一張不受影響（fragment 隔離）
     assert "資料不足以呈現此期間" in "\n".join(_texts(at))
     # 切回有資料的期間，圖回來
-    next(r for r in at.radio if r.key == "mkt_vix_period").set_value("6M").run()
-    assert len(_charts(at)) == 1
+    next(r for r in at.radio if r.key == key).set_value("6M").run()
+    assert len(_charts(at)) == 2
+
+
+def test_TAIEX期間漲跌_跟著期間切換更新_不重跑另一張卡():
+    at = _run(_OK)
+    before = "\n".join(_texts(at))
+    assert "期間漲跌 +" in before and "收盤價）" in before
+    next(r for r in at.radio if r.key == "mkt_taiex_period").set_value("3M").run()
+    after = [t for t in _texts(at) if "trend-taiex-return" in t]
+    assert len(after) == 1 and "期間漲跌 +" in after[0]
+    assert after[0] != [t for t in _texts(_run(_OK)) if "trend-taiex-return" in t][0]
+    # VIX 卡沒有期間漲跌
+    assert not [t for t in _texts(at) if "trend-vix-return" in t]
+
+
+def test_TAIEX取數失敗429_不畫TAIEX圖_主頁只寫取數失敗_原文走原始訊息():
+    at = _run(_TWERR)
+    assert not at.exception, [e.value for e in at.exception]
+    assert len(_charts(at)) == 1          # 只剩 VIX
+    assert not [r for r in at.radio if r.key == "mkt_taiex_period"]
+    assert [r for r in at.radio if r.key == "mkt_vix_period"]
+    needle = "Yahoo:^TWII 失敗：HTTP 429 Too Many Requests"
+    text = "\n".join(_texts(at))
+    assert needle not in text and "429" not in text
+    assert "⛔ 取數失敗" in text
+    from ui_v2 import plain
+    store = at.session_state[plain.RAW_STATE]["mkt"]["entries"]
+    assert f"⛔ 取數失敗：{needle}" in [e["text"] for e in store]
+
+
+def test_成交量_市場統計_EPS_PE_正式模式仍是Missing_沒有借TAIEX的資料():
+    at = _run(_OK)
+    text = "\n".join(_texts(at))
+    assert text.count(market_section.TEXT_DATA_GAP) == 2            # 台股成交量、台股市場統計
+    assert "⬜ EPS 預估資料未取得，無法計算正式指數情境" in text
+    assert "台股成交量" in text and "台股市場統計" in text
+    for blob in _texts(at):
+        if 'data-section="trend-taiex_volume"' in blob or 'data-section="trend-market_stats"' in blob:
+            assert "Yahoo" not in blob and "資料日期" not in blob
 
 
 def test_VIX取數失敗429_不畫圖_沒有期間按鈕_寫原文():
     at = _run(_ERR)
     assert not at.exception, [e.value for e in at.exception]
-    assert len(_charts(at)) == 0
+    assert len(_charts(at)) == 1          # TAIEX 仍有圖
     assert not [r for r in at.radio if r.key == "mkt_vix_period"]
     needle = "⛔ 取數失敗：Yahoo:^VIX 失敗：HTTP 429 Too Many Requests"
     assert needle not in "\n".join(_texts(at))        # 44 P0-①：一般畫面不印原文

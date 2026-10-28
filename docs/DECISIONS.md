@@ -1597,6 +1597,20 @@
 | supersedes／superseded by | supersedes：無。superseded by：無（客戶回覆 (b) 後以新 DEC 登記並回頭更新本筆） |
 | provenance | **執行組單組讀法，未經第二組獨立驗證**；(a) 的通道歸屬為執行組讀碼（`git grep`，不宣稱窮舉）；(b)～(d) 為執行組推論。 |
 
+### DEC-2026-10-27-43｜客戶裁示 BL-0518 核准：僅以 Yahoo `^TWII` 作為 TAIEX 指數價格／歷史 Data View 的來源；成交量、市場 PE、EPS、forward EPS、g、市場廣度、TWSE 官方市場統計不得由此延伸，維持 Data Gap／Missing
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策者 | **客戶**（本筆為客戶裁示；客戶對話本身執行組未見；原文由總管於派工單內逐字轉存，見 `docs/evidence/decisions/2026-10-27_bl0518_twii_ruling.md`） |
+| 決策內容摘要 | **客戶裁示**：BL-0518 核准。**僅使用 Yahoo `^TWII` 作為 TAIEX 指數價格／歷史 Data View 的來源。**允許：Close、歷史、3M／6M／1Y／3Y，以及可直接由價格確定性計算的指標（報酬／漲跌）。**禁止延伸為**：市場成交量官方來源、市場整體 PE、EPS、forward EPS、`g`、市場廣度、TWSE 官方市場統計——這些維持 Data Gap／Missing，與現況完全相同（`taiex_volume`、`market_stats`、`eps_pe_scenario`、`implied_trailing_index_earnings` 不變）。**實作約束**：重用既有 Yahoo 傳輸／取數（與 VIX 同一支 `market_indicator.fetch_yf_close_with_error`），**不得**另開第二套 Yahoo 取數架構、**不得**新增 `INDICATOR_SPECS` 鍵（44 凍結）、**不得**新增相依套件。**來源標示（provenance）**：`source = 'Yahoo Finance (^TWII)'`，**絕不標成 TWSE 官方**；missing != 0、proxy != real data。**失敗呈現**：主頁只寫「⛔ 取數失敗」，原文走 `plain.record_raw` 原始訊息通道（與 #1091 的 VIX 修正相同）。 |
+| 理由／背景 | 客戶未逐項附理由。（執行組背景說明）承接 `DEC-2026-10-27-41`（C 裁示）與 `DEC-2026-10-27-42` (b)（執行組讀法：TAIEX 來源待客戶確認、推薦方案 A）；本筆即客戶對 (b) 的回覆。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-27_bl0518_twii_ruling.md`；`docs/BACKLOG.md` BL-0518；`docs/v2/66` 區段 B；實作：`services/v2_tables/market_view.py`（`taiex_domain_from_l1`、`TAIEX_SOURCE_LABEL`）、`ui_v2/mkt/market_section.py`（`taiex_model`、`period_return`）、`ui_v2/mkt/page.py`（`_render_price_card`）；測試：`tests/test_v2_tables_market_view.py`、`tests/ui_v2/test_mkt_market_section_logic.py`、`tests/ui_v2/test_mkt_market_section_page.py`。 |
+| 影響範圍 | 🌍 頁 TAIEX domain 由 Missing 變為真 Data View（Yahoo `^TWII` 收盤、3M／6M／1Y／3Y 折線圖、資料日期／經過天數／來源標示、期間漲跌）。**不影響**：成交量、市場統計、EPS×PE、`implied_trailing_index_earnings`、NASDAQ／MSCI（維持 Missing）；市場結論仍為「暫無完整市場綜合判定（缺正式 aggregation rule）」（不做 aggregation）；不改 44、不改 `INDICATOR_SPECS`、不改 `CLAUDE.md`、不新增 host（Yahoo 為既有端點）。TWSE 官方端點若日後要升格為正式來源，另走 Data Source Decision Gate（BL-0501）。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：`DEC-2026-10-27-42` (b) 的等待狀態（「TAIEX 資料接入待客戶一行確認方案 A」已確認；(a)(c)(d) 不變）。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 `docs/evidence/decisions/2026-10-27_bl0518_twii_ruling.md`（圍欄內文 sha256 見該檔與 README）；本筆「決策內容摘要」為執行組依原文整理，以原文為準；由執行組單組寫成，未經第二組獨立驗證（data semantics 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核）。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。

@@ -34,12 +34,17 @@ def _points(start="2024-10-24", end="2026-10-23"):
     return out
 
 
-def _view(vix=None):
+def _taiex_ok(points=None):
+    return _dom("taiex", "ok", source="Yahoo Finance (^TWII)", fetched_at="2026-10-27T06:00:00+00:00",
+                obs_date="2026-10-23", value_unit="index", points=points if points is not None else _points())
+
+
+def _view(vix=None, taiex=None):
     vix = vix or _dom("vix", "ok", source="Yahoo:^VIX", fetched_at="2026-10-27T06:00:00+00:00",
                       obs_date="2026-10-23", value_unit="index", points=_points())
     return {"domains": [
         vix,
-        _dom("taiex", reason_code="source_pending_bl0518", reason="x"),
+        taiex or _taiex_ok(),
         _dom("taiex_volume", reason_code="no_official_source", reason="x"),
         _dom("market_stats", reason_code="no_official_source", reason="x"),
         _dom("nasdaq", reason_code="no_official_source", reason="x"),
@@ -57,7 +62,8 @@ def test_固定文案逐字():
     assert ms.TEXT_EPS_PE_MISSING == "⬜ EPS 預估資料未取得，無法計算正式指數情境"
     assert ms.TEXT_IMPLIED_UNDETERMINABLE == "⬜ 無法判定"
     assert ms.TEXT_NO_CONCLUSION == "暫無完整市場綜合判定（缺正式 aggregation rule）"
-    assert ms.TEXT_TAIEX_PENDING == "⬜ 資料來源待確認"
+    assert not hasattr(ms, "TEXT_TAIEX_PENDING")        # BL-0518 已裁示，「資料來源待確認」退役
+    assert ms.TEXT_PERIOD_RETURN_UNDETERMINABLE == "⬜ 無法判定"
     assert "目前沒有正式資料來源" in ms.TEXT_INTL_MISSING and "Missing" in ms.TEXT_INTL_MISSING \
         and "Data Gap" in ms.TEXT_INTL_MISSING
     assert "Data Gap" in ms.TEXT_DATA_GAP
@@ -71,7 +77,7 @@ def test_Missing_domain用到的文案():
     by = ms.domain_by_key(view)
     assert ms.missing_copy(by["eps_pe_scenario"]) == "⬜ EPS 預估資料未取得，無法計算正式指數情境"
     assert ms.missing_copy(by["implied_trailing_index_earnings"]) == "⬜ 無法判定"
-    assert ms.missing_copy(by["taiex"]) == "⬜ 資料來源待確認"
+    assert "taiex" not in ms._MISSING_COPY
     for key in ("nasdaq", "msci_world", "msci_em"):
         assert ms.missing_copy(by[key]) == ms.TEXT_INTL_MISSING
     for key in ("taiex_volume", "market_stats"):
@@ -101,7 +107,8 @@ def test_市場結論_一句固定話_加各domain狀態列_只列狀態():
     assert model["text"] == "暫無完整市場綜合判定（缺正式 aggregation rule）"
     assert [r["domain"] for r in model["rows"]] == [d["domain"] for d in _view()["domains"]]
     assert model["rows"][0]["status_text"] == "有資料（2026-10-23）"
-    assert all(r["status_text"] == "⬜ 資料未備" for r in model["rows"][1:])
+    assert model["rows"][1]["domain"] == "taiex" and model["rows"][1]["status_text"] == "有資料（2026-10-23）"
+    assert all(r["status_text"] == "⬜ 資料未備" for r in model["rows"][2:])
     assert set(model["rows"][0]) == {"domain", "label", "status", "status_text", "tone"}   # 沒有分數欄
 
 
@@ -179,3 +186,101 @@ def test_全部面向使用者的字串_過禁詞掃描_且無目標價_預測()
         assert logic.scan_forbidden(strings) == {}, period
         for word in ("目標價", "預測", "情境點位", "買進", "賣出"):
             assert not [s for s in strings if word in s], (period, word)
+
+
+# ───────────────────────── TAIEX（BL-0518）─────────────────────────
+
+
+def test_TAIEX圖卡_預設1Y可畫_3Y不足_來源標示逐字_標資料日期與經過天數():
+    t = ms.domain_by_key(_view())["taiex"]
+    one = ms.taiex_model(t, "1Y")
+    assert one["spec"] is not None and one["message"] is None and one["label"] == "台股加權指數（TAIEX）"
+    assert one["availability"] == {"3M": True, "6M": True, "1Y": True, "3Y": False}
+    assert one["caption_lines"][0] == "資料日期（最後觀測日）2026-10-23　延遲 4 日"
+    assert one["caption_lines"][1] == "來源 Yahoo Finance (^TWII)　取得時間 2026-10-27 14:00（UTC+8）"
+    assert ms.taiex_model(t, "3Y")["spec"] is None and ms.taiex_model(t, "3Y")["message"] == "資料不足以呈現此期間"
+    assert "TWSE" not in "".join(one["caption_lines"])
+
+
+def test_期間漲跌_只用已觀測點_末筆比首筆():
+    pts = [{"obs_date": "2026-10-01", "value_num": 100.0}, {"obs_date": "2026-10-02", "value_num": None},
+           {"obs_date": "2026-10-05", "value_num": 110.0}, {"obs_date": "2026-10-06", "value_num": 105.0}]
+    r = ms.period_return(pts)
+    assert r["status"] == "ok" and r["pct"] == pytest.approx(5.0)
+    assert r["text"] == "期間漲跌 +5.0%（2026-10-01 至 2026-10-06，收盤價）"
+    down = ms.period_return([{"obs_date": "2026-10-01", "value_num": 200.0},
+                             {"obs_date": "2026-10-02", "value_num": 190.0}])
+    assert down["text"].startswith("期間漲跌 -5.0%")
+    for text in (r["text"], down["text"]):
+        assert logic.scan_forbidden([text]) == {}
+
+
+@pytest.mark.parametrize("pts", [
+    [],
+    [{"obs_date": "2026-10-01", "value_num": 100.0}],
+    [{"obs_date": "2026-10-01", "value_num": 100.0}, {"obs_date": "2026-10-02", "value_num": None}],
+    [{"obs_date": "2026-10-01", "value_num": 0.0}, {"obs_date": "2026-10-02", "value_num": 5.0}],
+])
+def test_期間漲跌_不足兩點或起點非正_無法判定_不補值(pts):
+    r = ms.period_return(pts)
+    assert r == {"status": "undeterminable", "pct": None, "first_obs": None, "last_obs": None,
+                 "text": "⬜ 無法判定"}
+
+
+_NAN, _INF = float("nan"), float("inf")
+
+
+@pytest.mark.parametrize("pts", [
+    [{"obs_date": "2026-10-01", "value_num": _NAN}, {"obs_date": "2026-10-02", "value_num": 10.0}],
+    [{"obs_date": "2026-10-01", "value_num": 10.0}, {"obs_date": "2026-10-02", "value_num": _NAN}],
+    [{"obs_date": "2026-10-01", "value_num": 10.0}, {"obs_date": "2026-10-02", "value_num": _INF}],
+    [{"obs_date": "2026-10-01", "value_num": -_INF}, {"obs_date": "2026-10-02", "value_num": 10.0}],
+    [{"obs_date": "2026-10-01", "value_num": True}, {"obs_date": "2026-10-02", "value_num": 10.0}],
+    [{"obs_date": "2026-10-01", "value_num": 10.0}, {"obs_date": "2026-10-02", "value_num": False}],
+])
+def test_期間漲跌_非有限數與布林視為未觀測_無法判定(pts):
+    r = ms.period_return(pts)
+    assert r == {"status": "undeterminable", "pct": None, "first_obs": None, "last_obs": None,
+                 "text": "⬜ 無法判定"}
+
+
+def test_期間漲跌_中間夾NaN或bool_略過該點_其餘照算():
+    pts = [{"obs_date": "2026-10-01", "value_num": 100.0}, {"obs_date": "2026-10-02", "value_num": _NAN},
+           {"obs_date": "2026-10-05", "value_num": True}, {"obs_date": "2026-10-06", "value_num": 110.0}]
+    r = ms.period_return(pts)
+    assert r["status"] == "ok" and r["pct"] == pytest.approx(10.0)
+    assert r["text"] == "期間漲跌 +10.0%（2026-10-01 至 2026-10-06，收盤價）"
+
+
+def test_TAIEX圖卡_期間漲跌跟著所選窗口走():
+    t = _taiex_ok(points=[{"obs_date": d, "value_num": 100.0 + i} for i, d in
+                          enumerate(p["obs_date"] for p in _points())])
+    three_m = ms.taiex_model(t, "3M")["period_return"]
+    six_m = ms.taiex_model(t, "6M")["period_return"]
+    assert three_m["status"] == six_m["status"] == "ok"
+    assert three_m["first_obs"] > six_m["first_obs"]          # 窗口短 → 起點較晚
+
+
+def test_VIX圖卡沒有期間漲跌_只有TAIEX有():
+    assert ms.vix_model(ms.domain_by_key(_view())["vix"], "1Y")["period_return"] is None
+    assert ms.taiex_model(ms.domain_by_key(_view())["taiex"], "1Y")["period_return"]["status"] == "ok"
+
+
+def test_TAIEX系統錯誤_一般畫面只寫取數失敗_原文走原始訊息():
+    bad = _dom("taiex", "系統錯誤", source="Yahoo Finance (^TWII)", reason="Yahoo:^TWII 失敗：HTTP 429")
+    view = _view(taiex=bad)
+    model = ms.taiex_model(bad, "1Y")
+    assert model["message"] == "⛔ 取數失敗" and model["spec"] is None and model["period_return"] is None
+    assert ms.conclusion_model(view)["rows"][1]["status_text"] == "⛔ 取數失敗"
+    assert "429" not in "".join(ms.section_strings(view, "1Y"))
+    assert [r["text"] for r in ms.raw_entries(view)] == ["⛔ 取數失敗：Yahoo:^TWII 失敗：HTTP 429"]
+
+
+def test_成交量_市場統計_PE_EPS_Missing文案不因TAIEX接入而改():
+    by = ms.domain_by_key(_view())
+    assert ms.missing_copy(by["taiex_volume"]) == ms.TEXT_DATA_GAP
+    assert ms.missing_copy(by["market_stats"]) == ms.TEXT_DATA_GAP
+    assert ms.missing_copy(by["eps_pe_scenario"]) == "⬜ EPS 預估資料未取得，無法計算正式指數情境"
+    assert ms.missing_copy(by["implied_trailing_index_earnings"]) == "⬜ 無法判定"
+    assert set(ms._MISSING_COPY) == {"taiex_volume", "market_stats", "nasdaq", "msci_world", "msci_em",
+                                     "eps_pe_scenario", "implied_trailing_index_earnings"}

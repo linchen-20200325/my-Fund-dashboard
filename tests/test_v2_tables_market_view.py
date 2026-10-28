@@ -31,6 +31,24 @@ def _series(dates, values, *, fetched_at=_FETCHED, exchange_tz="Etc/UTC"):
     return s
 
 
+def _tw_series(dates, values, *, fetched_at=_FETCHED):
+    """^TWII 形狀：Yahoo 日 K 時間戳＝台北 09:00（＝UTC 01:00），交易所時區 Asia/Taipei。"""
+    idx = pd.to_datetime(dates) + pd.Timedelta(hours=1) if len(dates) else pd.DatetimeIndex([])
+    s = pd.Series(values, index=idx, dtype=float, name="^TWII")
+    if fetched_at is not None:
+        s.attrs["fetched_at"] = fetched_at
+    s.attrs["source"] = "Yahoo:^TWII"
+    s.attrs["exchange_tz"] = "Asia/Taipei"
+    return s
+
+
+def _both(vix_result=None, taiex_result=None):
+    """build_market_view 的兩個替身（VIX 與 TAIEX 各自獨立，不依賴預設走真 L1）。"""
+    vix_result = vix_result or (_series(_weekdays("2026-10-01", "2026-10-23"), [16.0] * 17), None)
+    taiex_result = taiex_result or (_tw_series(_weekdays("2026-10-01", "2026-10-23"), [23000.0 + i for i in range(17)]), None)
+    return {"fetch_vix": _Fetch(vix_result), "fetch_taiex": _Fetch(taiex_result)}
+
+
 def _weekdays(start, end):
     return [d.strftime("%Y-%m-%d") for d in pd.bdate_range(start, end)]
 
@@ -72,7 +90,7 @@ def test_VIX正常_逐日觀測_最後觀測日_來源_取得時間_單位():
 
 def test_VIX只用ticker一個位置參數呼叫L1_與B線同一個快取鍵():
     fetch = _Fetch((_series(_weekdays("2026-10-01", "2026-10-23"), [16.0] * 17), None))
-    mv.build_market_view(fetch_vix=fetch)
+    mv.build_market_view(fetch_vix=fetch, fetch_taiex=_Fetch((_tw_series([], []), None)))
     assert fetch.calls == [(("^VIX",), {})]
 
 
@@ -142,15 +160,15 @@ def test_固定順序_與_domain_全集():
 
 def test_無正式來源的domain_一律資料未備_不帶任何數值來源或時間():
     view = mv.build_market_view(fetch_vix=_Fetch((_series(_weekdays("2026-10-01", "2026-10-23"), [16.0] * 17), None)))
-    missing = [d for d in view["domains"] if d["domain"] != "vix"]
-    assert len(missing) == 8
+    missing = [d for d in view["domains"] if d["domain"] not in ("vix", "taiex")]
+    assert len(missing) == 7
     for d in missing:
         assert d["status"] == mv.STATE_MISSING, d["domain"]
         assert d["points"] == [], d["domain"]
         assert d["source"] is None and d["fetched_at"] is None and d["obs_date"] is None and d["value_unit"] is None
         assert d["reason_code"] and d["reason"], d["domain"]
     codes = {d["domain"]: d["reason_code"] for d in missing}
-    assert codes["taiex"] == mv.REASON_SOURCE_PENDING
+    assert "taiex" not in codes            # TAIEX 已是真 Data View（DEC-2026-10-27-43），不再是 Missing domain
     assert codes["nasdaq"] == codes["msci_world"] == codes["msci_em"] == mv.REASON_NO_OFFICIAL_SOURCE
     assert codes["eps_pe_scenario"] == mv.REASON_EPS_UNAVAILABLE
     assert codes["implied_trailing_index_earnings"] == mv.REASON_UNDETERMINABLE
@@ -213,5 +231,95 @@ def test_預設走market_indicator的L1屬性_替身換在market_indicator上兩
 
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", stub)
     view = mv.build_market_view()
-    assert calls == [("^VIX", (), {})]
+    assert calls == [("^VIX", (), {}), ("^TWII", ("5y",), {})]      # TAIEX 與 VIX 同一支 L1，沒有第二套取數
     assert _domain(view, "vix")["status"] == mv.STATE_OK
+
+
+# ───────────────────────── TAIEX（BL-0518；DEC-2026-10-27-43）─────────────────────────
+
+
+def test_TAIEX正常_Yahoo_TWII_逐日收盤_來源標示逐字_不是TWSE官方():
+    dates = _weekdays("2026-10-01", "2026-10-23")
+    values = [23000.0 + i * 10 for i in range(len(dates))]
+    fetch = _Fetch((_tw_series(dates, values), None))
+    view = mv.build_market_view(fetch_vix=_Fetch((_series(dates, [16.0] * len(dates)), None)), fetch_taiex=fetch)
+    t = _domain(view, "taiex")
+    assert fetch.calls == [(("^TWII", "5y"), {})]          # 只有 TAIEX 要 5y；VIX 仍是單一位置參數
+    assert t["status"] == mv.STATE_OK
+    assert t["source"] == "Yahoo Finance (^TWII)" == mv.TAIEX_SOURCE_LABEL
+    assert "TWSE" not in t["source"] and "證交所" not in t["source"]
+    assert t["obs_date"] == "2026-10-23" and t["fetched_at"] == _FETCHED and t["value_unit"] == "index"
+    assert [p["obs_date"] for p in t["points"]] == dates
+    assert [p["value_num"] for p in t["points"]] == values
+    assert t["reason"] is None and t["reason_code"] is None
+
+
+def test_TAIEX缺的日子就是沒有點_不補值不補0():
+    dates = _weekdays("2026-10-01", "2026-10-23")
+    values = [23000.0 + i for i in range(len(dates))]
+    values[4] = float("nan")
+    view = mv.build_market_view(**_both(taiex_result=(_tw_series(dates, values), None)))
+    t = _domain(view, "taiex")
+    assert t["status"] == mv.STATE_OK
+    assert dates[4] not in [p["obs_date"] for p in t["points"]]
+    assert 0.0 not in [p["value_num"] for p in t["points"]]
+
+
+def test_TAIEX_429_系統錯誤_原文照回_來源標示仍是Yahoo_不帶序列():
+    text = "Yahoo:^TWII 失敗：HTTP 429 Too Many Requests"
+    view = mv.build_market_view(**_both(taiex_result=(pd.Series(dtype=float, name="^TWII"), text)))
+    t = _domain(view, "taiex")
+    assert t["status"] == mv.STATE_ERROR and t["reason"] == text
+    assert t["points"] == [] and t["fetched_at"] is None and t["obs_date"] is None
+    assert _domain(view, "vix")["status"] == mv.STATE_OK        # 兩條獨立：TAIEX 失敗不拖垮 VIX
+
+
+def test_TAIEX_L1拋例外_轉成可見失敗原文():
+    view = mv.build_market_view(**_both(taiex_result=RuntimeError("boom")))
+    assert _domain(view, "taiex")["status"] == mv.STATE_ERROR
+    assert _domain(view, "taiex")["reason"] == "RuntimeError: boom"
+
+
+def test_TAIEX全被收盤規則略過_資料未備_不補值():
+    # 唯一一根日 K 是取得日（台北 10-27）當天 → 未收盤不寫
+    view = mv.build_market_view(**_both(taiex_result=(_tw_series(["2026-10-27"], [23500.0]), None)))
+    t = _domain(view, "taiex")
+    assert t["status"] == mv.STATE_MISSING and t["reason_code"] == mv.REASON_NO_OBSERVATION
+    assert t["points"] == [] and t["obs_date"] is None
+
+
+def test_變異_成交量_市場統計_PE_EPS_即使TAIEX有資料也維持Missing():
+    """TAIEX 資料接入後，客戶明示不得延伸的 domain 必須仍是 Missing：不帶數值、來源、時間，也不借用 ^TWII。"""
+    view = mv.build_market_view(**_both())
+    assert _domain(view, "taiex")["status"] == mv.STATE_OK
+    for key in ("taiex_volume", "market_stats", "eps_pe_scenario", "implied_trailing_index_earnings",
+                "nasdaq", "msci_world", "msci_em"):
+        d = _domain(view, key)
+        assert d["status"] == mv.STATE_MISSING, key
+        assert d["points"] == [] and d["source"] is None and d["fetched_at"] is None \
+            and d["obs_date"] is None and d["value_unit"] is None, key
+    assert _domain(view, "taiex_volume")["reason_code"] == mv.REASON_NO_OFFICIAL_SOURCE
+    assert set(mv._MISSING_DOMAINS) == {"taiex_volume", "market_stats", "nasdaq", "msci_world", "msci_em",
+                                        "eps_pe_scenario", "implied_trailing_index_earnings"}
+
+
+def test_TAIEX沿用同一支L1_沒有第二套Yahoo取數_INDICATOR_SPECS沒有TAIEX鍵():
+    assert not [k for k in mi.INDICATOR_SPECS if "twii" in k.lower() or "taiex" in k.lower()]
+    assert not [spec for spec in mi.INDICATOR_SPECS.values() if "^TWII" in repr(spec)]
+
+
+def test_TAIEX要5y_VIX不變_約4年序列3Y可用_2年序列3Y資料不足():
+    """BL-0518：3Y 視窗要有夠長歷史。TAIEX 以 `(^TWII, '5y')` 取數；VIX 仍只傳 ticker（B 線快取鍵不變）。"""
+    from ui_v2.mkt import chart
+
+    assert mv.TAIEX_RANGE == "5y"
+    vix_fetch = _Fetch((_series(_weekdays("2026-10-01", "2026-10-23"), [16.0] * 17), None))
+    four = _weekdays("2022-10-03", "2026-10-23")          # 約 4 年
+    two = _weekdays("2024-10-24", "2026-10-23")           # 約 2 年（舊的預設範圍）
+    t_four = _Fetch((_tw_series(four, [20000.0 + i for i in range(len(four))]), None))
+    view = mv.build_market_view(fetch_vix=vix_fetch, fetch_taiex=t_four)
+    assert vix_fetch.calls == [(("^VIX",), {})] and t_four.calls == [(("^TWII", "5y"), {})]
+    assert chart.availability(_domain(view, "taiex")["points"]) == {"3M": True, "6M": True, "1Y": True, "3Y": True}
+    t_two = _Fetch((_tw_series(two, [20000.0 + i for i in range(len(two))]), None))
+    view2 = mv.build_market_view(fetch_vix=vix_fetch, fetch_taiex=t_two)
+    assert chart.availability(_domain(view2, "taiex")["points"]) == {"3M": True, "6M": True, "1Y": True, "3Y": False}
