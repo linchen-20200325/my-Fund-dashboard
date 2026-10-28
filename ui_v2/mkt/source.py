@@ -61,12 +61,15 @@ def _fred_api_key() -> str:
 
 def load_live() -> dict:
     """給 `page.render(load_live=...)` 用的載入函式。"""
-    table = market_indicator.build_market_indicator_table(fred_api_key=_fred_api_key())
+    fred_key = _fred_api_key()
+    table = market_indicator.build_market_indicator_table(fred_api_key=fred_key)
     values = _secret_values()
     errors = {key: masking.mask_message(message, values)
               for key, message in table["errors"].items()}
     settings, settings_error = _load_settings(values)
-    view = _mask_view(market_view.build_market_view(), values)
+    # 順序：B 線（上面）先 → 本頁 Data View 後（同一 Yahoo／FRED 主機共用冷卻；見 `market_view.build_market_view`）。
+    # 金鑰只傳進 L2 取數，不印、不記；失敗原文經 `_mask_view` 遮蔽。
+    view = _mask_view(market_view.build_market_view(fred_api_key=fred_key), values)
     return {
         "dataset": {
             "rows": [dict(row) for row in table["rows"]],

@@ -39,7 +39,7 @@ def fake_st(monkeypatch):
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", lambda: [])
     # 2026-10-27 BL-0516 批 1：load_live 另向 L2 `market_view` 要「市場趨勢」區段的 Data View（會呼叫 L1 取 VIX）；
     # 本檔是接縫測試、不打網路 → 換成固定替身（市場趨勢區段本身的測試在 tests/ui_v2/test_mkt_market_section_*.py）。
-    monkeypatch.setattr(source.market_view, "build_market_view", lambda: dict(_STUB_VIEW))
+    monkeypatch.setattr(source.market_view, "build_market_view", lambda **_kw: dict(_STUB_VIEW))
     # 2026-10-13 起 load_live 另讀已存設定（客戶裁示：市場總覽設定存檔接上）；本檔不測設定，給一張空表。
     # 設定那一段的測試在 tests/ui_v2/test_mkt_settings_logic.py。
     monkeypatch.setattr(source.settings_store, "load_user_settings",
@@ -147,7 +147,7 @@ def test_market_view的失敗原文經真實_mask_view與load_live遮蔽_不含s
         {"domain": "taiex", "status": "資料未備", "reason": "沒有秘密", "reason_code": "x", "source": None,
          "fetched_at": None, "obs_date": None, "value_unit": None, "points": []}],
         "provenance": {}}
-    monkeypatch.setattr(source.market_view, "build_market_view", lambda: view)
+    monkeypatch.setattr(source.market_view, "build_market_view", lambda **_kw: view)
     monkeypatch.setattr(source.market_indicator, "build_market_indicator_table",
                         _fake_table([], {}, {}))
     out = source.load_live()["notes"]["market_view"]
@@ -155,3 +155,41 @@ def test_market_view的失敗原文經真實_mask_view與load_live遮蔽_不含s
     assert out["domains"][0]["reason"].endswith("其餘照留")
     assert out["domains"][1]["reason"] == "沒有秘密"
     assert key in repr(view)          # 原物件未被改動（複本）
+
+
+def test_FRED金鑰只傳進L2_不進回傳_缺金鑰與有金鑰兩種路徑(monkeypatch, fake_st):
+    """BL-0517：`_fred_api_key()` 讀好的金鑰傳給 `build_market_view(fred_api_key=...)`；view 不含金鑰；
+    FRED 失敗原文若夾帶金鑰，仍經 `_mask_view` 遮蔽。"""
+    key = _rnd.token_hex(12)
+    seen = []
+
+    def build_view(**kwargs):
+        seen.append(kwargs)
+        return {"domains": [
+            {"domain": "us10y", "status": "系統錯誤", "reason": f"FRED:DGS10 失敗 api_key={key}", "reason_code": None,
+             "source": "FRED (DGS10)", "fetched_at": None, "obs_date": None, "value_unit": None, "points": []}],
+            "provenance": {}}
+
+    monkeypatch.setattr(source.market_view, "build_market_view", build_view)
+    monkeypatch.setattr(source.market_indicator, "build_market_indicator_table", _fake_table([], {}, {}))
+    fake_st.secrets = {"FRED_API_KEY": key}
+    out = source.load_live()
+    assert seen == [{"fred_api_key": key}]
+    assert key not in repr(out)
+    assert out["notes"]["market_view"]["domains"][0]["reason"].startswith("FRED:DGS10 失敗")
+    # 沒有金鑰 → 傳空字串（由 L2 轉成 MISSING_FRED_API_KEY 狀態），不傳 None 以外的猜測值
+    fake_st.secrets = {}
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    seen.clear()
+    source.load_live()
+    assert seen == [{"fred_api_key": ""}]
+
+
+def test_B線先_本頁Data_View後_順序固定(monkeypatch, fake_st):
+    order = []
+    monkeypatch.setattr(source.market_indicator, "build_market_indicator_table",
+                        lambda **_kw: order.append("B") or {"rows": [], "errors": {}, "pending": {}, "skipped": {}})
+    monkeypatch.setattr(source.market_view, "build_market_view",
+                        lambda **_kw: order.append("view") or dict(_STUB_VIEW))
+    source.load_live()
+    assert order == ["B", "view"]

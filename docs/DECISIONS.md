@@ -1611,6 +1611,19 @@
 | supersedes／superseded by | supersedes：`DEC-2026-10-27-42` (b) 的等待狀態（「TAIEX 資料接入待客戶一行確認方案 A」已確認；(a)(c)(d) 不變）。superseded by：無。 |
 | provenance | 客戶裁示原文逐字存於 `docs/evidence/decisions/2026-10-27_bl0518_twii_ruling.md`（圍欄內文 sha256 見該檔與 README）；本筆「決策內容摘要」為執行組依原文整理，以原文為準；由執行組單組寫成，未經第二組獨立驗證（data semantics 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核）。 |
 
+### DEC-2026-10-27-44｜執行組讀法登記（**不是客戶裁示**，可推翻）：C 裁示下 BL-0517 的實作層級讀法（S&P 500、美債殖利率、VIX 長區間；現行版次、pp、不新增通道）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27 |
+| 決策內容摘要 | **執行組讀法，可推翻；不是客戶裁示**（客戶裁示是 `DEC-2026-10-27-41`；本筆承接 `-42` (a)「盤點確認各序列確屬 repo 既有 Yahoo／FRED 通道後才接入」，把盤點結果與實作讀法登記如下）：(a) **通道盤點（本組已 `git grep` 讀碼；本環境無網路，未連線實測）**：`^GSPC` 走 `market_indicator.fetch_yf_close_with_error`（與 `^VIX`、`^TWII` 同一支）；`DGS10`／`DGS2` 為 `shared/fred_series.py` 既有常數，經 `market_indicator` 已 import 的 `fetch_fred_vintages_with_error`；repo 沒有 FRED `SP500`，不使用；`fetch_fred_with_error` 沒有非測試呼叫者，不使用 → 皆為既有通道，不新增 host、API、FRED series、`INDICATOR_SPECS` 鍵；(b) **S&P 500**：`(^GSPC, 5y)`，來源標示固定 `Yahoo Finance (^GSPC)`，規則同 TAIEX（確定性期間漲跌）；(c) **美債殖利率**：只取現行版次（`realtime_end == 9999-12-31`）；單位 `%`（不是價格）；期間指標為**百分點變動（pp，末值減首值）**，不是百分比報酬；資料日期＝FRED 觀測日，不是公布日，不宣稱公布延遲；缺值不補 0、不前值填補；來源標示 `FRED (DGS10)`／`FRED (DGS2)`；缺 `FRED_API_KEY` → 兩卡走既有「⛔ 取數失敗」，原文只進原始訊息通道；(d) **VIX 長區間**：🌍 頁 VIX 改 `(^VIX, 5y)` 讓 3Y 按鈕為真；**性質改變（誠實記錄）**：舊版與 B 線 `vol_index` 同簽名同 L1 快取鍵，現版有獨立快取項與請求，但同一 Yahoo 主機共用冷卻；B 線 `vol_index` 的取數、快取鍵、`WINDOW_DAYS_MAX` 不變（有測試釘住）；(e) 呼叫順序固定：B 線先 → VIX → TAIEX → S&P 500 → FRED 10Y → FRED 2Y，新增請求排在後面以降低主機冷卻波及既有畫面；(f) 市場結論句不變（「暫無完整市場綜合判定（缺正式 aggregation rule）」），只多列新 domain 的真實資料狀態；NASDAQ／MSCI World／MSCI EM 維持 Missing／Data Gap；(g) 面向使用者的新文案（標籤「標普 500 指數（S&P 500）」「美國 10 年期公債殖利率」「美國 2 年期公債殖利率」、殖利率註記、「期間變動 … 個百分點（pp）」）為**總管擬，待覆核**。 |
+| 理由／背景 | （執行組背景說明）客戶 C 裁示條件式，`-42` (a) 讀法要求先確認通道；本批確認後依裁示接入，不擴大範圍。殖利率不得套用價格的百分比報酬，否則會把「4.0 → 4.15」說成 +3.75%，語意錯誤。 |
+| evidence／source | `docs/BACKLOG.md` BL-0517；`docs/v2/66` 第六次更新；實作：`services/v2_tables/market_view.py`（`sp500_domain_from_l1`、`fred_yield_domain_from_l1`、`build_market_view`）、`ui_v2/mkt/market_section.py`（`sp500_model`、`us10y_model`、`us2y_model`、`period_change_pp`）、`ui_v2/mkt/page.py`、`ui_v2/mkt/source.py`；測試：`tests/test_v2_tables_market_view.py`、`tests/ui_v2/test_mkt_market_section_logic.py`、`tests/ui_v2/test_mkt_market_section_page.py`、`tests/ui_v2/test_mkt_source.py`。 |
+| 影響範圍 | 🌍 頁新增 3 張圖卡（S&P 500、US10Y、US2Y）、VIX 的 3Y 按鈕在歷史夠長時可用；Yahoo 多 3 個快取鍵的請求、FRED 多 2 個；不影響 B 線、44、`INDICATOR_SPECS`、`CLAUDE.md`。 |
+| 是否可逆 | 可逆（客戶可另行裁示；程式為純 L2／L3 增量） |
+| supersedes／superseded by | supersedes：無（為 `-42` (a) 的落地讀法，不取代它）。superseded by：無。 |
+| provenance | **執行組單組讀法，未經第二組獨立驗證**；通道盤點為讀碼、未連線；`fetch_fred_vintages_with_error` 本 repo 從未做過真實連線實測（其 L1 檔頭自陳）；FRED 實際回應形狀（現行版次列、`realtime_end` 字面值、缺值記號）依 L1 檔頭與官方文件推論，測試以替身驗證。data semantics 等級，合併前依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1753,3 +1766,4 @@
 - 第四節 `DEC-2026-10-27-08`～`-24`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_vnext_gate_rulings.md`，無遮蔽），引號內文字逐字；文件組仍未見客戶對話本身；十五節裁示拆成十七筆的切分、各筆「文件組讀法」、`DEC-2026-10-23-01`／`-22-05`／`-27-07` 的就地 amendment 標示與 supersede 範圍為文件組依派工單寫成；`-14`、`-21`、`-22` 屬 investment meaning／formula 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核，本批由文件組單組寫成，**未經第二組驗證**；`-16` 的「`a28c5a2d` 曾出現姓名」為總管轉達，文件組只實測該 commit 的位置、未讀其內容。
 - 第四節 `DEC-2026-10-27-25`～`-38`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_g44_amendment_rulings.md`，無遮蔽），引號內文字逐字（條列改以引號併列）；執行組仍未見客戶對話本身；拆成十四筆的切分與各筆「執行組讀法」為執行組依派工單寫成；44 解凍屬治理／UI SSOT 等級、`-35`／`-37` 屬 formula／data source 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核；由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-27-41`、`-42`：`-41` 客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_a_c_parallel_rulings.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與 supersedes 欄為執行組讀法；`-42` 整筆是執行組讀法、不是客戶裁示，通道歸屬為執行組單次讀碼；`-41` 屬 data semantics 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核；由執行組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-27-44`：整筆是執行組讀法（不是客戶裁示），承接 `-42` (a)；通道盤點為讀碼、未連線實測；新文案為總管擬待覆核；由執行組單組寫成，未經第二組獨立驗證。
