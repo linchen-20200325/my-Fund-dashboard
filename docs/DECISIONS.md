@@ -1666,6 +1666,33 @@
 | supersedes／superseded by | supersedes：無。**不削弱** `PROJECT_RULES.md` 3.1／3.2 的揭露義務與 Stop／Decision／Model Gate（文件組讀法，可被客戶推翻；與 `CLAUDE.md` §-1.5.3 B 一致）；與第 11 節既有「milestone 建議開新對話」並存。superseded by：無。 |
 | provenance | 客戶裁示原文逐字存於 `docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；與 3.1／3.2 及 `CLAUDE.md` 的關係為文件組判讀，可被客戶推翻；由文件組單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-28-03｜客戶裁示：DG-1 採方案 B——先執行 BL-0520 特徵化測試（C1～C9）；方案 C 暫緩；DG-2 canonical identity 於測試與稽核後再提案
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-28 |
+| 決策者 | **客戶**（本筆為客戶裁示；客戶對話本身執行組未見；原文由總管逐字轉存為文字檔，見 `docs/evidence/decisions/2026-10-28_cross_view_dg1_ruling_b.md`） |
+| 決策內容摘要 | **客戶裁示**：DG-1 先執行**方案 B**＝BL-0520 特徵化測試 C1～C9。**目前不要改**：source precedence、canonical identity、`get_latest_nav`、valuation methodology、FX cutoff、return formula、freshness／conflict tolerance。目的不是把現況當規格，而是把各路徑差異變成可重跑證據；測試須清楚標示「描述現況，不代表核准現況語意」；能量測者實際量測（同 fund code／URL 不同呼叫形式、cache key、NAV source、NAV date／as-of、Sheet `nav_history`、`get_latest_nav`、return formula、FX、identity key、AI snapshot／cache）；不得為讓測試通過而改 production 行為。C1～C9 完成後做獨立稽核並整理成：已證實一致／已證實不一致／尚無法驗證／哪些差異會造成使用者看到不同數值。完成後再提出下一個 Gate：**DG-2 canonical identity**，並提供具體 contract 方案（至少涵蓋 canonical_id、fund code、ISIN、share class、currency、platform suffix、historical compatibility／migration）；**DG-2 未核准前，不開始 canonical identity production refactor**。**暫不執行方案 C**（把 `get_latest_nav` 併入 A 鏈），因為會直接改變 T7 估值數字，待 identity 與 precedence 有證據後再裁。BL-0509 照原排程平行累積，不互相阻塞。Model：Sonnet 5.5／Effort：Medium；DG-2 canonical data contract 正式實作時走 Model Gate，優先評估 Opus + High。 |
+| 理由／背景 | 客戶原話：「目的不是把現況當規格，而是先把目前各路徑的差異變成可重跑證據。」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-28_cross_view_dg1_ruling_b.md`；落地：`docs/BACKLOG.md` BL-0520／BL-0521／BL-0522、`docs/HANDOFF.md` Resume Checkpoint、`tests/test_xview_characterization.py`、`docs/v2/69_cross_view_consistency_spec.md` 〈BL-0520 實測結果〉。 |
+| 影響範圍 | 本批只增測試與文件；不改任何非測試 `.py`、不改 `CLAUDE.md`、`docs/v2/44_fund_ui_ssot.md`、`INDICATOR_SPECS`。明確**不做**清單：不改 source precedence、不做 canonical identity production refactor、不動 `get_latest_nav`（方案 C 暫緩）、不改 valuation／FX cutoff／return formula／freshness 容差。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。承接 `DEC-2026-10-28-01`（其 Decision Gate 項 DG-1 由本筆裁為方案 B）。不取代 BL-0509。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 `docs/evidence/decisions/2026-10-28_cross_view_dg1_ruling_b.md`（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；由實作組單組寫成，未經第二組獨立驗證。 |
+
+### DEC-2026-10-28-04｜客戶裁示（永久）：新增治理規則 Anti-Bloat / Minimum Governance Overhead
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-28 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-28_anti_bloat_rule.md`） |
+| 決策內容摘要 | **客戶裁示（永久）**：避免治理、審計、文件、BACKLOG、Evidence 與 PR 數量膨脹。十點：最小充分 audit、PR 最小化、BACKLOG 不碎片化、最小充分 evidence、batch 大小、Decision Gate 不氾濫、文件不重複 SSOT、完成後停止、少回報（Silent Cruise 四種情況以外不回報）、開工前自問。不得降低必要的正確性、安全性或 Stop Gate；不建立新的治理 SSOT；本次只落盤，不重整既有 BACKLOG、歷史 evidence 或舊 PR。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-28_anti_bloat_rule.md`；落地：`PROJECT_RULES.md` 13.4 與第 0.5 節索引一列、`docs/HANDOFF.md` 一行指標。 |
+| 影響範圍 | 之後所有工作的 audit 組數、PR／BACKLOG／evidence 數量與回報頻率。與 Silent Cruise、Context Efficiency、Minimum Sufficient Work／Test Scope、GitHub-first Verification Gate 並行。 |
+| 是否可逆 | 可逆（客戶可另行裁示）；客戶標示為永久規則 |
+| supersedes／superseded by | supersedes：無。**不削弱** `PROJECT_RULES.md` 第 4 節 Stop／Decision Gate、3.1／3.2 揭露義務；audit 組數的細節與 `DEC-2026-10-16-05` 同向（本規則列明須第 2 組獨立 audit 的高風險項，細節以 `PROJECT_RULES.md` 13.4 為準；兩者字面差異的調和為文件組讀法，可被客戶推翻）。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1811,3 +1838,5 @@
 - 第四節 `DEC-2026-10-27-44`：整筆是執行組讀法（不是客戶裁示），承接 `-42` (a)；通道盤點為讀碼、未連線實測；新文案為總管擬待覆核；由執行組單組寫成，未經第二組獨立驗證。
 - 第四節 `DEC-2026-10-28-01`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段、與既有 DEC 的同向關係及 `docs/v2/69` 的歸類為文件組讀法；四份審計無網路、未觀察任何數值落差；由文件組單組寫成，未經第二組獨立驗證。
 - 第四節 `DEC-2026-10-28-02`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；十點的整理與和 3.1／3.2 的關係為文件組讀法；環境變數是否可設未查證；由文件組單組寫成，未經第二組獨立驗證。
+- 第四節 `DEC-2026-10-28-03`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_cross_view_dg1_ruling_b.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
+- 第四節 `DEC-2026-10-28-04`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_anti_bloat_rule.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
