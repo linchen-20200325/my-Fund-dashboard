@@ -240,7 +240,7 @@ print("3", f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01"), f("ht
 5. **tab2 Step-1 `nav_latest` 不與序列對帳**：既有 `tests/test_xview_characterization.py::test_char_divergence_c5_scalar_nav_latest_and_series_last_are_not_reconciled` 綠（本批重跑）。
 6. **銀行平台第一個成功即用**：`_src_bank_platform_nav` 依序試各通路，第一個抓到資料的就回傳（moneydj 頁型要 ≥10 筆；台灣人壽 mobile 分支只要非空），不比對其他通路（讀碼）；且只對 base 碼觸發（`fund_orchestration` `_code in _BANK_PLATFORM_CODES`）。
 
-7. **反例：FundClear 級別碼也有 `-`**（2026-10-28 獨立稽核 MUST 1，重驗 `tests/test_fundclear_offshore.py::test_parse_selection`）：`AGIF-HT5`＝IT 累積類股、`AGIF-HTG`＝A 配息類股，是同一基金的不同級別。原 commit `539e660c` 的 resolver 會把兩者剝成同一 base `AGIF`（`same_canonical_fund` 為 True）；已改為命名空間未知時不剝（見第 13 節），測試釘住兩者不合併。
+7. **反例：FundClear 級別碼也有 `-`**（2026-10-28 獨立稽核 MUST 1，重驗 `tests/test_fundclear_offshore.py::test_parse_selection`）：`AGIF-HT5`＝IT 累積類股、`AGIF-HTG`＝A 配息類股，是同一基金的不同級別。原 commit `539e660c` 的 resolver 會把兩者剝成同一 base `AGIF`（`same_canonical_fund` 為 True）；已改為命名空間未知時不剝（見第 13 節），測試釘住兩者不合併。⚠️ 守門只擋「沒有命名空間證據」：呼叫端若對 FundClear 級別碼誤傳 `namespace="moneydj"`，兩者仍會被合併（測試 `test_呼叫端明示moneydj時_AGIF級別碼會被合併_守門靠呼叫端不誤標` 釘住此現況）。
 8. **別名表缺口**：resolver 單獨呼叫時預設不套別名，`ACTI171`／`ACTI7`／`ACTI71`（內建表同一檔）會得到三個 base；shadow hook 已傳入 production 對照表，故 hook 記錄不受影響；Stage-2 啟用前須決定別名表是否為 resolver 的正式輸入。
 
 以上已列入 `docs/BACKLOG.md` BL-0521 子項，不另開 BL。

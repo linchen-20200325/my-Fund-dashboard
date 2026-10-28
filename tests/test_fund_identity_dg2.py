@@ -168,6 +168,21 @@ def test_FundClear級別碼_明示命名空間_範圍外_不合併():
         fi.evaluate_suffix_evidence({"fund_code": "AGIF-HT5"}, {"fund_code": "AGIF-HTG"}, namespace="fundclear")
 
 
+def test_呼叫端明示moneydj時_AGIF級別碼會被合併_守門靠呼叫端不誤標():
+    # 記錄現況：命名空間守門只擋「沒有證據」；呼叫端若對 FundClear 級別碼誤標 moneydj，仍會合併
+    ht5 = fi.resolve_fund_identity("AGIF-HT5", namespace="moneydj")
+    htg = fi.resolve_fund_identity("AGIF-HTG", namespace="moneydj")
+    assert ht5.base_fund_code == htg.base_fund_code == "AGIF"
+    assert fi.same_canonical_fund(ht5, htg) is True
+
+
+@pytest.mark.parametrize("raw", ["TLZF9-ZZ99", "ACDD01-EQTAL005"])
+def test_shadow_後綴未剝_原因寫進reason(raw):
+    rec = shadow.shadow_compare(raw)
+    assert rec["resolver_result"]["verification_status"] == flags.STATUS_NAMESPACE_UNKNOWN
+    assert any(r.startswith("後綴未剝：無命名空間證據（不在通路表／非 MoneyDJ 頁型") for r in rec["reason"])
+
+
 def test_無後綴代碼不受命名空間影響():
     assert fi.resolve_fund_identity("AGIF").canonical_key == "AGIF"
 

@@ -24,6 +24,7 @@ from infra.cache import _normalize_moneydj_url_for_cache
 from repositories.fund.sources import _BANK_PLATFORM_CODES, canonicalize_moneydj_url, parse_moneydj_input
 from repositories.policy.v1 import _extract_code_from_url
 from services.fund_identity import resolve_fund_identity
+from shared.fund_identity import STATUS_NAMESPACE_UNKNOWN, STATUS_OUT_OF_SCOPE_NAMESPACE
 from services.v2_tables import fund_keys as _fund_keys
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,9 @@ def shadow_compare(raw, *, fund_keys_result: dict | None = None, channel_table=N
             reason.append(f"{name}: 得空值，resolver 得 {ident.original_code!r}")
         else:
             reason.append(f"{name}: 得 {value!r} ≠ resolver original_code {ident.original_code!r}")
+    if ident.verification_status in (STATUS_NAMESPACE_UNKNOWN, STATUS_OUT_OF_SCOPE_NAMESPACE):
+        reason.append(f"後綴未剝：無命名空間證據（不在通路表／非 MoneyDJ 頁型；status={ident.verification_status}），"
+                      f"original_code {ident.original_code!r} 不合併")
     if ident.platform_suffix:
         reason.append(f"後綴 {ident.platform_suffix!r} 只作通路 metadata；base_fund_code ＝ {ident.base_fund_code!r}"
                       "（所有現有 parser 都保留完整代碼當身分，行動版網址的 canonicalize 例外）")
