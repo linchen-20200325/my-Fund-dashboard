@@ -80,6 +80,7 @@
 | Minimum Sufficient Test Scope | 第 9 節 9.1 第 2～4 點（`DEC-2026-10-24-04`） |
 | GitHub Discussion Persistence Gate（協作助手與客戶的討論結論須在下一個相關實作批次前落 GitHub SSOT） | 第 12 節 12.2（`DEC-2026-10-27-19`） |
 | Public Repository Personal Name Redaction Rule（公開 repo 不得出現外部教材作者／老師真實姓名） | 第 12 節 12.3（`DEC-2026-10-27-20`） |
+| Cross-View Data Consistency Gate（同 canonical instrument＋metric＋as-of＋currency／share class ＝ 各 view 同一值；禁止各頁自選來源或平行計算；衝突不得靜默選一） | 第 13 節 13.3（`DEC-2026-10-28-01`） |
 
 **Supersession hygiene（同裁示）**：(1) 舊內容保留歷史，不刪；(2) 被新裁示取代時，在舊內容就地標示「superseded by <DEC-ID>」；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只能指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（現行四份見 0.4）。
 
@@ -658,6 +659,20 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 **大規模資訊架構改版只在四種情況允許**：使用者核心任務明顯改變；五頁已無法合理容納主要任務；有經驗證的 usability 問題；現行架構造成明確的資訊衝突。換 API／AI、新增單一功能、某頁難寫、資料暫時不足，都不是理由。
 
 **舊 UI 退役原則**：舊 UI 只能參考已驗證邏輯與資料流程，不是新 UI 視覺或資訊架構來源；只提供已驗證公式、deterministic logic、已證實資料 mapping、已通過測試的行為；不自動提供新 UI 版型、導覽、文案、interaction pattern、寫入權限。新 UI 覆蓋必要邏輯後才切正式入口、移除舊頁、清 legacy wiring 與死碼，並保留必要 regression tests／domain rules。**退役與刪除仍受既有閘門約束**（第 13 節第 11、12 條、第 4 節停下清單、`CLAUDE.md` §-1.5.1c 判定 3）；本小節不授權任何刪除（最保守讀法，可被客戶推翻）。
+
+### 13.3 長期規則：Cross-View Data Consistency Gate（客戶 2026-10-28 新增正式高優先需求，`DEC-2026-10-28-01`，永久）
+
+> **出處**：客戶 2026-10-28 裁示，逐字存檔 `docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`。audit、Matrix、gap、test proposal 見 `docs/v2/69_cross_view_consistency_spec.md`；工作項 `docs/BACKLOG.md` BL-0519～BL-0524。位階同 3.1：受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄（第 0.1 節）。**本節不授權任何實作**，只定義「之後新增或修改資料時必須維持什麼」。
+
+**核心規則**：同一 canonical instrument＋同一 metric＋同一 as-of＋同一 currency／share class，在所有 view 必須得到同一個 canonical value。
+
+1. **架構鏈**：Raw Sources → Source Resolution／Validation → Canonical Instrument Data → Domain Calculation → 各 Page Data View → One AI Brain。
+2. **禁止各頁自行選來源，也禁止各頁平行計算同一 metric。** 來源優先序、新鮮度、identity 驗證、衝突處理集中在資料層（L1 供候選值、L2 解析與計算、L3 只渲染），頁面不得自行決定。
+3. **同 as-of 來源數值衝突時不得靜默選一個**：至少留下 selected source／rejected source／difference／reason／freshness。尚無法判斷時顯示「⬜ 資料來源不一致，暫無法判定」，不顯示任何一個來源的值。
+4. **新增或修改 NAV、報酬、估值、FX、benchmark、identity、AI 輸入的工作**，開工前須對照 `docs/v2/69` 的 Matrix 與 gap 清單，並說明是否擴大或縮小跨 view 分歧；新增 view 不得再自帶第二套來源選擇或第二套公式。
+5. **需要更改 source precedence、canonical identity、valuation methodology、FX cutoff、formula 時，走 Decision Gate**（第 4 節）。已確認 bug 且只有一個明確安全修法者，不得包裝成客戶裁示（第 4 節反向禁令）。
+6. **登記不構成動工授權**（`CLAUDE.md` §-1）。本規則不取代 BL-0509；兩者獨立進行。進入 canonical data contract／source precedence 實作時，依第 5 節 Model Gate 評估是否升 Opus。
+7. **不削弱揭露義務**：audit 的結論以機制層級（FACT／INFERENCE／UNVERIFIED）標示；沒有執行期觀察到的數值落差不得寫成已發生的不一致（`CLAUDE.md` §-2 規則 6）。
 
 ## 第 14 節｜已裁示的治理衝突（2026-10-16 收斂）~~與尚待程序完成者~~（2026-10-16 全結，`DEC-2026-10-16-14`；有意識的狀態變更，不是漏刪；2026-10-16；決策者：客戶（#8 核准裁示，`DEC-2026-10-16-14`））
 

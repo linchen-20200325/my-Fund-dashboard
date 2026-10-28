@@ -1638,6 +1638,20 @@
 | supersedes／superseded by | supersedes：無（與 `DEC-2026-10-17-04`、`DEC-2026-10-23-04` B 同向，不取代它們；執行組讀法：~~兩節字句有出入時取較靜默者~~〔2026-10-28 稽核 S1 更正，有意識的更正，不是漏刪；決策者 AI 總管；對齊 `PROJECT_RULES.md` 3.2 第 4 點〕→ Stop Gate、Decision Gate、3.1 ② 高風險異常報告、Model／Effort Change Gate 與所有揭露義務永不被 3.2 壓掉，「取較靜默者」只適用於進度／狀態類閒聊；可被客戶推翻）。superseded by：無。 |
 | provenance | 客戶裁示原文逐字存於 `docs/evidence/decisions/2026-10-28_silent_cruise_rule.md`（圍欄內文 sha256 見該檔與 README）；本筆「決策內容摘要」為執行組依原文整理，以原文為準；與 3.1 的關係與「揭露義務不因靜默消失」為文件組判讀，可被客戶推翻；由執行組單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-28-01｜客戶裁示（永久治理原則＋本輪範圍）：新增正式高優先需求 Cross-View Data Consistency Gate；本輪僅 audit／matrix／gap／test proposal
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-28 |
+| 決策者 | **客戶**（本筆為客戶裁示；客戶對話本身執行組未見；原文由總管於派工單內逐字轉存，見 `docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`） |
+| 決策內容摘要 | **客戶裁示**：新增正式高優先需求 **Cross-View Data Consistency Gate**。客戶曾實際遇過同一檔基金／股票在單一標的頁與投資組合／持股頁顯示不同 NAV、價格或報酬（原因是各頁用不同來源、cache、as-of 或 fallback），vNext 必須避免重演。**核心規則**：「Same canonical instrument + same metric + same as-of + same currency/share class = same canonical value across all views.」**正式架構**：Raw Sources → Source Resolution／Validation → Canonical Instrument Data → Domain Calculation → 各 Page Data View → One AI Brain；禁止各頁自行選來源或平行計算同一 metric。**本輪範圍**：先做 repo-wide audit（12 項盤點）、產出 Cross-View Data Consistency Matrix（欄位：Instrument／Metric｜Single View｜Holdings｜Allocation｜AI Input｜Source｜As-of｜Currency｜Consistent?｜Root Cause／Action）、gap 清單與 automated consistency test proposal；**不直接重構，不直接大改 source precedence／canonical contract**。多來源須在資料層定義 primary／fallback／fallback trigger／freshness requirement／identity validation／conflict behavior；同 as-of 來源衝突時不得靜默選一個，至少留下 selected source／rejected source／difference／reason／freshness；無法判斷時顯示「⬜ 資料來源不一致，暫無法判定」。**Decision Gate 觸發項**：audit 發現需更改 source precedence、canonical identity、valuation methodology、FX cutoff、formula 時，再走 Decision Gate。**不取代 BL-0509**（多日 probe 照原計畫；Cross-View 為下一個獨立資料治理 batch）。**Model／Effort**：Sonnet 5.5／Medium；進入 canonical data contract／source precedence 實作時依 Model Gate 評估升 Opus。客戶要求落盤到 PROJECT_RULES（永久治理原則）、BACKLOG、HANDOFF 與必要的 data-contract／design spec。 |
+| 理由／背景 | 客戶原話：同一檔基金／股票在不同頁顯示不同 NAV、價格或報酬，原因是各頁使用不同來源、cache、as-of 或 fallback，vNext 必須避免重演。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`；落地：`PROJECT_RULES.md` 13.3 與第 0.5 節索引一列、`docs/v2/69_cross_view_consistency_spec.md`（audit 彙整、Matrix、gap、test proposal）、`docs/BACKLOG.md` BL-0519～BL-0524、`docs/HANDOFF.md` Resume Checkpoint。 |
+| 影響範圍 | 之後新增或修改 NAV、報酬、估值、FX、benchmark、identity、AI 輸入的工作，須對照 `PROJECT_RULES.md` 13.3 與 `docs/v2/69`。本批只增文件與一行 doc-counter 登記；不改任何 `.py` 行為、不改 `CLAUDE.md`、`docs/v2/44_fund_ui_ssot.md`、`INDICATOR_SPECS`。 |
+| 是否可逆 | 可逆（客戶可另行裁示）；客戶標示為永久治理原則 |
+| supersedes／superseded by | supersedes：無。不取代 BL-0509；與 `DEC-2026-10-27-18`（One AI Brain）、`DEC-2026-10-24-02`（資料先行順序）同向（文件組讀法，可被客戶推翻）。superseded by：無。 |
+| provenance | 客戶需求原文逐字存於 `docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；`docs/v2/69` 的 gap 編號、Consistent? 欄與「總管推薦」為寫作組判讀（推薦只是 RECOMMENDATION，不是已決定，可被客戶推翻）；四份審計均為唯讀、無網路、未觀察任何數值落差；由文件組單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1781,3 +1795,4 @@
 - 第四節 `DEC-2026-10-27-25`～`-38`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_g44_amendment_rulings.md`，無遮蔽），引號內文字逐字（條列改以引號併列）；執行組仍未見客戶對話本身；拆成十四筆的切分與各筆「執行組讀法」為執行組依派工單寫成；44 解凍屬治理／UI SSOT 等級、`-35`／`-37` 屬 formula／data source 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核；由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-27-41`、`-42`：`-41` 客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-27_a_c_parallel_rulings.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與 supersedes 欄為執行組讀法；`-42` 整筆是執行組讀法、不是客戶裁示，通道歸屬為執行組單次讀碼；`-41` 屬 data semantics 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核；由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-27-44`：整筆是執行組讀法（不是客戶裁示），承接 `-42` (a)；通道盤點為讀碼、未連線實測；新文案為總管擬待覆核；由執行組單組寫成，未經第二組獨立驗證。
+- 第四節 `DEC-2026-10-28-01`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段、與既有 DEC 的同向關係及 `docs/v2/69` 的歸類為文件組讀法；四份審計無網路、未觀察任何數值落差；由文件組單組寫成，未經第二組獨立驗證。
