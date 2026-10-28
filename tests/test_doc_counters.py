@@ -2450,6 +2450,7 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/67_ai_action_vocabulary.md",   # 2026-10-27 AI 行動語意 SSOT 與 One AI Brain（DEC-2026-10-27-18／-22）
     "docs/v2/68_bl0509_eps_probe_result.md",   # 2026-10-27 BL-0509 EPS Data Source Probe 第一次真跑結果（DEC-2026-10-27-37／-40）
     "docs/v2/69_cross_view_consistency_spec.md",   # 2026-10-28 Cross-View Data Consistency Gate 規格草案（DEC-2026-10-28-01）
+    "docs/v2/70_dg2_canonical_identity_proposal.md",   # 2026-10-28 DG-2 canonical identity 提案（待客戶裁示；DEC-2026-10-28-03）
     "docs/v2/CONSTITUTION.md",
     "docs/v2/README_DRAFT_PACK.md",
 )
