@@ -1,6 +1,8 @@
-# 70 — DG-2 canonical identity：Decision Gate 提案（待客戶裁示，未核准）
+# 70 — DG-2 canonical identity：Decision Gate 提案（~~待客戶裁示，未核准~~ → 2026-10-28 客戶已裁示 C+ shadow first，`DEC-2026-10-28-05`）
 
-> **狀態：待客戶裁示，未核准，不開始 production refactor。** 本文是 `docs/v2/69` 第 9 節 DG-2 的具體 contract 提案，依客戶 `DEC-2026-10-28-03` 第 5、6 項（先做 C1～C9 與獨立稽核，再提 DG-2；DG-2 核准前不動 canonical identity production 程式）撰寫。
+> ⚠️ **2026-10-28 狀態更新（有意識的更正，不是漏刪；決策者：客戶，`DEC-2026-10-28-05`）**：客戶已裁示 DG-2 採 **C+**、先 Shadow Mode，見第 11～14 節。第 1～10 節為裁示前的提案原文，保留不改；其中第 3 節 INFERENCE「後綴代表不同通路的 NAV 序列」與第 9 節問題 1「本文假設是」**被客戶裁示推翻**（後綴預設＝通路 metadata；有證據才走例外）。
+
+> ~~**狀態：待客戶裁示，未核准，不開始 production refactor。**~~ **（裁示前原文）** 本文是 `docs/v2/69` 第 9 節 DG-2 的具體 contract 提案，依客戶 `DEC-2026-10-28-03` 第 5、6 項（先做 C1～C9 與獨立稽核，再提 DG-2；DG-2 核准前不動 canonical identity production 程式）撰寫。
 > 不改任何 `.py`、不改 `CLAUDE.md`、不改 `docs/v2/44_fund_ui_ssot.md`、不動 `INDICATOR_SPECS`。登記不構成動工授權（`CLAUDE.md` §-1）。
 > **基準**：main `e05ae3a4` 加本分支（BL-0520 測試已落地，見 `docs/v2/69` 附錄 B）。會漂移的結論引用前請重查。
 > ⚠️ **驗證狀態**：本文由實作組單組寫成，**未經第二組獨立驗證**。第 9 節列出我自己重驗過的承重宣稱；其餘一律標「引用自研究報告，未重驗」。「建議」只是推論，客戶可推翻。
@@ -160,3 +162,78 @@ print("3", f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01"), f("ht
   11. production 無 `canonical_id`／`share_class` 符號：由 `tests/test_xview_characterization.py::test_char_agreement_c5b_no_canonical_id_or_share_class_symbol_exists_in_production_python` 的 AST 掃描（字面名稱；不證明沒有其他名稱表達同一概念）。
 - **其餘一律「引用自研究報告，未重驗」**，包含：內建別名 12 筆、`declared_profile` 細節、`nav_history` 欄位演進與 `_rescue_by_isin` 幣別閘、持倉 CSV／快照鍵、各 Sheet 的實際內容。
 - 本文沒有任何網路查證，也沒有查證真實基金代碼與 ISIN／級別的對應。
+
+## 11. 客戶裁示（`DEC-2026-10-28-05`）
+
+逐字原文：`docs/evidence/decisions/2026-10-28_dg2_identity_ruling.md`（本節是摘要，以原文為準）。
+
+- `TLZF9`／`TLZF9-AL001`／`TLZF9-24A7` 原則上同一核心基金：`base_fund_code = TLZF9`；`original_code`／`platform_suffix`／`channel_code`／`source_url` 另存；後綴不得直接當新身份。
+- 不得盲目剝後綴：證據顯示後綴是不同 share class／幣別／配息／避險／NAV series → Exception／Decision Gate，不硬合併。
+- ISIN 本階段不依賴（不作 key、不必要、缺了不警告）；currency／share class／配息／避險不得猜，沒有可靠資料一律 Unknown，Unknown 不視為相同、不同、安全或已確認。
+- 先 Shadow Mode：不改 Sheet schema、production 顯示、NAV precedence、valuation、FX、return formula；flag 預設關；只記差異。
+- 外部來源不得因 `results[0]` 接受；已知屬性衝突 → 拒收、留 evidence、顯示「⬜ 資料來源不一致，暫無法判定」。
+- NAV 與 identity 分開；同 base＋同日＋同幣別 NAV 不一致 → source conflict，不建第二個 canonical fund。
+- 本階段禁止順帶修改：`get_latest_nav`、NAV precedence、FundClear／MoneyDJ／Yahoo 排序、valuation、FX cutoff、return formula、Sheet migration、One AI Brain。
+
+## 12. 舊 UI reuse matrix
+
+來源：舊 UI targeted audit（單組、唯讀、無網路，2026-10-28，基準 main `5e5048d5`）。「重驗」欄：✅＝本實作組以純函式執行或讀碼重驗（多數已由 `tests/test_fund_identity_dg2.py` 釘住）；—＝**引用自稽核報告，未重驗**。
+
+| # | 邏輯（file::symbol） | 分類 | 重點 | 重驗 |
+|---|---|---|---|---|
+| 1 | `repositories/fund/sources.py::parse_moneydj_input` 頁型辨識 | ADAPT | resolver 取其 `page_type` 作 metadata | ✅ |
+| 2 | 同上代碼文法 `主碼(-後綴)?` | ADAPT | 經 `fund_keys` 關卡使用，不單獨用（`a=` 未錨定、兜底收 `#FRAG`） | ✅ |
+| 3 | `canonicalize_moneydj_url` 內 `split("-", 1)[0]` | ADAPT | resolver 對**所有**輸入一致套用第一個 `-` 前＝base | ✅ |
+| 4 | `canonicalize_moneydj_url` 整體（只改寫行動版網址） | LEGACY_COMPAT | 舊 tab2 行為維持；resolver 不依賴它 | ✅ |
+| 5 | `services/v2_tables/fund_keys.py::_resolve_one`／`_is_pure_code` | ADAPT（驗證≈REUSE） | resolver 的輸入關卡；`#frag`／`area=` 正確 | ✅ |
+| 6 | `repositories/policy/v1.py::_extract_code_from_url` | REJECT（身分）／LEGACY_COMPAT（保單同步） | `#frag`→`TLZF9-AL001#FRAG`、`area=TW`→`TW` | ✅ |
+| 7 | 持倉主鍵 `policy_id::CODE`、`migrate_ledger_dict` | LEGACY_COMPAT | 不改存放鍵 | — |
+| 8 | `infra/cache.py::_normalize_moneydj_url_for_cache` | REJECT | 小寫與裸碼得空鍵、頁型恆 `default` | ✅ |
+| 9 | `fetch_fund_from_moneydj_url` 內 fallback regex | LEGACY_COMPAT | 函式內嵌、不可單獨呼叫，shadow 未納入 | ✅（讀碼） |
+| 10 | `_DEFAULT_MAPPING`／`load_fund_code_mapping` | LEGACY_COMPAT（別名可 ADAPT） | resolver 預設不套別名（`alias_mapping={}`） | — |
+| 11 | `sources.py::_BANK_PLATFORM_CODES` | ADAPT（channel 種子） | 6 個 base、鍵全是 base；shadow 綁定後注入 resolver 當 `channel_table` | ✅ |
+| 12 | `_src_bank_platform_nav`（第一個成功通路即用） | UNVERIFIED | 不比對各通路是否一致；不可當「同 NAV」證據 | ✅（讀碼） |
+| 13 | `fund_fetcher.py::PORTAL_CFG` | LEGACY_COMPAT | 只有 URL 樣板 | — |
+| 14 | `fund_fetcher.py::_INSURANCE_SUBDOMAIN_HINTS` | REJECT（通路證據）／LEGACY_COMPAT（取數） | 以 base 前綴猜子網域，不可填 `channel_code` | — |
+| 15 | `get_page_types_to_try`、`_is_domestic_code` | LEGACY_COMPAT | 純頁面路由 | — |
+| 16 | `nav_metrics.py::fetch_nav`／`fetch_div` 的 `split("-")[-1]` | REJECT | 以後綴當代碼重抓（`TLZF9-AL001`→`AL001`）；見第 14 節 | ✅ |
+| 17 | `_morningstar_search_secid`／`_resolve_ms_secid` 的 `results[0]` | REJECT | 改由 `validate_external_candidate` 驗（本階段只 shadow） | — |
+| 18 | `_MORNINGSTAR_SECID_MAP`、`_ALLIANZ_INSURANCE_CODES`、`cache/nav/TLZF9.json` | LEGACY_COMPAT（C+ 佐證） | 全以 base 為鍵 | — |
+| 19 | `_span_extend_expected_ccy`／`_declared_or_table_ccy` | LEGACY_COMPAT | 帶後綴得未知幣別；resolver 不從它推 currency | — |
+| 20 | `nav_history_gs` 鍵、`nav_history_store._path` | LEGACY_COMPAT | 以完整代碼存序列；不 rekey | — |
+| 21 | `services/moneydj_fetcher.py::auto_fetch_moneydj`／`build_moneydj_url` | LEGACY_COMPAT；大寫化網址 REJECT | 見第 14 節 | ✅ |
+| 22 | `ui/tab3_portfolio.py` 手動加入、`ui/tab3_t7_ledger.py` 新基金整行 `.upper()` | REJECT（網址輸入） | 見第 14 節 | ✅ |
+| 23 | `ui/helpers/portfolio/load.py::batch_load_unloaded_funds` | LEGACY_COMPAT | 裸碼呼叫、去重不轉大寫 | — |
+| 24 | Step 1 平台頁 `nav_latest` 受保護、不與序列對帳 | UNVERIFIED | 見第 14 節 | ✅（既有特徵測試） |
+| 25 | `fx_and_main.py::get_latest_nav` 來源鏈 | UNVERIFIED（不碰） | NAV Gate | — |
+| 26 | `ui/helpers/portfolio/allocation.py::summarize_core_satellite` | REUSE（對身分議題） | 不依代碼、不用 NAV | — |
+
+舊 UI 結論（稽核，FACT 部分已重驗 #1～#6、#8、#11、#16）：舊路徑**不**收斂成 base（只有行動版網址經 canonicalize 剝後綴）；後綴在程式中只用於組平台 URL；「後綴＝不同 NAV 序列」只是兩處註解宣稱，其宣稱的機制（後綴代碼走 `_BANK_PLATFORM_CODES`）在現行程式不成立（表以 base 為鍵，`TLZF9-AL001` 不在表內，本組重跑確認）。沒有反證推翻 C+；各通路 NAV 是否相同 **UNVERIFIED（需網路）**。
+
+## 13. Stage-1 C+ shadow 設計與實作
+
+| 檔案 | 層 | 內容 |
+|---|---|---|
+| `shared/fund_identity.py` | L0 | `DG2_SHADOW_ENABLED = False`（feature flag，無 env override：本 repo 無此慣例）、`UNKNOWN = "Unknown"`、verification status、候選／cross-view 狀態、`SOURCE_CONFLICT_TEXT`、`IDENTITY_EXCEPTIONS = frozenset()`（例外登記，預設空） |
+| `services/fund_identity.py` | L2 純函式 | `CanonicalFundIdentity`（frozen dataclass：`base_fund_code`、`original_code`、`platform_suffix`、`channel_code`、`source_url`、`currency`、`share_class`、`distribution_type`、`hedge_status`、`isin`、`source`、`as_of`、`verification_status`，另加 metadata `page_type`／`raw_input`／`error`；`canonical_key` 只在 `base_resolved_attributes_unverified` 時有值）；`resolve_fund_identity`、`compare_attribute`／`same_canonical_fund`（Unknown＝未定）、`evaluate_suffix_evidence`（證據 → 例外紀錄，不合併）、`validate_external_candidate`（拒收／接受／unverified）、`check_cross_view_nav`（consistent／source_conflict／not_comparable） |
+| `services/fund_identity_shadow.py` | L2 | `current_parser_results`、`shadow_compare`（raw → 五個現有 parser 結果 → resolver 結果 → difference → reason）、`log_shadow_for_fund_keys`（hook；只寫 `logging`，自身失敗只記 log） |
+| `services/v2_tables/fund_keys.py::resolve_full_keys` | L2 | 唯一 hook：flag 為真才於函式內 import shadow 並記 log；回傳值不變 |
+
+- **層級**：純 resolver 不 import `_BANK_PLATFORM_CODES`（通路表以 `channel_table` 參數注入，shadow 模組綁定）；它 import L1 `parse_moneydj_input` 與 L2 `fund_keys`（L2→L1 下行，`CLAUDE.md` §8.2 允許；`fund_keys` 既有同一 import）。v2_tables import 白名單加開 `fund_keys.py`→`services.fund_identity_shadow` 一個名字（`tests/test_v2_tables_market_indicator.py`）；`tests/test_services_purity_contract.py` 照舊綠。
+- **resolver 不做的事**：不從名稱、後綴或幣別推 currency／share class／配息／避險；不預設 USD；不要求 ISIN；不套別名表（除非呼叫端注入）；不 canonicalize 改寫網址；不取數。
+- **本階段不改**：Sheet schema、production 顯示、`get_latest_nav`、NAV precedence、FundClear／MoneyDJ／Yahoo 排序、Morningstar `results[0]`（`validate_external_candidate` 未接入）、valuation、FX、return formula、One AI Brain、任何舊 UI 缺陷。
+- **測試**：`tests/test_fund_identity_dg2.py`（無網路；含 flag-off 不呼叫 hook／結果不變、flag-on 只寫 log 結果不變、shadow 失敗不影響 production）。`tests/test_xview_characterization.py` C5b「production 無 `share_class` 符號」改為「僅 `services/fund_identity.py`」（有意識的更正，該檔已註明）。
+- **Stage-2（啟用 resolver 影響任何鍵或顯示）須另一次 Decision Gate。** 待補證據：同一日 `TLZF9` vs `TLZF9-AL001`／`TLZF9-24A7` 的實際 NAV 比對（需網路；見 BL-0521）。
+
+## 14. 已知缺陷（本批不修，待後續）
+
+以下皆於 2026-10-28 由本實作組重驗（純函式執行或讀碼；端到端 UI 未跑）；本批依裁示第 9／12 項**不改** production。
+
+1. **T7／tab3 手動加入把網址整行轉大寫**：`ui/tab3_t7_ledger.py` 新基金 `_a_new_code.strip().upper()`、`ui/tab3_portfolio.py` 手動批次每行 `.upper()` → `build_moneydj_url` 的 `startswith("http")` 對 `HTTPS` 不成立 → 組出 `…?a=HTTPS://…` → `parse_moneydj_input` 得 code `HTTPS`（執行確認）。
+2. **`nav_metrics.fetch_nav`／`fetch_div` 以後綴當代碼**：`full_key.split("-")[-1]`，`TLZF9-AL001` → 打 `?a=AL001`（讀碼＋執行 split）；可達於 legacy 最終備援與 `nav_history_store.incremental_update`。
+3. **`policy/v1._extract_code_from_url`**：`#frag` → `TLZF9-AL001#FRAG`、`?area=TW&a=…` → `TW`（執行確認；`shadow_compare` 測試釘住）。
+4. **cache 正規化**：小寫 `a=` 與裸碼都得 `fetch_fund||default`（空碼鍵；執行確認）；production 0 呼叫者（引用第 10 節第 6 點）。
+5. **tab2 Step-1 `nav_latest` 不與序列對帳**：既有 `tests/test_xview_characterization.py::test_char_divergence_c5_scalar_nav_latest_and_series_last_are_not_reconciled` 綠（本批重跑）。
+6. **銀行平台第一個成功即用**：`_src_bank_platform_nav` 依序試各通路，第一個抓到資料的就回傳（moneydj 頁型要 ≥10 筆；台灣人壽 mobile 分支只要非空），不比對其他通路（讀碼）；且只對 base 碼觸發（`fund_orchestration` `_code in _BANK_PLATFORM_CODES`）。
+
+以上已列入 `docs/BACKLOG.md` BL-0521 子項，不另開 BL。

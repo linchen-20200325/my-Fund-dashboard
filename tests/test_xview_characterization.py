@@ -528,7 +528,12 @@ def test_char_agreement_c5b_no_canonical_id_or_share_class_symbol_exists_in_prod
                      else node.name if isinstance(node, (ast.FunctionDef, ast.ClassDef)) else None)
             if ident in wanted:
                 found.append((rel, ident))
-    assert found == []
+    # ~~`assert found == []`~~ → 2026-10-28 DG-2 Stage-1（有意識的更正，不是漏刪；客戶裁示 `DEC-2026-10-28-05`）：
+    # C+ resolver 以 Shadow Mode 新增 `services/fund_identity.py`（`share_class` 欄位，預設 Unknown）；
+    # 它沒有任何 production 消費端（唯一接點是 flag 預設關的 log hook，見 `tests/test_fund_identity_dg2.py`）。
+    # 本條仍釘住：**除了這一檔，production 沒有 `canonical_id`／`share_class` 符號**；多出任何一檔就紅。
+    assert {rel for rel, _ in found} <= {"services/fund_identity.py"}, found
+    assert "canonical_id" not in {ident for _, ident in found}, found
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -111,6 +111,7 @@ from __future__ import annotations
 from typing import Optional
 
 from repositories.fund.sources import load_fund_code_mapping, parse_moneydj_input
+from shared import fund_identity as _dg2_flags
 
 
 # 與 `parse_moneydj_input` 非網址分支的正則逐字相同（測試以原始碼比對、並與 `_is_pure_code` 對拍）。
@@ -269,8 +270,14 @@ def resolve_full_keys(fund_codes, *, mapping=None) -> dict:
         _check_injected_mapping(mapping)
         table, source = mapping, MAPPING_SOURCE_INJECTED
     results = [_resolve_one(raw, table) for raw in fund_codes]
-    return {
+    out = {
         "results": results,
         "provenance": {"mapping_source": source, "mapping_size": len(table),
                        "parser": PARSER_NAME},
     }
+    # DG-2 Stage-1 shadow hook（`DEC-2026-10-28-05`）：預設關；關閉時不 import、不呼叫任何東西。
+    # 打開時只寫 log，不改 `out`（`services/fund_identity_shadow.py`）。
+    if _dg2_flags.DG2_SHADOW_ENABLED:
+        from services.fund_identity_shadow import log_shadow_for_fund_keys
+        log_shadow_for_fund_keys(fund_codes, out)
+    return out

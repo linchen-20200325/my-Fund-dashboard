@@ -1693,6 +1693,20 @@
 | supersedes／superseded by | supersedes：無。**不削弱** `PROJECT_RULES.md` 第 4 節 Stop／Decision Gate、3.1／3.2 揭露義務；audit 組數的細節與 `DEC-2026-10-16-05` 同向（本規則列明須第 2 組獨立 audit 的高風險項，細節以 `PROJECT_RULES.md` 13.4 為準；兩者字面差異的調和為文件組讀法，可被客戶推翻）。superseded by：無。 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-28-05｜客戶裁示：DG-2 採 C+ canonical fund identity（base_fund_code ＋ 通路 metadata），第一階段 Shadow Mode、feature flag 預設關
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-28 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-28_dg2_identity_ruling.md`） |
+| 決策內容摘要 | **客戶裁示**：DG-2 採 **C+**，先 Shadow Mode。**後綴的業務語意**：以 `TLZF9-AL001` 為例，`TLZF9`＝基金本身代號、`AL001`＝銷售通路／平台／保經／保險公司附加識別；`TLZF9`／`TLZF9-AL001`／`TLZF9-24A7` 原則上同一核心基金，`base_fund_code = TLZF9`，`original_code`／`platform_suffix`／`channel_code`／`source_url` 另存，平台後綴不得直接當成新的基金身份。**不得盲目剝後綴**：證據顯示後綴對應不同 share class／幣別／配息／避險／NAV series 時不得強制合併，產生 Exception／Decision Gate。**ISIN 不依賴**：不作 canonical key、非必要欄位、不要求 Sheet 補、缺了不警告不影響 matching，僅為 optional verification attribute。**Unknown 不猜**：currency／share class／platform suffix／distribution type／hedge status 分開；禁止 currency＝share class、platform_suffix＝share class；禁止由名稱、後綴或幣別推配息／累積／避險；沒有可靠資料時一律 Unknown，Unknown 不得視為相同、不同、安全或已確認。**先查舊 UI**（REUSE／ADAPT／LEGACY_COMPAT／REJECT／UNVERIFIED），舊 UI 是 evidence 不是 SSOT。**Shadow Mode**：不改 Sheet schema、production 顯示、NAV source precedence、valuation、FX、return formula；flag 預設關；只記錄 raw input → current parser result → new resolver result → difference → reason。**外部來源**不得因 `results[0]` 直接接受，已知 identity 屬性衝突即拒收、留 evidence、顯示「⬜ 資料來源不一致，暫無法判定」。**NAV 與 identity 分開**：同 base＋同 NAV date＋同幣別不同 view 的 NAV 不一致 → source conflict，不得偷偷建第二個 canonical fund、不得以「不同平台」合理化。**本階段禁止順帶修改**：`get_latest_nav`、NAV primary／fallback precedence、FundClear／MoneyDJ／Yahoo 排序、valuation methodology、FX cutoff、return formula、Sheet migration、One AI Brain（各自走 Decision Gate）。Model：Opus 5.5／Effort：High（只限本範圍）。 |
+| 理由／背景 | 客戶原話：「Same canonical fund + same metric + same as-of + same currency = same canonical value across all views.」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-28_dg2_identity_ruling.md`；落地：`docs/v2/70_dg2_canonical_identity_proposal.md`〈客戶裁示〉〈舊 UI reuse matrix〉〈Stage-1 C+ shadow 設計與實作〉〈已知缺陷〉、`shared/fund_identity.py`、`services/fund_identity.py`、`services/fund_identity_shadow.py`、`tests/test_fund_identity_dg2.py`、`docs/BACKLOG.md` BL-0521、`docs/HANDOFF.md`。 |
+| 影響範圍 | Stage-1 只新增 shadow 模組與測試、`services/v2_tables/fund_keys.py` 一個 flag 把關的 log hook（預設關）；production 行為不變。Stage-2（啟用 resolver 影響任何顯示或鍵）須另一次 Decision Gate。不改 `CLAUDE.md`、`docs/v2/44_fund_ui_ssot.md`、`INDICATOR_SPECS`。 |
+| 是否可逆 | 可逆（客戶可另行裁示；Stage-1 為 shadow，關 flag 即無作用） |
+| supersedes／superseded by | supersedes：無。承接 `DEC-2026-10-28-03`（其指定的 DG-2 由本筆裁為 C+ shadow first）；`docs/v2/69` G-ID-1「平台後綴代表不同 NAV 序列」的 FACT 標記由本筆的例外路徑取代為「斷言，未經證據」。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1840,3 +1854,4 @@
 - 第四節 `DEC-2026-10-28-02`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_context_efficiency_rule.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；十點的整理與和 3.1／3.2 的關係為文件組讀法；環境變數是否可設未查證；由文件組單組寫成，未經第二組獨立驗證。
 - 第四節 `DEC-2026-10-28-03`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_cross_view_dg1_ruling_b.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
 - 第四節 `DEC-2026-10-28-04`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_anti_bloat_rule.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
+- 第四節 `DEC-2026-10-28-05`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_dg2_identity_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
