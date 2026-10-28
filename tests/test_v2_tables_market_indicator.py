@@ -450,7 +450,12 @@ def test_落地接縫拋錯_不吞(monkeypatch, no_other_l1):
 # 理由：A 鏈判「complete」要 L2 `calc_metrics` 算出的指標，只用 L1 重寫頁型迴圈與停止條件會與 A 鏈不同。
 # ⚠️ 這個名字會把 `services.fund_service` → `services.nav_history_gs`（gspread，`GSPREAD_DEBT` 已登記）
 #    帶進 B 線的呼叫鏈；登記 ≠ 核准，本批不處理那筆債。
-_L2_TO_L2_ALLOWED = {"nav_dividend.py": ("services.moneydj_fetcher",)}
+# → 2026-10-28 DG-2 Stage-1（客戶裁示 `DEC-2026-10-28-05`：C+ resolver 先 Shadow Mode、feature flag 預設關；
+#   總管派工規格指定「單一 vNext identity 入口一個 gated hook」）：加開 `fund_keys.py` → `services.fund_identity_shadow`
+#   這一個名字。該 import 只在 `shared.fund_identity.DG2_SHADOW_ENABLED` 為真時於函式內執行（預設不執行），
+#   hook 只寫 log、不改回傳值（`tests/test_fund_identity_dg2.py` 的 flag-off／flag-on 測試釘住）。
+_L2_TO_L2_ALLOWED = {"nav_dividend.py": ("services.moneydj_fetcher",),
+                     "fund_keys.py": ("services.fund_identity_shadow",)}
 
 # 逐檔額外放行（2026-10-13 標的探索稽核 L 回修；總管技術裁定：選股池讀取要「只快取成功、失敗冷卻」，
 # 放在 L2 `exp_universe.py`）：
@@ -470,7 +475,9 @@ _L2_TO_L2_ALLOWED = {"nav_dividend.py": ("services.moneydj_fetcher",)}
 #   不開整個 infra、不給其他檔；開了卻沒人用也紅。
 _EXTRA_ALLOWED = {"exp_universe.py": ("infra.cache", "infra.gspread_retry", "time", "threading"),
                   "exp_nav.py": ("infra.cache", "time", "threading", "copy"),
-                  "personal_session.py": ("infra.personal_oauth",)}
+                  "personal_session.py": ("infra.personal_oauth",),
+                  # 2026-10-28 DG-2 Stage-1 獨立稽核 SHOULD a：`fund_keys.py` 的 shadow hook 失敗只記 log（純標準庫、無 I/O）。
+                  "fund_keys.py": ("logging",)}
 
 
 def _is_v2_tables(name: str) -> bool:
@@ -521,12 +528,13 @@ def test_v2_tables只import標準庫與L0_L1():
     assert seen >= 5
     # 放行清單恰好是這一組：多開一個檔或一個名字就紅；開了卻沒人用也紅（不留沒人用的口子）。
     assert {(f, n) for f, names in _L2_TO_L2_ALLOWED.items() for n in names} == {
-        ("nav_dividend.py", "services.moneydj_fetcher")}
-    assert l2_seen == {("nav_dividend.py", "services.moneydj_fetcher")}, l2_seen
+        ("nav_dividend.py", "services.moneydj_fetcher"), ("fund_keys.py", "services.fund_identity_shadow")}
+    assert l2_seen == {("nav_dividend.py", "services.moneydj_fetcher"),
+                       ("fund_keys.py", "services.fund_identity_shadow")}, l2_seen
     # 放行清單恰好是這一組（字面值自我釘死，比照 `_L2_TO_L2_ALLOWED`）：多開一個檔或一個名字就紅。
     assert {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names} == {
         ("exp_universe.py", "infra.cache"), ("exp_universe.py", "infra.gspread_retry"),
         ("exp_universe.py", "time"), ("exp_universe.py", "threading"),
         ("exp_nav.py", "infra.cache"), ("exp_nav.py", "time"), ("exp_nav.py", "threading"), ("exp_nav.py", "copy"),
-        ("personal_session.py", "infra.personal_oauth")}
+        ("personal_session.py", "infra.personal_oauth"), ("fund_keys.py", "logging")}
     assert extra_seen == {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names}, extra_seen
