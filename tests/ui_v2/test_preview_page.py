@@ -118,6 +118,7 @@ def no_secrets(monkeypatch):
     monkeypatch.setattr(MI, "fetch_yf_close_with_error", lambda ticker, *a, **k: (None, _NO_NET))
     # 2026-10-13：FRED 三鍵接上；slow lane 設了 FRED_API_KEY 環境變數，不擋的話會真的去打 FRED。
     monkeypatch.setattr(MI, "fetch_fred_vintages_with_error", lambda *a, **k: (None, _NO_NET))
+    monkeypatch.setattr(MI, "fetch_fred_with_error", lambda *a, **k: (None, _NO_NET))   # BL-0517：🌍 頁殖利率走這支
     SET_REPO.clear_cache()
     POL.clear_cache()
     SB.reset_all()

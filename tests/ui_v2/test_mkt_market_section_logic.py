@@ -314,7 +314,8 @@ def test_BL0517新文案_標籤與註記_總管擬待覆核():
     assert ms.LABELS["sp500"] == "標普 500 指數（S&P 500）"
     assert ms.LABELS["us10y"] == "美國 10 年期公債殖利率"
     assert ms.LABELS["us2y"] == "美國 2 年期公債殖利率"
-    assert ms.TEXT_FRED_OBS_NOTE == "資料日期為 FRED 觀測日（不是公布日）；只取現行版次；單位為百分比（%），不是價格"
+    assert ms.TEXT_FRED_OBS_NOTE == "資料日期為 FRED 觀測日（不是公布日）；單位為百分比（%），不是價格"
+    assert "現行版次" not in ms.TEXT_FRED_OBS_NOTE and "版次" not in ms.TEXT_FRED_OBS_NOTE   # 不再讀 vintage，該句不再為真
 
 
 def test_SP500圖卡_同TAIEX規格_期間漲跌是百分比報酬_來源標示逐字():
@@ -429,3 +430,38 @@ def test_Mutation_把所有新domain換成系統錯誤_既有Missing文案與結
     assert ms.missing_copy(by["nasdaq"]) == ms.TEXT_INTL_MISSING
     assert ms.conclusion_model(view)["text"] == ms.TEXT_NO_CONCLUSION
     assert len(ms.raw_entries(view)) == 3
+
+
+def test_S2略過觀測的安靜說明_ok的殖利率卡帶reason時多一行_沒有reason時不多():
+    quiet = ms.us10y_model(_yield_ok("us10y", "FRED (DGS10)"), "1Y")
+    assert not [c for c in quiet["caption_lines"] if "略過" in c]
+    d = _yield_ok("us10y", "FRED (DGS10)")
+    d["reason"] = "已略過 3 筆無法採用的觀測"
+    m = ms.us10y_model(d, "1Y")
+    assert m["status"] == "ok" and m["spec"] is not None             # 狀態仍是 ok，圖照畫
+    assert m["caption_lines"][-1] == "已略過 3 筆無法採用的觀測" and m["message"] is None
+    assert logic.scan_forbidden(m["caption_lines"]) == {}
+    assert "已略過 3 筆無法採用的觀測" in ms.section_strings(_view(us10y=d), "1Y")
+
+
+def test_S2非ok的domain不加說明行_原因照舊走message():
+    bad = _dom("us10y", "資料未備", reason="值為缺值或非有限數字 2 筆不寫", reason_code="no_closed_observation")
+    m = ms.us10y_model(bad, "1Y")
+    assert m["caption_lines"] == [] and m["message"].endswith("值為缺值或非有限數字 2 筆不寫")
+
+
+def test_pp四捨五入為零不印負號_N2():
+    mk = lambda a, b: ms.period_change_pp([{"obs_date": "2026-10-01", "value_num": a}, {"obs_date": "2026-10-02", "value_num": b}])
+    for delta in (-0.004, 0.004, 0.0, -1e-12):
+        t = mk(4.0, 4.0 + delta)["text"]
+        assert t.startswith("期間變動 0.00 個百分點") and "-0.00" not in t and "+0.00" not in t, t
+    assert mk(4.0, 4.006)["text"].startswith("期間變動 +0.01 個百分點")
+    assert mk(4.0, 3.994)["text"].startswith("期間變動 -0.01 個百分點")
+
+
+def test_圖上最後一點標籤_接近零的殖利率不印負零():
+    from ui_v2.mkt import chart as ch
+    pts = [{"obs_date": "2026-10-01", "value_num": 0.1}, {"obs_date": "2026-10-02", "value_num": -0.003}]
+    spec = ch.build_spec(pts, label="US2Y", value_title="殖利率（%）", color="#000000", description="x")
+    texts = [t for t in ch.spec_strings(spec) if t.startswith("US2Y ")]
+    assert texts == ["US2Y 0.00"], texts

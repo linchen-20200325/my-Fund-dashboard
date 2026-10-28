@@ -224,7 +224,7 @@ _cfg = dict(CFG)
 _mi = source.market_indicator
 # AppTest 與 pytest 同一個行程：換掉的東西一律在 finally 換回來，不汙染之後的測試。
 _saved = (R.get_secret, R._make_client, dict(R._TITLES), GR.time, source.st, _mi.source_cooldowns,
-          _mi.fetch_yf_close_with_error, _mi.fetch_fred_vintages_with_error)
+          _mi.fetch_yf_close_with_error, _mi.fetch_fred_vintages_with_error, _mi.fetch_fred_with_error)
 # hermetic（PR #1012 CI slow lane 回修）：重新取數讀 `[st.secrets, os.environ]` 的 FRED_API_KEY（`source.refetch`），
 # CI 環境有一把無效的金鑰 → 本情境真的打到 api.stlouisfed.org。腳本執行期間一律拿掉環境變數、FRED 換替身，
 # 金鑰只由 `FRED` 參數決定（None ＝ 沒有金鑰）。
@@ -246,6 +246,7 @@ try:
     _mi.source_cooldowns = lambda: []
     _mi.fetch_yf_close_with_error = lambda ticker, *a, **k: (None, FETCH_ERROR)
     _mi.fetch_fred_vintages_with_error = _fred_stub
+    _mi.fetch_fred_with_error = _fred_stub
     if FRED is not None:
         _cfg["FRED_API_KEY"] = "dummy-invalid-key-for-test"
     if STALE:   # 新鮮度上限設 0 日 ⇒ 取回的每一列都在上限外（44 SET-1 判準）
@@ -264,7 +265,7 @@ try:
     page.render(load_live=source.load_live, save_live=source.save_setting, refetch_live=source.refetch)
 finally:
     (R.get_secret, R._make_client, R._TITLES, GR.time, source.st, _mi.source_cooldowns,
-     _mi.fetch_yf_close_with_error, _mi.fetch_fred_vintages_with_error) = _saved
+     _mi.fetch_yf_close_with_error, _mi.fetch_fred_vintages_with_error, _mi.fetch_fred_with_error) = _saved
     if _env_fred is not None:
         _os.environ["FRED_API_KEY"] = _env_fred
     R.clear_cache()

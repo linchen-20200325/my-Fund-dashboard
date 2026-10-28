@@ -36,7 +36,8 @@ TEXT_DATA_GAP = "⬜ Data Gap：目前沒有已核准的資料來源"
 TEXT_FRESHNESS_THRESHOLD = "新鮮度門檻 ⬜ 門檻待裁示：本圖只顯示資料日期與經過天數，不判新舊"
 TEXT_PERIOD_RETURN_UNDETERMINABLE = "⬜ 無法判定"
 TEXT_GAP_NOTE = "圓點為實際觀測日；相鄰觀測之間的連線不代表中間日有資料；缺值日不補值"
-TEXT_FRED_OBS_NOTE = "資料日期為 FRED 觀測日（不是公布日）；只取現行版次；單位為百分比（%），不是價格"
+TEXT_FRED_OBS_NOTE = "資料日期為 FRED 觀測日（不是公布日）；單位為百分比（%），不是價格"
+# ~~「…；只取現行版次；…」~~：2026-10-28 改走 `fetch_fred_with_error`（不讀 vintage），該句不再為真（總管擬，待覆核；有意識的更正，不是漏刪）。
 
 # domain → 畫面名稱
 LABELS = {
@@ -152,9 +153,10 @@ def period_change_pp(points: list) -> dict:
                 "last_obs": None, "text": TEXT_PERIOD_RETURN_UNDETERMINABLE}
     first, last = valued[0], valued[-1]
     pp = last["value_num"] - first["value_num"]
+    pp_text = "0.00" if abs(pp) < 0.005 else f"{pp:+.2f}"      # 四捨五入後為零不印正負號（避免「-0.00」）
     return {"status": "ok", "kind": "pp", "pp": pp, "pct": None, "first_obs": first["obs_date"],
             "last_obs": last["obs_date"],
-            "text": f"期間變動 {pp:+.2f} 個百分點（pp）（{first['obs_date']} 至 {last['obs_date']}，FRED 觀測值）"}
+            "text": f"期間變動 {pp_text} 個百分點（pp）（{first['obs_date']} 至 {last['obs_date']}，FRED 觀測值）"}
 
 
 def _price_model(domain: dict, period: str, *, key: str, short_label: str, value_title: str,
@@ -191,6 +193,9 @@ def _price_model(domain: dict, period: str, *, key: str, short_label: str, value
     ]
     if change == "pp":
         model["caption_lines"].append(TEXT_FRED_OBS_NOTE)
+    if domain.get("reason"):
+        # S2：有點留下、但有觀測被略過 → 安靜的一行說明（文案由 L2 `skipped_observations_text` 產生，總管擬，待覆核）。
+        model["caption_lines"].append(domain["reason"])
     if sliced["status"] == chart.STATUS_INSUFFICIENT:
         model["message"] = chart.TEXT_INSUFFICIENT
     elif sliced["status"] == chart.STATUS_EMPTY:

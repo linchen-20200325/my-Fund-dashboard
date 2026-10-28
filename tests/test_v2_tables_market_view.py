@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """L2 `services/v2_tables/market_view.py`（🌍 市場趨勢唯讀 Data View；BL-0516 批 1）的單元測試（fast lane；不打任何網路）。
 
-L1 一律以替身注入（簽名同 `fetch_yf_close_with_error(ticker, range_)`；FRED 同 `fetch_fred_vintages_with_error`）。涵蓋：VIX 正常／空序列／429（L1 回 error）／
+L1 一律以替身注入（簽名同 `fetch_yf_close_with_error(ticker, range_)`；FRED 同 `fetch_fred_with_error(series_id, api_key, n)`）。涵蓋：VIX 正常／空序列／429（L1 回 error）／
 L1 拋例外／全部被收盤規則略過／缺值，以及「無正式來源的 domain 一律資料未備、不帶任何數值」與 provenance 欄位。
 """
 
@@ -54,16 +54,15 @@ def _gspc_series(dates, values, *, fetched_at=_FETCHED):
     return s
 
 
-def _fred_frame(dates, values, *, fetched_at=_FETCHED, extra=None, series="DGS10"):
-    """fetch_fred_vintages 形狀：每個觀測日一列現行版次（realtime_end＝9999-12-31）；`extra` 可加修正前的舊版次列。"""
-    rows = [{"date": pd.Timestamp(d), "value": v, "realtime_start": pd.Timestamp(d) + pd.Timedelta(days=1),
-             "realtime_end": "9999-12-31"} for d, v in zip(dates, values)]
-    rows += list(extra or [])
-    df = pd.DataFrame(rows, columns=["date", "value", "realtime_start", "realtime_end"])
-    if fetched_at is not None:
-        df.attrs["fetched_at"] = fetched_at
-    df.attrs["source"] = f"FRED:{series}:vintages"
-    df.attrs["realtime_floor"] = "2021-10-01"
+def _fred_frame(dates, values, *, fetched_at=_FETCHED, series="DGS10"):
+    """`fetch_fred` 出口形狀（repositories/macro/fred.py）：`date`／`value`／`realtime_start`（＝查詢當天，不是公布日）／
+    `source`／`fetched_at`（**欄位**，整欄同一值，不是 attrs）。列由舊到新。FRED `.` 與 NaN 在 L1 內即被丟掉，所以正常輸入沒有它們；
+    測試要餵壞值時直接塞進 `values`（驗本層防禦）。"""
+    rows = [{"date": pd.Timestamp(d), "value": v, "realtime_start": pd.Timestamp("2026-10-27"),
+             "source": f"FRED:{series}", "fetched_at": fetched_at} for d, v in zip(dates, values)]
+    df = pd.DataFrame(rows, columns=["date", "value", "realtime_start", "source", "fetched_at"])
+    if fetched_at is None:
+        df = df.drop(columns=["fetched_at"])
     return df
 
 
@@ -74,8 +73,8 @@ class _FredFetch:
         self.by_series = by_series
         self.calls = []
 
-    def __call__(self, series_id, api_key, observation_start):
-        self.calls.append((series_id, api_key, observation_start))
+    def __call__(self, series_id, api_key, n):
+        self.calls.append((series_id, api_key, n))
         result = self.by_series[series_id]
         if isinstance(result, Exception):
             raise result
@@ -164,12 +163,15 @@ def test_B線vol_index取數不變_仍是單一ticker位置參數_預設2y_WINDO
         return _series(_weekdays("2026-10-01", "2026-10-23"), [16.0] * 17), None
 
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", stub)
+    fred_calls = []
+    monkeypatch.setattr(mi, "fetch_fred_with_error", lambda *a, **k: fred_calls.append(a) or (None, "x"))
     monkeypatch.setattr(mi, "fetch_fred_vintages_with_error", lambda *a, **k: (None, "x"))
     mi.build_market_indicator_table(fred_api_key="k")
     assert ("^VIX", (), {}) in calls                           # 只傳 ticker 一個位置參數（預設 2y，快取鍵不變）
     assert not [c for c in calls if c[0] == "^VIX" and c != ("^VIX", (), {})]
     assert mi.INDICATOR_SPECS["vol_index"]["source"] == ("Yahoo", "^VIX")
     assert mi.FRED_LOOKBACK_DAYS == logic.WINDOW_DAYS_MAX == 730
+    assert fred_calls == []                                    # B 線 FRED 三鍵仍走 vintage 讀法，不碰本頁的 `fetch_fred_with_error`
 
 
 def test_VIX空序列_沒有原因_系統錯誤_原文照回():
@@ -445,7 +447,7 @@ def test_SP500_L1拋例外_空序列_全被略過_缺值():
 # ───────────────────────── 美債殖利率（BL-0517 (2)）─────────────────────────
 
 
-def test_殖利率正常_FRED現行版次_單位百分比_來源標示逐字_觀測日不是公布日():
+def test_殖利率正常_FRED觀測日資料_單位百分比_來源標示逐字_觀測日不是公布日():
     dates = _weekdays("2026-10-01", "2026-10-23")
     fred = _fred_ok(4.0, 3.5, dates)
     view = mv.build_market_view(**_all(fred=fred))
@@ -453,50 +455,52 @@ def test_殖利率正常_FRED現行版次_單位百分比_來源標示逐字_觀
         d = _domain(view, key)
         assert d["status"] == mv.STATE_OK and d["source"] == label
         assert d["value_unit"] == "%" and d["value_unit"] != "index"        # 單位是百分比，不是價格
-        assert [p["obs_date"] for p in d["points"]] == dates                  # 觀測日，不是 realtime_start（觀測日 +1）
+        assert [p["obs_date"] for p in d["points"]] == dates                  # 觀測日，不是 realtime_start（＝查詢當天 2026-10-27）
         assert d["obs_date"] == "2026-10-23" and d["fetched_at"] == _FETCHED
+        assert d["reason"] is None                                            # 沒有略過任何觀測 → 不寫說明
         assert [p["value_num"] for p in d["points"]] == pytest.approx([base + i * 0.01 for i in range(len(dates))])
     assert [c[0] for c in fred.calls] == ["DGS10", "DGS2"]
     assert mv.US10Y_SERIES == "DGS10" and mv.US2Y_SERIES == "DGS2"
 
 
-def test_殖利率L1呼叫參數_金鑰與觀測起點_不新增series():
+def test_殖利率L1呼叫參數_金鑰與n涵蓋5年日頻_不新增series():
     fred = _fred_ok()
     mv.build_market_view(**_all(fred=fred, key="the-key"))
     assert all(c[1] == "the-key" for c in fred.calls)
-    expect = (mv._utc_today() - pd.Timedelta(days=mv.FRED_VIEW_LOOKBACK_DAYS)).isoformat()
-    assert {c[2] for c in fred.calls} == {expect}
+    assert {c[2] for c in fred.calls} == {mv.FRED_VIEW_OBSERVATION_LIMIT} == {1500}
+    assert mv.FRED_VIEW_OBSERVATION_LIMIT >= 5 * 262 + 5 * 10              # 5 年平日（含 `.` 假日）＋餘裕
     assert {c[0] for c in fred.calls} <= {"DGS10", "DGS2"}
 
 
-def test_殖利率只取現行版次_修正過的觀測日用現行值_不用舊版():
-    d1, d2, d3 = "2026-10-01", "2026-10-02", "2026-10-05"
-    # 舊版列刻意排在現行版次列「之後」：若實作取「每個觀測日最後一列」就會誤取 3.90 → 本測試會紅
-    stale = {"date": pd.Timestamp(d2), "value": 3.90, "realtime_start": pd.Timestamp("2026-10-03"),
-             "realtime_end": "2026-10-09"}
-    frame = _fred_frame([d1, d2, d3], [4.00, 4.15, 4.20], extra=[stale])
-    d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label=mv.US10Y_SOURCE_LABEL)
-    assert {p["obs_date"]: p["value_num"] for p in d["points"]} == {d1: 4.00, d2: 4.15, d3: 4.20}
-    assert 3.90 not in [p["value_num"] for p in d["points"]]
+def test_殖利率3Y按鈕可用_約5年日頻序列():
+    from ui_v2.mkt import chart
+
+    days = [d.strftime("%Y-%m-%d") for d in pd.bdate_range("2021-10-27", "2026-10-23")]
+    d = mv.fred_yield_domain_from_l1("us10y", _fred_frame(days, [4.0] * len(days)), None, source_label="FRED (DGS10)")
+    assert d["status"] == mv.STATE_OK and chart.availability(d["points"])["3Y"] is True
 
 
-def test_殖利率重複現行版次_該日不進序列_理由寫明_不隨便挑一列():
+def test_殖利率不讀realtime_start當觀測日_也不當公布日():
     frame = _fred_frame(["2026-10-01", "2026-10-02"], [4.0, 4.1])
-    dup = pd.DataFrame([{"date": pd.Timestamp("2026-10-02"), "value": 9.99, "realtime_start": pd.Timestamp("2026-10-04"),
-                         "realtime_end": "9999-12-31"}])
-    frame = pd.concat([frame, dup], ignore_index=True)
-    frame.attrs.update(fetched_at=_FETCHED, realtime_floor="2021-10-01")
+    frame["realtime_start"] = pd.Timestamp("2026-10-27")                  # 查詢當天，與觀測日無關
+    d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label="FRED (DGS10)")
+    assert [p["obs_date"] for p in d["points"]] == ["2026-10-01", "2026-10-02"]
+    assert "2026-10-27" not in repr(d["points"]) and set(d["points"][0]) == {"obs_date", "value_num"}
+
+
+def test_殖利率列序不影響結果_L1由舊到新_亂序也排好():
+    frame = _fred_frame(["2026-10-05", "2026-10-01", "2026-10-02"], [4.2, 4.0, 4.1])
+    d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label="FRED (DGS10)")
+    assert [p["obs_date"] for p in d["points"]] == ["2026-10-01", "2026-10-02", "2026-10-05"] and d["obs_date"] == "2026-10-05"
+
+
+def test_殖利率同一觀測日多列_該日不進序列_計入略過數_不隨便挑一列():
+    frame = pd.concat([_fred_frame(["2026-10-01", "2026-10-02"], [4.0, 4.1]),
+                       _fred_frame(["2026-10-02"], [9.99])], ignore_index=True)
     d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label="FRED (DGS10)")
     assert [p["obs_date"] for p in d["points"]] == ["2026-10-01"]
     assert 9.99 not in [p["value_num"] for p in d["points"]] and 4.1 not in [p["value_num"] for p in d["points"]]
-
-
-def test_殖利率沒有現行版次的觀測日_不進序列():
-    only_old = [{"date": pd.Timestamp("2026-10-02"), "value": 4.1, "realtime_start": pd.Timestamp("2026-10-03"),
-                 "realtime_end": "2026-10-09"}]
-    frame = _fred_frame(["2026-10-01"], [4.0], extra=only_old)
-    d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label="FRED (DGS10)")
-    assert [p["obs_date"] for p in d["points"]] == ["2026-10-01"]
+    assert d["status"] == mv.STATE_OK and d["reason"] == mv.skipped_observations_text(2)
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf"), None, True, "4.1", "."])
@@ -505,6 +509,8 @@ def test_殖利率非有限數值_不是觀測_不補0_不前值填補(bad):
     d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label="FRED (DGS10)")
     assert [p["obs_date"] for p in d["points"]] == ["2026-10-01", "2026-10-05"]
     assert [p["value_num"] for p in d["points"]] == [4.0, 4.2]       # 缺的日子沒有點；不是 0，也不是 4.0 延伸
+    assert d["reason"] == "已略過 1 筆無法採用的觀測"                   # S2：有點留下但略過 1 筆 → 安靜說明，狀態仍 ok
+    assert d["status"] == mv.STATE_OK
 
 
 def test_殖利率全部缺值_資料未備_帶略過理由():
@@ -514,23 +520,49 @@ def test_殖利率全部缺值_資料未備_帶略過理由():
     assert "缺值" in d["reason"] and d["points"] == [] and d["obs_date"] is None and d["fetched_at"] is None
 
 
-def test_殖利率負值是有效觀測_不被當成缺值():
+def test_殖利率負值與零是有效觀測_不被當成缺值_也不算略過():
     frame = _fred_frame(["2026-10-01", "2026-10-02"], [-0.10, 0.0])
     d = mv.fred_yield_domain_from_l1("us2y", frame, None, source_label="FRED (DGS2)")
     assert [p["value_num"] for p in d["points"]] == [-0.10, 0.0]       # 0.0 是真實觀測（不是缺值）
+    assert d["status"] == mv.STATE_OK and d["reason"] is None
 
 
-def test_殖利率觀測日晚於取得日_不進序列():
-    frame = _fred_frame(["2026-10-26", "2026-10-28"], [4.0, 4.1])      # 取得日（UTC）2026-10-27
+def test_殖利率觀測日晚於取得日_不進序列_計入略過數():
+    frame = _fred_frame(["2026-10-26", "2026-10-27", "2026-10-28"], [4.0, 4.05, 4.1])      # 取得日（UTC）2026-10-27
     d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label="FRED (DGS10)")
-    assert [p["obs_date"] for p in d["points"]] == ["2026-10-26"] and "晚於取得日" not in (d["reason"] or "")
+    assert [p["obs_date"] for p in d["points"]] == ["2026-10-26", "2026-10-27"]              # 當天算（不晚於取得日）
+    assert d["reason"] == "已略過 1 筆無法採用的觀測"
+    only_future = mv.fred_yield_domain_from_l1("us10y", _fred_frame(["2026-10-28"], [4.1]), None, source_label="x")
+    assert only_future["status"] == mv.STATE_MISSING and "晚於取得日" in only_future["reason"]
+
+
+def test_殖利率觀測日無法解析_計入略過數():
+    frame = _fred_frame(["2026-10-01", "2026-10-02"], [4.0, 4.1])
+    frame["date"] = frame["date"].astype(object)
+    frame.loc[1, "date"] = None
+    d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label="FRED (DGS10)")
+    assert [p["obs_date"] for p in d["points"]] == ["2026-10-01"] and d["reason"] == "已略過 1 筆無法採用的觀測"
 
 
 def test_殖利率fetched_at取不到_整批不寫_不以現在時間補():
-    for bad in (None, "2026-10-27T06:00:00"):       # 缺、或沒有時區
+    for bad in (None, "2026-10-27T06:00:00", "not-a-time", ""):       # 缺欄、沒有時區、壞字串、空字串
         frame = _fred_frame(["2026-10-01"], [4.0], fetched_at=bad)
         d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label="FRED (DGS10)")
-        assert d["status"] == mv.STATE_MISSING and d["points"] == [] and d["fetched_at"] is None
+        assert d["status"] == mv.STATE_MISSING and d["points"] == [] and d["fetched_at"] is None, bad
+
+
+def test_殖利率fetched_at是L1欄位_不是attrs_attrs有也不採用():
+    frame = _fred_frame(["2026-10-01"], [4.0], fetched_at=None)
+    frame.attrs["fetched_at"] = _FETCHED                                # 真 L1 不這樣給；採用就等於替 L1 發明契約
+    d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label="FRED (DGS10)")
+    assert d["status"] == mv.STATE_MISSING
+
+
+def test_殖利率非UTC時區的fetched_at_換算成UTC_取得日用UTC日期():
+    # 2026-10-28T06:00+08:00 ＝ 2026-10-27T22:00Z → UTC 取得日 2026-10-27；10-28 的觀測晚於它
+    frame = _fred_frame(["2026-10-27", "2026-10-28"], [4.0, 4.1], fetched_at="2026-10-28T06:00:00+08:00")
+    d = mv.fred_yield_domain_from_l1("us10y", frame, None, source_label="FRED (DGS10)")
+    assert [p["obs_date"] for p in d["points"]] == ["2026-10-27"] and d["fetched_at"] == "2026-10-27T22:00:00+00:00"
 
 
 def test_殖利率FRED空表_L1回error_L1拋例外_都是系統錯誤_原文照回():
@@ -543,6 +575,14 @@ def test_殖利率FRED空表_L1回error_L1拋例外_都是系統錯誤_原文照
     assert _domain(view, "us2y")["status"] == mv.STATE_ERROR and _domain(view, "us2y")["reason"] == "HTTP 429 Too Many Requests"
     assert _domain(view, "us10y")["points"] == [] and _domain(view, "us10y")["source"] == "FRED (DGS10)"
     assert _domain(view, "vix")["status"] == _domain(view, "sp500")["status"] == mv.STATE_OK
+
+
+def test_殖利率L1回真的空DataFrame無欄位加error_系統錯誤_原文照回():
+    """`fetch_fred` 失敗時回無欄位的空 DataFrame，原文掛旁路；`fetch_fred_with_error` 把它們拆成 (df, error)。"""
+    view = mv.build_market_view(**_all(fred=_FredFetch({"DGS10": (pd.DataFrame(), "FRED:DGS10 api_key 為空"),
+                                                         "DGS2": (pd.DataFrame(), None)})))
+    assert _domain(view, "us10y")["reason"] == "FRED:DGS10 api_key 為空" and _domain(view, "us10y")["status"] == mv.STATE_ERROR
+    assert _domain(view, "us2y")["reason"] == mi.EMPTY_WITHOUT_REASON
 
 
 @pytest.mark.parametrize("key", [None, "", "   "])
@@ -563,19 +603,28 @@ def test_金鑰不進回傳結構_也不進任何domain欄位():
     assert secret not in repr(view)
     view = mv.build_market_view(**_all(fred=_FredFetch({"DGS10": (None, "HTTP 500"), "DGS2": (None, "HTTP 500")}), key=secret))
     assert secret not in repr(view)
+    frame = _fred_frame(["2026-10-01", "2026-10-02"], [4.0, float("nan")])      # 略過說明（S2）也不含金鑰
+    view = mv.build_market_view(**_all(fred=_FredFetch({"DGS10": (frame, None), "DGS2": (frame, None)}), key=secret))
+    assert secret not in repr(view) and _domain(view, "us10y")["reason"] == "已略過 1 筆無法採用的觀測"
+
+
+def test_略過說明只有FRED殖利率有_Yahoo的domain沒有():
+    view = mv.build_market_view(**_all())
+    for key in ("vix", "taiex", "sp500", "us10y", "us2y"):
+        assert _domain(view, key)["reason"] is None, key
 
 
 def test_預設走market_indicator的FRED屬性_替身換在market_indicator上(monkeypatch):
     calls = []
 
-    def stub(series_id, api_key, observation_start):
-        calls.append((series_id, api_key))
+    def stub(series_id, api_key, n):
+        calls.append((series_id, api_key, n))
         return _fred_frame(_weekdays("2026-10-01", "2026-10-23"), [4.0] * 17, series=series_id), None
 
-    monkeypatch.setattr(mi, "fetch_fred_vintages_with_error", stub)
+    monkeypatch.setattr(mi, "fetch_fred_with_error", stub)
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", lambda t, *a, **k: (_series(_weekdays("2026-10-01", "2026-10-23"), [16.0] * 17), None))
     view = mv.build_market_view(fred_api_key="k")
-    assert calls == [("DGS10", "k"), ("DGS2", "k")]
+    assert calls == [("DGS10", "k", 1500), ("DGS2", "k", 1500)]
     assert _domain(view, "us10y")["status"] == mv.STATE_OK
 
 
@@ -586,7 +635,7 @@ def test_呼叫順序_VIX先_TAIEX_SP500_FRED10Y_FRED2Y_B線由L3先呼叫():
         order.append(t)
         return _series(_weekdays("2026-10-01", "2026-10-23"), [16.0] * 17), None
 
-    def fr(sid, k, o):
+    def fr(sid, k, n):
         order.append(sid)
         return _fred_frame(_weekdays("2026-10-01", "2026-10-23"), [4.0] * 17), None
 

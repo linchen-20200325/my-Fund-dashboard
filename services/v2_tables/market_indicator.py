@@ -62,7 +62,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 
-from repositories.macro.fred import FRED_BASE
+from repositories.macro.fred import FRED_BASE, fetch_fred_with_error  # noqa: F401 —— 後者給 `market_view` 經本命名空間取用（L2 純度：只 import services）
 from repositories.macro.fred_vintage import (
     REALTIME_END_LATEST,
     fetch_fred_vintages_with_error,

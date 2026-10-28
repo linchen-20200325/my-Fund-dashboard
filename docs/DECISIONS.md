@@ -1616,13 +1616,27 @@
 | 欄位 | 內容 |
 |---|---|
 | 日期 | 2026-10-27 |
-| 決策內容摘要 | **執行組讀法，可推翻；不是客戶裁示**（客戶裁示是 `DEC-2026-10-27-41`；本筆承接 `-42` (a)「盤點確認各序列確屬 repo 既有 Yahoo／FRED 通道後才接入」，把盤點結果與實作讀法登記如下）：(a) **通道盤點（本組已 `git grep` 讀碼；本環境無網路，未連線實測）**：`^GSPC` 走 `market_indicator.fetch_yf_close_with_error`（與 `^VIX`、`^TWII` 同一支）；`DGS10`／`DGS2` 為 `shared/fred_series.py` 既有常數，經 `market_indicator` 已 import 的 `fetch_fred_vintages_with_error`；repo 沒有 FRED `SP500`，不使用；`fetch_fred_with_error` 沒有非測試呼叫者，不使用 → 皆為既有通道，不新增 host、API、FRED series、`INDICATOR_SPECS` 鍵；(b) **S&P 500**：`(^GSPC, 5y)`，來源標示固定 `Yahoo Finance (^GSPC)`，規則同 TAIEX（確定性期間漲跌）；(c) **美債殖利率**：只取現行版次（`realtime_end == 9999-12-31`）；單位 `%`（不是價格）；期間指標為**百分點變動（pp，末值減首值）**，不是百分比報酬；資料日期＝FRED 觀測日，不是公布日，不宣稱公布延遲；缺值不補 0、不前值填補；來源標示 `FRED (DGS10)`／`FRED (DGS2)`；缺 `FRED_API_KEY` → 兩卡走既有「⛔ 取數失敗」，原文只進原始訊息通道；(d) **VIX 長區間**：🌍 頁 VIX 改 `(^VIX, 5y)` 讓 3Y 按鈕為真；**性質改變（誠實記錄）**：舊版與 B 線 `vol_index` 同簽名同 L1 快取鍵，現版有獨立快取項與請求，但同一 Yahoo 主機共用冷卻；B 線 `vol_index` 的取數、快取鍵、`WINDOW_DAYS_MAX` 不變（有測試釘住）；(e) 呼叫順序固定：B 線先 → VIX → TAIEX → S&P 500 → FRED 10Y → FRED 2Y，新增請求排在後面以降低主機冷卻波及既有畫面；(f) 市場結論句不變（「暫無完整市場綜合判定（缺正式 aggregation rule）」），只多列新 domain 的真實資料狀態；NASDAQ／MSCI World／MSCI EM 維持 Missing／Data Gap；(g) 面向使用者的新文案（標籤「標普 500 指數（S&P 500）」「美國 10 年期公債殖利率」「美國 2 年期公債殖利率」、殖利率註記、「期間變動 … 個百分點（pp）」）為**總管擬，待覆核**。 |
+| 決策內容摘要 | **執行組讀法，可推翻；不是客戶裁示**（客戶裁示是 `DEC-2026-10-27-41`；本筆承接 `-42` (a)「盤點確認各序列確屬 repo 既有 Yahoo／FRED 通道後才接入」，把盤點結果與實作讀法登記如下）：(a) **通道盤點（本組已 `git grep` 讀碼；本環境無網路，未連線實測）**：`^GSPC` 走 `market_indicator.fetch_yf_close_with_error`（與 `^VIX`、`^TWII` 同一支）；`DGS10`／`DGS2` 為 `shared/fred_series.py` 既有常數，~~經 `market_indicator` 已 import 的 `fetch_fred_vintages_with_error`~~ → 改經 `market_indicator` 命名空間的 `fetch_fred_with_error`（`fetch_fred` 薄包裝，production 已證實路徑；（2026-10-28 稽核 S1 更正，有意識的更正，不是漏刪；決策者 AI 總管））；repo 沒有 FRED `SP500`，不使用 → 皆為既有通道，不新增 host、API、FRED series、`INDICATOR_SPECS` 鍵；(b) **S&P 500**：`(^GSPC, 5y)`，來源標示固定 `Yahoo Finance (^GSPC)`，規則同 TAIEX（確定性期間漲跌）；(c) **美債殖利率**：~~只取現行版次（`realtime_end == 9999-12-31`）~~ → 讀 `fetch_fred_with_error`（最新 1500 筆，觀測日資料；無版次概念）；單位 `%`（不是價格）；期間指標為**百分點變動（pp，末值減首值）**，不是百分比報酬；資料日期＝FRED 觀測日，不是公布日，不宣稱公布延遲；缺值不補 0、不前值填補；來源標示 `FRED (DGS10)`／`FRED (DGS2)`；缺 `FRED_API_KEY` → 兩卡走既有「⛔ 取數失敗」，原文只進原始訊息通道；(d) **VIX 長區間**：🌍 頁 VIX 改 `(^VIX, 5y)` 讓 3Y 按鈕為真；**性質改變（誠實記錄）**：舊版與 B 線 `vol_index` 同簽名同 L1 快取鍵，現版有獨立快取項與請求，但同一 Yahoo 主機共用冷卻；B 線 `vol_index` 的取數、快取鍵、`WINDOW_DAYS_MAX` 不變（有測試釘住）；(e) 呼叫順序固定：B 線先 → VIX → TAIEX → S&P 500 → FRED 10Y → FRED 2Y，新增請求排在後面以降低主機冷卻波及既有畫面；(f) 市場結論句不變（「暫無完整市場綜合判定（缺正式 aggregation rule）」），只多列新 domain 的真實資料狀態；NASDAQ／MSCI World／MSCI EM 維持 Missing／Data Gap；(g) 面向使用者的新文案（標籤「標普 500 指數（S&P 500）」「美國 10 年期公債殖利率」「美國 2 年期公債殖利率」、殖利率註記、「期間變動 … 個百分點（pp）」）為**總管擬，待覆核**。 |
 | 理由／背景 | （執行組背景說明）客戶 C 裁示條件式，`-42` (a) 讀法要求先確認通道；本批確認後依裁示接入，不擴大範圍。殖利率不得套用價格的百分比報酬，否則會把「4.0 → 4.15」說成 +3.75%，語意錯誤。 |
 | evidence／source | `docs/BACKLOG.md` BL-0517；`docs/v2/66` 第六次更新；實作：`services/v2_tables/market_view.py`（`sp500_domain_from_l1`、`fred_yield_domain_from_l1`、`build_market_view`）、`ui_v2/mkt/market_section.py`（`sp500_model`、`us10y_model`、`us2y_model`、`period_change_pp`）、`ui_v2/mkt/page.py`、`ui_v2/mkt/source.py`；測試：`tests/test_v2_tables_market_view.py`、`tests/ui_v2/test_mkt_market_section_logic.py`、`tests/ui_v2/test_mkt_market_section_page.py`、`tests/ui_v2/test_mkt_source.py`。 |
 | 影響範圍 | 🌍 頁新增 3 張圖卡（S&P 500、US10Y、US2Y）、VIX 的 3Y 按鈕在歷史夠長時可用；Yahoo 多 3 個快取鍵的請求、FRED 多 2 個；不影響 B 線、44、`INDICATOR_SPECS`、`CLAUDE.md`。 |
 | 是否可逆 | 可逆（客戶可另行裁示；程式為純 L2／L3 增量） |
 | supersedes／superseded by | supersedes：無（為 `-42` (a) 的落地讀法，不取代它）。superseded by：無。 |
-| provenance | **執行組單組讀法，未經第二組獨立驗證**；通道盤點為讀碼、未連線；`fetch_fred_vintages_with_error` 本 repo 從未做過真實連線實測（其 L1 檔頭自陳）；FRED 實際回應形狀（現行版次列、`realtime_end` 字面值、缺值記號）依 L1 檔頭與官方文件推論，測試以替身驗證。data semantics 等級，合併前依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核。 |
+| provenance | **執行組單組讀法，未經第二組獨立驗證**；通道盤點為讀碼、未連線；~~`fetch_fred_vintages_with_error` 本 repo 從未做過真實連線實測~~ → 2026-10-28 改走 production 已證實的 `fetch_fred`；本 session 仍未對 FRED 真實回應做連線驗證，FRED 實際回應形狀依 L1 程式與測試推論，測試以替身驗證。data semantics 等級，合併前依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核。 |
+
+### DEC-2026-10-27-45｜客戶裁示（永久）：恢復並嚴格執行 Silent Autonomous Cruise；主動回報僅四種情況；完整批次回報格式
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-27（客戶裁示日；寫入 repo 日 2026-10-28） |
+| 決策者 | **客戶**（本筆為客戶裁示；客戶對話本身執行組未見；原文由總管於派工單內逐字轉存，見 `docs/evidence/decisions/2026-10-28_silent_cruise_rule.md`） |
+| 決策內容摘要 | **客戶裁示（永久，非本輪臨時）**：恢復並嚴格執行 Silent Autonomous Cruise。主動回報只有四種：(1) 完整 batch／stage 已完成（PR 完成、audit 完成、CI 結果已知、merge／Auto-Ship 已完成或明確被阻擋）；(2) 真正 Stop Gate；(3) Model／Effort Change Gate；(4) 真正 blocker（無法安全自行解決且會實際阻止下一步）。其餘一律靜默（PR 正在寫、PR 已開 CI 在跑、audit 已派出、agent 工作中、跑測試、等 workflow／reviewer／mergeability、同步 BACKLOG／HANDOFF、「只是通知」、「不需要你回覆」、重複確認 merged／ready-for-review／subscribed／unsubscribed、沒有新決策的新狀態）；不得用「🟢 不需要你回覆」包裝中途進度；不需要客戶回覆又沒有完整 batch 就不發訊息。完整批次回報格式（整批結束時一次）：第一行 🟢／🟡／🔴；main SHA；PR；完成內容；audit；CI；是否需要客戶回覆；下一個唯一接手點；Model／Effort（只有需要改變時才標）。客戶要求同步進 PROJECT_RULES 與 HANDOFF 的工作模式說明。同批客戶指示「目前 BL-0517 繼續執行，不需要回報中途狀態」。 |
+| 理由／背景 | 客戶原話：新對話一再退化為輸出過程碎碎唸（「實作批次已派出」等）。（執行組背景說明）與 `DEC-2026-10-17-04`（3.1）、`DEC-2026-10-23-04` B（3.1 第 6 點）同向；本筆是永久重申與逐項寫明靜默清單。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-28_silent_cruise_rule.md`；落地 `PROJECT_RULES.md` 第 3 節 3.2 與第 0.5 節索引、`docs/HANDOFF.md` 第 0 節第 6 點與第 1 節提示。 |
+| 影響範圍 | 所有未來新對話、總管與所有 agent 的對客戶出聲時機與批次回報格式。不影響資料、公式、UI、`CLAUDE.md`、44。 |
+| 是否可逆 | 可逆（客戶可另行裁示）；客戶明示為永久規則 |
+| supersedes／superseded by | supersedes：無（與 `DEC-2026-10-17-04`、`DEC-2026-10-23-04` B 同向，不取代它們；執行組讀法：兩節字句有出入時取較靜默者，可被客戶推翻）。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 `docs/evidence/decisions/2026-10-28_silent_cruise_rule.md`（圍欄內文 sha256 見該檔與 README）；本筆「決策內容摘要」為執行組依原文整理，以原文為準；與 3.1 的關係與「揭露義務不因靜默消失」為文件組判讀，可被客戶推翻；由執行組單組寫成，未經第二組獨立驗證。 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 

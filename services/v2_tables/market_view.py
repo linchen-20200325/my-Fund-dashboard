@@ -19,11 +19,15 @@
 3. **S&P 500 指數收盤序列（BL-0517 (1)；客戶 2026-10-27 C 裁示，總管讀法 `DEC-2026-10-27-44`）**：
    Yahoo `^GSPC`，同一支 L1、同一條 `rows_from_daily_close`，`range_="5y"`；來源標示固定 `Yahoo Finance (^GSPC)`。
 4. **美國公債殖利率（BL-0517 (2)）**：FRED `DGS10`（10Y）／`DGS2`（2Y），經已被 `market_indicator` import 的
-   `fetch_fred_vintages_with_error`，**只取現行版次**（`realtime_end == REALTIME_END_LATEST`）的觀測；值是**百分比**
-   （`value_unit="%"`，不是價格）；`obs_date` 是 FRED 觀測日，不是公布日，本層不宣稱任何公布延遲；缺值（FRED `.`→NaN）
-   不進序列、不補 0。來源標示 `FRED (DGS10)`／`FRED (DGS2)`。
-   ⚠️ **`fetch_fred_vintages_with_error` 本 repo 從未做過真實連線實測**（其 L1 檔頭已自陳；B 線 FRED 三鍵也只用替身測過）。
-   本層只用替身測過形狀；首次部署要看畫面是否為「⛔ 取數失敗」或空序列，再回頭查來源。
+   `fetch_fred_with_error(series_id, api_key, n)`（`repositories/macro/fred.py`；**production 已在用的同一條讀法**：
+   `risk_radar`／`us_indicators` 走 `fetch_fred`，本頁走它的 `_with_error` 薄包裝，同一層 `_ttl_cache`）。
+   值是**百分比**（`value_unit="%"`，不是價格）；`obs_date` ＝ FRED 觀測日（`date` 欄），**不是公布日**：
+   `fetch_fred` 的 `realtime_start` 是**查詢當天**，不是首次公布日，本層不使用它、不宣稱任何公布延遲；
+   缺值（FRED `.`、NaN）在 L1 內即被丟掉，不進序列、不補 0。來源標示 `FRED (DGS10)`／`FRED (DGS2)`。
+   2026-10-28 總管裁示（稽核 S1）：~~`fetch_fred_vintages_with_error` 只取現行版次~~ → 改走上述 production 已驗證的讀法
+   （**有意識的更正，不是漏刪**；日期 2026-10-28；決策者 AI 總管）。舊讀法的理由是「vintage 才拿得到公布日」，但本頁**不顯示**公布日，
+   那份能力用不到，卻要承擔「本 repo 從未真實連線實測」的風險；被權衡掉的是版次資訊，本頁不需要。
+   ⚠️ 本 session 沒有對 FRED 真實連線驗證回應；只用替身測過形狀。首次部署要看畫面是否為「⛔ 取數失敗」或空序列。
 5. **Missing 結構**：尚無正式來源的 domain 一律交回 `資料未備`＋原因代碼，不補值、不用 0、不拿別的代號頂替。
 
 硬邊界（寫死，違反即 bug）：
@@ -52,7 +56,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from services.v2_tables import market_indicator
@@ -92,8 +96,10 @@ US2Y_SERIES = FRED_DGS2
 US10Y_SOURCE_LABEL = "FRED (DGS10)"
 US2Y_SOURCE_LABEL = "FRED (DGS2)"
 YIELD_VALUE_UNIT = "%"
-# FRED 觀測起點往回幾個日曆日：約 5 年（涵蓋 3Y 視窗＋餘裕）。這是取數範圍，不是新鮮度或判定門檻。
-FRED_VIEW_LOOKBACK_DAYS = 1830
+# FRED 取最近幾筆觀測（`fetch_fred` 以 `sort_order=desc&limit=n` 取最新 n 筆）：日頻約每年 260 個平日，
+# 5 年約 1300 筆（含 FRED 以 `.` 標記的假日，約每年 9~10 筆，L1 會丟掉）；取 1500（約 5.8 年）涵蓋 3Y 視窗並留餘裕。
+# 這是取數範圍，不是新鮮度或判定門檻。與 B 線（vintage 讀法、不同函式）及 `fetch_fred` 其他 caller（n=250 等）快取鍵不同。
+FRED_VIEW_OBSERVATION_LIMIT = 1500
 
 # domain 鍵（固定順序＝畫面上狀態列的順序）。
 DOMAIN_VIX = "vix"
@@ -205,52 +211,53 @@ def _is_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def skipped_observations_text(count: int) -> str:
+    """S2：有點留下、但有觀測被略過時，寫進 domain `reason` 的安靜說明（總管擬，待覆核）。"""
+    return f"已略過 {count} 筆無法採用的觀測"
+
+
 def fred_yield_domain_from_l1(domain: str, frame, error, *, source_label: str) -> dict:
-    """純函式：L1 `fetch_fred_vintages_with_error` 的 `(DataFrame, error)` → 殖利率 domain（%）。無 I/O；替身可直接餵。
+    """純函式：L1 `fetch_fred_with_error` 的 `(DataFrame, error)` → 殖利率 domain（%）。無 I/O；替身可直接餵。
+
+    L1 契約（2026-10-28 讀 `repositories/macro/fred.py::fetch_fred` 實測）：欄位 `date`（Timestamp）、`value`（float64）、
+    `realtime_start`、`source`、`fetched_at`（**欄位**，不是 attrs；UTC ISO、有時區，整欄同一值）；列已依 `date` **由舊到新**排序
+    （請求端是最新 n 筆）；FRED 的 `.` 與 NaN 在 L1 內即被丟掉（不計入略過數：那是來源的缺值，不是被本層略過的觀測）。
 
     - `error` 非空 → `系統錯誤`，原文照回（遮蔽在 L3）；空表又沒有原因 → `EMPTY_WITHOUT_REASON`，不補。
-    - **只取現行版次**：同一觀測日若有多個版次（修正過），只取 `realtime_end == REALTIME_END_LATEST` 那一列；
-      沒有現行版次的觀測日（現在 FRED 上已無此值）不進序列；同一觀測日出現不只一列現行版次（不該發生）→ 該日不進序列、記進略過理由。
-    - 值必須是有限數字（bool、NaN、inf、None 都不是觀測；FRED `.`→NaN）→ 不進序列、**不補 0**、不前值填補。
-    - `obs_date` ＝ FRED 觀測日（`date` 欄），**不是公布日**；不用 `realtime_start` 當觀測日，也不推算任何公布延遲。
-    - 觀測日晚於取得日（UTC）→ 不進序列（來源資料不合理，不顯示）。
-    - 取得時間用 L1 自報的 `attrs["fetched_at"]`（要有時區）；取不到 → 整批不寫、`資料未備`，不以現在時間補。
-    - 完全沒有可用觀測、也沒有錯誤 → `資料未備`＋略過理由。
+    - `obs_date` ＝ FRED 觀測日（`date` 欄），**不是公布日**；不用 `realtime_start`（它是查詢當天），也不推算任何公布延遲。
+    - 值必須是有限數字（bool、NaN、inf、None、字串都不是觀測）→ 不進序列、**不補 0**、不前值填補；負值與 0.0 是有效觀測。
+    - 同一觀測日出現不只一列（L1 不該產生）→ 該日全部不進序列（不隨便挑一列），計入略過數。
+    - 觀測日晚於取得日（UTC）→ 不進序列（來源資料不合理，不顯示），計入略過數。
+    - 取得時間用 L1 的 `fetched_at` 欄（第一個非空值；要有時區）；取不到或沒有時區 → 整批不寫、`資料未備`，不以現在時間補。
+    - 有點留下、但有觀測被略過（日期無法解析、值無法採用、重複、晚於取得日）→ `ok`，`reason` ＝ `skipped_observations_text(N)`；
+      沒有被略過 → `reason` 為 None。完全沒有可用觀測、也沒有錯誤 → `資料未備`＋略過理由。
     """
     if error:
         return _domain(domain, STATE_ERROR, reason=str(error), source=source_label)
     if frame is None or len(frame) == 0:
         return _domain(domain, STATE_ERROR, reason=EMPTY_WITHOUT_REASON, source=source_label)
-    attrs = getattr(frame, "attrs", None) or {}
-    fetched_at = market_indicator._utc_iso(attrs.get("fetched_at"))
+    stamps = frame["fetched_at"].dropna() if "fetched_at" in getattr(frame, "columns", ()) else ()
+    fetched_at = market_indicator._utc_iso(stamps.iloc[0] if len(stamps) else None)
     if fetched_at is None:
         return _domain(domain, STATE_MISSING, reason_code=REASON_NO_OBSERVATION,
                        reason=f"L1 回傳的 fetched_at 取不到或沒有時區，{len(frame)} 筆全部不寫", source=source_label)
     fetched_day = datetime.fromisoformat(fetched_at.replace("Z", "+00:00")).astimezone(timezone.utc).date().isoformat()
 
-    current: dict = {}
-    duplicated = set()
+    by_date: dict = {}
     bad_date = bad_value = future = 0
-    seen_obs = set()
     for record in frame.to_dict("records"):
         obs = market_indicator._iso_day(record.get("date"))
         if obs is None:
             bad_date += 1
             continue
-        seen_obs.add(obs)
-        if str(record.get("realtime_end")) != market_indicator.REALTIME_END_LATEST:
-            continue                       # 修正前的舊版次：不用
-        if obs in current:
-            duplicated.add(obs)
-            continue
-        current[obs] = record.get("value")
-    for obs in duplicated:
-        current.pop(obs, None)
-    no_current = len(seen_obs - set(current) - duplicated)
-
+        by_date.setdefault(obs, []).append(record.get("value"))
+    duplicated = sum(len(v) for v in by_date.values() if len(v) > 1)
     points = []
-    for obs in sorted(current):
-        value = current[obs]
+    for obs in sorted(by_date):
+        values = by_date[obs]
+        if len(values) > 1:
+            continue
+        value = values[0]
         if not _is_number(value):
             bad_value += 1
             continue
@@ -258,27 +265,22 @@ def fred_yield_domain_from_l1(domain: str, frame, error, *, source_label: str) -
             future += 1
             continue
         points.append({"obs_date": obs, "value_num": float(value)})
-    skipped = []
-    if bad_date:
-        skipped.append(f"觀測日缺或解析不了 {bad_date} 筆不寫")
-    if no_current:
-        skipped.append(f"現行版次不含此觀測 {no_current} 個觀測日不寫")
-    if duplicated:
-        skipped.append(f"同一觀測日有多列現行版次 {len(duplicated)} 個觀測日不寫")
-    if bad_value:
-        skipped.append(f"現行版次的值為缺值 {bad_value} 個觀測日不寫")
-    if future:
-        skipped.append(f"觀測日晚於取得日（{fetched_day}，世界協調時間）{future} 個觀測日不寫")
+    skipped_n = bad_date + bad_value + duplicated + future
     if not points:
+        parts = []
+        if bad_date:
+            parts.append(f"觀測日缺或解析不了 {bad_date} 筆不寫")
+        if bad_value:
+            parts.append(f"值為缺值或非有限數字 {bad_value} 筆不寫")
+        if duplicated:
+            parts.append(f"同一觀測日有多列 {duplicated} 筆不寫")
+        if future:
+            parts.append(f"觀測日晚於取得日（{fetched_day}，世界協調時間）{future} 筆不寫")
         return _domain(domain, STATE_MISSING, reason_code=REASON_NO_OBSERVATION,
-                       reason="；".join(skipped) if skipped else "沒有任何可用的現行版次觀測", source=source_label)
+                       reason="；".join(parts) if parts else "沒有任何可用的觀測", source=source_label)
     return _domain(domain, STATE_OK, source=source_label, fetched_at=fetched_at, obs_date=points[-1]["obs_date"],
-                   value_unit=YIELD_VALUE_UNIT, points=points)
-
-
-def _utc_today() -> date:
-    """今天（世界協調時間的日期）。獨立成函式是為了測試能固定它。"""
-    return datetime.now(timezone.utc).date()
+                   value_unit=YIELD_VALUE_UNIT, points=points,
+                   reason=skipped_observations_text(skipped_n) if skipped_n else None)
 
 
 def _call(fetch: Callable, *args):
@@ -297,7 +299,7 @@ def build_market_view(*, fetch_vix: Optional[Callable] = None, fetch_taiex: Opti
     `fetch_vix`：測試替身（簽名同 `fetch_yf_close_with_error(ticker, range_)`）；不傳＝L1 真函式。
     `fetch_taiex`／`fetch_sp500`：同上，給 `^TWII`／`^GSPC`；不傳＝與 VIX 用**同一支**
     （`fetch_vix` 若有給就是它，否則 L1 真函式）——沒有自己的取數架構。
-    `fetch_fred`：簽名同 `fetch_fred_vintages_with_error(series_id, api_key, observation_start)`；不傳＝L1 真函式
+    `fetch_fred`：簽名同 `fetch_fred_with_error(series_id, api_key, n)`；不傳＝L1 真函式
     （經 `market_indicator` 屬性取，測試替身換在那裡時兩邊一起換）。
     `fred_api_key`：由 L3 傳入（`source._fred_api_key`）；本層不讀 secrets、不印、不記、不放進回傳。
     None／空白 → 兩個殖利率 domain 為 `系統錯誤`＋`MISSING_FRED_API_KEY`，**不打 L1**。
@@ -310,8 +312,8 @@ def build_market_view(*, fetch_vix: Optional[Callable] = None, fetch_taiex: Opti
     VIX：呼叫 `("^VIX", "5y")`（`VIX_RANGE`）。**與舊版不同**：舊版與 B 線同簽名同快取鍵；現版有自己的快取項與請求，
     但 B 線 `vol_index` 的 `("^VIX",)` 預設 2y、快取鍵、`WINDOW_DAYS_MAX` 完全不變（測試釘住）。
     TAIEX／S&P 500：`(ticker, "5y")`。視窗切片在客戶端（`ui_v2/mkt/chart.py`）。
-    FRED：`observation_start` ＝ 今天（UTC）往回 `FRED_VIEW_LOOKBACK_DAYS` 日；與 B 線的 730 日不同 → 不同快取鍵。
-    ⚠️ 這支 FRED L1 本 repo 從未真實連線實測過（見檔頭）。
+    FRED：`n` ＝ `FRED_VIEW_OBSERVATION_LIMIT`（1500，最新 n 筆）；與 B 線（vintage 讀法）不同函式、不同快取鍵。
+    ⚠️ 本 session 沒有對 FRED 真實連線驗證回應（見檔頭）。
     """
     # 經 `market_indicator` 模組取 L1 函式（呼叫時才解析）：與 B 線 `vol_index` 用的是同一個屬性，
     # 測試替身換 `market_indicator.fetch_yf_close_with_error` 時兩邊一起換，不會一邊真打網路。
@@ -323,15 +325,14 @@ def build_market_view(*, fetch_vix: Optional[Callable] = None, fetch_taiex: Opti
                DOMAIN_TAIEX: taiex_domain_from_l1(t_series, t_error),
                DOMAIN_SP500: sp500_domain_from_l1(g_series, g_error)}
     has_key = isinstance(fred_api_key, str) and bool(fred_api_key.strip())
-    observation_start = (_utc_today() - timedelta(days=FRED_VIEW_LOOKBACK_DAYS)).isoformat()
     for key, series_id, label in ((DOMAIN_US10Y, US10Y_SERIES, US10Y_SOURCE_LABEL),
                                   (DOMAIN_US2Y, US2Y_SERIES, US2Y_SOURCE_LABEL)):
         if not has_key:
             frame, f_error = None, MISSING_FRED_API_KEY
         else:
             frame, f_error = _call(fetch_fred if fetch_fred is not None
-                                   else market_indicator.fetch_fred_vintages_with_error,
-                                   series_id, fred_api_key, observation_start)
+                                   else market_indicator.fetch_fred_with_error,
+                                   series_id, fred_api_key, FRED_VIEW_OBSERVATION_LIMIT)
         domains[key] = fred_yield_domain_from_l1(key, frame, f_error, source_label=label)
     for key in _MISSING_DOMAINS:
         domains[key] = missing_domain(key)
@@ -341,6 +342,6 @@ def build_market_view(*, fetch_vix: Optional[Callable] = None, fetch_taiex: Opti
             "readonly": True,
             "writes_market_indicator": False,
             "note": "唯讀 Data View；VIX、TAIEX（Yahoo ^TWII，非 TWSE 官方）、S&P 500（Yahoo ^GSPC）沿用同一支 L1 取數與收盤規則；"
-                    "美債殖利率取 FRED 現行版次；其餘 domain 無正式來源，一律資料未備。",
+                    "美債殖利率取 FRED 觀測日資料（`fetch_fred`）；其餘 domain 無正式來源，一律資料未備。",
         },
     }

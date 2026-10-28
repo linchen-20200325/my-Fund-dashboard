@@ -12,7 +12,9 @@ BL-0516 批 1（客戶裁示 C，`DEC-2026-10-27-41`；藍圖 `MK-7`、`SH-7` �
 - **期間不足就說不足**：選的期間比序列涵蓋還長 → `status == "insufficient"`，**不**縮短區間冒充（客戶 2026-10-27 派工）。
   判定只有一條：最早一筆有值的觀測日**晚於**視窗起點 → 不足。視窗以「最後一筆有值的觀測日」往回推，不以今天推。
 - **已知限制**：視窗起點落在週末／假日時，最早有值觀測日必晚於起點而被判不足（不另發明容忍規則）；
-  目前 L1 抓 2y，1Y 以下不受影響，3Y 本來就不足。正式路徑 L1 已 dropna，缺的日子是沒有點、折線直接連過，
+  本頁 VIX／TAIEX／S&P 500 取 5y（`market_view` 的 `*_RANGE`），殖利率取最新 1500 筆（`FRED_VIEW_OBSERVATION_LIMIT`），
+  3Y 在來源涵蓋足夠時可用（B 線 `vol_index` 仍是預設 2y，不在本圖）；來源實際回得比預期短時才會判不足。
+  ~~目前 L1 抓 2y，3Y 本來就不足~~（BL-0517 前為真，現已不成立；有意識的更正，不是漏刪）。正式路徑 L1 已 dropna，缺的日子是沒有點、折線直接連過，
   只有明確帶 None／NaN 的點才會斷線。
 - **沒有預測線、目標價線、箭頭**：規格裡只有「實際觀測」一條折線＋觀測點＋最後一點的直接標籤。
 - **不靠顏色分辨**：最後一點有文字標籤（`名稱 值`）、觀測點有形狀；單一序列時顏色只是裝飾。
@@ -117,7 +119,7 @@ def build_spec(points, *, label: str, value_title: str, color: str, description:
             {"mark": {"type": "point", "color": color, "filled": True, "size": 12, "shape": "circle"},
              "encoding": {"x": x_enc, "y": y_enc}},
             {"data": {"values": [{"date": last["date"], "value": last["value"],
-                                  "text": f"{label} {last['value']:.2f}"}]},
+                                  "text": f"{label} {0.0 if abs(last['value']) < 0.005 else last['value']:.2f}"}]},
              "mark": {"type": "text", "align": "right", "dx": -6, "dy": -10, "fontSize": 12,
                       "color": color},
              "encoding": {"x": {"field": "date", "type": "temporal"},

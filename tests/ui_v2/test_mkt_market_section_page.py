@@ -48,12 +48,11 @@ def _gspc_series():
     return s
 
 def _fred(base):
-    def _fn(series_id, api_key, observation_start):
+    def _fn(series_id, api_key, n):
         days = pd.bdate_range("2024-10-24", "2026-10-23")
         df = pd.DataFrame({{"date": days, "value": [base + (i % 7) * 0.01 for i in range(len(days))],
-                           "realtime_start": days + pd.Timedelta(days=1), "realtime_end": "9999-12-31"}})
-        df.attrs.update({{"fetched_at": "2026-10-27T06:00:00+00:00", "realtime_floor": observation_start,
-                         "source": "FRED:" + series_id + ":vintages"}})
+                           "realtime_start": pd.Timestamp("2026-10-27"), "source": "FRED:" + series_id,
+                           "fetched_at": "2026-10-27T06:00:00+00:00"}})
         return df, None
     return _fn
 
@@ -66,7 +65,7 @@ _OK = _HEAD + """
 _notes["market_view"] = mv.build_market_view(fetch_vix=lambda _t, _r=None: (_series(), None),
                                              fetch_taiex=lambda _t, _r=None: (_tw_series(), None),
                                              fetch_sp500=lambda _t, _r=None: (_gspc_series(), None),
-                                             fetch_fred=lambda sid, k, o: _fred(4.0 if sid == "DGS10" else 3.5)(sid, k, o),
+                                             fetch_fred=lambda sid, k, n: _fred(4.0 if sid == "DGS10" else 3.5)(sid, k, n),
                                              fred_api_key="k")
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """
@@ -76,7 +75,7 @@ _notes["market_view"] = mv.build_market_view(
     fetch_vix=lambda _t, _r=None: (pd.Series(dtype=float), "Yahoo:^VIX 失敗：HTTP 429 Too Many Requests"),
     fetch_taiex=lambda _t, _r=None: (_tw_series(), None),
     fetch_sp500=lambda _t, _r=None: (_gspc_series(), None),
-    fetch_fred=lambda sid, k, o: _fred(4.0)(sid, k, o), fred_api_key="k")
+    fetch_fred=lambda sid, k, n: _fred(4.0)(sid, k, n), fred_api_key="k")
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """
 
@@ -85,7 +84,7 @@ _notes["market_view"] = mv.build_market_view(
     fetch_vix=lambda _t, _r=None: (_series(), None),
     fetch_taiex=lambda _t, _r=None: (pd.Series(dtype=float), "Yahoo:^TWII 失敗：HTTP 429 Too Many Requests"),
     fetch_sp500=lambda _t, _r=None: (_gspc_series(), None),
-    fetch_fred=lambda sid, k, o: _fred(4.0)(sid, k, o), fred_api_key="k")
+    fetch_fred=lambda sid, k, n: _fred(4.0)(sid, k, n), fred_api_key="k")
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """
 
