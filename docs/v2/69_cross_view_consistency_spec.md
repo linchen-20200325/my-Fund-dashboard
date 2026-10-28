@@ -48,7 +48,7 @@
 | Return 1D | 找不到 1D 報酬欄位：舊版 `calc_metrics` 只有 1W／1M／3M／6M／1Y 等 | 同左 | 同左 | 同左 | — | — | — | ⬜ 無法判定（本輪審計未發現任何 view 輸出 1D 基金報酬；「不存在」為單組結論，UNVERIFIED） | 若未來新增，須先走 canonical return 實作；見 G-RET-1 |
 | Return 1M／3M | 舊版健診表優先用 MoneyDJ wb01 公告值，缺值才退回自算（列數窗） | 衛星戰情室 `mk_dashboard` 只用自算（22／65 列）；vNext hld 用使用者自選日曆窗價格報酬 | vNext alo 不輸出報酬 | tab2 快照讀原始 `ret_1m`／`ret_3m` | wb01 scrape｜自算列數窗｜vNext 日曆窗 | 窗口語意三種 | 原幣（vNext）｜原幣（舊版） | 🔴 不一致（機制：同名「近 1M」存在三套定義，FACT；數值落差未驗） | G-RET-1、G-RET-2；公式統一須 Decision Gate（formula） |
 | Return 1Y | tab2 KPI：含息 SSOT（`resolve_1y_total_return`，窗口 ≥350 天才有值） | tab3 表欄「1Y含息%」直接讀原始 `ret_1y_total`，未過 SSOT 門檻；vNext hld 為價格報酬 | vNext alo 不輸出 | tab2 快照與 tab3 AI 摘要讀原始值；`ai_service`／健診報告走 SSOT | 還原淨值（reinvest）｜自算列數窗｜wb01｜vNext 價格報酬｜持有期簡單加總 | 252 列 vs 日曆窗 vs 買入日起 | 原幣｜TWD（帳本） | 🔴 不一致（機制：至少四種不同數學的「1Y／含息」，且 AI 與畫面可讀不同門檻，FACT；數值落差未驗） | G-RET-2～G-RET-5；需 Decision Gate（formula） |
-| Benchmark | tab2／健診：`benchmark_for_currency`（TWD→^TWII、USD→^GSPC，365 天共同日期） | 衛星戰情室：使用者選 SPY／QQQ，9 個月窗，不分基金幣別 | vNext 無逐基金 benchmark | 依各頁 | Yahoo 指數｜Yahoo ETF | 365 天 vs 9 個月 | 指數原幣 | 🔴 不一致（機制：同基金在兩頁對應不同 benchmark 與窗口，FACT） | G-BM-1；benchmark 登記表與口徑須 Decision Gate |
+| Benchmark | tab2／健診：`services/capture_ratio.py::benchmark_for_currency`（TWD→token `"TWII"`、USD→token `"SPX"`，其餘幣別→`None`；token 對應到 Yahoo 符號 ^TWII／^GSPC 的映射為審計 B 所述、本輪未追，UNVERIFIED；365 天共同日期） | 衛星戰情室：使用者選 SPY／QQQ，9 個月窗，不分基金幣別 | vNext 無逐基金 benchmark | 依各頁 | Yahoo 指數｜Yahoo ETF | 365 天 vs 9 個月 | 指數原幣 | 🔴 不一致（機制：同基金在兩頁對應不同 benchmark 與窗口，FACT） | G-BM-1；benchmark 登記表與口徑須 Decision Gate |
 | Fund code | tab2：`canonicalize_moneydj_url`＋`parse_moneydj_input`（平台後綴被剝除或保留視輸入形式） | 舊版持股：`_extract_code_from_url`（原樣）；vNext：`fund_keys`（保留平台後綴） | 同 vNext | n/a | Sheet 使用者輸入字串 | n/a | n/a | 🔴 不一致（機制：至少六種金鑰推導規則，且平台後綴代表不同 NAV 序列，FACT；是否已實際誤配未驗） | G-ID-1；canonical identity 須 Decision Gate |
 | ISIN／canonical identity | 無 canonical identity 物件；ISIN 只是選填的選股池欄位，供 NAV 回補查詢 | 保單 Sheet 無 ISIN 欄 | 同左 | 快照不帶 canonical id | 使用者輸入 | n/a | n/a | ⬜ 無法判定（不存在可比較的鍵） | G-ID-2；須先定義 canonical contract（Decision Gate） |
 | Share class | 程式碼中沒有 share class 欄位 | 同左 | 同左 | 同左 | 僅 `docs/v2/54` 的未核准設計備忘 | n/a | n/a | ⬜ 無法判定 | G-ID-3；須 Decision Gate |
@@ -70,7 +70,7 @@
 
 ### 4.3 股票／ETF
 
-**本輪審計未發現任何 view 輸出單一股票或 ETF 的價格**（close／adjusted close／price date／ticker 的 view 皆不存在）。基金持股是 MoneyDJ 基金紀錄；SPY／QQQ／指數 ticker 只作 benchmark 或市場指標。Yahoo 的收盤序列為原始 close，未見 adjusted close 路徑。此結論為單組 grep 與讀碼（審計 D），「沒有其他消費者」為 UNVERIFIED。故股票／ETF 的 close、return、currency、ticker／canonical ID 等列在本矩陣中**不出列**；若未來新增，必須先建立 canonical identity 與 as-of 規則，再開 view。
+**本輪審計未發現任何 view 輸出單一股票或 ETF 的價格**（close／adjusted close／price date／ticker 的 view 皆不存在）。基金持股是 MoneyDJ 基金紀錄；SPY／QQQ／指數 ticker 只作 benchmark 或市場指標。Yahoo 的收盤序列為原始 close，未見 adjusted close 路徑（僅 Yahoo 序列；AlphaVantage NAV 備援 `repositories/fund/sources.py` 讀 `5. adjusted close`，該備援是基金 NAV 而非股票價格）。另有一條已知的非 UI 價格路徑：`scripts/export_fund_db.py` 的 `_DEFAULT_US_IDS`（NVDA、AMD、TSM、AAPL、MSFT、SPY、QQQ）由 `write_us_market` 寫入，經 `.github/workflows/export_db.yml` 執行；其產出的下游消費者 **UNVERIFIED**（本輪未追），故上述「沒有 view 輸出個股／ETF 價格」僅限 `ui`／`ui_v2` 的 view。此結論為單組 grep 與讀碼（審計 D），「沒有其他消費者」為 UNVERIFIED。故股票／ETF 的 close、return、currency、ticker／canonical ID 等列在本矩陣中**不出列**；若未來新增，必須先建立 canonical identity 與 as-of 規則，再開 view。
 
 ## 5. Gap 清單
 
@@ -100,7 +100,7 @@
 | G-RET-1（B-D1） | 「近 1M／3M」：健診表優先 wb01 公告值，缺值才自算；境內基金 `_fetch_domestic_perf` 恆回空，故境內只用自算；衛星戰情室只用自算 | F（`_fetch_domestic_perf` 存在已重驗；「恆回空」引用自審計 B，未重驗）／落差 I | 是（formula） |
 | G-RET-2（B-D2／D5） | 1Y：SSOT 含息（R4）、自算列數窗（R1）、wb01、持有期簡單加總（R9）、vNext 價格報酬（R11）並存；tab2 AI 快照與 tab3 表欄／AI 摘要讀原始 `ret_1y_total`，繞過 `resolve_1y_total_return` 的 ≥350 天門檻 | F（`RET_1Y_RESTORED_MIN_WINDOW_DAYS=350` 已重驗）／落差 I | 是 |
 | G-RET-3（B-D3） | R1 `_ret(n)` 以列數取窗、無日曆跨度護欄；稀疏或合併歷史時「1Y」可能不是一年 | F（引用自審計 B，未重驗） | 是 |
-| G-RET-4（B-D4） | vNext hld 的區間報酬為價格報酬、原幣、使用者窗口；舊版含息與 TWD 帳本報酬不同；`ui_v2` 不得 import `services`，故無法共用實作 | F（引用）／I | 是 |
+| G-RET-4（B-D4） | vNext hld 的區間報酬為價格報酬、原幣、使用者窗口；舊版含息與 TWD 帳本報酬不同；`ui_v2` 只有各頁 `source.py` 可 import `services.v2_tables`（`docs/v2/49`），不能直接 import 其他 `services` 模組，故 vNext 無法直接共用舊版 `services` 的報酬實作 | F（引用）／I | 是 |
 | G-RET-5（B-annualisation） | 年化口徑四種：固定 N 年、rows/252、日曆日/365.25、cum/years 線性 | F（引用） | 是 |
 | G-RET-6 | `ytd` 鍵在 tab2 快照被讀取，但全 repo 沒有產生者（死鍵，已重驗：僅一個讀取點） | F | 否 |
 | G-RET-7 | `compute_1y_total_return_mk_simple` 已無 production caller 但仍從 `services/health/__init__.py` 匯出（已重驗） | F | 否 |
