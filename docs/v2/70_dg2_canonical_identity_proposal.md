@@ -16,6 +16,9 @@
 
 ## 2. 現況：身分推導與比較點（FACT，除非標註）
 
+**2.0 計數口徑**：本文與 `docs/v2/69` G-ID-1、`BL-0521` 一致，採「**六種從原始輸入推導基金代碼的規則**」：(1) `parse_moneydj_input`、(2) `canonicalize_moneydj_url`、(3) `fetch_fund_from_moneydj_url` 內的 fallback regex、(4) policy `_extract_code_from_url`、(5) cache key 正規化 `_normalize_moneydj_url_for_cache`、(6) `fund_keys`（`resolve_full_keys`）。
+下表另列的 mapping、`_BANK_PLATFORM_CODES`、選股池、`nav_history`、FundClear、晨星等是「**使用或儲存**身分的位置」，不計入這六種；六是下界（沿用 69 的「至少」），不是窮舉。
+
 | 位置 | 接受 | 輸出 | 平台後綴 | ISIN／幣別／級別 |
 |---|---|---|---|---|
 | `repositories/fund/sources.py::parse_moneydj_input` | 網址（`a=` 參數）或裸碼；不合格式的裸碼走 `upper()[:30]` 截斷兜底 | `code`（大寫）、`page_type`、`full_url` | 保留 | 無 |
@@ -24,13 +27,13 @@
 | `sources.py::_BANK_PLATFORM_CODES` | 基本代碼 | 各平台完整代碼與頁型（例如 `TLZF9-…`） | 後綴＝不同通路 NAV（`canonicalize` 檔內註解） | 無 |
 | `repositories/fund/fund_orchestration.py::fetch_fund_from_moneydj_url` | canonicalize → parse → 內部 fallback regex → mapping → `_is_domestic_code` | 結果 `full_key`＝`fund_code`＝code | 保留（行動版網址除外） | 無 |
 | `repositories/policy/v1.py::_extract_code_from_url` | 裸碼（轉大寫）或任何「key 以 a／code 結尾」的參數，否則取路徑最後一段 | 大寫代碼；持倉鍵 `"{policy_id}::{CODE}"` | 保留 | 無 |
-| `infra/cache.py::_normalize_moneydj_url_for_cache` | 網址 `a=` | `fetch_fund\|CODE\|page_type` | 保留 | 無；FACT：production 無呼叫者（只有定義與 docstring 提及），裸碼會得到空代碼 |
+| `infra/cache.py::_normalize_moneydj_url_for_cache` | 網址 `a=` | `fetch_fund\|CODE\|page_type` | 保留 | 無；FACT：production 無呼叫者（只有定義與 docstring 提及）；裸碼與**小寫 `a=` 網址**都得到空代碼鍵 `fetch_fund\|\|default`（執行確認：`a=acdd01` 得空鍵、`a=ACDD01` 得 `ACDD01`；成因＝其解析不處理小寫，僅為執行結果推論） |
 | `services/v2_tables/fund_keys.py` | 僅 ASCII；strip／upper；parse；mapping；最後再驗格式 | `full_key`、`portal=""`；格式不合 fail loud | 保留 | 無 |
 | `repositories/fund/declared_profile.py` | 代碼 | 來源自報幣別（MoneyDJ／TDCC／FundClear）| 保留 | 只有幣別（引用自研究報告，未重驗） |
 | `repositories/pool_repository.py::PoolEntry` | 選股池列 | 欄位 `code,name,category,type_override,note,added_at,status,isin,currency,morningstar_secid` | 照填 | **ISIN、幣別、晨星 secId 為選填手填**（欄位名 FACT；「僅此處有 ISIN」引用自研究報告） |
 | `repositories/fundclear_offshore.py` | `(organizeCode, fundCode, fundClassCode)` 三碼；級別碼不可傳 `all` | NAV 與幣別 | n/a | FundClear 端的級別碼（FACT：`all` 會 raise） |
 | `sources.py::_MORNINGSTAR_SECID_MAP`、`_resolve_ms_secid`、`_morningstar_search_secid` | 代碼；優先序為選股池 secId、ISIN 篩選、硬編表（5 筆）、以名稱搜尋取 `results[0]` | secId | n/a | 搜尋路徑不驗 ISIN／名稱／幣別／級別（`results[0]` FACT；寫回選股池引用自 `docs/v2/69` G-ID-3，未重驗） |
-| `services/nav_history_gs.py`／`nav_history_store.py` | 代碼（strip／upper） | Sheet `nav_history` 與本機 `<CODE>.json` | 保留 | 有 `currency` 欄；`_rescue_by_isin` 的幣別閘引用自研究報告，未重驗 |
+| `services/nav_history_gs.py`／`nav_history_store.py` | 代碼（strip／upper） | Sheet `nav_history` 與本機 `<CODE>.json` | 保留 | 有 `currency` 欄；`_rescue_by_isin` 只存在於 `services/nav_history_store.py`（`git grep` 確認），其幣別閘的內容引用自研究報告，未重驗 |
 | `services/portfolio_csv.py`、`models/ledger.py` | `code`／`fund_code` | 持倉鍵 | 保留 | 幣別預設值見 `FundPosition`（預設 `"USD"`，與「未知幣別不得當 USD」的 2026-10-10 裁示須對照，UNVERIFIED 是否有實際路徑吃到預設） |
 
 未涵蓋（UNVERIFIED）：`ui/tab2`／`ui/tab3` 內的就地推導、`ui_v2/alo` 的 `holding_id` 組法與 `alo_holdings` 比對、TDCC／FundClear 數字代碼與 MoneyDJ 代碼的對應。「沒有其他推導點」是非窮舉敘述。
@@ -46,7 +49,7 @@
 | `taishinlife.moneydj.com/mobile/b1.aspx?a=TLZF9-AL001` | `TLZF9-AL001` | `…/yp010001.djhtm?a=TLZF9`（後綴被剝除） | **同一頁，parse 給有後綴、canonicalize 給無後綴** |
 | `tcbbankfund.moneydj.com/w/wb/wb01.djhtm?a=TLZF9-24A7` | `TLZF9-24A7` | 原樣（平台桌面頁保留後綴） | 剝除只發生在行動版網址 |
 
-結論（FACT）：同一個實體頁，依網址形態可能得到基本碼或帶後綴碼；只有行動版網址路徑會剝後綴。
+結論（FACT）：同一個實體頁，依網址形態可能得到基本碼或帶後綴碼；在 `canonicalize_moneydj_url` 之內，只有行動版網址路徑會剝後綴（其他推導點是否剝後綴見第 2 節表，未逐一驗證）。
 
 ## 3. 身分被存在哪裡（migration surface）
 
@@ -87,7 +90,7 @@ INFERENCE：後綴代表不同通路的 NAV 序列，若 canonical 化時把 `TL
 | 缺 ISIN | 該筆 `canonical_id` 為 `LEGACY:…`，畫面標「識別未確認」 | ISIN 只是驗證用，缺不影響鍵，但鍵內含 `?` 者視為「部分身分」，不跨來源合併 | 屬性為空，不影響鍵 |
 | 衝突 | 拒收該筆外部命中，記 conflict | 同左；ISIN 與鍵內幣別／級別不符＝衝突 | 驗證閘拒收（幣別不符；ISIN 已知且不符） |
 | 歷史相容／migration | 別名表以選股池 `isin`、硬編晨星表、人工補種；舊 `code` 欄不動，resolver 唯讀查表 | 由現有代碼拆後綴；以 declared_profile 幣別補；Policy／選股池**加欄**（additive） | 儲存資料不動；只有「原本被截斷的不合格輸入」改為 fail loud |
-| 影響面（blast radius） | 新 resolver＋至少 7 個推導點改走它；別名表維護成本高 | 同 A 加 Sheet 加欄；中大 | 收斂 6 種推導成 1 個；小到中 |
+| 影響面（blast radius） | 新 resolver＋六種推導規則（見 §2.0）的呼叫點改走它；別名表維護成本高 | 同 A 加 Sheet 加欄；中大 | 收斂六種推導規則成 1 個；小到中 |
 | 對應測試 | `fund_keys`／policy／orchestration 既有測試；X3 | 同左；另需欄位缺值矩陣測試 | 既有 C5b 特徵化測試轉為斷言；X3 部分 |
 
 ### 5.1 優缺點與風險
@@ -128,6 +131,32 @@ INFERENCE：後綴代表不同通路的 NAV 序列，若 canonical 化時把 `TL
 
 ## 10. 揭露：這份提案怎麼來的、哪裡沒驗
 
-- 來源：單一作者的唯讀研究報告（無網路、不連線）加本組重驗。**本組重驗過的承重宣稱**：(1) ISIN、晨星 secId、純數字被 `parse_moneydj_input` 原樣當作代碼（執行）；(2) 行動版網址 `canonicalize` 剝後綴、平台桌面頁不剝（執行）；(3) 裸碼小寫不被 `canonicalize` 轉大寫（執行）；(4) `_MORNINGSTAR_SECID_MAP` 恰 5 筆（執行）；(5) `PoolEntry` 欄位含 `isin`／`currency`／`morningstar_secid`（執行）；(6) `_normalize_moneydj_url_for_cache` 在 production 只有定義與 docstring 提及（`git grep`）；(7) `_morningstar_search_secid` 取 `results[0]`（`git grep`）；(8) FundClear 級別碼不可傳 `all`（讀 docstring 與 `git grep`）；(9) 持倉鍵 `"{policy_id}::{CODE}"`（讀碼）；(10) `DEC-2026-10-16-03`、`-05` 存在，54 §3 身分鏈文字（`grep`）；(11) production 無 `canonical_id`／`share_class` 符號（BL-0520 測試）。
+- 來源：單一作者的唯讀研究報告（無網路、不連線）加本組重驗。**本組重驗過的承重宣稱與可重跑的指令**（repo 根目錄執行；Python 部分需 `PYTHONPATH=.`，本機沒有 pandera 時以空操作外掛取代 `shared.schemas`，不影響下列函式）：
+
+```text
+# 腳本（存成 v.py 執行）
+from repositories.fund import sources as s
+p, c = s.parse_moneydj_input, s.canonicalize_moneydj_url
+for i in ["LU0766462157", "0P0001J5YG", "12345678", "acdd01"]: print("1", i, p(i)["code"], c(i))
+for i in ["https://taishinlife.moneydj.com/mobile/b1.aspx?a=TLZF9-AL001",
+          "https://tcbbankfund.moneydj.com/w/wb/wb01.djhtm?a=TLZF9-24A7"]: print("2", p(i)["code"], c(i))
+print("4", len(s._MORNINGSTAR_SECID_MAP))
+from repositories.pool_repository import PoolEntry; import dataclasses
+print("5", [f.name for f in dataclasses.fields(PoolEntry)][-3:])
+from infra.cache import _normalize_moneydj_url_for_cache as f
+print("3", f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01"), f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=ACDD01"))
+```
+
+  1. ISIN、晨星 secId、純數字被當代碼原樣接受；小寫裸碼 parse 轉大寫、canonicalize 不轉：輸出 `1 LU0766462157 LU0766462157`、`1 0P0001J5YG 0P0001J5YG`、`1 12345678 12345678`、`1 acdd01 ACDD01 acdd01`。
+  2. 行動版網址剝後綴、平台桌面頁不剝：`2 TLZF9-AL001 https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=TLZF9`；`2 TLZF9-24A7 https://tcbbankfund.moneydj.com/w/wb/wb01.djhtm?a=TLZF9-24A7`。
+  3. cache 鍵函式：小寫 `a=` 得 `fetch_fund||default`、大寫得 `fetch_fund|ACDD01|default`（輸出行 `3 …`）。
+  4. `_MORNINGSTAR_SECID_MAP` 恰 5 筆：輸出 `4 5`。
+  5. `PoolEntry` 末三欄：輸出 `5 ['isin', 'currency', 'morningstar_secid']`。
+  6. `git grep -n _normalize_moneydj_url_for_cache -- '*.py'` → 只有 `infra/cache.py` 三行（模組 docstring、定義、錯誤訊息字串），沒有其他檔案、沒有 import 或呼叫。
+  7. `git grep -n "results\[0\]" -- repositories/fund/sources.py` → `sources.py` 內兩行（取 `i` 與 `n`）。
+  8. `git grep -n "fundClassCode" -- repositories/fundclear_offshore.py` → 檔頭 docstring 寫「`fundClassCode` 不可傳 "all"…明確 raise ValueError」（以讀 docstring 為準，raise 本身未另行執行）。
+  9. `git grep -n '"{policy_id}::{fund_code}"' -- repositories/policy/v1.py` → 命中 `sync_policies_to_portfolio_funds` docstring（`repositories/policy/v1.py:232`），內部 `_pk` 以 `policy_id::CODE` 組字串（讀碼）。
+  10. `git grep -n "^### DEC-2026-10-16-0[35]" -- docs/DECISIONS.md` → 兩行；`git grep -n "身分鏈" -- docs/v2/54_phase7_design_backlog.md` → §3 內身分鏈一行。
+  11. production 無 `canonical_id`／`share_class` 符號：由 `tests/test_xview_characterization.py::test_char_agreement_c5b_no_canonical_id_or_share_class_symbol_exists_in_production_python` 的 AST 掃描（字面名稱；不證明沒有其他名稱表達同一概念）。
 - **其餘一律「引用自研究報告，未重驗」**，包含：內建別名 12 筆、`declared_profile` 細節、`nav_history` 欄位演進與 `_rescue_by_isin` 幣別閘、持倉 CSV／快照鍵、各 Sheet 的實際內容。
 - 本文沒有任何網路查證，也沒有查證真實基金代碼與 ISIN／級別的對應。
