@@ -61,9 +61,9 @@ def test_通路metadata逐輸入保留且彼此不同():
 
 
 def test_後綴不在通路表_channel為Unknown_不猜():
-    ident = fi.resolve_fund_identity("TLZF9-ZZ99", channel_table=TABLE)
+    ident = fi.resolve_fund_identity("TLZF9-ZZ99", channel_table=TABLE, namespace="moneydj")
     assert ident.base_fund_code == "TLZF9" and ident.channel_code == flags.UNKNOWN
-    assert fi.resolve_fund_identity("TLZF9-AL001").channel_code == flags.UNKNOWN  # 沒注入表
+    assert fi.resolve_fund_identity("TLZF9-AL001", namespace="moneydj").channel_code == flags.UNKNOWN  # 沒注入表
 
 
 @pytest.mark.parametrize("raw", ["", "   ", None, 12345, "TL", "TLZF9 X", "actı171",
@@ -85,8 +85,12 @@ def test_channel_table形狀錯直接拋():
 # ═══════════════ Platform suffix：預設不建第二個 canonical；例外不合併 ═══════════════
 
 def test_後綴預設不建立第二個canonical_fund():
-    keys = {fi.resolve_fund_identity(r).canonical_key for r in ("TLZF9", "TLZF9-AL001", "TLZF9-24A7")}
+    keys = {fi.resolve_fund_identity(r, namespace="moneydj").canonical_key
+            for r in ("TLZF9", "TLZF9-AL001", "TLZF9-24A7")}
     assert keys == {"TLZF9"}
+    keys2 = {fi.resolve_fund_identity(r, channel_table=TABLE).canonical_key
+             for r in ("TLZF9", "TLZF9-AL001", "TLZF9-24A7")}
+    assert keys2 == {"TLZF9"}
 
 
 def test_預設例外登記為空():
@@ -95,8 +99,8 @@ def test_預設例外登記為空():
 
 def test_例外登記命中_不合併_待決():
     excs = {("TLZF9", "AL001")}
-    al = fi.resolve_fund_identity("TLZF9-AL001", exceptions=excs)
-    a7 = fi.resolve_fund_identity("TLZF9-24A7", exceptions=excs)
+    al = fi.resolve_fund_identity("TLZF9-AL001", exceptions=excs, namespace="moneydj")
+    a7 = fi.resolve_fund_identity("TLZF9-24A7", exceptions=excs, namespace="moneydj")
     bare = fi.resolve_fund_identity("TLZF9", exceptions=excs)
     assert al.verification_status == flags.STATUS_EXCEPTION == "exception_distinct_series_needs_decision"
     assert al.canonical_key is None and al.base_fund_code == "TLZF9"
@@ -139,6 +143,51 @@ def test_證據_base不同或同碼_拋():
         fi.evaluate_suffix_evidence({"fund_code": "TLZF9"}, {"fund_code": "ANZ89-1G11"})
     with pytest.raises(ValueError):
         fi.evaluate_suffix_evidence({"fund_code": "TLZF9-AL001"}, {"fund_code": "tlzf9-al001"})
+
+
+# ═══════════════ 命名空間（獨立稽核 MUST 1）：FundClear 級別碼不得被剝後綴合併 ═══════════════
+
+def test_FundClear級別碼_AGIF_HT5與HTG_預設不合併():
+    # tests/test_fundclear_offshore.py：AGIF-HT5＝IT 累積類股、AGIF-HTG＝A 配息類股，同一基金的不同級別
+    ht5 = fi.resolve_fund_identity("AGIF-HT5")
+    htg = fi.resolve_fund_identity("AGIF-HTG")
+    for ident in (ht5, htg):
+        assert ident.verification_status == flags.STATUS_NAMESPACE_UNKNOWN
+        assert ident.base_fund_code is None and ident.platform_suffix is None and ident.canonical_key is None
+    assert ht5.original_code == "AGIF-HT5" and htg.original_code == "AGIF-HTG"
+    assert fi.same_canonical_fund(ht5, htg) is not True
+    assert fi.same_canonical_fund(ht5, fi.resolve_fund_identity("agif-ht5")) is True  # 完整代碼逐字相同
+
+
+def test_FundClear級別碼_明示命名空間_範圍外_不合併():
+    ht5 = fi.resolve_fund_identity("AGIF-HT5", namespace="fundclear")
+    htg = fi.resolve_fund_identity("AGIF-HTG", namespace="fundclear")
+    assert ht5.verification_status == flags.STATUS_OUT_OF_SCOPE_NAMESPACE
+    assert fi.same_canonical_fund(ht5, htg) is None
+    with pytest.raises(ValueError):  # 證據函式也不把它們當成同 base 的後綴
+        fi.evaluate_suffix_evidence({"fund_code": "AGIF-HT5"}, {"fund_code": "AGIF-HTG"}, namespace="fundclear")
+
+
+def test_無後綴代碼不受命名空間影響():
+    assert fi.resolve_fund_identity("AGIF").canonical_key == "AGIF"
+
+
+# ═══════════════ 別名表（獨立稽核 SHOULD b） ═══════════════
+
+def test_別名表注入後_ACTI171_ACTI7_ACTI71同一base_未注入則各自():
+    from repositories.fund.sources import load_fund_code_mapping
+    builtin = load_fund_code_mapping(path="")  # 不讀檔，只回內建表
+    codes = ("ACTI171", "ACTI7", "ACTI71")
+    assert {fi.resolve_fund_identity(c, alias_mapping=builtin).base_fund_code for c in codes} == {"ACTI71"}
+    assert {fi.resolve_fund_identity(c).base_fund_code for c in codes} == set(codes)  # 預設不做別名（已知缺口）
+
+
+def test_shadow_hook把production對照表傳給resolver(monkeypatch, caplog):
+    monkeypatch.setattr(flags, "DG2_SHADOW_ENABLED", True)
+    with caplog.at_level(logging.INFO, logger="services.fund_identity_shadow"):
+        fund_keys.resolve_full_keys(["ACTI171"], mapping={"ACTI171": {"public_code": "ACTI71"}})
+    (rec,) = [r for r in caplog.records if r.name == "services.fund_identity_shadow"]
+    assert "'base_fund_code': 'ACTI71'" in rec.getMessage()
 
 
 # ═══════════════ Unknown ═══════════════
@@ -192,6 +241,20 @@ def test_外部候選_相符則收():
                                          {"source": "ms", "base_fund_code": "TLZF9", "currency": "USD"})
     assert res["status"] == flags.CANDIDATE_ACCEPTED and res["display_text"] is None
     assert res["confirmed"] == ["base_fund_code", "currency"]
+
+
+def test_外部候選_只有幣別相符_不接受_unverified():
+    # 獨立稽核 MUST 2：同幣別的別檔基金很多，只有 currency 相符不得 accepted
+    res = fi.validate_external_candidate(fi.resolve_fund_identity("TLZF9", currency="USD"),
+                                         {"source": "ms", "currency": "USD"})
+    assert res["status"] == flags.CANDIDATE_UNVERIFIED and res["confirmed"] == ["currency"]
+    assert res["display_text"] is None
+
+
+def test_外部候選_isin相符則收():
+    res = fi.validate_external_candidate(fi.resolve_fund_identity("TLZF9", isin="LU0000000000"),
+                                         {"source": "ms", "isin": "lu0000000000"})
+    assert res["status"] == flags.CANDIDATE_ACCEPTED and res["confirmed"] == ["isin"]
 
 
 def test_外部候選_只有Unknown對值_unverified():
@@ -307,6 +370,30 @@ def test_flag開_shadow內部失敗_不影響production(monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger="services.fund_identity_shadow"):
         assert fund_keys.resolve_full_keys(CODES, mapping={}) == baseline
     assert any("dg2_shadow 失敗" in r.getMessage() for r in caplog.records)
+
+
+def test_flag開_shadow模組import失敗_不影響production(monkeypatch, caplog):
+    import sys
+    baseline = fund_keys.resolve_full_keys(CODES, mapping={})
+    monkeypatch.setattr(flags, "DG2_SHADOW_ENABLED", True)
+    monkeypatch.setitem(sys.modules, "services.fund_identity_shadow", None)  # import 時拋 ImportError
+    with caplog.at_level(logging.ERROR, logger="services.v2_tables.fund_keys"):
+        assert fund_keys.resolve_full_keys(CODES, mapping={}) == baseline
+    assert any("dg2_shadow hook 失敗" in r.getMessage() for r in caplog.records)
+
+
+def test_flag關_新模組不會被import_子程序():
+    import subprocess
+    import sys
+    from pathlib import Path
+    code = ("import sys; import services.v2_tables.fund_keys as fk; "
+            "fk.resolve_full_keys(['TLZF9', 'TLZF9-AL001'], mapping={}); "
+            "print('DG2MODS', 'services.fund_identity' in sys.modules, 'services.fund_identity_shadow' in sys.modules)")
+    out = subprocess.run([sys.executable, "-c", code], cwd=Path(__file__).resolve().parents[1],
+                         capture_output=True, text=True, timeout=120)
+    assert out.returncode == 0, out.stderr[-2000:]
+    (line,) = [ln for ln in out.stdout.splitlines() if ln.startswith("DG2MODS")]
+    assert line == "DG2MODS False False", line
 
 
 def test_resolver_不import_L1私有通路表與IO套件():

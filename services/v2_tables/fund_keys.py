@@ -108,6 +108,7 @@ L1 的回傳字典**沒有**標記走了哪一支，所以本檔照同一條規�
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from repositories.fund.sources import load_fund_code_mapping, parse_moneydj_input
@@ -276,8 +277,12 @@ def resolve_full_keys(fund_codes, *, mapping=None) -> dict:
                        "parser": PARSER_NAME},
     }
     # DG-2 Stage-1 shadow hook（`DEC-2026-10-28-05`）：預設關；關閉時不 import、不呼叫任何東西。
-    # 打開時只寫 log，不改 `out`（`services/fund_identity_shadow.py`）。
+    # 打開時只寫 log，不改 `out`（`services/fund_identity_shadow.py`）；連 import 失敗也只記 log，
+    # 不得傳到 production（2026-10-28 獨立稽核 SHOULD a）。別名表傳同一份 `table`（不另讀檔，SHOULD b）。
     if _dg2_flags.DG2_SHADOW_ENABLED:
-        from services.fund_identity_shadow import log_shadow_for_fund_keys
-        log_shadow_for_fund_keys(fund_codes, out)
+        try:
+            from services.fund_identity_shadow import log_shadow_for_fund_keys
+            log_shadow_for_fund_keys(fund_codes, out, alias_mapping=table)
+        except Exception:  # shadow 不得影響 production；不吞：完整 traceback 寫進 log
+            logging.getLogger(__name__).exception("dg2_shadow hook 失敗（production 結果未受影響）")
     return out

@@ -23,11 +23,16 @@ UNKNOWN: str = "Unknown"
 STATUS_UNRESOLVED: str = "unresolved"  # 輸入解析不出合格代碼；不猜
 STATUS_BASE_RESOLVED: str = "base_resolved_attributes_unverified"  # 依「第一個 - 前＝基金碼」取得 base；其餘屬性未驗
 STATUS_EXCEPTION: str = "exception_distinct_series_needs_decision"  # 例外登記／證據顯示後綴可能是不同序列；不合併、待 Decision Gate
+# 帶 `-` 的代碼，但沒有證據顯示它屬於 MoneyDJ／平台代碼命名空間（例：FundClear 級別碼 `AGIF-HT5`／`AGIF-HTG`
+# 是同一基金的不同級別）→ 不剝後綴、不合併（2026-10-28 獨立稽核 MUST 1）。
+STATUS_NAMESPACE_UNKNOWN: str = "namespace_unknown_suffix_not_stripped"
+STATUS_OUT_OF_SCOPE_NAMESPACE: str = "out_of_scope_namespace"  # 呼叫端明示非 MoneyDJ 命名空間（例 fundclear）
+NAMESPACE_MONEYDJ: str = "moneydj"  # 「第一個 - 前＝基金碼」只在此命名空間成立
 
 # ── 外部候選驗證（裁示第 10 項）───────────────────────────────────────────
-CANDIDATE_ACCEPTED: str = "accepted"  # 至少一個已知屬性相符，且沒有衝突
+CANDIDATE_ACCEPTED: str = "accepted"  # base_fund_code 或 isin 已確認相符，且沒有衝突
 CANDIDATE_REJECTED: str = "rejected"  # 已知屬性明確衝突 → 拒收、留 evidence
-CANDIDATE_UNVERIFIED: str = "unverified"  # 沒有衝突，但也沒有任何已知屬性可確認
+CANDIDATE_UNVERIFIED: str = "unverified"  # 沒有衝突，但 base_fund_code／isin 都未確認（只有幣別等相符也算這裡）
 SOURCE_CONFLICT_TEXT: str = "⬜ 資料來源不一致，暫無法判定"  # 客戶指定顯示文字，逐字
 
 # ── Cross-view NAV（裁示第 11 項）────────────────────────────────────────

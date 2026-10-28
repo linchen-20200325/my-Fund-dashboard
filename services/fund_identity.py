@@ -18,7 +18,12 @@
   是為了不觸發該函式尾端的 shadow hook（hook 開啟時會回呼本檔 → 否則無窮遞迴）。
 - 頁型：`repositories/fund/sources.py::parse_moneydj_input` 的 `page_type`（僅作 metadata）。
 - 基本碼：第一個 `-` 之前＝基金碼（`canonicalize_moneydj_url` 的 `split("-", 1)[0]`；與 `fund_keys._is_pure_code`
-  的 `partition("-")` 同一切法）——但**對所有輸入一致套用**，不只行動版網址。
+  的 `partition("-")` 同一切法）——~~但**對所有輸入一致套用**，不只行動版網址。~~
+  → 2026-10-28 獨立稽核 MUST 1（有意識的更正，不是漏刪）：**只在 MoneyDJ／平台代碼命名空間套用**。
+  FundClear 級別碼 `AGIF-HT5`（累積）／`AGIF-HTG`（A 配息）也有 `-`，卻是**不同級別**；盲目剝會把它們合併。
+  命名空間證據（任一即可）：呼叫端 `namespace="moneydj"`；網址被 `parse_moneydj_input` 認出 MoneyDJ 頁型；
+  完整代碼在注入的通路表內。沒有證據 → `namespace_unknown_suffix_not_stripped`（不剝、不合併）；
+  明示其他命名空間 → `out_of_scope_namespace`。無 `-` 的代碼不受影響。
 - 通路表：呼叫端注入（形狀同 `sources._BANK_PLATFORM_CODES`：`{base: [(domain, full_code, page_type), ...]}`）。
   本檔**不** import 那張 L1 私有表；綁定在 `services/fund_identity_shadow.py`。
 
@@ -38,12 +43,15 @@ from shared.fund_identity import (
     CANDIDATE_REJECTED,
     CANDIDATE_UNVERIFIED,
     IDENTITY_EXCEPTIONS,
+    NAMESPACE_MONEYDJ,
     NAV_CONFLICT,
     NAV_CONSISTENT,
     NAV_NOT_COMPARABLE,
     SOURCE_CONFLICT_TEXT,
     STATUS_BASE_RESOLVED,
     STATUS_EXCEPTION,
+    STATUS_NAMESPACE_UNKNOWN,
+    STATUS_OUT_OF_SCOPE_NAMESPACE,
     STATUS_UNRESOLVED,
     UNKNOWN,
 )
@@ -60,6 +68,8 @@ _ABS_TOL = 1e-12
 SAME = "same"
 DIFFERENT = "different"
 UNKNOWN_CMP = "unknown"
+
+_UNSTRIPPED = frozenset({STATUS_NAMESPACE_UNKNOWN, STATUS_OUT_OF_SCOPE_NAMESPACE})
 
 
 @dataclass(frozen=True)
@@ -100,9 +110,14 @@ def compare_attribute(a, b) -> str:
 
 
 def same_canonical_fund(a: CanonicalFundIdentity, b: CanonicalFundIdentity) -> Optional[bool]:
-    """`True`／`False`／`None`（未定：任一邊 unresolved，或同 base 但任一邊是例外待裁）。"""
+    """`True`／`False`／`None`（未定：任一邊 unresolved、命名空間未知，或同 base 但任一邊是例外待裁）。
+
+    命名空間未知／範圍外的代碼只在**完整代碼逐字相同**時判 True，其餘一律 None（不剝後綴、不合併）。
+    """
     if STATUS_UNRESOLVED in (a.verification_status, b.verification_status):
         return None
+    if {a.verification_status, b.verification_status} & _UNSTRIPPED:
+        return True if (a.original_code is not None and a.original_code == b.original_code) else None
     if a.base_fund_code != b.base_fund_code:
         return False
     if STATUS_EXCEPTION in (a.verification_status, b.verification_status):
@@ -144,7 +159,7 @@ def _lookup_channel(channel_table, base: str, full_code: str) -> str:
 
 
 def resolve_fund_identity(raw, *, channel_table=None, exceptions=None, as_of=None,
-                          source: str = DEFAULT_SOURCE, alias_mapping=None,
+                          source: str = DEFAULT_SOURCE, alias_mapping=None, namespace=None,
                           currency=None, share_class=None, distribution_type=None,
                           hedge_status=None, isin=None) -> CanonicalFundIdentity:
     """裸碼（任意大小寫）、帶後綴代碼、MoneyDJ 桌面／行動版／平台子網域網址、`#fragment`、`area=TW&a=CODE`
@@ -154,6 +169,8 @@ def resolve_fund_identity(raw, *, channel_table=None, exceptions=None, as_of=Non
     沒給一律 Unknown（`isin` 為 None）。本函式**不會**從名稱、後綴或幣別推任何一個（裁示第 4 項）。
     `alias_mapping`：`fund_keys` 形狀的別名表；預設 `{}`（不讀 csv、不做別名）。
     `exceptions`：`(base, suffix)` 集合；預設 `shared.fund_identity.IDENTITY_EXCEPTIONS`（空）。
+    `namespace`：`None`（由網址頁型／通路表找證據）、`"moneydj"`（呼叫端擔保是 MoneyDJ／平台代碼）、
+    其他字串（明示非 MoneyDJ → 帶 `-` 者判 `out_of_scope_namespace`）。見檔頭「基本碼」一條。
     """
     mapping = {} if alias_mapping is None else alias_mapping
     if alias_mapping is not None:
@@ -172,15 +189,30 @@ def resolve_fund_identity(raw, *, channel_table=None, exceptions=None, as_of=Non
     suffix = tail if sep else None
     info = parse_moneydj_input(raw.strip())
     is_url = bool(info.get("is_url"))
+    page_type = info.get("page_type", "") or ""
     channel = _lookup_channel(channel_table, base, full_key) if suffix else None
-    status = STATUS_EXCEPTION if (suffix and (base, suffix) in excs) else STATUS_BASE_RESOLVED
     isin_v = isin.strip().upper() if isinstance(isin, str) and isin.strip() else None
+    if suffix:
+        if namespace is not None and namespace != NAMESPACE_MONEYDJ:
+            unstripped = STATUS_OUT_OF_SCOPE_NAMESPACE
+        elif namespace == NAMESPACE_MONEYDJ or (is_url and page_type) or channel != UNKNOWN:
+            unstripped = None
+        else:
+            unstripped = STATUS_NAMESPACE_UNKNOWN
+        if unstripped:
+            return CanonicalFundIdentity(
+                base_fund_code=None, original_code=full_key, platform_suffix=None, channel_code=None,
+                source_url=raw.strip() if is_url else None, isin=isin_v, verification_status=unstripped,
+                page_type=page_type, currency=_clean_attr(currency, upper=True),
+                share_class=_clean_attr(share_class), distribution_type=_clean_attr(distribution_type),
+                hedge_status=_clean_attr(hedge_status), **common)
+    status = STATUS_EXCEPTION if (suffix and (base, suffix) in excs) else STATUS_BASE_RESOLVED
     return CanonicalFundIdentity(
         base_fund_code=base, original_code=full_key, platform_suffix=suffix, channel_code=channel,
         source_url=raw.strip() if is_url else None,
         currency=_clean_attr(currency, upper=True), share_class=_clean_attr(share_class),
         distribution_type=_clean_attr(distribution_type), hedge_status=_clean_attr(hedge_status),
-        isin=isin_v, verification_status=status, page_type=info.get("page_type", "") or "", **common)
+        isin=isin_v, verification_status=status, page_type=page_type, **common)
 
 
 # ═══════════════ 例外路徑（裁示第 2 項）：有證據就不合併 ═══════════════
@@ -195,7 +227,7 @@ def _nav_float(value, where: str) -> float:
     return v
 
 
-def evaluate_suffix_evidence(obs_a: dict, obs_b: dict) -> Optional[dict]:
+def evaluate_suffix_evidence(obs_a: dict, obs_b: dict, *, namespace: str = NAMESPACE_MONEYDJ) -> Optional[dict]:
     """同 base、不同完整代碼的兩筆觀測 → 若有**區分性證據**回例外紀錄，否則回 None。
 
     區分性證據：兩邊皆已知且不同的 currency／share_class／distribution_type／hedge_status；
@@ -208,8 +240,8 @@ def evaluate_suffix_evidence(obs_a: dict, obs_b: dict) -> Optional[dict]:
     for name, obs in (("obs_a", obs_a), ("obs_b", obs_b)):
         if not isinstance(obs, dict):
             raise TypeError(f"{name} 須為 dict（收到 {type(obs).__name__}）")
-        ident = resolve_fund_identity(obs.get("fund_code"))
-        if ident.verification_status == STATUS_UNRESOLVED:
+        ident = resolve_fund_identity(obs.get("fund_code"), namespace=namespace)
+        if ident.base_fund_code is None:
             raise ValueError(f"{name} 的 fund_code 解析不出：{ident.error}")
         ids.append(ident)
     a_id, b_id = ids
@@ -253,7 +285,8 @@ def validate_external_candidate(identity: CanonicalFundIdentity, candidate: dict
 
     比對 `base_fund_code`／`isin`／`currency`／`share_class`／`distribution_type`／`hedge_status`：
     任一兩邊皆已知且不同 → `rejected`（留 conflict 紀錄、`display_text` ＝ 客戶指定文字）；
-    沒有衝突且至少一項兩邊皆已知且相同 → `accepted`；其餘 → `unverified`（Unknown 對值：不衝突、也不確認）。
+    沒有衝突且 `base_fund_code` 或 `isin` 兩邊皆已知且相同 → `accepted`；其餘（含只有幣別等非身分鍵相符）→ `unverified`
+    （Unknown 對值：不衝突、也不確認）。
     本階段**只在 shadow 使用**，未接到任何 production 取數路徑。
     """
     if not isinstance(identity, CanonicalFundIdentity):
@@ -281,8 +314,12 @@ def validate_external_candidate(identity: CanonicalFundIdentity, candidate: dict
         out.update(status=CANDIDATE_REJECTED, rejected_source=cand_source, difference=list(out["conflicts"]),
                    display_text=SOURCE_CONFLICT_TEXT,
                    reason="已知身分屬性明確衝突：" + "、".join(c["attribute"] for c in out["conflicts"]))
-    elif out["confirmed"]:
+    elif {"base_fund_code", "isin"} & set(out["confirmed"]):
         out.update(status=CANDIDATE_ACCEPTED, reason="已知屬性相符：" + "、".join(out["confirmed"]))
+    elif out["confirmed"]:
+        # 2026-10-28 獨立稽核 MUST 2：只有幣別等非身分鍵相符不足以接受（同幣別的別檔基金很多）。
+        out["reason"] = ("只有非身分鍵相符（" + "、".join(out["confirmed"]) +
+                         "）；base_fund_code 或 isin 未確認 → 不接受")
     else:
         out["reason"] = "沒有任何兩邊皆已知的屬性可比對（Unknown 不算確認）"
     return out

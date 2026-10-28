@@ -475,7 +475,9 @@ _L2_TO_L2_ALLOWED = {"nav_dividend.py": ("services.moneydj_fetcher",),
 #   不開整個 infra、不給其他檔；開了卻沒人用也紅。
 _EXTRA_ALLOWED = {"exp_universe.py": ("infra.cache", "infra.gspread_retry", "time", "threading"),
                   "exp_nav.py": ("infra.cache", "time", "threading", "copy"),
-                  "personal_session.py": ("infra.personal_oauth",)}
+                  "personal_session.py": ("infra.personal_oauth",),
+                  # 2026-10-28 DG-2 Stage-1 獨立稽核 SHOULD a：`fund_keys.py` 的 shadow hook 失敗只記 log（純標準庫、無 I/O）。
+                  "fund_keys.py": ("logging",)}
 
 
 def _is_v2_tables(name: str) -> bool:
@@ -534,5 +536,5 @@ def test_v2_tables只import標準庫與L0_L1():
         ("exp_universe.py", "infra.cache"), ("exp_universe.py", "infra.gspread_retry"),
         ("exp_universe.py", "time"), ("exp_universe.py", "threading"),
         ("exp_nav.py", "infra.cache"), ("exp_nav.py", "time"), ("exp_nav.py", "threading"), ("exp_nav.py", "copy"),
-        ("personal_session.py", "infra.personal_oauth")}
+        ("personal_session.py", "infra.personal_oauth"), ("fund_keys.py", "logging")}
     assert extra_seen == {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names}, extra_seen

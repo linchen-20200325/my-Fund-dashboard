@@ -51,10 +51,17 @@ def current_parser_results(raw, *, fund_keys_result: dict | None = None) -> dict
     }
 
 
-def shadow_compare(raw, *, fund_keys_result: dict | None = None, channel_table=None) -> dict:
-    """單筆輸入的 shadow 紀錄。`channel_table` 預設綁定 L1 的 `_BANK_PLATFORM_CODES`。"""
+def shadow_compare(raw, *, fund_keys_result: dict | None = None, channel_table=None,
+                   alias_mapping=None) -> dict:
+    """單筆輸入的 shadow 紀錄。`channel_table` 預設綁定 L1 的 `_BANK_PLATFORM_CODES`。
+
+    `alias_mapping`：hook 傳入 production `resolve_full_keys` 已載入的同一份對照表（不另讀檔）；
+    單獨呼叫時預設 `{}`（不做別名）。不傳 `namespace`：裸的帶後綴代碼若不在通路表、也不是 MoneyDJ 網址，
+    resolver 照實記 `namespace_unknown_suffix_not_stripped`（Sheet 代碼的命名空間屬 Stage-2 Decision Gate）。
+    """
     table = _BANK_PLATFORM_CODES if channel_table is None else channel_table
-    ident = resolve_fund_identity(raw, channel_table=table, source="dg2_shadow")
+    ident = resolve_fund_identity(raw, channel_table=table, source="dg2_shadow",
+                                  alias_mapping=alias_mapping)
     current = current_parser_results(raw, fund_keys_result=fund_keys_result)
     resolver = {"base_fund_code": ident.base_fund_code, "original_code": ident.original_code,
                 "platform_suffix": ident.platform_suffix, "channel_code": ident.channel_code,
@@ -80,10 +87,10 @@ def shadow_compare(raw, *, fund_keys_result: dict | None = None, channel_table=N
             "difference": difference, "reason": reason}
 
 
-def log_shadow_for_fund_keys(fund_codes, out: dict) -> None:
+def log_shadow_for_fund_keys(fund_codes, out: dict, *, alias_mapping=None) -> None:
     """`resolve_full_keys` 的 shadow hook：逐筆寫一則 log；不改 `out`、不拋例外（失敗只記 log）。"""
     try:
         for raw, res in zip(fund_codes, out.get("results", [])):
-            logger.info("dg2_shadow %r", shadow_compare(raw, fund_keys_result=res))
+            logger.info("dg2_shadow %r", shadow_compare(raw, fund_keys_result=res, alias_mapping=alias_mapping))
     except Exception:  # shadow 不得影響 production；不吞：完整 traceback 寫進 log
         logger.exception("dg2_shadow 失敗（production 結果未受影響）")
