@@ -184,12 +184,36 @@ def test_positive_control_detects_split_synthetic_token(tmp_path):
     assert _scan([f], {}) == []
 
 
+def _path_hits(rel: str, index: dict[str, int] | None = None) -> set[int]:
+    """逐段（以 ``/`` 分隔）比對路徑，避免 ``_STRIP_RE`` 移除 ``/`` 後把相鄰目錄名的字接起來誤報。
+
+    已知限制：單一路徑段內仍套用與內容相同的正規化（移除底線、連字號等），
+    故同一檔名內以分隔符拆開的字會被接起來比對（刻意，擋拆字繞過）。
+    """
+    hits: set[int] = set()
+    for seg in rel.split("/"):
+        hits |= _line_hits(seg, index)
+    return hits
+
+
+def test_path_scan_positive_and_negative_control():
+    """路徑掃描正控／負控：合成假名（非任何人名）。"""
+    synthetic = "測試甲乙"
+    digest = hashlib.sha256(_SALT + synthetic.encode("utf-8")).hexdigest()
+    index = {digest: 0}
+    assert _path_hits("docs/測試甲乙_notes.md", index) == {0}
+    assert _path_hits("docs/測試-甲乙/x.md", index) == {0}
+    assert _path_hits("docs/一般文件.md", index) == set()
+    # 跨目錄相鄰字不得接起來誤報
+    assert _path_hits("測試/甲乙/x.md", index) == set()
+
+
 def test_no_external_author_names_in_tracked_paths():
     """路徑名（檔名／目錄名）同樣不得含已登記姓名。"""
     violations = []
     for path in _tracked_files():
         rel = path.relative_to(_REPO).as_posix()
-        for idx in sorted(_line_hits(rel)):
+        for idx in sorted(_path_hits(rel)):
             violations.append(f"<path #{idx}> (banned digest #{idx})")
     assert not violations, (
         "追蹤檔的路徑名含已登記姓名（只列摘要索引，不印原文）：\n" + "\n".join(violations)

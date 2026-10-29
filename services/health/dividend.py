@@ -160,7 +160,7 @@ def compute_1y_total_return_mk_simple(
               + Σ(divs in last 1Y) / NAV_1Y_ago × 100
 
     與業界 wb01 複利還原淨值法不同(複利 ≈ 高 5-15%,borderline 可能 flip)。
-    此公式對齊老師教學版,user 自己拿計算機算結果一致。
+    此公式為外部教材教學版,user 自己拿計算機算結果一致。
 
     Args
     ----
@@ -499,7 +499,7 @@ def _eating_grey(reason: str, *, tr1y_label=None, adr_source=None, adr_pct=None,
 def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
     """老師 1Y 吃本金檢查 SSOT 入口(2026-10-23 裁示 1B:唯一判定)。
 
-    依老師體檢邏輯:
+    依外部教材體檢邏輯:
         近一年含息總報酬率 < 年化配息率 → 🔴 吃本金(2pp 黃燈帶走 `dividend_safety`)
 
     支援兩種 fund dict shape:
