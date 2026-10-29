@@ -382,3 +382,22 @@ def test_no_write_steps_outside_result_branch(wf):
     # 只有 checkout / setup-python / upload-artifact 三種 action
     uses = {str(s.get("uses", "")).split("@")[0] for _, _, s in _steps(wf) if s.get("uses")}
     assert uses <= {"actions/checkout", "actions/setup-python", "actions/upload-artifact"}, uses
+
+
+_INJECTION_EXPR = ("${{ github.event", "${{ github.head_ref", "${{ inputs.")
+
+
+def _injection_hits(wf: dict) -> list:
+    return [f"{jn}/{s.get('name', '?')}" for jn, _, s in _steps(wf)
+            if any(tok in (s.get("run") or "") for tok in _INJECTION_EXPR)]
+
+
+def test_no_expression_injection_in_run_steps(wf):
+    assert _injection_hits(wf) == [], "run: 不得內插 github.event／head_ref／inputs 表達式（expression injection）"
+
+
+def test_injection_guard_detects_mutation(wf):
+    import copy
+    bad = copy.deepcopy(wf)
+    next(s for _, _, s in _steps(bad) if s.get("run"))["run"] += '\necho "${{ github.event.head_commit.message }}"'
+    assert _injection_hits(bad), "守衛必須能偵測到注入表達式"

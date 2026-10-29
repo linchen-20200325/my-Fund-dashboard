@@ -266,7 +266,7 @@ def test_non200_keeps_masked_snippet():
 # ── 2026-10-29 最終整合裁示：觀察性裁定、baseline、product mapping ──
 def _po(inp, kind, date="2026-10-28", nav=8.4121, name="某基金", ccy=None, src=None, transport="direct"):
     o = _obs(inp, kind, transport, base="TLZF9", ccy=ccy, points=((date, nav),))
-    o.update(nav=nav, fund_name=name, currency_source=src)
+    o.update(nav=nav, fund_name=name, currency_source=src, fund_name_source="basic_info_url:u")   # 名稱由基本頁回填，不是平台頁明示
     return o
 
 
@@ -277,15 +277,14 @@ def _trio(**over):
 
 def test_observational_strong_when_date_nav_name_agree_and_currency_kept_separate():
     r = P.observational_assessment(_trio())
-    assert r["verdict"] == "strong_observational_evidence" and r["strictly_comparable"] is False
+    assert r["verdict"] == "observational_consistent_day" and r["strictly_comparable"] is False
     assert r["currency_evidence"] == {"base_page_reports": "美元", "platform_pages_currency_stated": False,
                                       "currency_inferred": False, "note": r["currency_evidence"]["note"]}
     assert r["nav_date"] == "2026-10-28" and r["nav"] == 8.4121 and "strictly_comparable" not in r["verdict"]
 
 
 def test_observational_mutations_each_flip_to_conflict():
-    for mut, key in ((lambda o: o[1].update(nav=8.5, recent=[["2026-10-28", 8.5]]), "nav_value_differs"),
-                     (lambda o: o[2].update(nav_date="2026-10-27"), "nav_date_differs"),
+    for mut, key in ((lambda o: o[1].update(nav=8.5, recent=[["2026-10-28", 8.5]]), "nav_value_differs_same_date"),
                      (lambda o: o[1].update(fund_name="別的基金"), "fund_name_differs")):
         obs = _trio()
         mut(obs)
@@ -342,7 +341,26 @@ def test_end_to_end_observational_and_no_currency_inference():
         return dict(status=200, content_type="text/html", latency_ms=1.0, bytes=len(body), body=body.encode(), error=None)
     r = _run(get)
     obs = r["summary"]["TLZF9"]["observational"]
-    assert obs["verdict"] == "strong_observational_evidence" and obs["currency_evidence"]["platform_pages_currency_stated"] is False
+    assert obs["verdict"] == "observational_consistent_day" and obs["currency_evidence"]["platform_pages_currency_stated"] is False
     assert r["summary"]["ACDD01"]["verdict"] == "baseline_verified"
     assert r["product_mapping"]["mapping_verified_against_moneydj"] is None
     assert not any("ACDD01" in c["a"] + c["b"] for c in r["comparisons"])
+
+
+def test_date_lag_only_is_date_anomaly_not_conflict():
+    obs = _trio()
+    obs[2].update(nav_date="2026-10-27", recent=[["2026-10-27", 8.4121]])
+    r = P.observational_assessment(obs)
+    assert r["verdict"] == "date_anomaly" and not r["differences"] and r["date_anomaly"].startswith("nav_date_differs")
+    obs[2].update(nav=8.0)   # 不同日、不同值：仍只是日期異常（同日沒有值不一致）
+    assert P.observational_assessment(obs)["verdict"] == "date_anomaly"
+
+
+def test_name_evidence_states_platform_names_missing_and_never_claims_consistent():
+    r = P.observational_assessment(_trio())
+    ne = r["name_evidence"]
+    assert ne["platform_names_stated"] is False and "base page only" in ne["note"] and "base page only" in r["detail"]
+    obs = _trio()
+    for o in obs[1:]:
+        o.update(fund_name="某基金", fund_name_source="platform_page")
+    assert P.observational_assessment(obs)["name_evidence"]["platform_names_stated"] is True

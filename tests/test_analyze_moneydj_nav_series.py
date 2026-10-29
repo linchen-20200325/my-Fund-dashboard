@@ -21,7 +21,7 @@ _URL = {"TLZF9": "https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=TLZF9",
 def _o(inp, date, nav, name="某基金", kind=None, transport="direct", ccy=None):
     kind = kind or ("prod_nav30" if inp == "TLZF9" else "platform_wb")
     return {"input": inp, "base": "TLZF9", "kind": kind, "transport": transport, "parse_status": "ok", "http_status": 200,
-            "nav": nav, "nav_date": date, "recent": [[date, nav]], "fund_name": name, "currency": ccy,
+            "nav": nav, "nav_date": date, "recent": [[date, nav]], "fund_name": name, "fund_name_source": "basic_info_url:u", "currency": ccy,
             "currency_source": "basic_info_url:u" if ccy else None, "url": _URL[inp], "raw": {"snippet_text": "x"}}
 
 
@@ -88,9 +88,21 @@ def test_fund_name_conflict_detected(tmp_path):
     assert res["classification"] == "conflict_found" and res["date_conflicts"][0]["name_conflict"] is True
 
 
-def test_run_level_date_lag_is_conflict(tmp_path):
-    res, _ = _run(tmp_path, [("r1", _day("2026-10-28", **{"TLZF9-24A7": {"nav_date": "2026-10-27", "recent": [["2026-10-27", 8.4121]]}}))])
-    assert res["classification"] == "conflict_found" and res["run_level_conflicts"] == ["r1"]
+def test_publication_lag_is_date_anomaly_not_conflict_and_excluded_from_count(tmp_path):
+    lag = _day("2026-10-28", **{"TLZF9-24A7": {"nav_date": "2026-10-27", "recent": [["2026-10-27", 8.4121]]}})
+    runs = [("r1", lag), ("r2", _day("2026-10-29")), ("r3", _day("2026-10-30")), ("r4", _day("2026-10-31"))]
+    res, _ = _run(tmp_path, runs)
+    assert res["classification"] == "strong_observational_evidence_same_series" and res["run_level_conflicts"] == []
+    assert res["date_anomalies"][0]["run"] == "r1" and res["reportable"] is True
+    assert "2026-10-28" not in res["consistent_dates"] and res["consistent_dates"] == ["2026-10-29", "2026-10-30", "2026-10-31"]
+    only, _ = _run(tmp_path / "b", [("r1", lag)])
+    assert only["classification"] == "insufficient_days"
+
+
+def test_name_evidence_surfaced_per_run(tmp_path):
+    res, _ = _run(tmp_path, [("r1", _day("2026-10-28"))])
+    assert res["runs"][0]["name_evidence"]["platform_names_stated"] is False
+    assert res["runs"][0]["observational"] == "observational_consistent_day"
 
 
 def test_blocked_when_no_nav_anywhere(tmp_path):

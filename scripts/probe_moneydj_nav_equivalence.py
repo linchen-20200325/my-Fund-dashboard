@@ -3,7 +3,8 @@
 
 客戶裁示（`DEC-2026-10-29-02`，逐字：`docs/evidence/decisions/2026-10-29_dg2_nav_probe_ruling.md`）採方案 A：
 對 `TLZF9`／`TLZF9-AL001`／`TLZF9-24A7`／`ACDD01`／`ACDD01-EQTAL005` 取 MoneyDJ 頁面實際 NAV，
-判斷「通路後綴是否改變 fund NAV」。**本檔只蒐證**：不改 resolver、不改 NAV precedence、不寫 Sheet／nav_history／cache、
+判斷「通路後綴是否改變 fund NAV」。（v1.0 的原始框架；其中 `ACDD01-EQTAL005` 的 NAV 等價題已於 2026-10-29
+`DEC-2026-10-29-03` 改解讀為商品對應問題，現行語意見下方「v1.1」一節。）**本檔只蒐證**：不改 resolver、不改 NAV precedence、不寫 Sheet／nav_history／cache、
 不啟用 DG-2 shadow flag；不因探測成功就把任何 MoneyDJ URL 升格為 production source。
 
 ## 做什麼
@@ -25,7 +26,7 @@
 
 ## 2026-10-29 最終整合裁示後的解讀（v1.1）
 
-- TLZF9 家族：保留上面的 strict 規則（幣別需雙方明示），**另加**並列的 `observational`（`strong_observational_evidence`／`conflict`／`incomplete`），
+- TLZF9 家族：保留上面的 strict 規則（幣別需雙方明示），**另加**並列的 `observational`（`observational_consistent_day`／`date_anomaly`／`conflict`／`incomplete`），
   幣別證據分兩欄記錄（`base_page_reports`、`platform_pages_currency_stated`），**不推定平台頁幣別**。
 - ACDD01：以 MoneyDJ 基本基金頁為 baseline（`baseline_verified`／`baseline_failed`）；`EQTAL005` 是保險商品代碼，
   只在 `product_mapping` 區回報（來源＝客戶確認，`mapping_verified_against_moneydj` 預設 None），`ACDD01-EQTAL005` 頁面只當原始觀測、不進 verdict。
@@ -86,7 +87,9 @@ TRANSPORTS = ("direct", "nas_proxy")
 
 V_CONSISTENT, V_NOT_COMPARABLE, V_CONFLICT, V_BLOCKED = "consistent", "not_comparable", "conflict", "blocked"
 # 觀察性裁定（與上面的 strict 規則並列、明確區分；不是 strictly_comparable）
-V_STRONG_OBS, V_OBS_CONFLICT, V_OBS_INCOMPLETE = "strong_observational_evidence", "conflict", "incomplete"
+# 單日 run 的標籤刻意不叫 strong：多日才有 `strong_observational_evidence_same_series`（analyzer 的分類）
+V_STRONG_OBS, V_OBS_CONFLICT, V_OBS_INCOMPLETE = "observational_consistent_day", "conflict", "incomplete"
+V_OBS_DATE_ANOMALY = "date_anomaly"   # 各輸入最新 NAV 日不同（可能是發布延遲）；不是 NAV／名稱 conflict
 V_BASELINE_VERIFIED, V_BASELINE_FAILED = "baseline_verified", "baseline_failed"
 CMP_CONSISTENT, CMP_NOT_COMPARABLE, CMP_CONFLICT = "consistent", "not_comparable", "conflict"
 UNKNOWN = "unknown"
@@ -243,8 +246,9 @@ def observational_assessment(observations: list, inputs: tuple = FAMILIES["TLZF9
 
     base 輸入（prod 頁）與其餘每個平台輸入（platform_* 頁；prod 頁對帶後綴輸入可能只是回傳 base 頁，不算）
     的最新 NAV 日、NAV 值全部相同、且頁面自報基金名稱（有的話）一致、無 identity conflict →
-    `strong_observational_evidence`（**僅此一日**；跨日累積由 `scripts/analyze_moneydj_nav_series.py` 計不同 NAV 日）。
-    任一不同 → `conflict`（附候選原因，不下「不同基金」結論）；缺任一角色 → `incomplete`。
+    `observational_consistent_day`（**僅此一日**，不是 strong；跨日累積由 `scripts/analyze_moneydj_nav_series.py` 計不同 NAV 日）。
+    **同一 NAV 日**上 NAV 值或基金名稱不同 → `conflict`（附候選原因，不下「不同基金」結論）；僅各輸入最新 NAV 日不同 → `date_anomaly`（疑似發布延遲，可回報、不算 conflict）；缺任一角色 → `incomplete`。
+    基金名稱：平台 NAV 頁通常不載明名稱，`name_evidence` 如實記 `platform_names_stated`；未載明時名稱一致性只代表 base 頁，不算平台佐證。
     **永不**輸出 strictly_comparable；**不推定幣別**：`currency_evidence` 把兩件事分開記，不合併。
     """
     base_in, plat_ins = inputs[0], inputs[1:]
@@ -260,7 +264,12 @@ def observational_assessment(observations: list, inputs: tuple = FAMILIES["TLZF9
                                  "platform_pages_currency_stated": bool(plat_stated),
                                  "currency_inferred": False,
                                  "note": "missing ≠ known：平台頁未明示幣別時不以 base 頁幣別補入，兩欄各自獨立"},
-           "points": [], "differences": [], "candidate_causes": [], "missing_roles": []}
+           "name_evidence": None, "points": [], "differences": [], "candidate_causes": [], "missing_roles": []}
+    plat_names = [o.get("fund_name") for o in plat_obs
+                  if o.get("fund_name") and not str(o.get("fund_name_source") or "").startswith("basic_info_url")]
+    res["name_evidence"] = {"platform_names_stated": bool(plat_names),
+                            "note": ("平台頁亦載明基金名稱，已與 base 頁比對" if plat_names else
+                                     "base page only / platform names not stated：名稱一致性不構成平台頁佐證（缺值不當作一致）")}
     res["missing_roles"] = [k for k, v in roles.items() if not v]
     all_obs = [o for v in roles.values() for o in v]
     res["points"] = sorted({(o["input"], o["kind"], o["transport"], o["nav_date"], o["nav"]) for o in all_obs})
@@ -268,15 +277,18 @@ def observational_assessment(observations: list, inputs: tuple = FAMILIES["TLZF9
     if res["missing_roles"]:
         return res
     dates = {o["nav_date"] for o in all_obs}
+    same_date_nav_differs = False
+    for d in dates:
+        ns = [o["nav"] for o in all_obs if o["nav_date"] == d]
+        same_date_nav_differs = same_date_nav_differs or any(not math.isclose(ns[0], x, rel_tol=1e-9, abs_tol=1e-12) for x in ns[1:])
     navs = sorted({o["nav"] for o in all_obs})
-    nav_differs = any(not math.isclose(navs[0], x, rel_tol=1e-9, abs_tol=1e-12) for x in navs[1:])
     names = {str(o["fund_name"]).strip() for o in all_obs if o.get("fund_name")}
-    if len(dates) > 1:
-        res["differences"].append(f"nav_date_differs:{sorted(dates)}")
-    if nav_differs:
-        res["differences"].append(f"nav_value_differs:{navs}")
+    if same_date_nav_differs:
+        res["differences"].append(f"nav_value_differs_same_date:{navs}")
     if len(names) > 1:
         res["differences"].append(f"fund_name_differs:{sorted(names)}")
+    if len(dates) > 1:
+        res["date_anomaly"] = f"nav_date_differs:{sorted(dates)}"
     if res["differences"]:
         res["verdict"] = V_OBS_CONFLICT
         a = roles[base_in][0]
@@ -284,8 +296,13 @@ def observational_assessment(observations: list, inputs: tuple = FAMILIES["TLZF9
         res["candidate_causes"] = candidate_causes(a, b, a["nav_date"] if a["nav_date"] == b["nav_date"] else None)
         res["conclusion"] = "conflict_UNVERIFIED（不得據此判定為不同基金）"
         return res
+    if len(dates) > 1:
+        res["verdict"] = V_OBS_DATE_ANOMALY
+        res["detail"] = "各輸入最新 NAV 日不同（疑似發布延遲，UNVERIFIED）；不算 conflict，也不計入一致日"
+        return res
     res["verdict"] = V_STRONG_OBS
     res["nav_date"], res["nav"] = next(iter(dates)), navs[0]
+    res["detail"] = "NAV 日與 NAV 值全一致；" + res["name_evidence"]["note"]
     return res
 
 

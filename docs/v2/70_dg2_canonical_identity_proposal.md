@@ -334,7 +334,7 @@ hook 只拿到字串串列，`resolve_full_keys` 的呼叫端來源不一（讀�
 - **三層模型**：Fund（MoneyDJ 基本基金碼；Sheet「基金代號」欄只限此碼，違反標 `sheet_code_contract_violation`、原值保留）／Insurance Product-Channel（如 `EQTAL005`，不是 share class、不是另一檔基金、不是另一條 NAV 序列）／Holding（同一基金可有多張保單與多筆持倉，基金身份收斂不得合併持倉）。Identity、NAV、Product Mapping、Holding 四種 resolver 不得混用。
 - **現況對應（不改 production）**：resolver 現有欄位 `platform_suffix`／`channel_code` 暫時承載「商品／通路代碼」概念；專用 `insurance_product_code` 欄位是未來工作，只要 canonical contract 不變就不需要 Decision Gate。
 - **ACDD01 / EQTAL005**：`ACDD01` NAV 以 MoneyDJ 基本基金頁為 baseline（客戶提供 `https://m.moneydj.com/a1.aspx?a=acdd01`）；`EQTAL005 → ACDD01` 是商品對應，來源＝客戶確認（`customer_confirmed_2026-10-29`），probe 報告 `product_mapping.mapping_verified_against_moneydj` 預設 `null`（UNVERIFIED），只有請求回來的頁面真的出現該連結才改 `true`。
-- **TLZF9 標示**：三頁同日同 NAV 是 FACT；平台頁未明示幣別 → 只記 `strong_observational_evidence`，不是 strictly comparable；「base page reports USD」與「platform page currency not stated」兩欄分開記，不合併、不補 USD。
+- **TLZF9 標示**：三頁同日同 NAV 是 FACT；平台頁未明示幣別 → 單日 run 只記 `observational_consistent_day`，≥3 個不同 NAV 日一致後才由 analyzer 分類為 `strong_observational_evidence_same_series`，不是 strictly comparable；「base page reports USD」與「platform page currency not stated」兩欄分開記，不合併、不補 USD。
 - **多日計畫**：既有 workflow 加排程（`17 13 * * 1-5`），累積 3～5 個**不同交易日**；`scripts/analyze_moneydj_nav_series.py` 計不同 NAV 日（非 run 數）並分類 `insufficient_days`／`strong_observational_evidence_same_series`／`conflict_found`／`blocked`。結果只留在 `probe/moneydj-nav-results`，不每日開 PR 或改 HANDOFF／BACKLOG／DECISIONS。
 - **Shadow flag 維持 OFF，提 Decision Gate 前置**：(1) TLZF9 多日 probe 完成；(2) 無 NAV conflict；(3) resolver identity 穩定；(4) product／fund／holding 分層完成。dashed key cache 備援不新增；FundClear 獨立 namespace、ISIN 非必要。
 - 單組寫成，未經第二組獨立驗證。

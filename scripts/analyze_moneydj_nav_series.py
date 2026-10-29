@@ -11,9 +11,12 @@
   （v1.0 舊報告也能分析；單一邏輯，不在此另寫第二套）。
 * 最終分類 `classification` ∈ {insufficient_days, strong_observational_evidence_same_series, conflict_found, blocked}：
   - `blocked`：沒有任何 run 取得可解析的 NAV；
-  - `conflict_found`：任一 run 的觀察性裁定為 conflict，或任一 NAV 日上輸入間 NAV／基金名稱不一致（優先於下兩者）；
+  - `conflict_found`：**同一 NAV 日**上輸入間 NAV 值或基金名稱不一致（含任一 run 的觀察性裁定為 conflict；優先於下兩者）；
+    各輸入最新 NAV 日不同（疑似發布延遲）**不是** conflict：記為 `date_anomalies`（可回報項），該 run 涉及的 NAV 日不計入一致日；
   - `strong_observational_evidence_same_series`：三輸入 NAV 日、NAV 值、基金名稱全一致的**不同 NAV 日 ≥ 3**，且無 conflict；
   - `insufficient_days`：其餘（含 <3 個一致日）。
+* 名稱證據：平台 NAV 頁通常不載明基金名稱，`name_evidence.platform_names_stated` 如實帶出；缺值不當作「一致」證據。
+* `date_matrix` 的儲存格可能合併來自**不同 run** 的輸入（同一 NAV 日、各輸入各取其最新值）——可接受，此處明示。
 * **永不輸出 strictly comparable；不推定平台頁幣別**（`currency_evidence` 兩欄原樣帶出，不合併）。
 """
 from __future__ import annotations
@@ -112,9 +115,13 @@ def analyze(reports: list) -> dict:
                                                                      "currency_evidence": None}
         runs.append({"run": rep["_stamp"], "generated_at_utc": rep.get("generated_at_utc"),
                      "executed_sha": rep.get("executed_sha"), "observational": obsv["verdict"],
-                     "differences": obsv.get("differences", []), "currency_evidence": obsv.get("currency_evidence"),
+                     "differences": obsv.get("differences", []), "date_anomaly": obsv.get("date_anomaly"),
+                     "name_evidence": obsv.get("name_evidence"), "currency_evidence": obsv.get("currency_evidence"),
                      "baseline_ACDD01": P.baseline_assessment(obs, blocked=blocked)["verdict"],
                      "product_mapping_status": P.product_mapping_section(obs)["status"]})
+    anomaly_dates = {d for r in runs if r["date_anomaly"] for d in
+                     {pt["date"] for rep in reports if rep["_stamp"] == r["run"] for pt in _latest_points(rep)}}
+    date_anomalies = [{"run": r["run"], "detail": r["date_anomaly"]} for r in runs if r["date_anomaly"]]
     matrix, conflicts, consistent_dates = [], [], []
     for d in sorted(by_date):
         cells, navs, names = {}, [], set()
@@ -132,6 +139,8 @@ def analyze(reports: list) -> dict:
                               "navs": sorted(set(navs)), "names": sorted(names)})
         elif missing:
             status = "partial"
+        elif d in anomaly_dates:
+            status = "date_anomaly"
         else:
             status = "all_three_equal"
             consistent_dates.append(d)
@@ -149,7 +158,8 @@ def analyze(reports: list) -> dict:
     return {"runs_count": len(runs), "distinct_nav_dates": len(by_date),
             "distinct_consistent_nav_dates": len(consistent_dates), "consistent_dates": consistent_dates,
             "min_required_dates": MIN_DISTINCT_CONSISTENT_DATES, "date_matrix": matrix, "date_conflicts": conflicts,
-            "run_level_conflicts": run_conflicts, "runs": runs,
+            "run_level_conflicts": run_conflicts, "date_anomalies": date_anomalies, "reportable": bool(conflicts or run_conflicts or date_anomalies),
+            "runs": runs,
             "acdd01_baseline_per_run": {r["run"]: r["baseline_ACDD01"] for r in runs},
             "eqtal005_mapping_status": mapping, "classification": cls,
             "note": "數不同 NAV 日而非 run 次數；不推定平台頁幣別；永不輸出 strictly comparable"}
@@ -174,6 +184,8 @@ def render_markdown(res: dict, skipped: list) -> str:
     L += ["", "## 逐 run", "", "| run | 觀察性裁定 | ACDD01 baseline | 差異 | currency_evidence（兩欄分開，不合併） |", "|---|---|---|---|---|"]
     for r in res["runs"]:
         L.append(f"| {r['run']} | {r['observational']} | {r['baseline_ACDD01']} | {r['differences'] or '—'} | {r['currency_evidence']} |")
+    if res["date_anomalies"]:
+        L += ["", "## Date anomalies（疑似發布延遲，可回報；不是 conflict）", f"- {res['date_anomalies']}"]
     if res["date_conflicts"] or res["run_level_conflicts"]:
         L += ["", "## Conflicts", f"- NAV 日層級：{res['date_conflicts']}", f"- run 層級：{res['run_level_conflicts']}"]
     return "\n".join(L) + "\n"
