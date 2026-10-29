@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
+
 # ── Feature flag（預設關）────────────────────────────────────────────────
 # 關閉時 production 行為逐位元組不變：`services/v2_tables/fund_keys.py::resolve_full_keys`
 # 唯一的 shadow hook 連 import 都不做（測試：`tests/test_fund_identity_dg2.py` flag-off 測試）。
@@ -28,6 +30,37 @@ STATUS_EXCEPTION: str = "exception_distinct_series_needs_decision"  # 例外登�
 STATUS_NAMESPACE_UNKNOWN: str = "namespace_unknown_suffix_not_stripped"
 STATUS_OUT_OF_SCOPE_NAMESPACE: str = "out_of_scope_namespace"  # 呼叫端明示非 MoneyDJ 命名空間（例 fundclear）
 NAMESPACE_MONEYDJ: str = "moneydj"  # 「第一個 - 前＝基金碼」只在此命名空間成立
+# ── 2026-10-29 客戶最終裁示 `DEC-2026-10-29-01`（逐字：`docs/evidence/decisions/2026-10-29_dg2_final_ruling.md`）──
+# MoneyDJ 命名空間內，後綴也只在**已驗證 mapping** 命中時才剝（裁示第 4 項第 3、4 點）：
+# 有 MoneyDJ 證據但後綴不在通路表／客戶確認表 → 不剝、不合併。
+STATUS_SUFFIX_UNVERIFIED: str = "moneydj_suffix_unverified_not_stripped"
+# 呼叫端宣告輸入取自 Google Sheet「基金代號」欄（裁示第 1、4 項）：命名空間固定 MoneyDJ，值須為基本代碼。
+# 只適用於該欄；不得推廣到其他 Sheet、其他欄或外部 API 的 code。
+INPUT_SOURCE_SHEET_FUND_CODE: str = "sheet_fund_code_column"
+INPUT_SOURCE_NAMESPACES = MappingProxyType({INPUT_SOURCE_SHEET_FUND_CODE: NAMESPACE_MONEYDJ})
+# Sheet 基金代號欄的值不符基本代碼契約（帶 `-`、網址、格式不符…）→ 原值保留、不剝不截不改寫、只標記。
+STATUS_SHEET_CONTRACT_VIOLATION: str = "sheet_code_contract_violation"
+
+# ── 已驗證後綴 mapping 的出處標記 ──
+SUFFIX_PROVENANCE_CHANNEL_TABLE: str = "channel_table"  # 注入的通路表（shadow 綁定 L1 `_BANK_PLATFORM_CODES`）
+SUFFIX_PROVENANCE_CUSTOMER_2026_10_29: str = "customer_confirmed_2026-10-29"
+NAV_EQUIVALENCE_UNVERIFIED: str = "UNVERIFIED"
+# 客戶確認的業務語意（裁示第 3 項）：完整代碼 → 基本代碼。不含通路名稱（客戶未給，不自編）。
+# NAV 等價性未經證據（container 無法連 MoneyDJ，2026-10-29）；不得當成「同一 NAV series」的證據。
+# `TLZF9-AL001`／`TLZF9-24A7` 已在通路表內，不重複列。
+CUSTOMER_CONFIRMED_SUFFIXES = MappingProxyType({
+    ("ACDD01", "EQTAL005"): MappingProxyType({
+        "provenance": SUFFIX_PROVENANCE_CUSTOMER_2026_10_29,
+        "decision": "DEC-2026-10-29-01",
+        "nav_equivalence": NAV_EQUIVALENCE_UNVERIFIED,
+    }),
+})
+
+# ── MoneyDJ 頁型（裁示第 5 項）──
+# 只有**網址明示**的頁型才記；裸碼一律 Unknown（前綴／對照表推斷不可靠，見 `docs/v2/70` 第 15 節）。
+# 值是 MoneyDJ 頁面類別（境內／境外頁），不是基金屬性的證明。其他頁型（wb01／wr01／a1_mobile…）→ Unknown。
+PAGE_TYPE_SOURCE_URL: str = "url"
+MONEYDJ_PAGE_MARKET = MappingProxyType({"yp010000": "domestic", "yp010001": "offshore"})
 
 # ── 外部候選驗證（裁示第 10 項）───────────────────────────────────────────
 CANDIDATE_ACCEPTED: str = "accepted"  # base_fund_code 或 isin 已確認相符，且沒有衝突
