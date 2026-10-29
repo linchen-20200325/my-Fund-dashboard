@@ -1749,6 +1749,20 @@
 | supersedes／superseded by | supersedes：`docs/v2/70` 16.1 把 `ACDD01-EQTAL005` 視為 NAV 等價題的提法（第 17 節加註，不改歷史）；`-02` 第 (1) 項中 ACDD01 家族的比較目標。承接 `DEC-2026-10-29-01`、`-02`。superseded by：無。 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-29-04｜客戶裁示：Context Compaction Gate（永久規則）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-29 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-29_context_compaction_gate.md`） |
+| 決策內容摘要 | **客戶裁示**：專案 AI 主動管理對話 context，符合六個觸發條件任一（多個完成 Batch／PR／Decision、階段切換、反覆讀大量 diff／CI／audit／HANDOFF、出現重複查證或忘記裁示、context 使用量明顯偏高、Model／Effort 升級前）先 compact 再繼續；只保留現在仍影響下一步的資訊，已寫入 GitHub 的過程一律可丟棄、需要時 targeted fetch；GitHub 是長期記憶。compaction 屬內部維護，僅在 GitHub 與既有記憶衝突、遺失必要裁示、需重新確認客戶決策時回報。低風險治理更新，Sonnet 5.5／Medium。 |
+| 理由／背景 | 客戶原話：「GitHub 是長期記憶。」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-29_context_compaction_gate.md`；落地：`PROJECT_RULES.md` 11.1 〈Context Compaction Gate〉小節、`docs/HANDOFF.md` context-efficiency 指標行。 |
+| 影響範圍 | 只動治理文件；承接並延伸 `DEC-2026-10-28-02`（Context Efficiency），不新增規則檔；不弱化第 3.1／3.2 揭露義務與 Stop／Decision Gate。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。延伸 `DEC-2026-10-28-02`。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1900,3 +1914,4 @@
 - 第四節 `DEC-2026-10-29-01`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_dg2_final_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與「只剝已驗證 mapping 命中的後綴」等讀法為執行組讀法；由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-29-02`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_dg2_nav_probe_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與影響範圍欄對 BL-0521 (c) 的對應為執行組讀法；由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-29-03`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_dg2_fund_product_holding_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要分段為執行組讀法；由執行組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-29-04`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_context_compaction_gate.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；由執行組單組寫成，未經第二組驗證。
