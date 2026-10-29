@@ -151,7 +151,10 @@ def test_end_to_end_consistent_and_resolver_evidence():
     r = _run(_ok)
     assert [i["original_input"] for i in r["inputs"]] == list(P.INPUTS)
     assert {i["original_input"]: i["base_fund_code"] for i in r["inputs"]}["TLZF9-24A7"] == "TLZF9"
-    assert r["summary"]["TLZF9"]["verdict"] == "consistent" and r["summary"]["ACDD01"]["verdict"] == "consistent"
+    assert r["summary"]["TLZF9"]["verdict"] == "consistent" and r["summary"]["ACDD01"]["verdict"] == "not_comparable"
+    assert "only prod pages compared" in r["summary"]["ACDD01"]["detail"]   # 帶後綴者無 platform 頁 → 不算覆蓋
+    o = next(o for o in r["observations"] if o["input"] == "TLZF9-AL001" and o["kind"] == "platform_wb")
+    assert o["currency_source"].startswith("basic_info_url:") and o["fund_name_source"].startswith("basic_info_url:")
     kinds = {o["kind"] for o in r["observations"] if o["input"] == "TLZF9-AL001"}
     assert {"prod_nav30", "platform_hist", "platform_wb", "basic_info"} <= kinds
     assert all(o["transport"] == "direct" for o in r["observations"]) and r["transports"]["nas_proxy"] == "proxy_not_configured"
@@ -217,3 +220,44 @@ def test_import_guard_no_writer_modules():
     assert not [m for m in mods if any(b in m for b in banned)], mods
     text = (_ROOT / "scripts" / "probe_moneydj_nav_equivalence.py").read_text(encoding="utf-8")
     assert "requests.post" not in text and ".post(" not in text and ".put(" not in text and ".delete(" not in text
+
+
+# ── 審查回修：覆蓋判定、共同日、旗標 ──
+def test_dashed_input_needs_platform_page_to_count_as_covered():
+    g, _ = _grp([_obs(), _obs("TLZF9-AL001", "prod_nav30")])
+    assert g["verdict"] == "not_comparable" and "only prod pages compared" in g["detail"]
+    assert "prod_nav30~prod_nav30" in g["detail"]
+    g2, _ = _grp([_obs(), _obs("TLZF9-AL001", "platform_wb")])
+    assert g2["verdict"] == "consistent" and "prod_nav30~platform_wb" in g2["detail"]
+
+
+def test_three_input_group_partial_not_comparable():
+    ins = ("TLZF9", "TLZF9-AL001", "TLZF9-24A7")
+    g, _ = _grp([_obs(), _obs("TLZF9-AL001", "platform_wb"), _obs("TLZF9-24A7", "platform_wb", status="no_nav_table")], ins)
+    assert g["verdict"] == "not_comparable" and g["uncovered_inputs"] == ["TLZF9-24A7"]   # 退回 `if cons` 會變 consistent
+    g2, _ = _grp([_obs(), _obs("TLZF9-AL001", "platform_wb"), _obs("TLZF9-24A7", "platform_wb")], ins)
+    assert g2["verdict"] == "consistent"
+
+
+def test_common_date_pick_is_latest_common():
+    a = _obs(points=(("2026-10-26", 9.0), ("2026-10-27", 10.1), ("2026-10-28", 10.2)))
+    b = _obs("X", "platform_wb", points=(("2026-10-26", 9.5), ("2026-10-27", 10.1)))
+    r = P.compare_observations(a, b)
+    assert r["compared_date"] == "2026-10-27" and r["status"] == "consistent"   # 取最舊共同日(10-26)會變 conflict
+
+
+def test_fund_name_mismatch_flag_and_same_input_conflicts_surface():
+    a, b = _obs(), _obs("TLZF9-AL001", "platform_wb")
+    a["fund_name"], b["fund_name"] = "甲基金", "乙基金"
+    g, comps = _grp([a, b])
+    assert comps[0]["fund_name_mismatch"] is True and g["fund_name_mismatch_pairs"] and g["verdict"] == "consistent"
+    c = _obs("TLZF9", "prod_nav30", "nas_proxy", points=(("2026-10-27", 10.1), ("2026-10-28", 99.0)))
+    g2, _ = _grp([_obs(), c, _obs("TLZF9-AL001", "platform_wb")])
+    assert g2["same_input_conflicts"] and "same_input_conflicts" in g2["detail"]
+
+
+def test_non200_keeps_masked_snippet():
+    o = P.build_observation(input_code="X", base="X", kind="prod_nav30", transport="direct", url="u",
+                            resp=dict(status=403, content_type="text/html", body="<html>Forbidden 拒絕</html>".encode(), error=None),
+                            parser_version="v")
+    assert o["parse_status"] == "http_failed" and "Forbidden" in o["error_snippet"]

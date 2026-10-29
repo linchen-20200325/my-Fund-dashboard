@@ -136,7 +136,11 @@ def compare_observations(a: dict, b: dict) -> dict:
            "b": f"{b.get('input')}|{b.get('kind')}|{b.get('transport')}",
            "scope": "same_input" if a.get("input") == b.get("input") else "cross_input",
            "status": CMP_NOT_COMPARABLE, "reasons": [], "compared_date": None,
-           "nav_a": None, "nav_b": None, "share_class": UNKNOWN, "candidate_causes": []}
+           "nav_a": None, "nav_b": None, "share_class": UNKNOWN, "candidate_causes": [],
+           "kind_a": a.get("kind"), "kind_b": b.get("kind"),
+           # 頁面自報基金名稱不同 → 旗標（僅提示，不是「不同基金」的結論）
+           "fund_name_mismatch": bool(a.get("fund_name") and b.get("fund_name")
+                                      and str(a["fund_name"]).strip() != str(b["fund_name"]).strip())}
     for x in (a, b):
         if x.get("parse_status") != "ok":
             res["reasons"].append(f"parse_failure:{x.get('input')}|{x.get('kind')}|{x.get('transport')}:{x.get('parse_status')}")
@@ -179,23 +183,39 @@ def summarize_group(inputs: tuple, observations: list, comparisons: list, blocke
                 "supports_suffix_does_not_change_nav": None}
     cross = [c for c in comparisons if c["scope"] == "cross_input"
              and c["a"].split("|")[0] in ins and c["b"].split("|")[0] in ins]
+    flags = {"fund_name_mismatch_pairs": [f'{c["a"]} ~ {c["b"]}' for c in cross if c.get("fund_name_mismatch")],
+             "same_input_conflicts": [f'{c["a"]} ~ {c["b"]}' for c in comparisons if c["scope"] == "same_input"
+                                      and c["status"] == CMP_CONFLICT and c["a"].split("|")[0] in ins]}
     conflicts = [c for c in cross if c["status"] == CMP_CONFLICT]
     cons = [c for c in cross if c["status"] == CMP_CONSISTENT]
-    covered = sorted({c[s].split("|")[0] for c in cons for s in ("a", "b")})
+
+    def _valid(c):   # 帶後綴的輸入，其一側必須是 platform_* 頁；否則 prod 頁可能只是回傳 base 基金頁（tautology）
+        for side in ("a", "b"):
+            inp, kind = c[side].split("|")[:2]
+            if "-" in inp and not kind.startswith("platform_"):
+                return False
+        return True
+    valid = [c for c in cons if _valid(c)]
+    kinds = sorted({f'{c["kind_a"]}~{c["kind_b"]}' for c in cons})
+    covered = sorted({c[s].split("|")[0] for c in valid for s in ("a", "b")})
     uncovered = sorted(ins - set(covered))
+    extra = f"；一致比較的頁型配對：{kinds}" + (f"；旗標：{ {k: v for k, v in flags.items() if v} }" if any(flags.values()) else "")
+    base = {"covered_inputs": covered, "uncovered_inputs": uncovered, **flags}
     if conflicts:
-        return {"verdict": V_CONFLICT, "detail": f"{len(conflicts)} 組可比條件下 NAV 不一致（source conflict／UNVERIFIED，非不同基金結論）",
-                "covered_inputs": covered, "uncovered_inputs": uncovered,
-                "supports_suffix_does_not_change_nav": False}
-    if cons and not uncovered:
-        return {"verdict": V_CONSISTENT, "detail": f"{len(cons)} 組可比比較全部一致，所有輸入皆被覆蓋",
-                "covered_inputs": covered, "uncovered_inputs": [],
-                "supports_suffix_does_not_change_nav": True}
+        return {"verdict": V_CONFLICT, "detail": f"{len(conflicts)} 組可比條件下 NAV 不一致（source conflict／UNVERIFIED，非不同基金結論）" + extra,
+                **base, "supports_suffix_does_not_change_nav": False}
+    if valid and not uncovered:
+        return {"verdict": V_CONSISTENT, "detail": f"{len(valid)} 組可比比較全部一致，所有輸入皆被覆蓋（帶後綴者皆有 platform 頁佐證）" + extra,
+                **base, "supports_suffix_does_not_change_nav": True}
     reasons = sorted({r.split(":")[0].split("(")[0] for c in cross for r in c["reasons"]})
-    return {"verdict": V_NOT_COMPARABLE,
-            "detail": ("部分一致但未覆蓋全部輸入" if cons else "沒有任何可比的跨輸入比較") + f"；不可比原因：{reasons}",
-            "covered_inputs": covered, "uncovered_inputs": uncovered,
-            "supports_suffix_does_not_change_nav": None}
+    if cons and not valid:
+        why = "only prod pages compared（帶後綴輸入無 platform 頁佐證，一致可能只是同一 base 頁）"
+    elif valid:
+        why = "部分一致但未覆蓋全部輸入"
+    else:
+        why = "沒有任何可比的跨輸入比較"
+    return {"verdict": V_NOT_COMPARABLE, "detail": why + f"；不可比原因：{reasons}" + extra,
+            **base, "supports_suffix_does_not_change_nav": None}
 
 
 # ───────────────────────── 解析（借用 production 函式，唯讀） ─────────────────────────
@@ -247,14 +267,19 @@ def build_observation(*, input_code: str, base, kind: str, transport: str, url: 
            "http_status": resp.get("status"), "latency_ms": resp.get("latency_ms"),
            "error": resp.get("error"), "parse_status": "http_failed", "parser": parser_version,
            "fund_name": None, "nav": None, "nav_date": None, "currency": None, "source_timestamp": None,
+           "currency_source": None, "fund_name_source": None, "error_snippet": None,
            "recent": [], "raw": None}
     body = resp.get("body")
     if resp.get("status") != 200 or not body:
+        if body:   # 非 200：留一小段遮蔽後的純文字，利於判讀（不存 header／cookie）
+            txt = re.sub(r"<[^>]+>", " ", decode_body(body, resp.get("content_type")))
+            obs["error_snippet"] = mask_text(" ".join(txt.split())[:300], secret_literals())
         return obs
     html = decode_body(body, resp.get("content_type"))
     if kind == "basic_info":
         b = parse_basic_page(html)
         obs.update(fund_name=b["fund_name"], currency=b["currency"],
+                   currency_source="basic_info_url(self)", fund_name_source="basic_info_url(self)",
                    parse_status="ok" if b["fund_name"] else "no_name_table",
                    raw=raw_evidence(body, html, []))
         return obs
@@ -269,6 +294,7 @@ def build_observation(*, input_code: str, base, kind: str, transport: str, url: 
     if basic:
         obs["fund_name"] = basic.get("fund_name")
         obs["currency"] = basic.get("currency")
+        obs["currency_source"] = obs["fund_name_source"] = basic.get("url") and "basic_info_url"
     return obs
 
 
@@ -453,7 +479,7 @@ def run_probe(http_get: Callable, *, sleep: Callable = time.sleep, secrets: tupl
                     obs["url_note"] = note
                     report["observations"].append(obs)
                     if k == "basic_info" and obs["parse_status"] == "ok":
-                        basic = {"fund_name": obs["fund_name"], "currency": obs["currency"]}
+                        basic = {"fund_name": obs["fund_name"], "currency": obs["currency"], "url": u}
                         break
                     if k in ("prod_nav30", "prod_nav30_alt") and obs["parse_status"] == "ok":
                         nav_ok = True
@@ -462,6 +488,8 @@ def run_probe(http_get: Callable, *, sleep: Callable = time.sleep, secrets: tupl
                 for o in report["observations"]:
                     if o["input"] == inp and o["transport"] == transport and o["kind"] != "basic_info" and o["parse_status"] == "ok":
                         o["fund_name"], o["currency"] = basic["fund_name"], basic["currency"]
+                        o["currency_source"] = o["fund_name_source"] = f'basic_info_url:{basic["url"]}'
+
         if on_progress:
             on_progress(report)
     # 比較（只用 parse ok 的 NAV 觀測）
