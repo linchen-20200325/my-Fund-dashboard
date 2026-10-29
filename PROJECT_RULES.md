@@ -83,6 +83,8 @@
 | Cross-View Data Consistency Gate（同 canonical instrument＋metric＋as-of＋currency／share class ＝ 各 view 同一值；禁止各頁自選來源或平行計算；衝突不得靜默選一） | 第 13 節 13.3（`DEC-2026-10-28-01`） |
 | Anti-Bloat / Minimum Governance Overhead（最小充分 audit／PR／evidence、BACKLOG 不碎片化、完成後停止、少回報） | 第 13 節 13.4（`DEC-2026-10-28-04`） |
 | Context Efficiency 與 Context Compaction Gate（自動 compact 建議、最小必要讀取、frozen 44 局部讀取、compact 後恢復順序、compaction 六觸發／保留／可丟棄、GitHub = 長期記憶） | 第 11 節 11.1（`DEC-2026-10-28-02`、`DEC-2026-10-29-04`） |
+| Visual Fidelity Gate（功能測試／CI／QA 全綠 ≠ UI Stage 完成；UI PR 要有 production-like Cloud screenshot 正式確認，CI deterministic screenshot 只是自動安全網） | 第 7 節指標；本文 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九其九（`DEC-2026-10-29-05`） |
+| GitHub Durable Memory Contract（Conversation 不是 SSOT；Batch 結案前檢查五類文件同步；HANDOFF 只是索引） | 第 6 節 6.1.1 末尾指標（`DEC-2026-10-29-06`） |
 
 **Supersession hygiene（同裁示）**：(1) 舊內容保留歷史，不刪；(2) 被新裁示取代時，在舊內容就地標示「superseded by <DEC-ID>」；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只能指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（現行四份見 0.4）。
 
@@ -426,6 +428,7 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 1. **GitHub 是 Project Memory／SSOT**；聊天與模型記憶不是正式專案記憶。換 AI、換對話、聊天紀錄不完整或完全不可用，只要 repository 與正式紀錄仍在，新 AI 必須能重建現況並安全接手。
 2. **交接完成條件**：工作階段結束時，下一個 AI 只讀 GitHub（不看本次聊天）必須能判斷以下 7 項；任一無法判斷 → 該工作階段**不得視為完成交接**：(1) main／PR／CI 狀態；(2) 已完成什麼；(3) 未完成什麼；(4) 客戶正式裁示；(5) 現行 SSOT／資料口徑／架構；(6) blocker／Decision Gate；(7) 下一個唯一 handoff point。
 3. **併讀**：寫入位置依 6.1 第 2 點（四份既有文件，不另建新檔）；新裁示同批落盤依第 12 節 12.1；7 項的實況核對依第 2 節 GitHub-first verification（文件與 GitHub 實況不一致時以實況為準）。
+4. 📌 **2026-10-29 指標：GitHub Durable Memory Contract**（客戶，`DEC-2026-10-29-06`；逐字存檔 `docs/evidence/decisions/2026-10-29_presentation_contract_migration.md` 第三段圍欄第十二～十四節）。「Conversation 不是 SSOT、GitHub 是 durable memory」「新 session 只靠 GitHub 能完整恢復」已由本小節第 1、2 點與 12.1、12.2 涵蓋，不另立規則；**補一句**：完成任何 Batch 前，逐一檢查本批產生的新正式知識是否要同步到五類文件 —— `docs/DECISIONS.md`（裁示、supersede、amendment）、本檔（跨 Batch 永久治理）、正式 design／architecture spec（Presentation Contract、Visual Fidelity、Decision Digest、One AI Brain、IA／blueprint）、`docs/BACKLOG.md`（未完成、Gate、後續批）、`docs/HANDOFF.md`（main、已完成、未完成、唯一下一接手點）；先落 GitHub 再結案。**HANDOFF 只是接手索引**：Decision Digest schema、One AI Brain contract、UI hierarchy、Missing contract、Visual Fidelity rule 不得只寫在 HANDOFF，HANDOFF 只指向正式 SSOT（與 13.4 第 7 條同向）。
 
 #### 6.1.2 長期規則：Quota-safe Resume Checkpoint／中斷續接（客戶 2026-10-26 永久治理要求，`DEC-2026-10-26-02`）
 
@@ -458,6 +461,8 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 - 低風險變更可依既有分級縮小驗證範圍，但**不得虛構驗證**：沒跑的就寫沒跑。
 - 寫「完成」時必須能指出證據（SHA、PR、check-run、測試輸出）。
 - 未通過驗證禁報「完成」；不得把自己的結果寫成協作助手已複驗。
+
+**Visual Fidelity Gate（永久驗收規則；客戶 2026-10-29，`DEC-2026-10-29-05`）**：UI 變更的完成鏈另加 production-like screenshot 驗收。功能測試、CI、QA 全綠 ≠ UI Stage 完成；UI PR 要有桌機與 390px 的 screenshot（正式確認＝production-like Cloud screenshot；CI deterministic screenshot＝自動安全網，不取代正式確認），對照 `docs/design/vnext_visual_blueprint.md` 與最新正式 Presentation Contract；首屏結構、圖文比例、資訊密度、圖表尺寸、主次 hierarchy 明顯偏離或答不出三眼問題時，即使 CI 全綠也不得標 Stage complete；沒做正式確認的 UI PR 寫「Visual Fidelity Gate 未執行」，不寫通過。檢查項與每批驗收的本文在 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九其九，本節不複製。
 
 **既有錨點**：交接本 2026-10-08〈七、完成的定義〉（約 :4465-4466）；`PROCESS.md` §4（約 :92 起）、§7「交付報告內容」（約 :220）；`CLAUDE.md` v3 `04`（約 :1275）。
 
@@ -675,14 +680,14 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 
 **問：五年後即使資料源、AI 模型、OAuth 或前端框架換掉，哪些必須維持？答：**
 
-1. **五頁資訊架構與職責**：🌍 市場與趨勢、⚖️ 資產配置、💼 我的持股、🔍 找基金、⚙️ 設定（順序見 `DEC-2026-10-24-02`）。新功能優先歸入既有五頁，不輕易增第六頁；頁面名稱與主要責任應保持穩定；不以 API／資料源／模型限制或「程式比較好接」改造資訊架構。（→ **2026-10-27 指標**：此順序與五頁名稱已由客戶 `DEC-2026-10-27-02` 定為 `docs/v2/44_fund_ui_ssot.md` 的正式頁序與頁名，44 依該條有限解凍（只限頁序、頁名與 D1 導覽殼直接需要的條文／守衛，見 44 第七節第三小節之十七）；本小節首段「不解凍 44」指本小節自身不構成解凍授權，仍為真。🌍 後續內容見 `DEC-2026-10-27-03`）
+1. **五頁資訊架構與職責**：🌍 市場與趨勢、⚖️ 資產配置、💼 我的持股、🔍 找基金、⚙️ 設定（順序見 `DEC-2026-10-24-02`）。新功能優先歸入既有五頁，不輕易增第六頁；頁面名稱與主要責任應保持穩定；不以 API／資料源／模型限制或「程式比較好接」改造資訊架構。（→ **2026-10-27 指標**：此順序與五頁名稱已由客戶 `DEC-2026-10-27-02` 定為 `docs/v2/44_fund_ui_ssot.md` 的正式頁序與頁名，44 依該條有限解凍（只限頁序、頁名與 D1 導覽殼直接需要的條文／守衛，見 44 第七節第三小節之十七）；本小節首段「不解凍 44」指本小節自身不構成解凍授權，仍為真。🌍 後續內容見 `DEC-2026-10-27-03`）（→ **2026-10-29 指標**（客戶 Gate 1 方案 A，`DEC-2026-10-29-06`；有意識的政策變更，不是漏刪；本句原文不改）：⚖️ 資產配置併入「💼 我的資產」成為頁內區段，內容頁為 🌍 市場與趨勢、💼 我的資產、🔍 找基金、⚙️ 設定；🤖 AI 投資總結的入口形式待單一最小 Gate（BL-0526）。正式條文 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之二十。）
 2. **domain semantics、data contracts、user classifications、deterministic investment rules** 不隨技術元件更換而改；技術元件（Streamlit、Google Sheet、OAuth provider、外部 API、AI model、storage、前端框架）不是產品 SSOT。
 3. **Missing 語意**（已有，見第 13 節第 2～4 條）：Missing ≠ 0／False／HOLD／中性／正常／安全／未觸發；顏色不得是唯一語意載體。新來源給不出同語意時顯示 Missing／Unavailable，不用「差不多」的值替代。
 4. **可追溯性**：重要資料可追溯來源與時間（已有，第 13 節第 5 條）。
 5. **UI 不承載核心投資邏輯**：投資分類、風險判定、3-3-3、核心／衛星、配息／吃本金、趨勢判讀、配置規則、Missing 語意、Risk Cap 等必須在可測試的 domain／service／rule layer（明確輸入／輸出 contract），UI 只讀結果並呈現。
 6. **資料流**：Raw → Validate → Normalize → Domain／Rule → AI interpretation → UI。Raw 不直接當投資結論。
 7. **AI 非資料真相來源**（已有，第 13 節第 1 條、13.1）：AI 只讀已存在且可追溯的資料、解釋與整合 evidence；不補缺值、不猜數字、不改寫 deterministic rule 結果、不取代驗證或正式 investment semantics、不得因生成結果方便而修改資料層；換模型不改資料與 domain contract。
-8. **⚙️ 設定長期責任與 Active Sheet 原則**：帳號／OAuth、Active Sheet、連線狀態、sync／freshness、diagnostics 由 ⚙️ 管，其他頁不自管 Sheet／credential／connection。Active Sheet ＝ 持倉／保單 workbook；Pending ≠ Active；驗證成功才切換、失敗保留舊 Active；其他頁只消費結果，不猜、不 fallback 到別本（`DEC-2026-10-25-04` J-4）。
+8. **⚙️ 設定長期責任與 Active Sheet 原則**：帳號／OAuth、Active Sheet、連線狀態、sync／freshness、diagnostics 由 ⚙️ 管，其他頁不自管 Sheet／credential／connection。Active Sheet ＝ 持倉／保單 workbook；Pending ≠ Active；驗證成功才切換、失敗保留舊 Active；其他頁只消費結果，不猜、不 fallback 到別本（`DEC-2026-10-25-04` J-4）。（→ **2026-10-29 指標**（`DEC-2026-10-29-06`；有意識的政策變更，不是漏刪；本句原文不改）：只改**畫面入口位置** —— Google 帳號控制桌機固定左側、Sheet 選擇放在使用該 Sheet 的頁面、設定頁只留低頻全域功能；Active Sheet 的狀態語意（Pending ≠ Active、驗證成功才切換、失敗保留舊 Active、不猜、不 fallback）與單一狀態機一字不改；OAuth scope／callback／credential／token 不改。正式條文 44 第七節第三小節之二十其三。）
 
 **新需求分類 Gate**：先答屬於 A. Data／B. Domain／Rule／C. AI interpretation／D. UI／Interaction／E. Infrastructure／Auth 哪一層，先放對層再實作；不得因「最快」把邏輯塞進 UI。
 
