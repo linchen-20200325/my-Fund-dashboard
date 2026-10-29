@@ -188,3 +188,86 @@ def test_D_確認production無呼叫者():
     out = subprocess.check_output(["git", "grep", "-l", "_normalize_moneydj_url_for_cache", "--", "*.py"], cwd=root, text=True).split()
     prod = [f for f in out if not f.startswith("tests/") and f != "infra/cache.py"]
     assert prod == ["services/fund_identity_shadow.py"]
+
+
+# ── 2026-10-29 獨立稽核 should-fix ─────────────────────────────
+@pytest.mark.parametrize("raw", [
+    "https://[bad/x?a=TLZF9",          # netloc 不合法：urlsplit 拋 ValueError
+    "https://[::1/p?a=acdd01#f",
+    "http://[x]y/?code=TLZF9-AL001",
+])
+def test_C_urlsplit拋ValueError_不拋_退回修正前輸出(raw):
+    from urllib.parse import urlsplit
+    from repositories.policy.v1 import _extract_code_from_url
+    with pytest.raises(ValueError):
+        urlsplit(raw)
+    assert _extract_code_from_url(raw) == _old_extract(raw)
+    assert _extract_code_from_url("https://[bad/x?a=TLZF9") == "TLZF9"
+
+
+def test_C_同步遇到壞網址列_不整批失敗():
+    import pandas as pd
+    from repositories.policy import v1
+    df = pd.DataFrame([{"policy_id": "P1", "fund_url": "https://[bad/x?a=TLZF9", "invest_twd": 1},
+                       {"policy_id": "P2", "fund_url": _MJ + "?a=ACDD01", "invest_twd": 2}])
+    funds, _stats = v1.sync_policies_to_portfolio_funds(df, [])
+    assert sorted(f["code"] for f in funds) == ["ACDD01", "TLZF9"]
+
+
+def _calls_in(path):
+    import ast
+    from pathlib import Path
+    tree = ast.parse((Path(__file__).resolve().parents[1] / path).read_text(encoding="utf-8"))
+    return tree
+
+
+@pytest.mark.parametrize("path,target", [
+    ("ui/tab3_t7_ledger.py", "_new_code_clean"),
+    ("ui/tab3_portfolio.py", "_code"),
+])
+def test_A_手動加入處_呼叫normalize_manual_fund_input(path, target):
+    """回退成 `.strip().upper()` 必須紅燈（稽核 should-fix 2）。"""
+    import ast
+    tree = _calls_in(path)
+    hits, upper_hits = 0, 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        names += [e.id for t in node.targets if isinstance(t, ast.Tuple) for e in t.elts if isinstance(e, ast.Name)]
+        if target not in names:
+            continue
+        for sub in ast.walk(node.value):
+            if isinstance(sub, ast.Call) and getattr(sub.func, "id", None) == "normalize_manual_fund_input":
+                hits += 1
+            if isinstance(sub, ast.Call) and getattr(sub.func, "attr", None) == "upper":
+                upper_hits += 1
+    expected = 1 if path.endswith("t7_ledger.py") else 2  # tab3：有逗號／無逗號兩支
+    assert hits == expected, (path, hits)
+    assert upper_hits == 0, path
+
+
+def test_A_tab3_抽不出代碼的行_進略過清單並警示():
+    """稽核 should-fix 3：`if not _code:` 分支先記到 `_dropped_lines` 再略過，且有對應 `st.warning`。"""
+    import ast
+    tree = _calls_in("ui/tab3_portfolio.py")
+    branch_ok = False
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.If) and isinstance(node.test, ast.UnaryOp)
+                and isinstance(node.test.op, ast.Not) and getattr(node.test.operand, "id", None) == "_code"):
+            calls = [n for n in ast.walk(node) if isinstance(n, ast.Call)]
+            branch_ok |= any(getattr(c.func, "attr", None) == "append"
+                             and getattr(c.func.value, "id", None) == "_dropped_lines" for c in calls)
+    assert branch_ok
+    warned = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and getattr(node.test, "id", None) == "_dropped_lines":
+            warned |= any(isinstance(n, ast.Call) and getattr(n.func, "attr", None) == "warning"
+                          for n in ast.walk(node))
+    assert warned
+
+
+def test_A_網址抽不出代碼_回空字串():
+    from services.moneydj_fetcher import normalize_manual_fund_input as norm
+    assert norm("https://www.moneydj.com/funddj/ya/yp010001.djhtm") == ""
+    assert norm(" https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=tlzf9 ") == "TLZF9"

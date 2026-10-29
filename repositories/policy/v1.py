@@ -212,13 +212,30 @@ def _extract_code_from_url(url: str) -> str:
     if "://" not in s and "/" not in s:
         return s.upper()
     from urllib.parse import urlsplit
-    # urlsplit 丟掉 #fragment;query 內若再出現 `?` 視為分隔(舊行為)
-    query = urlsplit(s).query.replace("?", "&")
+    try:
+        # urlsplit 丟掉 #fragment;query 內若再出現 `?` 視為分隔(舊行為)
+        query = urlsplit(s).query.replace("?", "&")
+    except ValueError:
+        # 2026-10-29 獨立稽核 should-fix 1:netloc 不合法(例 `https://[bad/x?a=TLZF9`)時 urlsplit 會拋;
+        # 呼叫端(`sync_policies_to_portfolio_funds`、`policy/v2._v1_frame_to_v2` 的 `.map`)沒有 try,
+        # 一列壞值會讓整次同步失敗 → 該輸入退回修正前的寫法,輸出與修正前逐字相同。
+        return _extract_code_from_url_legacy(s)
     for token in query.split("&"):
         if "=" in token:
             k, v = token.split("=", 1)
             k = k.lower()
             if (k == "a" or k.endswith("code")) and v:
+                return v.strip().upper()
+    tail = s.rstrip("/").split("/")[-1]
+    return tail.split(".")[0].upper()
+
+
+def _extract_code_from_url_legacy(s: str) -> str:
+    """DG-2 §10 C 修正前的寫法(逐字保留),只給 `urlsplit` 拋 ValueError 的輸入使用。"""
+    for token in s.replace("?", "&").split("&"):
+        if "=" in token:
+            k, v = token.split("=", 1)
+            if k.lower().endswith(("a", "code")) and v:
                 return v.strip().upper()
     tail = s.rstrip("/").split("/")[-1]
     return tail.split(".")[0].upper()
