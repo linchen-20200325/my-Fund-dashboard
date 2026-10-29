@@ -483,19 +483,19 @@ def test_char_agreement_c5b_platform_suffix_is_kept_so_suffixed_and_plain_codes_
 
 
 def test_char_divergence_c5b_policy_extract_keeps_url_fragment_that_the_other_derivations_drop():
-    """描述現況，不代表核准現況語意。C5b／G-ID-1：同一個含 `#frag` 的網址，policy `_extract_code_from_url` 得 `ACDD01#FRAG`，
-    parse／fund_keys 得 `ACDD01`。Sheet 政策列以前者推導代碼、NAV 取數以後者推導，鍵可能對不上（機制；真實政策列是否含 fragment 未驗）。"""
+    """描述現況，不代表核准現況語意。【DG-2 §10 缺陷 C 修正後翻轉】原斷言 policy `_extract_code_from_url` 得 `ACDD01#FRAG`（fragment 黏進代碼）；
+    修正（`urlsplit` 丟棄 `#fragment`）後與 parse／fund_keys 一致，皆為 `ACDD01`。測試名保留以利追溯。"""
     t = _identity_table()["url_fragment"]
-    assert t["policy_extract"] == "ACDD01#FRAG"
-    assert {t["parse"], t["canon_then_parse"], t["fund_keys"]} == {"ACDD01"}
+    assert t["policy_extract"] == "ACDD01"
+    assert {t["policy_extract"], t["parse"], t["canon_then_parse"], t["fund_keys"]} == {"ACDD01"}
 
 
 def test_char_divergence_c5b_policy_extract_takes_first_key_ending_with_a_or_code_not_the_a_parameter():
-    """描述現況，不代表核准現況語意。C5b／G-ID-1：網址 `…?area=TW&a=ACDD01`（人工構造輸入），policy `_extract_code_from_url` 取第一個「key 以 a／code 結尾」的值＝`TW`，
-    parse／fund_keys 取 `a=` 參數＝`ACDD01`。真實 MoneyDJ 網址是否出現此形態未驗（機制）。"""
+    """描述現況，不代表核准現況語意。【DG-2 §10 缺陷 C 修正後翻轉】原斷言網址 `…?area=TW&a=ACDD01` 的 policy `_extract_code_from_url` 得 `TW`（取第一個以 a 結尾的鍵）；
+    修正後只認參數名恰為 `a`（或以 `code` 結尾者），得 `ACDD01`，與 parse／fund_keys 一致。測試名保留以利追溯。"""
     t = _identity_table()["url_decoy_param"]
-    assert t["policy_extract"] == "TW"
-    assert {t["parse"], t["fund_keys"]} == {"ACDD01"}
+    assert t["policy_extract"] == "ACDD01"
+    assert {t["policy_extract"], t["parse"], t["fund_keys"]} == {"ACDD01"}
 
 
 def test_char_divergence_c5b_build_moneydj_url_keeps_url_input_case_so_cache_strings_differ():

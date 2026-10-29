@@ -93,13 +93,74 @@ def test_B_無破折號的鍵_網址序列與預存檔查詢逐字不變(_nav_sp
 
 
 # ── C. policy v1 _extract_code_from_url ───────────────────────
+def _old_extract(url):
+    """修正前實作(逐字抄自 base 84a956b5),作差分對照基準。"""
+    if not url:
+        return ""
+    s = str(url).strip()
+    if "://" not in s and "/" not in s:
+        return s.upper()
+    for token in s.replace("?", "&").split("&"):
+        if "=" in token:
+            k, v = token.split("=", 1)
+            if k.lower().endswith(("a", "code")) and v:
+                return v.strip().upper()
+    tail = s.rstrip("/").split("/")[-1]
+    return tail.split(".")[0].upper()
+
+
+_MJ = "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+
+
 @pytest.mark.parametrize("raw,expected", [
-    (_URL + "#frag", "TLZF9-AL001#FRAG"),
-    ("https://www.moneydj.com/funddj/ya/yp010001.djhtm?area=TW&a=TLZF9-AL001", "TW"),
+    (_URL + "#frag", "TLZF9-AL001"),
+    (_MJ + "?area=TW&a=TLZF9-AL001", "TLZF9-AL001"),
+    (_MJ + "?A=tlzf9-al001#x", "TLZF9-AL001"),
+    (_MJ + "?yp=010001&a=ACDD01&b=1", "ACDD01"),
+    (_MJ + "?data=1&a=ACDD01", "ACDD01"),
+    ("www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01", "ACDD01"),  # 無 scheme 但含 /
 ])
-def test_C_現況_缺陷輸入(raw, expected):
+def test_C_缺陷輸入_修正後(raw, expected):
     from repositories.policy.v1 import _extract_code_from_url
     assert _extract_code_from_url(raw) == expected
+
+
+# 目前正確的輸入:修正前後輸出必須逐字相同(holding key `{policy_id}::{CODE}` 不變)
+_VALID = [
+    "TLZF9", "tlzf9", " acdd01 ", "TLZF9-AL001", "tlzf9-al001", "a=tlzf9",
+    "", None,
+    _MJ + "?a=ACDD01", _MJ + "?a=acdd01", _MJ + "?A=ACDD01", _MJ + "?yp=010001&a=ACDD01",
+    _MJ + "?b=1&a=ACDD01&c=2", _MJ + "?a=ACDD01-EQTAL005",
+    "https://chubb.moneydj.com/w/wr/wr01.djhtm?a=ACDD01-EQTAL005",
+    "https://m.moneydj.com/a1.aspx?a=acdd01",
+    "https://tcbbankfund.moneydj.com/w/wb/wb02.djhtm?a=TLZF9",
+    "https://x.example/p?code=XYZ123", "https://x.example/p?fundcode=XYZ123&z=1",
+    "https://x.example/p?code=XYZ123&a=ACDD01",  # code 在 a 之前 → 取 code(舊行為)
+    "https://x.example/p?a=",  # a 空值 → 走路徑尾段
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm",  # 無 query → 路徑尾段
+    "https://x.example/fund/ABC123/", "https://x.example/fund/ABC123.html",
+    _MJ + "?a=ACDD01&a=BAR456",  # 重複 a → 取第一個
+]
+
+
+@pytest.mark.parametrize("raw", _VALID)
+def test_C_目前正確的輸入_輸出與修正前逐字相同(raw):
+    from repositories.policy.v1 import _extract_code_from_url
+    assert _extract_code_from_url(raw) == _old_extract(raw)
+
+
+def test_C_持股鍵格式不變_對既有valid列(monkeypatch):
+    """`sync_policies_to_portfolio_funds` 的 pk 字串 `{policy_id}::{CODE}`:valid 列(裸碼/一般網址/平台後綴)
+    在修正前後逐字相同;含 fragment／area 誘餌的人工構造列才會不同(那些是缺陷輸入)。"""
+    import pandas as pd
+    import repositories.policy.v1 as v1
+    rows = [(f"P{i}", u) for i, u in enumerate(u for u in _VALID if u and str(u).strip())]
+    df = pd.DataFrame([{"policy_id": pid, "fund_url": u, "invest_twd": 1000} for pid, u in rows])
+    _, new_rep = v1.sync_policies_to_portfolio_funds(df, [])
+    monkeypatch.setattr(v1, "_extract_code_from_url", _old_extract)
+    _, old_rep = v1.sync_policies_to_portfolio_funds(df, [])
+    assert new_rep == old_rep
+    assert any(k.endswith("::ACDD01-EQTAL005") for k in new_rep["added"])  # 平台後綴鍵仍保留
 
 
 # ── D. infra.cache._normalize_moneydj_url_for_cache（production 0 呼叫者）──

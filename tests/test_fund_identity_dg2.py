@@ -328,9 +328,11 @@ def test_shadow輸出形狀():
 
 def test_shadow_回報已知現有parser分歧():
     frag = shadow.shadow_compare("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=TLZF9-AL001#frag")
-    assert frag["difference"]["policy_v1_extract_code_from_url"] == "TLZF9-AL001#FRAG"
+    # DG-2 §10 缺陷 C 修正後翻轉:policy_v1 的 `#FRAG`／`TW` 分歧已消失(不再出現在 difference);
+    # 其餘舊 parser 分歧(cache_normalizer 小寫 a=／canonicalize 行動版)不在本批修正範圍,維持原斷言。
+    assert "policy_v1_extract_code_from_url" not in frag["difference"]
     area = shadow.shadow_compare("https://www.moneydj.com/funddj/ya/yp010001.djhtm?area=TW&a=TLZF9-AL001")
-    assert area["difference"]["policy_v1_extract_code_from_url"] == "TW"
+    assert "policy_v1_extract_code_from_url" not in area["difference"]
     low = shadow.shadow_compare("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=tlzf9-al001")
     assert low["difference"]["cache_normalizer"] == ""
     mob = shadow.shadow_compare("https://m.moneydj.com/a1.aspx?a=TLZF9-AL001")
