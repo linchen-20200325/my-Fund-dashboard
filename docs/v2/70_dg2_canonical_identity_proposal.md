@@ -295,4 +295,32 @@ hook 只拿到字串串列，`resolve_full_keys` 的呼叫端來源不一（讀�
 - **未來 Shadow flag 提案必附清單（裁示第 3 項）**：執行環境、觸發頻率、讀取哪些 production input、log 欄位、是否含 policy id／個資、遮罩規則、retention、差異分類、success／fail threshold、rollback、關閉方式、是否完全不影響正式 return value。在客戶核准前 flag 維持 OFF。
 - **真實 Sheet 結構性檢查（裁示第 4 項）**：UNVERIFIED。本 container 沒有 Sheet 憑證（無服務帳戶設定、無相關環境變數），依裁示跳過，未讀任何 Sheet；不阻塞 probe。
 - **dashed key cache 備援**：不核准新增（裁示第 2 項）：即第 14 節 (c) 登記「未加、待決策」的答案，維持未加。
-- 單組寫成，未經第二組獨立驗證；probe 尚未實跑，上列皆為設計，不含任何 NAV 數值。
+- 單組寫成，未經第二組獨立驗證；probe 尚未實跑，上列皆為設計，不含任何 NAV 數值。（→ 2026-10-29 已實跑一次，結果見下節 16.1；上列設計敘述不改。）
+
+### 16.1 首次實跑結果（2026-10-29）
+
+- **來源**：workflow `moneydj_nav_equivalence_probe.yml`，run `40822928361`，`executed_sha` `b4b6d7ef`，報告 `results/20261029T052400Z_run40822928361/report.json.gz`，存於 GitHub 分支 `probe/moneydj-nav-results`（**未複製進 main**）。單次、單日。
+- **FACT（以下皆為報告值）**：連線——GitHub Actions 可連 MoneyDJ；直連（runner IP）與 `nas_proxy` 兩條路徑各 36 次請求、19 次 ok、0 blocked，HTTP 狀態序列完全相同。`tcbbankfund.moneydj.com` 對全部輸入皆回 404。
+
+| input | base | page used for NAV | HTTP/parse | NAV | NAV date | currency (explicit?) | comparable? | verdict |
+|---|---|---|---|---|---|---|---|---|
+| TLZF9 | www.moneydj.com | yp010001 | 200 / ok | 8.4121 | 2026-10-28 | 美元（明示，取自 basic_info 頁） | 是（與自身 direct/nas_proxy 同輸入一致） | not_comparable（跨輸入，見下） |
+| TLZF9-AL001 | taishinlife.moneydj.com | wb01 | 200 / ok | 8.4121 | 2026-10-28 | 無（頁面未載明） | 否：`currency_missing_not_explicit` | not_comparable |
+| TLZF9-24A7 | fundrwd.entiebank.com.tw | wb01 | 200 / ok | 8.4121 | 2026-10-28 | 無（頁面未載明） | 否：`currency_missing_not_explicit` | not_comparable |
+| ACDD01 | www.moneydj.com | yp010000 | 200 / ok | 322.18 | 2026-10-28 | 台幣（明示） | 無可配對輸入 | not_comparable |
+| ACDD01-EQTAL005 | www.moneydj.com（無平台頁） | yp010000／yp010001／basic_info 皆試 | 200 / no_nav_table | 無 | 無 | 無 | 否 | 無 NAV（UNVERIFIED） |
+
+- 補充 FACT：TLZF9 基金名稱（www basic_info）為「安聯收益成長基金-AMg7月…（美元）」；ACDD01 為「安聯台灣大壩基金-A累積型…」。TLZF9-AL001 的 `platform_hist`（yp004002）回 404；TLZF9-24A7 的 `platform_hist` 回 200 但 `no_nav_table`；兩者 www 頁（yp010001／yp010000）皆 200 但 `no_nav_table`。ACDD01-EQTAL005 不在 `_BANK_PLATFORM_CODES`，未發平台頁請求。
+- 腳本群組 verdict：TLZF9 家族 `not_comparable`（原因 `currency_missing_not_explicit`）、ACDD01 家族 `not_comparable`；無 conflict、無 fund_name mismatch、無 same-input conflict。
+
+**關鍵觀察**
+- (a) **FACT**：TLZF9、TLZF9-AL001、TLZF9-24A7 三者 NAV 皆為 8.4121、日期皆為 2026-10-28。**依嚴格規則仍為 `not_comparable`**，因平台頁未明示幣別。**INFERENCE**：這是「非正式支持」通路後綴不改變 NAV，**不是**正式確認；不得據此宣稱「同一基金」或「不同基金」。
+- (b) **FACT**：`www.moneydj.com` 對含 `-` 的代碼回 `no_nav_table`；帶後綴代碼只在對應平台主機（`taishinlife`、`fundrwd.entiebank`）取得 NAV。**INFERENCE**：後綴代碼的取數需走對應平台主機（僅此一日、兩個平台的觀察）。
+- (c) **FACT**：ACDD01-EQTAL005 所試頁面皆無 NAV 表。**結論：UNVERIFIED**（無 NAV 可比，亦不代表它不存在）。
+- (d) 僅單次、單日；NAV 同值可能是同日巧合的機率未排除（**INFERENCE**）。share class 於報告中皆為 `unknown`。
+
+**Shadow flag Decision Gate 證據充分性（執行組提案，非客戶裁示）：目前尚不充分。**
+- 缺：(1) 平台頁幣別明示，或客戶接受「以 base 頁幣別推定」的放寬規則；(2) ACDD01-EQTAL005 的平台頁／網址；(3) 多日資料；(4) share class 未知。
+- 選項：**O1** 以按鈕分支每日重跑 N 日累積樣本；**O2** 客戶裁示放寬幣別規則（接受 base 頁幣別為推論）；**O3** 客戶提供 EQTAL005 的平台網址。選項可併用。
+
+- 單組寫成，未經第二組獨立驗證；數值已對照 report.json 以腳本核對。
