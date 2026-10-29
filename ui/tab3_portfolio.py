@@ -39,7 +39,7 @@ from infra.oauth import (
 )
 from ui.helpers.metric_explainers import render_metric_explainer
 from ui.helpers.tw_time import tw_now_str
-from services.moneydj_fetcher import auto_fetch_moneydj  # F-H6 v19.79: §8.2 L3→L2
+from services.moneydj_fetcher import auto_fetch_moneydj, normalize_manual_fund_input  # F-H6 v19.79: §8.2 L3→L2
 from repositories.ledger_repository import (
     load_all_ledgers,
 )
@@ -1522,9 +1522,9 @@ def render_portfolio_tab() -> None:
                         continue
                     if "," in _line:
                         _parts = [p.strip() for p in _line.split(",", 1)]
-                        _code, _pid = _parts[0].upper(), _parts[1]
+                        _code, _pid = normalize_manual_fund_input(_parts[0]), _parts[1]  # DG-2 §10 A
                     else:
-                        _code = _line.upper()
+                        _code = normalize_manual_fund_input(_line)  # DG-2 §10 A:先判網址再轉大寫
                         _pid = default_pid
                     if not _code:
                         continue
