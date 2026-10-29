@@ -243,7 +243,7 @@
 | T4 | `tests/ui_v2/test_hld_page.py`（`len(labels) == 5`、展開後數量不變）、`tests/ui_v2/test_exp_page.py`（`len(labels) == 4`） | 精確展開區數量 | ③每個 ④ 塊可展開取得；不巢狀照守；不鎖總數 | A | 【碼】【執抽查】 |
 | T5 | `tests/ui_v2/test_alo_page.py`、`tests/ui_v2/test_set_page.py` 以塊代號前綴過濾的精確清單 | 精確清單 | 同 T4；新「▸」展開區標題規則先定 | A | 【碼】 |
 | T6 | `tests/ui_v2/test_set_reshape_page.py`、`tests/ui_v2/test_sections_page.py` | 段序、展開區先後 | 段序被改時：③＋新段序；否則不動 | A／F | 【碼】 |
-| T7 | `tests/ui_v2/test_set_login_page.py`、`tests/ui_v2/test_set_picker_page.py`、`tests/ui_v2/test_rulings_2026_10_18_page.py` | 登入卡、Sheet 卡、重新取數在設定頁展開區內 | IA 定案後重寫（不是本 Contract 的部分） | F（待 BL-0526） | 【碼】 |
+| T7 | `tests/ui_v2/test_set_login_page.py`、`tests/ui_v2/test_set_picker_page.py`、`tests/ui_v2/test_rulings_2026_10_18_page.py` | 登入卡、Sheet 卡、重新取數在設定頁展開區內 | 帳號與 Sheet 位置已裁示（44 之二十其三），隨 Batch F／D 重寫（不是本 Contract 的部分）；callback 查證結果可能影響登入卡測試 | D／F（不依 BL-0526） | 【碼】 |
 | T8 | `tests/ui_v2/_plain_scan.py` | 市場腳本 `_MKT_NOTES` 沒有市場趨勢區段的資料 | **補射程**：讓去工程化守衛涵蓋市場趨勢區段與新 detail 容器 | A | 【碼】【執抽查】 |
 | T9 | `tests/ui_v2/test_mkt_market_section_page.py` | 存在性 | ①②已符合；Batch C 搬 caption 時**新增**「主層不含長句」與「detail 內含它們」兩條 | C | 【碼】 |
 | T10 | 新增 | — | 共用元件形狀測試：chip 3～5 枚、每圖至多一句、圖不在展開區、detail 預設收合、Missing 不寫 0 或中性 | B | 【碼】 |
@@ -263,7 +263,8 @@
 2. 44 第七節第三小節之二十（基金 IA：頁序與頁名、💼 我的資產結構與一枚結論燈、塊數 16、找基金第一階段、帳號與 Sheet 選擇的位置、舊線不遷），八行行尾加註。兩小節的行尾加註都不增刪行，表格列的加註寫在最後一格格尾。
 3. 44 守衛基準值同批更新：`tests/ui_v2/test_alo_logic.py::test_44還是凍結的那一份`（md5）、`tests/ui_v2/test_exp_logic.py::test_44還是凍結的那一份`（md5＋行數）。理由：照 44 有限解凍程序（之十七、之十八前例），改 44 的同一批更新釘值，上一個值寫進註解。凍結不變量（塊標題、判準行、節判準、表判準、元件判準、紅線標記、隔離字表）改前改後同數，相關守衛不必動。`tests/test_doc_counters.py` 的受檢清單 `_MD_DOCS` 登記本檔（守衛要求新增的 `docs/v2/*.md` 逐一登記）。
 4. `docs/v2/67_ai_action_vocabulary.md` 第 5～7 節（Decision Digest Contract、One AI Brain contract、揭露）；67 不是凍結檔，照一般文件增補，第 1～4 節原文一字未改。
-5. `PROJECT_RULES.md`：第 7 節 Visual Fidelity Gate 指標、6.1.1 GitHub Durable Memory 指標、13.2 第 1、8 條行尾指標、0.5 快速索引兩行；`docs/design/vnext_visual_blueprint.md` 檔頭一行指標；`docs/DECISIONS.md` `DEC-2026-10-29-05`、`-06` 與七筆舊 DEC 的「部分 superseded by」標示。
+5. `PROJECT_RULES.md`：第 7 節 Visual Fidelity Gate 指標、6.1.1 GitHub Durable Memory 指標、13.2 第 1、8 條行尾指標、0.5 快速索引兩行；`docs/design/vnext_visual_blueprint.md` 檔頭一行指標；`docs/DECISIONS.md` `DEC-2026-10-29-05`、`-06` 與九筆舊 DEC 的「部分 superseded by」標示。
+6. `docs/v2/59`（五頁純文字線框）、`docs/v2/52`（B-15 固定說明欄常駐）、`docs/v2/58`（U-43 的帳號與 Sheet 位置）各在檔頭加一行 supersede 指標，原文一字未改。
 
 ### 5.2 本 PR 沒做（逐項附理由）
 
@@ -275,7 +276,7 @@
 | 44 之十四頁首資料狀態改 chip 的字面 | 相容（44 之十九其七第 3 條），字面不必改 | 實作批若要改字面再開一輪 |
 | 子法 1 | 判斷相容（5.3） | 若客戶不採此讀法，走提案單 #9（先例 56→57：子法修改要客戶核准提案文字） |
 | `docs/wireframes/` 原件 | 客戶原件不得改寫；A 線不遷 | — |
-| `docs/v2/59`、`61`、`65`、`52`、`58`、`64` 檔頭指標 | Anti-Bloat（`PROJECT_RULES.md` 13.4 第 7 條）：precedence 與 supersede 由 DEC 與 44 之十九、之二十承接，不在每份舊文件各放一份 | 實作批碰到該檔時順手加指標 |
+| `docs/v2/61`、`65`、`64` 檔頭指標 | Anti-Bloat（`PROJECT_RULES.md` 13.4 第 7 條）：precedence 與 supersede 由 DEC 與 44 之十九、之二十承接；`59`、`52`、`58` 三份因有條文被直接 supersede，已依 Supersession hygiene 第 (2) 條在檔頭加一行指標（5.1 第 6 條），其餘三份未加 | 實作批碰到該檔時順手加指標 |
 | 三張圖卡（BL-0517）寫進 44 | 方案 A 先草稿 | 草稿經客戶拍板後另開一輪 |
 
 ### 5.3 子法 1 相容判斷（處置 3，執行組判斷，可被客戶推翻）
@@ -299,7 +300,7 @@
 | page count | `PROJECT_RULES.md` 13.2 第 1 條；`DEC-2026-10-26-01` (1)(9)；藍圖 §2「五大主頁（固定）」；`DEC-2026-10-27-11` 手機五大主頁 | 內容頁四頁（🌍、💼、🔍、⚙️）；AI 入口待 Gate，不寫涉及 AI 的頁數；(9) 不 supersede（本次是客戶親裁） |
 | page name | 44 之十七其二、第三節第零小節第一欄；`DEC-2026-10-27-02` | 正式頁名「💼 我的資產」以之二十其一為準；兩處表格第一欄待對齊批 |
 | 頁面職責 | 44 第三節第零小節 ⚖️「不談單檔績效好壞」；「一頁只回答自己那一句問題」；`DEC-2026-10-27-29`、`-30` | 兩列字面不改，讀作頁內兩個區段；整頁那一句隨 Batch D 定稿 |
-| 容器上限 | 44 第二節（一頁最多 16 塊、層 1 一枚結論燈） | `ALO-*` 8 塊＋`HLD-*` 9 塊＝17 塊、兩枚燈（【文】以 `git show 02615e41:docs/v2/44_fund_ui_ssot.md | grep -c '^#### 塊 ALO-'` 得 8、`HLD-` 得 9，本組 2026-10-29 重跑相同）；只留一枚層 1 燈後計 16；燈的畫法待 Batch D 線框 |
+| 容器上限 | 44 第二節（一頁最多 16 塊、層 1 一枚結論燈） | `ALO-*` 8 塊＋`HLD-*` 9 塊＝17 塊、兩枚燈（【文】以 `git show 02615e41:docs/v2/44_fund_ui_ssot.md | grep -c '^#### 塊 ALO-'` 得 8、`HLD-` 得 9，本組 2026-10-29 重跑相同）；只留一枚層 1 燈後總數計 16；**但逐層計不合規**：持倉層 1／2／3／4＝1／3／2／3、配置＝1／2／3／2（44 第三節第二、第四小節層表），合併去一燈後層 2＝5（合規）、**層 3＝5、層 4＝5，各超「層 3、層 4 各 3 塊」上限 2 塊**（【執】讀 `02615e41` 兩張層表）。處置：留給 Batch D 線框送客戶裁示（合併、切換、下沉或收合，符合 Visual Budget），**客戶裁示前不得宣稱合規**（44 之二十其二第 5 條；BL-0525 Batch D 前置 Gate）；燈的畫法同樣待 Batch D 線框 |
 | 資訊擁有權 | `docs/v2/64` §2、`DEC-2026-10-25-01` | 頁面歸屬改；計算擁有權不變（canonical 鏈＝A；禁止配置區段自抓第二套資料，`PROJECT_RULES.md` 13.3） |
 | routing | url_path `hld`／`alo`；`/set` 是 OAuth redirect 落點（`BL-0465`） | 合併頁 path 隨對齊批定；`/set` 不得動 |
 | Data Health | 44 `SET-8` 總表列數 | 隨對齊批 |
@@ -397,7 +398,7 @@
 | **Phase 2＝Batch A** helper／tests migration | (1) T1～T6、T8 依新測試契約改寫（不刪資訊、不改產品行為）；(2) 頁首狀態行與核心卡的 page 層呈現責任拆分點（只動 page，不動模型）；(3) 截圖工具鏈落地（第七節兩層） | 預覽站 URL 與網路放行（只擋 (3) 的正式確認） | targeted tests、regression、CI、1 組獨立稽核；本批不改畫面時 Visual audit 註記「無可見變更」 |
 | **Phase 3＝Batch B** 共用元件 | (1) chart card；(2) metadata／status chip；(3) detail 展開區＋Missing placeholder（含圖表 placeholder） | 無（44 之十九已定）；符號照 44 現行 | 同上＋T10＋desktop／390 截圖 |
 | **Phase 4＝Batch C** 🌍 reference implementation | (1) 段序改為圖表優先、Primary 1＋Secondary ≤3（X-25、T1）；(2) 圖卡改 chips＋「▸」（X-26、T9）；(3) 核心卡 `answers`／`detail_lines` 下沉（X-27） | 無；BL-0517 三張新圖卡不在本批（方案 A 草稿另批） | 八項全做＋Visual audit 九問 |
-| **Phase 5＝Batch D** 💼 我的資產 | (1) 合併頁 IA（含一枚結論燈的畫法、頁序頁名對齊批）；(2) 情境式持倉資料來源選擇；(3) portfolio visuals（Primary 1＋Secondary ≤3） | 線框草稿先行（新元件與合併頁）；BL-0526 若影響頁數，對齊批等它 | 八項全做 |
+| **Phase 5＝Batch D** 💼 我的資產 | (1) 合併頁 IA（含一枚結論燈的畫法、層 3／層 4 各超 2 塊的處置〔線框送客戶裁示〕、頁序頁名對齊批）；(2) 情境式持倉資料來源選擇；(3) portfolio visuals（Primary 1＋Secondary ≤3） | 線框草稿先行（新元件與合併頁）；**層 3／層 4 超限的客戶裁示**；BL-0526 若影響頁數，對齊批等它 | 八項全做 |
 | **Phase 6＝Batch E** 🔍 找基金 | (1) 候選清單解耦；(2) 暫時篩選（只在本次瀏覽生效）；(3) search／filter／compare 呈現 | BL-0397 Data Source Decision Gate（未核准前搜尋區 `◇ 資料未備`）；CAP-GATE-05 | 八項全做 |
 | **Batch F** ⚙️ 設定＋帳號位置 | (1) 設定頁瘦身；(2) Google 帳號左側固定與手機控制；(3) desktop／mobile 互動 | callback 查證（6.2，可能再 Gate） | 八項全做 |
 | **Phase 7** One AI Brain／Decision Digest／AI 投資總結 | 依 67 第 5、6 節；先補 BL-0527 缺口與守衛 | BL-0526 入口形式；BL-0495 Risk Cap；BL-0496 減碼 trigger；`AI-1`、`AI-3` | Digest 契約定義前不寫 prompt 或 LLM glue |

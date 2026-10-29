@@ -29,7 +29,7 @@
 | `2026-10-29_dg2_nav_probe_ruling.md` | 客戶 2026-10-29 DG-2 下一步裁示全文（MoneyDJ NAV 網路查證採方案 A、獨立唯讀 probe workflow 與比較規則、probe 安全邊界；dashed key cache 備援不核准；DG-2 Shadow flag 維持 OFF 與下次提案必附清單；真實 Sheet URL 結構性檢查；BL-0509 獨立；`docs/DECISIONS.md` `DEC-2026-10-29-02`）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的 DG-2 下一步裁示，經總管於派工單內逐字轉存 | 2026-10-29 | main `89295c43` | 5394 | `7d80d0fbff89dd5b44d89c5199922e6b360cf420e50fcf25dcd547abba350566` |
 | `2026-10-29_dg2_fund_product_holding_ruling.md` | 客戶 2026-10-29 DG-2 最終整合（二）裁示全文（基金／保險商品通路／持倉三層身份、Sheet 基金代號欄契約與 `sheet_code_contract_violation`、`ACDD01` baseline＝MoneyDJ 基本頁、`EQTAL005`＝保險商品代碼而非 NAV 等價題、TLZF9 strong observational evidence 不得改寫為 strictly comparable、不推定幣別、多日 probe 3～5 個不同交易日、Shadow flag 維持 OFF 與前置清單、dashed key cache 不新增、Anti-Bloat 靜默規則、Model gate；`docs/DECISIONS.md` `DEC-2026-10-29-03`）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的 DG-2 最終整合（二）裁示，經總管於派工單內逐字轉存 | 2026-10-29 | main `ba1b54ee` | 10696 | `cca9d3495cec65dc785f0e67d420e4cf105e8b9f6854e38019ce45513b92d395` |
 | `2026-10-29_context_compaction_gate.md` | 客戶 2026-10-29 永久規則 Context Compaction Gate 全文（六個觸發條件、壓縮只保留清單、可丟棄清單、GitHub 是長期記憶、Silent Cruise 例外三種、Sonnet 5.5／Medium；`docs/DECISIONS.md` `DEC-2026-10-29-04`；落地為 `PROJECT_RULES.md` 11.1 小節）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的永久規則裁示，經總管於派工單內逐字轉存 | 2026-10-29 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（PR #1102） | 2642 | `abe178790a6cd60ca40451a6c8f51e1102aeaa5333d5fc6ad8df44cc90eb6ed1` |
-| `2026-10-29_presentation_contract_migration.md` | 客戶 2026-10-29 Presentation Contract Migration＋Visual Fidelity Gate 裁示全文（三則訊息：第一則在第六節開頭截斷、第二則為補送的第六～二十四節、第三則為 Gate 裁示與追加方向；`docs/DECISIONS.md` `DEC-2026-10-29-05`、`-06`；落地為 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九與之二十、`docs/v2/67_ai_action_vocabulary.md` 第 3.5 節起、`docs/v2/71_presentation_contract_migration.md`）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-29 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `02615e41` 之後） | 31980 | `6d32e4ba57d12aca051ff8033722badc1150b8daacb4f0cbb4000222ce2ec6b2` |
+| `2026-10-29_presentation_contract_migration.md` | 客戶 2026-10-29 Presentation Contract Migration＋Visual Fidelity Gate 裁示全文（三則訊息：第一則在第六節開頭截斷、第二則為補送的第六～二十四節、第三則為 Gate 裁示與追加方向；`docs/DECISIONS.md` `DEC-2026-10-29-05`、`-06`；落地為 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九與之二十、`docs/v2/67_ai_action_vocabulary.md` 第 5～7 節、`docs/v2/71_presentation_contract_migration.md`）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-29 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `02615e41` 之後） | 31979 | `22a6b1125c291079015b3ab3476a9c953249d8fc9fe20aad2807b0c25055d17f` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 
@@ -257,7 +257,7 @@
 
 | 對象 | 大小（bytes） | sha256 |
 |---|---|---|
-| 整檔（檔頭說明＋兩段圍欄） | 31980 | `6d32e4ba57d12aca051ff8033722badc1150b8daacb4f0cbb4000222ce2ec6b2` |
+| 整檔（檔頭說明＋三段圍欄） | 31979 | `22a6b1125c291079015b3ab3476a9c953249d8fc9fe20aad2807b0c25055d17f` |
 | 第一段圍欄內文（第一則訊息，在第六節開頭截斷；無跳脫碼） | 4093 | `7f069a1f8df4200712fe02942c3beac6fdd9af7bcbe9265dabe325f69f035e73` |
 | 第二段圍欄內文（第二則訊息，補送的第六～二十四節；無跳脫碼） | 13019 | `a19f3bf169143ea7b1cd3e57cea2a057ec09f83a33b26652365a3b9a0680886a` |
 | 第三段圍欄內文（第三則訊息，Gate 裁示與追加方向；無跳脫碼） | 11990 | `00a1505635263503f59d7e43645eef80559aae1b47cf2248d5e8bebfcbd1d4bd` |

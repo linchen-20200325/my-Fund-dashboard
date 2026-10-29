@@ -3,7 +3,7 @@
 - **來源**：客戶 2026-10-29 對話中的正式裁示，分三則訊息送出，經總管於派工單內轉存為三個逐字文字檔；執行組照抄，未見客戶對話本身。
 - **三則訊息的關係**：第一則（第一段圍欄）在「六、舊契約 migration」開頭、「A. 資訊語」處被截斷；第二則（第二段圍欄）為客戶補送的第六～二十四節全文。第一則的第六節開頭與第二則的第六節是同一節的兩個版本，**以第二則為準**（第二則是客戶補送的完整版）；第一則照原樣保留，不補字、不刪截斷處。第三則（第三段圍欄）是客戶對前兩則落盤後所提五個 Decision Gate 的裁示，並追加新方向（簡單決策儀表板、Visual Budget、四頁 IA、Decision Digest、One AI Brain、AI 投資總結、GitHub Durable Memory）。
 - **遮蔽**：無。本文沒有作者或老師姓名，也沒有 secret。
-- **決策登記**：`docs/DECISIONS.md` `DEC-2026-10-29-05`（Presentation Contract 與 Visual Fidelity Gate，含第三則的 Visual Budget 與 VFG 確認）、`DEC-2026-10-29-06`（第三則的 IA 裁示、Decision Digest／One AI Brain 方向與 GitHub Durable Memory）（皆客戶裁示）。落地：`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九（Presentation Contract 與 Visual Fidelity Gate 正式條文）、第七節第三小節之二十（基金 IA 最小 amendment）、`docs/v2/67_ai_action_vocabulary.md` 第 3.5 節起（Decision Digest 與 One AI Brain）、`docs/v2/71_presentation_contract_migration.md`（盤點、矩陣、清單、分批計畫）、`PROJECT_RULES.md` 第 7 節指標、`docs/design/vnext_visual_blueprint.md` 檔頭指標、`docs/BACKLOG.md` BL-0525／BL-0526 與相關列尾補記。
+- **決策登記**：`docs/DECISIONS.md` `DEC-2026-10-29-05`（Presentation Contract 與 Visual Fidelity Gate，含第三則的 Visual Budget 與 VFG 確認）、`DEC-2026-10-29-06`（第三則的 IA 裁示、Decision Digest／One AI Brain 方向與 GitHub Durable Memory）（皆客戶裁示）。落地：`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九（Presentation Contract 與 Visual Fidelity Gate 正式條文）、第七節第三小節之二十（基金 IA 最小 amendment）、`docs/v2/67_ai_action_vocabulary.md` 第 5～7 節（Decision Digest 與 One AI Brain）、`docs/v2/71_presentation_contract_migration.md`（盤點、矩陣、清單、分批計畫）、`PROJECT_RULES.md` 第 7 節指標、`docs/design/vnext_visual_blueprint.md` 檔頭指標、`docs/BACKLOG.md` BL-0525～BL-0528 與相關列尾補記。
 - **性質**：本檔只存原文，不含執行組讀法。圍欄為轉存的客戶原文，字句未改；唯一格式處理：無（行尾空白：三段皆 0 行；三段各以單一換行結尾）。
 - **圍欄寫法**：原文第二則自己含三個反引號的程式碼區塊，故三段圍欄一律用**四個反引號**，圍欄內文逐位元組等於原文。
 - **存檔日期**：2026-10-29

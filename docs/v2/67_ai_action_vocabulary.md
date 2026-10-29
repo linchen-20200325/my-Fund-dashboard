@@ -167,7 +167,7 @@ Raw Sources → Canonical Data → Rules / Indicators / Risk Cap → Decision Di
 
 ### 5.3 每個可判斷項的最低概念欄位（客戶第六節）與 repo 既有承載
 
-> 「既有承載」欄只說 repo 現在有什麼可以對上，不是指定欄名；量測 main `02615e41`，調查組 3 讀碼結果，本組抽查了 `value_text`、`rule_version` 兩列，其餘照錄。
+> 「既有承載」欄只說 repo 現在有什麼可以對上，不是指定欄名；量測 main `02615e41`，調查組 3 讀碼結果；執行組抽查四件：`value_text`（page model 只留格式化字串）、`rule_version`（零命中）、`build_ai_summary`（零命中，第 5.7 節）、B 線沒有 AI 呼叫（第 5.7 節），其餘照錄。
 
 | 概念（客戶原文） | repo 既有承載 | 缺口 |
 |---|---|---|
@@ -228,5 +228,5 @@ Raw Sources → Canonical Data → Rules / Indicators / Risk Cap → Decision Di
 ## 7. 第 5、6 節沒有查證的部分
 
 1. 第 5、6 節由執行組單組寫成，未經第二組獨立驗證（`CLAUDE.md` §-2 規則 6）；屬 AI decision semantics 與 data semantics 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核。
-2. 第 5.3 節「既有承載」與第 5.7 節的現有 AI 盤點是調查組 3 單組讀碼結果；執行組抽查了 `build_ai_summary`、`rule_version` 兩條指令、B 線無 AI 呼叫，其餘照錄，欄位是讀建構函式得出，沒有跑過實際回傳值。
+2. 第 5.3 節「既有承載」與第 5.7 節的現有 AI 盤點是調查組 3 單組讀碼結果；執行組抽查四件（與第 5.3 節檔頭同一份清單）：`value_text`、`rule_version`、`build_ai_summary`、B 線沒有 AI 呼叫，其餘照錄，欄位是讀建構函式得出，沒有跑過實際回傳值。
 3. 第 5.1 節兩條鏈的對位、第 5.2 節第 3 點、第 5.5 節、第 6 節第 2、3、8 點為讀法，可被客戶推翻。
