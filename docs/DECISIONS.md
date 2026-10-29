@@ -1721,6 +1721,20 @@
 | supersedes／superseded by | supersedes：#1098 之後提出的 Sheet 代碼解析 A／B／C 三方案（第 4 項：原樣不再適用）；`DEC-2026-10-28-05` 下「MoneyDJ 命名空間內第一個 `-` 前一律＝基金碼」的實作讀法收窄為「只剝已驗證 mapping 命中的後綴」（第 4 項第 3、4 點）；BL-0521 子項 (h)「Sheet 裸帶後綴代碼的命名空間」由第 1、4 項裁定。superseded by：無。 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；「MoneyDJ 命名空間內也只剝已驗證 mapping 命中的後綴」、Sheet 契約大小寫與前後空白沿用 `fund_keys` 第 0～2 步為執行組讀法；屬 identity／data semantics 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核；單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-29-02｜客戶裁示：DG-2 下一步——MoneyDJ NAV probe 採方案 A；dashed key cache 備援不核准；Shadow flag 維持 OFF
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-29 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-29_dg2_nav_probe_ruling.md`） |
+| 決策內容摘要 | **客戶裁示**：(1) MoneyDJ NAV 網路查證採**方案 A**：獨立、唯讀的 probe workflow，沿用 BL-0509 probe 模式，只蒐證不接 production；對 `TLZF9`／`TLZF9-AL001`／`TLZF9-24A7`／`ACDD01`／`ACDD01-EQTAL005` 記錄 original input、resolved base、URL／頁型、名稱、NAV、NAV date、幣別（來源明示才記）、source timestamp、HTTP／parse 狀態、raw evidence reference、parser version／SHA；同 base、同 share class（可確認時）、同幣別、同 NAV date 才可比較；一致＝「支持通路後綴不改變 fund NAV」的 evidence，不一致＝先分類原因（as-of、publication lag、page type、currency、share class、platform stale cache、parser difference、source inconsistency），記為 source conflict／UNVERIFIED，不得直接判為不同基金；結果只寫 probe 分支／evidence，不寫 Sheet／`nav_history`／正式 cache，不改 resolver／NAV precedence／畫面，不啟用 flag；GitHub Actions 也被擋則記錄實際錯誤後停止，不另建繞路。(2) **dashed key cache 備援（`cache/nav/{完整帶後綴代碼}.json`）不核准**，維持現況；日後有證據才另走 Data Source／NAV semantics Decision Gate。(3) **DG-2 Shadow flag 維持 OFF**；順序固定：probe → evidence → 評估 → 再提方案；下次提案必須一次附：執行環境、觸發頻率、讀取哪些 production input、log 欄位、是否含 policy id／個資、遮罩規則、retention、差異分類、success／fail threshold、rollback、關閉方式、是否完全不影響正式 return value。(4) 真實 Sheet 的 `#fragment`／`area=TW&a=` 不需客戶人工檢查；現有 reader 能唯讀安全盤點才做結構性檢查（是否含 `#`、`area=`、完整 URL），不把原值寫進 log；需新憑證／權限／碰敏感資料則標 UNVERIFIED，不阻塞 probe。(5) BL-0509 照原排程平行累積，不與本 probe 合成同一資料來源契約。(6) 本輪最多：probe workflow、probe evidence／tests、必要 docs／handoff 同步；完成後回報 main／PR／CI、Actions 能否連 MoneyDJ、五輸入 evidence matrix、已確認一致與仍 UNVERIFIED／conflict、是否足以進 Shadow flag Decision Gate。Model：workflow／probe 實作 Sonnet 5.5／Medium；若 probe 結果出現 identity／NAV semantics 衝突，再升 Opus 5.5／High。 |
+| 理由／背景 | 取得可追溯 evidence 前，不新增資料來源／fallback semantics，也不開 flag。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-29_dg2_nav_probe_ruling.md`；落地：`scripts/probe_moneydj_nav_equivalence.py`、`.github/workflows/moneydj_nav_equivalence_probe.yml`、`tests/test_probe_moneydj_nav_equivalence.py`、`tests/test_moneydj_nav_equivalence_probe_workflow.py`、`docs/evidence/probe_moneydj_nav/README.md`、`docs/v2/70_dg2_canonical_identity_proposal.md` 第 16 節、`docs/BACKLOG.md` BL-0521 子項 (a)。 |
+| 影響範圍 | 新增獨立唯讀 probe（腳本、workflow、測試、文件）；不動 resolver、NAV precedence、Sheet、cache、畫面、flag；BL-0521 子項 (c)（`3a1cb35d`）登記「含 `-` 的鍵改讀 `cache/nav/{full_key}.json` 備援＝新 fallback，未加、待決策」：本筆第 (2) 項即該待決策的答案＝不核准，維持未加；本批未動任何 production 檔 |
+| 是否可逆 | 可逆（probe 刪檔即無作用；flag 本來就關） |
+| supersedes／superseded by | supersedes：無。承接 `DEC-2026-10-29-01` 第 9 項（網路 NAV 查證 UNVERIFIED）：本筆指定查證方式。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；影響範圍欄對 `3a1cb35d` 的關係是執行組讀法；單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1870,3 +1884,4 @@
 - 第四節 `DEC-2026-10-28-04`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_anti_bloat_rule.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
 - 第四節 `DEC-2026-10-28-05`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_dg2_identity_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
 - 第四節 `DEC-2026-10-29-01`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_dg2_final_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與「只剝已驗證 mapping 命中的後綴」等讀法為執行組讀法；由執行組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-29-02`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_dg2_nav_probe_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與影響範圍欄對 BL-0521 (c) 的對應為執行組讀法；由執行組單組寫成，未經第二組驗證。
