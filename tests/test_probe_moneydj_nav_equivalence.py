@@ -151,8 +151,8 @@ def test_end_to_end_consistent_and_resolver_evidence():
     r = _run(_ok)
     assert [i["original_input"] for i in r["inputs"]] == list(P.INPUTS)
     assert {i["original_input"]: i["base_fund_code"] for i in r["inputs"]}["TLZF9-24A7"] == "TLZF9"
-    assert r["summary"]["TLZF9"]["verdict"] == "consistent" and r["summary"]["ACDD01"]["verdict"] == "not_comparable"
-    assert "only prod pages compared" in r["summary"]["ACDD01"]["detail"]   # 帶後綴者無 platform 頁 → 不算覆蓋
+    assert r["summary"]["TLZF9"]["verdict"] == "consistent" and r["summary"]["ACDD01"]["verdict"] == "baseline_verified"
+    assert "ACDD01-EQTAL005" not in json.dumps(r["comparisons"]) and r["product_mapping"]["excluded_from_verdicts"] is True
     o = next(o for o in r["observations"] if o["input"] == "TLZF9-AL001" and o["kind"] == "platform_wb")
     assert o["currency_source"].startswith("basic_info_url:") and o["fund_name_source"].startswith("basic_info_url:")
     kinds = {o["kind"] for o in r["observations"] if o["input"] == "TLZF9-AL001"}
@@ -261,3 +261,106 @@ def test_non200_keeps_masked_snippet():
                             resp=dict(status=403, content_type="text/html", body="<html>Forbidden 拒絕</html>".encode(), error=None),
                             parser_version="v")
     assert o["parse_status"] == "http_failed" and "Forbidden" in o["error_snippet"]
+
+
+# ── 2026-10-29 最終整合裁示：觀察性裁定、baseline、product mapping ──
+def _po(inp, kind, date="2026-10-28", nav=8.4121, name="某基金", ccy=None, src=None, transport="direct"):
+    o = _obs(inp, kind, transport, base="TLZF9", ccy=ccy, points=((date, nav),))
+    o.update(nav=nav, fund_name=name, currency_source=src, fund_name_source="basic_info_url:u")   # 名稱由基本頁回填，不是平台頁明示
+    return o
+
+
+def _trio(**over):
+    return [_po("TLZF9", "prod_nav30", ccy="美元", src="basic_info_url:u"), _po("TLZF9-AL001", "platform_wb"),
+            _po("TLZF9-24A7", "platform_hist")]
+
+
+def test_observational_strong_when_date_nav_name_agree_and_currency_kept_separate():
+    r = P.observational_assessment(_trio())
+    assert r["verdict"] == "observational_consistent_day" and r["strictly_comparable"] is False
+    assert r["currency_evidence"] == {"base_page_reports": "美元", "platform_pages_currency_stated": False,
+                                      "currency_inferred": False, "note": r["currency_evidence"]["note"]}
+    assert r["nav_date"] == "2026-10-28" and r["nav"] == 8.4121 and "strictly_comparable" not in r["verdict"]
+
+
+def test_observational_mutations_each_flip_to_conflict():
+    for mut, key in ((lambda o: o[1].update(nav=8.5, recent=[["2026-10-28", 8.5]]), "nav_value_differs_same_date"),
+                     (lambda o: o[1].update(fund_name="別的基金"), "fund_name_differs")):
+        obs = _trio()
+        mut(obs)
+        r = P.observational_assessment(obs)
+        assert r["verdict"] == "conflict" and any(d.startswith(key) for d in r["differences"]), (key, r)
+        assert r["candidate_causes"] and "UNVERIFIED" in r["conclusion"]
+
+
+def test_observational_incomplete_when_a_platform_input_missing_and_never_strong():
+    obs = _trio()[:2]
+    r = P.observational_assessment(obs)
+    assert r["verdict"] == "incomplete" and r["missing_roles"] == ["TLZF9-24A7"]
+    # prod 頁對帶後綴輸入不算平台佐證（可能只是回傳 base 頁）
+    obs = [_trio()[0], _po("TLZF9-AL001", "prod_nav30"), _po("TLZF9-24A7", "prod_nav30")]
+    assert P.observational_assessment(obs)["verdict"] == "incomplete"
+
+
+def test_platform_currency_stated_only_when_page_itself_states_it():
+    obs = _trio()
+    obs[1].update(currency="美元", currency_source="basic_info_url:x")   # 由基本頁回填，不是平台頁明示
+    assert P.observational_assessment(obs)["currency_evidence"]["platform_pages_currency_stated"] is False
+    obs[1].update(currency_source="platform_page")
+    ev = P.observational_assessment(obs)["currency_evidence"]
+    assert ev["platform_pages_currency_stated"] is True and ev["currency_inferred"] is False
+
+
+def test_baseline_verified_and_failed():
+    ok = [dict(_po("ACDD01", "prod_nav30"), http_status=200),
+          {"input": "ACDD01", "kind": "basic_info", "parse_status": "ok", "fund_name": "某基金", "currency": "美元", "http_status": 200}]
+    assert P.baseline_assessment(ok)["verdict"] == "baseline_verified"
+    nocur = [ok[0], dict(ok[1], currency=None)]
+    b = P.baseline_assessment(nocur)
+    assert b["verdict"] == "baseline_failed" and "currency_not_explicit_on_basic_page" in b["problems"]
+    assert P.baseline_assessment([ok[1]])["verdict"] == "baseline_failed"
+    assert P.baseline_assessment([], )["verdict"] == "blocked"
+
+
+def test_product_mapping_unverified_by_default_and_excluded_from_verdicts():
+    m = P.product_mapping_section([dict(_po("ACDD01-EQTAL005", "prod_nav30"), raw={"snippet_text": "只有 ACDD01 基金"})])
+    assert m["product_code"] == "EQTAL005" and m["fund_code"] == "ACDD01" and m["provenance"] == "customer_confirmed_2026-10-29"
+    assert m["mapping_verified_against_moneydj"] is None and m["status"] == "UNVERIFIED"
+    assert m["reference_evidence_url"] == "https://m.moneydj.com/a1.aspx?a=acdd01" and m["excluded_from_verdicts"] is True
+    seen = P.product_mapping_section([dict(_po("ACDD01-EQTAL005", "prod_nav30"), raw={"snippet_text": "ACDD01 … EQTAL005"})])
+    assert seen["mapping_verified_against_moneydj"] is True
+
+
+def test_end_to_end_observational_and_no_currency_inference():
+    def get(url, t):
+        if "/yp/" in url:   # 帶後綴輸入的基本頁不回幣別
+            code = url.split("a=", 1)[-1].split("&")[0]
+            body = _basic(ccy="" if "-" in code else "美元")
+        else:
+            body = _html([("10/27", "8.4"), ("10/28", "8.4121")])
+        return dict(status=200, content_type="text/html", latency_ms=1.0, bytes=len(body), body=body.encode(), error=None)
+    r = _run(get)
+    obs = r["summary"]["TLZF9"]["observational"]
+    assert obs["verdict"] == "observational_consistent_day" and obs["currency_evidence"]["platform_pages_currency_stated"] is False
+    assert r["summary"]["ACDD01"]["verdict"] == "baseline_verified"
+    assert r["product_mapping"]["mapping_verified_against_moneydj"] is None
+    assert not any("ACDD01" in c["a"] + c["b"] for c in r["comparisons"])
+
+
+def test_date_lag_only_is_date_anomaly_not_conflict():
+    obs = _trio()
+    obs[2].update(nav_date="2026-10-27", recent=[["2026-10-27", 8.4121]])
+    r = P.observational_assessment(obs)
+    assert r["verdict"] == "date_anomaly" and not r["differences"] and r["date_anomaly"].startswith("nav_date_differs")
+    obs[2].update(nav=8.0)   # 不同日、不同值：仍只是日期異常（同日沒有值不一致）
+    assert P.observational_assessment(obs)["verdict"] == "date_anomaly"
+
+
+def test_name_evidence_states_platform_names_missing_and_never_claims_consistent():
+    r = P.observational_assessment(_trio())
+    ne = r["name_evidence"]
+    assert ne["platform_names_stated"] is False and "base page only" in ne["note"] and "base page only" in r["detail"]
+    obs = _trio()
+    for o in obs[1:]:
+        o.update(fund_name="某基金", fund_name_source="platform_page")
+    assert P.observational_assessment(obs)["name_evidence"]["platform_names_stated"] is True

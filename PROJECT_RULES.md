@@ -82,7 +82,7 @@
 | Public Repository Personal Name Redaction Rule（公開 repo 不得出現外部教材作者／老師真實姓名） | 第 12 節 12.3（`DEC-2026-10-27-20`） |
 | Cross-View Data Consistency Gate（同 canonical instrument＋metric＋as-of＋currency／share class ＝ 各 view 同一值；禁止各頁自選來源或平行計算；衝突不得靜默選一） | 第 13 節 13.3（`DEC-2026-10-28-01`） |
 | Anti-Bloat / Minimum Governance Overhead（最小充分 audit／PR／evidence、BACKLOG 不碎片化、完成後停止、少回報） | 第 13 節 13.4（`DEC-2026-10-28-04`） |
-| Context Efficiency（自動 compact 建議、最小必要讀取、frozen 44 局部讀取、compact 後恢復順序、GitHub = 長期記憶） | 第 11 節 11.1（`DEC-2026-10-28-02`） |
+| Context Efficiency 與 Context Compaction Gate（自動 compact 建議、最小必要讀取、frozen 44 局部讀取、compact 後恢復順序、compaction 六觸發／保留／可丟棄、GitHub = 長期記憶） | 第 11 節 11.1（`DEC-2026-10-28-02`、`DEC-2026-10-29-04`） |
 
 **Supersession hygiene（同裁示）**：(1) 舊內容保留歷史，不刪；(2) 被新裁示取代時，在舊內容就地標示「superseded by <DEC-ID>」；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只能指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（現行四份見 0.4）。
 
@@ -567,6 +567,17 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 10. **原則**：GitHub 是長期記憶；conversation context 只是工作快取。不用巨大 context 取代良好的 SSOT／targeted retrieval。
 
 **與既有規則的關係（文件組判讀，可被客戶推翻）**：本節是 3.2「不為過程發訊息」在 context 管理上的具體化；縮小讀取範圍**不得**變成略過必要驗證——第 2 節 GitHub-first 驗證、第 8 節稽核、`CLAUDE.md` §-2 規則 3／6 的複驗與揭露照舊；碰到高風險語意變更時，必要的讀取範圍由該變更的風險決定，不由本節縮小。
+
+#### Context Compaction Gate（客戶 2026-10-29 永久規則，`DEC-2026-10-29-04`；延伸本節，不另立規則檔）
+
+> **出處**：逐字存檔 `docs/evidence/decisions/2026-10-29_context_compaction_gate.md`。
+
+- **觸發（任一即先 compact 再繼續）**：(1) 已累積多個完成的 Batch／PR／Decision；(2) 完成明確階段、進入新階段；(3) 反覆讀取大量 GitHub diff、CI、audit、HANDOFF；(4) 出現重複查證、重複敘述、忘記已裁示事項；(5) context 使用量明顯偏高；(6) Model／Effort 升級前，且大量舊 context 已不再需要。
+- **只保留**：GitHub 最新 main SHA；Open／Draft PR；尚未完成的 Decision Gate；現行 PROJECT_RULES／DECISIONS；目前 Batch 目標；已確認的資料契約；尚未解決的 bug／risk；下一個唯一安全接手點。
+- **可丟棄（已寫入 GitHub 者）**：舊 PR 過程、CI 等待過程、audit 對話、重複研究、已結案 Decision 討論、中間推理與暫時方案；後續需要時由 GitHub targeted fetch 重取。
+- **原則**：GitHub 是長期記憶；對話 context 只保存仍會影響下一步的資訊；不得為避免重讀 GitHub 而長期保留大量歷史 context。
+- **靜默**：compaction 屬內部維護、不回報客戶；僅在 compaction 後發現 GitHub 與既有記憶衝突、遺失必要裁示、需重新確認客戶決策時才回報。
+- **界線（文件組判讀，可被客戶推翻）**：丟棄對象限於已落盤的過程；**不得**因 compact 而略過第 3.1／3.2 的揭露義務，或丟失未結案的 Stop／Decision Gate 與其前置條件。保留清單是下限，不是上限。
 
 ## 第 12 節｜新發現落盤規則
 

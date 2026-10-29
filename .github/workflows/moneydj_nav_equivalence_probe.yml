@@ -1,4 +1,4 @@
-name: "探測：MoneyDJ NAV 等價性（只讀，手動／按鈕分支觸發）"
+name: "探測：MoneyDJ NAV 等價性（只讀，手動／按鈕分支／排程觸發）"
 
 # 目的：客戶裁示 `DEC-2026-10-29-02`（方案 A）—— 取 TLZF9／TLZF9-AL001／TLZF9-24A7／ACDD01／ACDD01-EQTAL005
 # 的 MoneyDJ 頁面實際 NAV，判斷「通路後綴是否改變 fund NAV」。只蒐證，不接 production：
@@ -13,15 +13,33 @@ name: "探測：MoneyDJ NAV 等價性（只讀，手動／按鈕分支觸發）"
 # ⚠️ `ref: main` 擋不到的事（同 twse 那支）：push 事件執行的是被推那顆 commit 裡的這份 workflow 檔本身。
 #
 # ⚠️ 只讀：只發 GET；報告只推到專用分支 `probe/moneydj-nav-results`（**不推 main、不推其他分支、不 force**），
-#    並上傳為 Actions artifact。沒有排程。觸發方式只有兩種：
+#    並上傳為 Actions artifact。觸發方式三種（皆只跑 main 上的腳本）：
 #    (1) 手動 `workflow_dispatch`（沒有輸入參數）；
 #    (2) push 到「按鈕分支」`probe/moneydj-nav-trigger`
-#        （例：`git fetch origin main` 後 `git push origin origin/main:refs/heads/probe/moneydj-nav-trigger`）。
+#        （例：`git fetch origin main` 後 `git push origin origin/main:refs/heads/probe/moneydj-nav-trigger`）；
+#    (3) 固定排程 `schedule`（見下）。
 # ⛔ 按鈕分支只當「按鈕」用 —— 內容不被執行，執行的永遠是 main。本 workflow 必須先合併進 main。
+#
+# 📅 排程（2026-10-29 客戶裁示 DG-2 最終整合第 8 節：沿用既有 workflow 累積多日 evidence；**這是 probe，不是正式資料層排程**）
+#    * 啟用日期：2026-10-29（本檔合併進 main 的那一刻起生效；GitHub 的 schedule 只讀預設分支上的 workflow 檔）。
+#    * 用途：累積 3～5 個「不同交易日」的 TLZF9／TLZF9-AL001／TLZF9-24A7 觀測，不必有人按按鈕。
+#      累積期間不開 PR、不改 HANDOFF／BACKLOG／DECISIONS；結果只落 `probe/moneydj-nav-results` 分支。
+#      判讀以分析腳本 `scripts/analyze_moneydj_nav_series.py` 計「不同 NAV 日」數（非 run 次數）。
+#    * 時間：`17 13 * * 1-5` ＝ 台北週一至週五 21:17（UTC 13:17；台灣基金淨值多於當日傍晚前後發布；
+#      分鐘刻意避開整點／半點）。GitHub 排程可能延遲或偶爾漏跑；報告內 `generated_at_utc` 才是實際時間。
+#      cron 不知道休市日，休市日仍會跑，得到「NAV 日沒推進」的重複觀測（有用，不是錯誤）。
+#    * 預計收集 3～5 個不同交易日後，由客戶裁示是否停用。
+#    * **如何停用**：刪除本檔 `on:` 下的整個 `schedule:` 區塊（連同 cron 行）並開 PR 合併進 main；
+#      停用後手動／按鈕分支觸發仍可用。（公開 repo 60 天無活動時 GitHub 也會自動停用排程。）
+#    * 只讀保證不變：排程事件與手動事件走同一條路徑；`ref: main`、只發 GET、只推結果分支；
+#      `PROXY_URL` 仍只在「Run probe」步驟 env、`GITHUB_TOKEN` 仍只在推報告那一步；排程不新增任何 secret 引用。
+#    * 請求量：每次 run 見下方 timeout 註解的推算（約 5 輸入 × 2 路徑、每請求間隔 ≥1 秒、單請求最多重試 1 次）；每日 1 次、僅週一至週五。
 on:
   push:
     branches:
       - probe/moneydj-nav-trigger
+  schedule:
+    - cron: "17 13 * * 1-5"   # 台北週一至週五 21:17
   workflow_dispatch:
 
 permissions:

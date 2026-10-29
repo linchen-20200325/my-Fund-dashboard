@@ -3,7 +3,8 @@
 
 客戶裁示（`DEC-2026-10-29-02`，逐字：`docs/evidence/decisions/2026-10-29_dg2_nav_probe_ruling.md`）採方案 A：
 對 `TLZF9`／`TLZF9-AL001`／`TLZF9-24A7`／`ACDD01`／`ACDD01-EQTAL005` 取 MoneyDJ 頁面實際 NAV，
-判斷「通路後綴是否改變 fund NAV」。**本檔只蒐證**：不改 resolver、不改 NAV precedence、不寫 Sheet／nav_history／cache、
+判斷「通路後綴是否改變 fund NAV」。（v1.0 的原始框架；其中 `ACDD01-EQTAL005` 的 NAV 等價題已於 2026-10-29
+`DEC-2026-10-29-03` 改解讀為商品對應問題，現行語意見下方「v1.1」一節。）**本檔只蒐證**：不改 resolver、不改 NAV precedence、不寫 Sheet／nav_history／cache、
 不啟用 DG-2 shadow flag；不因探測成功就把任何 MoneyDJ URL 升格為 production source。
 
 ## 做什麼
@@ -22,6 +23,13 @@
   `conflict` 只列「候選原因」（as-of、publication lag、頁型、幣別、share class、平台 stale cache、parser、來源不一致）
   與各自支持／排除的證據，**絕不**下「不同基金」的結論。缺值一律 `None`，不用 0。
 - MoneyDJ 連不上 → 記錄實際（遮蔽後）錯誤文字於 `network_blocked`，**停止，不做任何繞路**。
+
+## 2026-10-29 最終整合裁示後的解讀（v1.1）
+
+- TLZF9 家族：保留上面的 strict 規則（幣別需雙方明示），**另加**並列的 `observational`（`observational_consistent_day`／`date_anomaly`／`conflict`／`incomplete`），
+  幣別證據分兩欄記錄（`base_page_reports`、`platform_pages_currency_stated`），**不推定平台頁幣別**。
+- ACDD01：以 MoneyDJ 基本基金頁為 baseline（`baseline_verified`／`baseline_failed`）；`EQTAL005` 是保險商品代碼，
+  只在 `product_mapping` 區回報（來源＝客戶確認，`mapping_verified_against_moneydj` 預設 None），`ACDD01-EQTAL005` 頁面只當原始觀測、不進 verdict。
 
 ## 安全
 
@@ -56,10 +64,16 @@ for _p in (str(_REPO), str(_REPO / "scripts")):
 
 from probe_twse_eps import mask_text, secret_literals  # noqa: E402  (stdlib-only 遮蔽工具，同一組 probe 慣例)
 
-SCRIPT_VERSION = "moneydj_nav_equivalence/1.0"
+SCRIPT_VERSION = "moneydj_nav_equivalence/1.1"
 INPUTS: tuple[str, ...] = ("TLZF9", "TLZF9-AL001", "TLZF9-24A7", "ACDD01", "ACDD01-EQTAL005")
-FAMILIES: dict = {"TLZF9": ("TLZF9", "TLZF9-AL001", "TLZF9-24A7"),
-                  "ACDD01": ("ACDD01", "ACDD01-EQTAL005")}
+# 2026-10-29 客戶最終整合裁示第 5、6 節：ACDD01 家族不再做「NAV 等價」比較——
+#   ACDD01 ＝ MoneyDJ 基本基金頁 baseline（`baseline_assessment`）；
+#   EQTAL005 ＝ 保險商品代碼（不是 share class／另一檔基金／另一條 NAV 序列），只回報 `product_mapping`，
+#   `ACDD01-EQTAL005` 的頁面仍當原始觀測請求（便宜），但不進任何 verdict／comparison。
+FAMILIES: dict = {"TLZF9": ("TLZF9", "TLZF9-AL001", "TLZF9-24A7")}
+BASELINE_INPUT = "ACDD01"
+RAW_ONLY_INPUTS: tuple[str, ...] = ("ACDD01-EQTAL005",)
+PRODUCT_MAPPING_REFERENCE_URL = "https://m.moneydj.com/a1.aspx?a=acdd01"   # 客戶 2026-10-29 提供的有效 MoneyDJ 基本頁
 SPACING_SEC = 1.0
 TIMEOUT_SEC = 20
 RETRIES = 1
@@ -72,6 +86,11 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 TRANSPORTS = ("direct", "nas_proxy")
 
 V_CONSISTENT, V_NOT_COMPARABLE, V_CONFLICT, V_BLOCKED = "consistent", "not_comparable", "conflict", "blocked"
+# 觀察性裁定（與上面的 strict 規則並列、明確區分；不是 strictly_comparable）
+# 單日 run 的標籤刻意不叫 strong：多日才有 `strong_observational_evidence_same_series`（analyzer 的分類）
+V_STRONG_OBS, V_OBS_CONFLICT, V_OBS_INCOMPLETE = "observational_consistent_day", "conflict", "incomplete"
+V_OBS_DATE_ANOMALY = "date_anomaly"   # 各輸入最新 NAV 日不同（可能是發布延遲）；不是 NAV／名稱 conflict
+V_BASELINE_VERIFIED, V_BASELINE_FAILED = "baseline_verified", "baseline_failed"
 CMP_CONSISTENT, CMP_NOT_COMPARABLE, CMP_CONFLICT = "consistent", "not_comparable", "conflict"
 UNKNOWN = "unknown"
 
@@ -216,6 +235,116 @@ def summarize_group(inputs: tuple, observations: list, comparisons: list, blocke
         why = "沒有任何可比的跨輸入比較"
     return {"verdict": V_NOT_COMPARABLE, "detail": why + f"；不可比原因：{reasons}" + extra,
             **base, "supports_suffix_does_not_change_nav": None}
+
+
+def _ok_nav(o: dict) -> bool:
+    return o.get("kind") != "basic_info" and o.get("parse_status") == "ok" and o.get("nav") is not None and bool(o.get("nav_date"))
+
+
+def observational_assessment(observations: list, inputs: tuple = FAMILIES["TLZF9"]) -> dict:
+    """觀察性裁定（客戶 2026-10-29 最終整合第 7～9 節）。
+
+    base 輸入（prod 頁）與其餘每個平台輸入（platform_* 頁；prod 頁對帶後綴輸入可能只是回傳 base 頁，不算）
+    的最新 NAV 日、NAV 值全部相同、且頁面自報基金名稱（有的話）一致、無 identity conflict →
+    `observational_consistent_day`（**僅此一日**，不是 strong；跨日累積由 `scripts/analyze_moneydj_nav_series.py` 計不同 NAV 日）。
+    **同一 NAV 日**上 NAV 值或基金名稱不同 → `conflict`（附候選原因，不下「不同基金」結論）；僅各輸入最新 NAV 日不同 → `date_anomaly`（疑似發布延遲，可回報、不算 conflict）；缺任一角色 → `incomplete`。
+    基金名稱：平台 NAV 頁通常不載明名稱，`name_evidence` 如實記 `platform_names_stated`；未載明時名稱一致性只代表 base 頁，不算平台佐證。
+    **永不**輸出 strictly_comparable；**不推定幣別**：`currency_evidence` 把兩件事分開記，不合併。
+    """
+    base_in, plat_ins = inputs[0], inputs[1:]
+    roles = {base_in: [o for o in observations if o.get("input") == base_in and o.get("kind") in ("prod_nav30", "prod_nav30_alt") and _ok_nav(o)]}
+    for pin in plat_ins:
+        roles[pin] = [o for o in observations if o.get("input") == pin and str(o.get("kind", "")).startswith("platform_") and _ok_nav(o)]
+    plat_obs = [o for pin in plat_ins for o in roles[pin]]
+    base_ccy = next((o.get("currency") for o in observations if o.get("input") == base_in and o.get("currency")), None)
+    plat_stated = [o.get("currency") for o in plat_obs
+                   if o.get("currency") and not str(o.get("currency_source") or "").startswith("basic_info_url")]
+    res = {"verdict": V_OBS_INCOMPLETE, "strictly_comparable": False,
+           "currency_evidence": {"base_page_reports": base_ccy,
+                                 "platform_pages_currency_stated": bool(plat_stated),
+                                 "currency_inferred": False,
+                                 "note": "missing ≠ known：平台頁未明示幣別時不以 base 頁幣別補入，兩欄各自獨立"},
+           "name_evidence": None, "points": [], "differences": [], "candidate_causes": [], "missing_roles": []}
+    plat_names = [o.get("fund_name") for o in plat_obs
+                  if o.get("fund_name") and not str(o.get("fund_name_source") or "").startswith("basic_info_url")]
+    res["name_evidence"] = {"platform_names_stated": bool(plat_names),
+                            "note": ("平台頁亦載明基金名稱，已與 base 頁比對" if plat_names else
+                                     "base page only / platform names not stated：名稱一致性不構成平台頁佐證（缺值不當作一致）")}
+    res["missing_roles"] = [k for k, v in roles.items() if not v]
+    all_obs = [o for v in roles.values() for o in v]
+    res["points"] = sorted({(o["input"], o["kind"], o["transport"], o["nav_date"], o["nav"]) for o in all_obs})
+    res["points"] = [list(p) for p in res["points"]]
+    if res["missing_roles"]:
+        return res
+    dates = {o["nav_date"] for o in all_obs}
+    same_date_nav_differs = False
+    for d in dates:
+        ns = [o["nav"] for o in all_obs if o["nav_date"] == d]
+        same_date_nav_differs = same_date_nav_differs or any(not math.isclose(ns[0], x, rel_tol=1e-9, abs_tol=1e-12) for x in ns[1:])
+    navs = sorted({o["nav"] for o in all_obs})
+    names = {str(o["fund_name"]).strip() for o in all_obs if o.get("fund_name")}
+    if same_date_nav_differs:
+        res["differences"].append(f"nav_value_differs_same_date:{navs}")
+    if len(names) > 1:
+        res["differences"].append(f"fund_name_differs:{sorted(names)}")
+    if len(dates) > 1:
+        res["date_anomaly"] = f"nav_date_differs:{sorted(dates)}"
+    if res["differences"]:
+        res["verdict"] = V_OBS_CONFLICT
+        a = roles[base_in][0]
+        b = next((o for o in all_obs if o is not a and (o["nav_date"] != a["nav_date"] or not math.isclose(o["nav"], a["nav"], rel_tol=1e-9, abs_tol=1e-12))), plat_obs[0])
+        res["candidate_causes"] = candidate_causes(a, b, a["nav_date"] if a["nav_date"] == b["nav_date"] else None)
+        res["conclusion"] = "conflict_UNVERIFIED（不得據此判定為不同基金）"
+        return res
+    if len(dates) > 1:
+        res["verdict"] = V_OBS_DATE_ANOMALY
+        res["detail"] = "各輸入最新 NAV 日不同（疑似發布延遲，UNVERIFIED）；不算 conflict，也不計入一致日"
+        return res
+    res["verdict"] = V_STRONG_OBS
+    res["nav_date"], res["nav"] = next(iter(dates)), navs[0]
+    res["detail"] = "NAV 日與 NAV 值全一致；" + res["name_evidence"]["note"]
+    return res
+
+
+def baseline_assessment(observations: list, blocked: bool = False) -> dict:
+    """ACDD01 baseline（裁示第 5 節）：MoneyDJ 基本基金頁的基金名稱＋幣別（頁面明示）與 NAV／NAV 日都取得 → `baseline_verified`。"""
+    mine = [o for o in observations if o.get("input") == BASELINE_INPUT]
+    if blocked or not any(o.get("http_status") == 200 for o in mine):
+        return {"verdict": V_BLOCKED, "detail": "沒有任何 HTTP 200 的觀測（見 network_blocked）"}
+    basic = next((o for o in mine if o.get("kind") == "basic_info" and o.get("parse_status") == "ok"), None)
+    nav = next((o for o in mine if _ok_nav(o)), None)
+    problems = []
+    if not basic or not basic.get("fund_name"):
+        problems.append("basic_page_missing_fund_name")
+    if not basic or not basic.get("currency"):
+        problems.append("currency_not_explicit_on_basic_page")
+    if not nav:
+        problems.append("nav_or_nav_date_missing")
+    out = {"verdict": V_BASELINE_FAILED if problems else V_BASELINE_VERIFIED, "problems": problems,
+           "fund_name": basic and basic.get("fund_name"), "currency": basic and basic.get("currency"),
+           "currency_source": "basic_info page (explicit)" if basic and basic.get("currency") else None,
+           "nav": nav and nav.get("nav"), "nav_date": nav and nav.get("nav_date")}
+    return out
+
+
+def product_mapping_section(observations: list) -> dict:
+    """EQTAL005 → ACDD01 是商品對應問題，不是 NAV 等價問題（裁示第 6 節）。
+
+    來源（provenance）＝客戶 2026-10-29 確認；`mapping_verified_against_moneydj` 預設 None（UNVERIFIED），
+    只有當請求回來的 `ACDD01-EQTAL005` 頁面片段真的出現 EQTAL005 字樣才改 True。這些頁面只是原始觀測，不進 verdict。
+    """
+    raw = [o for o in observations if o.get("input") in RAW_ONLY_INPUTS]
+    seen = any(o.get("parse_status") == "ok" and "EQTAL005" in str((o.get("raw") or {}).get("snippet_text") or "")
+               and "ACDD01" in str((o.get("raw") or {}).get("snippet_text") or "") for o in raw)
+    return {"product_code": "EQTAL005", "fund_code": BASELINE_INPUT, "provenance": "customer_confirmed_2026-10-29",
+            "reference_evidence_url": PRODUCT_MAPPING_REFERENCE_URL,
+            "mapping_verified_against_moneydj": True if seen else None,
+            "status": "OBSERVED_ON_PAGE" if seen else "UNVERIFIED",
+            "excluded_from_verdicts": True,
+            "raw_observations": [{"kind": o.get("kind"), "transport": o.get("transport"), "http_status": o.get("http_status"),
+                                  "parse_status": o.get("parse_status"), "nav_date": o.get("nav_date"), "nav": o.get("nav")}
+                                 for o in raw],
+            "note": "EQTAL005 不是 share class／另一檔基金／另一條 NAV 序列；本區不是 NAV 等價比較"}
 
 
 # ───────────────────────── 解析（借用 production 函式，唯讀） ─────────────────────────
@@ -502,6 +631,11 @@ def run_probe(http_get: Callable, *, sleep: Callable = time.sleep, secrets: tupl
     for name, fam_inputs in FAMILIES.items():
         report["summary"][name] = summarize_group(fam_inputs, report["observations"], report["comparisons"],
                                                   blocked=all_blocked)
+        report["summary"][name]["observational"] = (
+            {"verdict": V_BLOCKED} if report["summary"][name]["verdict"] == V_BLOCKED
+            else observational_assessment(report["observations"], fam_inputs))
+    report["summary"][BASELINE_INPUT] = baseline_assessment(report["observations"], blocked=all_blocked)
+    report["product_mapping"] = product_mapping_section(report["observations"])
     report["complete"] = True
     return report
 
