@@ -628,7 +628,7 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 4. **可以保存**：公式、方法、原始數值、日期、資料口徑、source evidence、教材頁面／章節位置；**不得保存作者姓名**。
 5. **既有內容（歷史姓名處理，`DEC-2026-10-27-16`）**：不 force-push、不 rewrite Git history；對 default branch 目前可見的文件、程式碼、註解、helper 名稱、測試、evidence 做 **forward-only cleanup** —— 姓名不是程式必要識別者一律改中性名稱；已公開、須改寫歷史才能移除的 commit／PR metadata 只登記 historical exposure、不改寫、不再擴散，新文件不得再次引用。待辦：`docs/BACKLOG.md` BL-0492（cleanup）、BL-0493（historical exposure）、BL-0497（守衛測試）。
 6. **轉存客戶原文時**（文件組讀法，可被客戶推翻）：原文含姓名者，以「〔作者姓名：公開 repo 不入檔〕」之類的遮蔽字樣取代並在檔頭登記（前例 `docs/evidence/decisions/2026-10-27_d1_44_unfreeze_rulings.md`）；遮蔽是本規則要求的格式處理，不算改動裁示字句。
-7. **自查**（文件組讀法，可被客戶推翻）：送出 commit、PR 或檔案前，確認上列射程內沒有真實姓名；守衛測試落地前（BL-0497）靠人工自查，不宣稱已有機器守衛。
+7. **自查**（文件組讀法，可被客戶推翻）：送出 commit、PR 或檔案前，確認上列射程內沒有真實姓名；~~守衛測試落地前（BL-0497）靠人工自查，不宣稱已有機器守衛。~~ → **2026-10-29 狀態同步（有意識的狀態更新，不是漏刪；非新規則）**：`tests/test_public_repo_name_redaction.py`（#1081）已落地，機器涵蓋「git 追蹤檔的內容與路徑名中、已登記雜湊的姓名」；**不涵蓋** PR title／PR body／commit message／branch name／issue／review comment、git 歷史、拼音與非 CJK 寫法、未登記字表的姓名——這些仍靠送出前人工自查，**不得宣稱完整 machine enforcement**。
 8. 本節與 `DEC-2026-10-22-05` (5)（正式產品命名不得用作者／老師姓名）同向，是射程擴大，不取代。不構成動工授權（`CLAUDE.md` §-1）。
 
 ## 第 13 節｜Domain-rule 索引（基金領域護欄 14 條）

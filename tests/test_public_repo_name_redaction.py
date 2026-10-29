@@ -30,7 +30,11 @@
 
 射程外（據實揭露）
 ------------------
-- 只掃目前追蹤的檔案；git 歷史中的既有出現**不改寫**（客戶裁示），本守衛不看歷史。
+- 只掃目前追蹤的檔案（內容與路徑名）；git 歷史中的既有出現**不改寫**（客戶裁示），本守衛不看歷史。
+- **不涵蓋 PR title／PR body／commit message／branch name／issue／review comment**：
+  這些不在 repo 檔案內，pytest 掃 working tree 達成不了（``PROJECT_RULES.md`` 12.3 第 3 點的
+  其餘射程仍靠人工自查），**不得宣稱本守衛是完整的 machine enforcement**。
+- 只有已登記進 ``_BANNED_DIGESTS`` 的姓名會被偵測；未登記的其他作者無法由本守衛證明為 0。
 - 只比對 CJK n-gram；羅馬拼音、拆成非 CJK 字元等寫法不在射程內。
 - 通用名詞「老師」本身不違規；只比對具體「姓氏＋老師」組合。
 - 單一姓氏字（1 字）不入表：單字姓氏與一般文字大量重疊，必然誤報。
@@ -178,6 +182,18 @@ def test_positive_control_detects_split_synthetic_token(tmp_path):
     got = _scan([f], index)
     assert got == [f"sample.md:{n} (banned digest #0)" for n in range(2, 2 + len(samples))]
     assert _scan([f], {}) == []
+
+
+def test_no_external_author_names_in_tracked_paths():
+    """路徑名（檔名／目錄名）同樣不得含已登記姓名。"""
+    violations = []
+    for path in _tracked_files():
+        rel = path.relative_to(_REPO).as_posix()
+        for idx in sorted(_line_hits(rel)):
+            violations.append(f"<path #{idx}> (banned digest #{idx})")
+    assert not violations, (
+        "追蹤檔的路徑名含已登記姓名（只列摘要索引，不印原文）：\n" + "\n".join(violations)
+    )
 
 
 def test_no_external_author_names_in_tracked_files():
