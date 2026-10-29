@@ -1,0 +1,111 @@
+name: "探測：MoneyDJ NAV 等價性（只讀，手動／按鈕分支觸發）"
+
+# 目的：客戶裁示 `DEC-2026-10-29-02`（方案 A）—— 取 TLZF9／TLZF9-AL001／TLZF9-24A7／ACDD01／ACDD01-EQTAL005
+# 的 MoneyDJ 頁面實際 NAV，判斷「通路後綴是否改變 fund NAV」。只蒐證，不接 production：
+# 不寫 Sheet／nav_history／cache、不改 resolver／NAV precedence／畫面、不啟用 DG-2 shadow flag。
+# 結構照抄 `twse_eps_probe.yml`（按鈕分支、報告分支、checkout ref: main、PROXY_URL 只在 Run 步驟）與
+# `moneydj_basic_probe.yml`（pip install -r requirements.txt，因腳本借用 production 解析函式）。
+#
+# ⚠️ 連線路徑：腳本兩條都量並在每筆紀錄標明 —— `direct`（GitHub runner IP 直連）與 `nas_proxy`
+#    （`PROXY_URL` 環境變數 → requests Session proxies；未設則 proxy_not_configured、不發請求）。
+#    `PROXY_URL` 只在「Run probe」那一步以 env 傳入；腳本不印、不寫報告、錯誤文字先遮蔽。
+#    若兩條路徑都連不上 MoneyDJ：記錄實際錯誤文字（報告 `network_blocked`）後停止，不另建繞路。
+# ⚠️ `ref: main` 擋不到的事（同 twse 那支）：push 事件執行的是被推那顆 commit 裡的這份 workflow 檔本身。
+#
+# ⚠️ 只讀：只發 GET；報告只推到專用分支 `probe/moneydj-nav-results`（**不推 main、不推其他分支、不 force**），
+#    並上傳為 Actions artifact。沒有排程。觸發方式只有兩種：
+#    (1) 手動 `workflow_dispatch`（沒有輸入參數）；
+#    (2) push 到「按鈕分支」`probe/moneydj-nav-trigger`
+#        （例：`git fetch origin main` 後 `git push origin origin/main:refs/heads/probe/moneydj-nav-trigger`）。
+# ⛔ 按鈕分支只當「按鈕」用 —— 內容不被執行，執行的永遠是 main。本 workflow 必須先合併進 main。
+on:
+  push:
+    branches:
+      - probe/moneydj-nav-trigger
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 只為了把報告推到 probe/moneydj-nav-results
+
+concurrency:
+  group: moneydj-nav-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    # 請求數上限推算（非實量）：5 輸入 × 2 路徑 × 最多約 8 個網址 ≈ 80；每個請求最壞約 2×20 秒＋2 秒重試＋1 秒間隔 ≈ 43 秒；
+    # 實際遠少於此（連不上時前 3 個請求無 200 即停該路徑）。Run probe 上限 45 分，job 上限 60 分。
+    timeout-minutes: 60
+    env:
+      RESULT_BRANCH: probe/moneydj-nav-results
+      REPORT_PATH: probe_out/moneydj_nav_report.json.gz
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # ⛔ 一律跑 main 上的腳本（見檔頭）。
+          ref: main
+          persist-credentials: false
+
+      - name: Record executed SHA
+        run: echo "PROBE_EXECUTED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install deps
+        # 腳本借用 production 解析函式（經 fund_fetcher 載入 streamlit 與 services）→ 裝完整 requirements。
+        run: pip install -r requirements.txt
+
+      - name: Run probe
+        timeout-minutes: 45
+        env:
+          # 有設才經 NAS 中繼；腳本只記各路徑實際結果，不輸出 host／帳密。
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+        run: python scripts/probe_moneydj_nav_equivalence.py --out "$REPORT_PATH"
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moneydj-nav-report
+          path: probe_out/moneydj_nav_report.json.gz
+          if-no-files-found: warn
+
+      - name: Commit report to probe/moneydj-nav-results
+        # 探測部分失敗時報告照樣寫出，失敗原文也要留下來 → always()。
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$REPORT_PATH" ]; then
+            echo "::error::報告檔不存在（$REPORT_PATH），沒有可提交的東西"
+            exit 1
+          fi
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::${AUTH}"
+          agit() { git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" "$@"; }
+          STAMP="$(date -u '+%Y%m%dT%H%M%SZ')_run${GITHUB_RUN_ID}"
+          mkdir -p "$RUNNER_TEMP/mdjnavprobe"
+          cp "$REPORT_PATH" "$RUNNER_TEMP/mdjnavprobe/report.json.gz"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git clean -fdxq
+          if agit ls-remote --exit-code --heads origin "$RESULT_BRANCH" >/dev/null; then
+            agit fetch --depth=1 origin "$RESULT_BRANCH"
+            git checkout -B "$RESULT_BRANCH" FETCH_HEAD
+          else
+            git checkout --orphan "$RESULT_BRANCH"
+            git rm -rfq .
+          fi
+          mkdir -p "results/$STAMP"
+          cp "$RUNNER_TEMP/mdjnavprobe/report.json.gz" "results/$STAMP/report.json.gz"
+          git add "results/$STAMP/report.json.gz"
+          git commit -m "探測：MoneyDJ NAV 等價性 ${STAMP} [skip ci]"
+          agit push origin "HEAD:refs/heads/$RESULT_BRANCH"
+          echo "報告已推到 $RESULT_BRANCH：results/$STAMP/report.json.gz"
