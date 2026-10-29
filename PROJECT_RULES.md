@@ -400,6 +400,8 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 - **`CLAUDE.md` §-1.5 Stop Gate／本檔第 4 節**：相容。推理強度通知不是裁示題，不得用它夾帶產品、資料、投資語意的決定；那些照舊走第 4 節。
 - **`CLAUDE.md` §-2、§-1、`PROCESS.md` §5／§7、`EXCEPTIONS.md`**：本組未發現牴觸（未經第二組驗證）。`PROCESS.md` §5 停機門檻是 blocker（3.1 ②），不是強度調整。
 
+📌 **2026-10-29 指標（`DEC-2026-10-29-07`；不改上列任何條文）**：BL-0525 Batch A 起，機械性 UI 實作（presentation helpers、tests migration、screenshot tooling、共用 card／chips／expander、Missing presentation、routing／layout 等明確實作）預設 Sonnet 5.5／Medium；升回 Opus＋High 的條件與先通知再升級的流程見 `docs/DECISIONS.md` `DEC-2026-10-29-07` 第 (3) 點，與本節 5.1 第 10 點同向。
+
 ## 第 6 節｜Safe Checkpoint
 
 **何時做**：換對話、換模式、大型 phase 切換、destructive cleanup 前、長工作結束、context 過長之前。

@@ -345,8 +345,14 @@ def test_HLD5是純文字列表_不巢狀_不自動展開_也沒有死鈕():
         for b in logic.all_blocks(model)
         if b["code"] in ("HLD-4", "HLD-5", "HLD-6", "HLD-7", "HLD-8")
     }
-    # 不巢狀：畫面上的 expander 剛好是那五塊，沒有一枚是某一檔的標題。
-    assert set(labels) == expected and len(labels) == 5, labels
+    # 不巢狀：畫面上的 expander 除了那五塊，沒有一枚是某一檔的標題。
+    # BL-0525 Batch A 測試契約遷移（T4；`DEC-2026-10-29-05` (7)、44 之十九其六／其八；有意識的更正，不是漏刪）：
+    # ~~`set(labels) == expected and len(labels) == 5`（展開區總數鎖死為五）~~ → 新契約允許卡內「▸ 為什麼‧來源‧限制‧去哪補」
+    # 這類 detail 展開區（presentation primitives），總數不再鎖；改驗③五塊各自是可展開取得的展開區、且各只一枚，
+    # 其餘展開區只准是「▸ 」開頭的 detail（逐檔標題不是，所以「不巢狀、不是某一檔的標題」的保護照舊）。
+    # 舊斷言在寫下當時為真；被權衡掉的是「展開區總數剛好五」。
+    assert expected <= set(labels) and all(labels.count(x) == 1 for x in expected), labels
+    assert all(label.startswith("▸ ") for label in labels if label not in expected), labels
     block = logic.find_block(model, "HLD-5")
     items = block["_items"]
     for item in items:
@@ -406,7 +412,8 @@ def test_HLD5展開之後仍然不巢狀第二層():
     model = logic.build_page_model(**fixtures.scenario("full"))
     hid = logic.find_block(model, "HLD-5")["_items"][0]["_holding_id"]
     at.button(key=f"hld5_open_{hid}").click().run()
-    assert before == 5, before
+    # BL-0525 Batch A（T4）：~~`before == 5`~~ → 至少那五塊；展開之後數量不變的「不巢狀第二層」保護照舊。
+    assert before >= 5, before
     assert len(at.expander) == before, [e.label for e in at.expander]
 
 

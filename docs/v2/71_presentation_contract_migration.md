@@ -17,8 +17,8 @@
 3. B 線全樹只有一個圖表呼叫點（🌍 頁的折線圖卡）；⚖️、💼、🔍、⚙️ 四頁目前沒有圖。新契約在那四頁不是「搬位置」而是「新增視覺元件」，依 `CLAUDE.md` §-1.5.4 屬草稿先行。【碼】【執抽查】
 4. 衝突最直接的兩處：🌍 頁唯一的圖排在結論燈、三張文字卡與 ③ 之後；圖下常駐四到六行來源與限制小字。這兩處是 Batch C 的主工作。【碼】
 5. 44 的呈現類條文已於本 PR 由 44 之十九 supersede（七行行尾加註、原文保留）；資料語意、Missing 符號、四狀態、嚴重度一字未改。子法 1 不動（判斷理由見第五節第三小節）。
-6. 基金 IA（第十二～十五節）撞到的多是客戶自己的舊 DEC；客戶第三則已裁示 Gate 1、2、5，本 PR 已在 44 之二十落最小 IA amendment，並在 `DEC-2026-10-29-06` 逐筆寫明被 supersede 的範圍（第六節）。🤖 AI 投資總結的入口形式待單一最小 Gate（BL-0526）。
-7. Visual Fidelity Gate：客戶已裁示正式確認＝production-like Cloud screenshot、CI deterministic screenshot＝自動安全網；兩者工具鏈都還沒建（repo 內零張截圖、CI 沒有上傳截圖的步驟），列入 Batch A（第七節）。
+6. 基金 IA（第十二～十五節）撞到的多是客戶自己的舊 DEC；客戶第三則已裁示 Gate 1、2、5，本 PR 已在 44 之二十落最小 IA amendment，並在 `DEC-2026-10-29-06` 逐筆寫明被 supersede 的範圍（第六節）。🤖 AI 投資總結的入口形式待單一最小 Gate（BL-0526）。 **【2026-10-29 狀態更新（`DEC-2026-10-29-07`）：客戶已裁示方案 C，BL-0526 closed；見第 6.6 節。舊句保留，不是漏刪。】**
+7. Visual Fidelity Gate：客戶已裁示正式確認＝production-like Cloud screenshot、CI deterministic screenshot＝自動安全網；兩者工具鏈都還沒建（repo 內零張截圖、CI 沒有上傳截圖的步驟），列入 Batch A（第七節）。 **【2026-10-29 狀態更新：Batch A 已建 CI 安全網與 Cloud 擷取腳本，Cloud 正式確認受目前執行環境網路限制，見第 7.1 節。】**
 8. Decision Digest 與 One AI Brain：repo 內原本沒有「Decision Digest」，也沒有 `build_ai_summary`；現有 AI 全在舊線、各頁自組文字快照自呼叫 LLM，沒有可直接重用成 One AI Brain 的函式。最小契約落在 67 第 5、6 節，缺口與守衛登記 BL-0527（第八節）。
 
 ---
@@ -229,6 +229,8 @@
 | 圖卡模型欄位 | `ui_v2/mkt/market_section.py::_price_model`（`freshness` 已是獨立欄位） | 可用 | 不必改模型；只改 page | C | 【碼】 |
 | 舊線三要素 | `ui/helpers/render_state.py::not_ready`、`ui/helpers/ia/empty_state.py::empty_state` | 只服務舊線 | B 線不可共用（import 守衛）；舊線不遷 | —（客戶已裁示不遷） | 【碼】 |
 
+> **2026-10-29 Batch A 更新**：chart card、chip、detail expander、Missing placeholder 四種形狀已建在 `ui_v2/presentation.py` 與 `ui_v2/presentation_view.py`（單元與畫面測試已有），尚未被任何頁面呼叫；套用到頁面屬 Batch C～F。
+
 ---
 
 ## 4. Test migration impact list
@@ -250,6 +252,25 @@
 | T11 | 舊線 `tests/test_ia_kit.py`、`tests/test_batch2_top_card_grid.py`、`tests/test_dual_track_plotly_id_collision.py`、`tests/test_wf0[1-5]_*`、`tests/test_ia_*` | where 要存在或常駐 | 不改（客戶已裁示舊線不遷） | — | 【碼】 |
 | T12 | logic 層測試（`detail_lines`／`caption_lines`／`note_lines` 內容） | 模型內容 | 不必改，只要 migration 只動 page、不刪模型欄位 | — | 【碼】 |
 | T13 | `tests/ui_v2/test_bl0345_dev_notes_page.py`、`tests/ui_v2/test_plain_page.py` | 收合展開區內文也不得有工程字樣 | 保留；新 detail 內的技術診斷要嘛進「進階診斷」，要嘛登記 `skip_expanders` 並附理由 | B／C | 【碼】 |
+
+### 4.1 Batch A 測試遷移結果（2026-10-29）
+
+| # | 結果 | 說明 |
+|---|---|---|
+| T1 | 順延 Batch C，現況已相容 | 它量的是結論燈元素在 390 首屏可見，沒有鎖「文字形式」，燈改 chip 後仍過；「首屏看得到主圖或主數字」的新斷言要等頁面套用（Batch C）才加，否則今天必然紅 |
+| T2 | **已遷** | 狀態行不再鎖「恰一個文字元素」，改驗資料截至日存在且只講一次、不寫「資料齊」「正常」；◷／◇／⛔ 語意測試未動 |
+| T3 | **已遷** | 「卡片 HTML 完全沒有來源」改為「預設可見層（剝掉 `<details>`）沒有來源長字」＋「總表明細或卡內展開區可追溯」 |
+| T4 | **已遷（hld、exp）** | 展開區總數鎖死（五、四）改為各塊各一枚且預設收合，其餘展開區只准是「▸ 」開頭的 detail；不巢狀（展開後數量不變）的保護照舊 |
+| T5 | 不必遷 | alo、set 以塊代號前綴過濾，新增的「▸」detail 不會讓它紅；它驗的是四塊是展開區且收合，與新契約同向 |
+| T6 | 順延（段序被改時才動） | 本批不改段序 |
+| T7 | 順延 Batch D／F | 帳號與 Sheet 位置隨對應批 |
+| T8 | **已補射程** | 新增 `tests/ui_v2/test_plain_trend_page.py`（含正控）：市場趨勢區段納入去工程化掃描；情境腳本放在 `_plain_scan.MKT_TREND`，未放進 `SCRIPTS`，以免牽動逐情境參數化的既有測試 |
+| T9 | 順延 Batch C | 隨圖卡搬 caption 時新增 |
+| T10 | **已建（primitives 部分）** | 共用元件形狀測試：chip 3～5 枚、每圖至多一句、圖不在展開區、detail 預設收合、Missing 不寫 0 或中性、不巢狀時內容仍完整 |
+| T11、T12 | 不改 | 舊線不遷；logic 層不動 |
+| T13 | 順延 B／C | 新 detail 內的技術診斷歸屬隨頁面套用處理 |
+
+修改處都在測試檔內以註解保留舊斷言與舊理由（劃線），不刪資訊、不改產品行為。
 
 調查組未找到任何「圖表必須在展開區外／內」的測試（字面掃描，若有以 HTML 結構間接檢查者未涵蓋）。【碼】
 
@@ -330,6 +351,8 @@
 
 ### 6.6 🤖 AI 投資總結的入口形式（**待單一最小 Gate**，BL-0526）
 
+> **【2026-10-29 已裁示：方案 C（`DEC-2026-10-29-07`，客戶；逐字存檔 `docs/evidence/decisions/2026-10-29_batch_a_rulings.md`）。BL-0526 closed。】** 下方標題的「待單一最小 Gate」、Gate 草稿與方案表是裁示前的原文，保留作歷史（有意識的狀態更新，不是漏刪）。客戶採用的內容比草稿再收緊兩點：各頁入口至多一個 local AI summary 或一個「查看 AI 判斷」鏡像入口，且必須是同一份 Decision Digest 的 slice、與 🤖 結論一致、不另呼叫 prompt；🤖 頁只回答「現在怎麼看、主要原因、最大風險、是否需要行動」，不做成資料牆。啟用時點維持草稿推薦的綁定 Phase 7：Phase 7 實作 One AI Brain 時才加入頂層導覽，目標 5 項（🌍、💼、🔍、🤖、⚙️）。正式條文：`docs/v2/67_ai_action_vocabulary.md` 第 6.1 節；44 之二十其一第 2 條行尾加註。Batch A 不改 `ui_v2/app_preview.py::PAGES`、不改頁數頁序守衛、不實作 One AI Brain。
+
 **Gate 題目（商業語言，草稿）**：「AI 投資總結」要放在哪裡，才能讓你在電腦和手機上都一眼找到，而且全站只有一份結論？
 
 | 方案 | 內容 | 優點 | 缺點與風險 |
@@ -356,6 +379,19 @@
 | production-like 頁面 | B 線 Streamlit Cloud 預覽站（入口 `ui_v2/app_preview.py`） | URL 不在 repo；真資料要該 app 的 Secrets | 【碼】 |
 
 **落地路徑（Batch A 第 3 項）**：(1) **正式確認**：總管或客戶提供 B 線預覽站 URL、放行該網域的網路存取，以 Node playwright＋Chromium 截桌機與 390；這是操作前提，不是新的產品 Gate。(2) **自動安全網**：CI 加一支 deterministic screenshot 步驟（固定測試資料）並上傳 artifact；slow lane 的 `continue-on-error` 是否要對這一支收緊，屬 CI 設定，由實作批判斷並寫進 PR。在正式確認做完之前，UI PR 寫「Visual Fidelity Gate 未執行」，不寫通過。
+
+### 7.1 Batch A 落地現況（2026-10-29；`DEC-2026-10-29-07`）
+
+| 項 | 落地 | 驗過的是什麼 |
+|---|---|---|
+| Cloud Preview URL | 登記在 `tests/visual_fidelity/config.py::CLOUD_PREVIEW_URL`（程式可讀的單一位置；公開網址，不含 credential）。守衛：同檔單元測試釘住「只在這一處」 | 單元測試（本機與 CI） |
+| 兩層標示 | `config.CI_FIXTURE_LABEL`＝「CI fixture screenshot ≠ production-like Cloud screenshot」；CI 截圖檔名前綴 `ci-fixture`、artifact 名 `ci-fixture-screenshots-NOT-production-cloud`、報告第一行都帶標示；Cloud 截圖前綴 `cloud-preview`，兩層不混用 | 單元測試與 workflow 解析測試 |
+| A. CI deterministic screenshot | `tests/visual_fidelity/test_ci_fixture_screenshots.py`（Playwright／Chromium、固定 fixtures、不打外部網路、desktop 1280x800 與 390x844、每畫面截兩次比對決定性、基本 layout 檢查 V1～V8）＋ `.github/workflows/pr-check.yml` 新 job `visual-fidelity-safety-net`（`actions/upload-artifact@v4`）。**非阻擋**（`continue-on-error: true`）：hard 檢查（例外、程式碼區塊外露、水平溢出）會轉紅，契約缺口（圖在首屏、chips 數）只寫進報告，因為今天的頁面尚未套用呈現契約，那是 Batch C～F 的工作；新建的 primitives 展示頁則全部檢查都是 hard | 本機以 Python playwright 與本機 Chromium 實跑過六個情境的截圖與檢查；CI job 本身待 PR 的 CI 結果 |
+| B. Streamlit Cloud screenshot | `tests/visual_fidelity/cloud_capture.py`（參數化 URL、desktop 與 390px；預設不在 CI 跑，只在手動 `workflow_dispatch` 時嘗試）。網路被擋時輸出並寫入「production-like Cloud capture blocked by current environment network policy」、exit 0 | 本機實跑：目前執行環境連不到該網域（`curl` 回 000；playwright 回 `net::ERR_TUNNEL_CONNECTION_FAILED`），腳本走到 blocked 分支。**尚未取得任何 production-like 截圖** |
+
+**Cloud 正式確認的狀態**：production-like Cloud capture blocked by current environment network policy（2026-10-29）。依客戶裁示不停批、不重複向客戶要 URL；環境放行後執行 `python tests/visual_fidelity/cloud_capture.py --out <目錄>`（或手動觸發 workflow）補正式 Cloud confirmation。在補上之前，UI PR 寫「Visual Fidelity Gate 未執行」，不寫通過；Batch A 本身不改任何可見畫面，Visual audit 註記「無可見變更」。
+
+**沒做的**：像素 baseline 比對（repo 內沒有基準 PNG，第一張要在有人確認「這就是對的畫面」之後才能存；那個確認就是 Cloud screenshot）；VFG 12 項中需要人判斷的項（三眼原則、圖文比例、資訊密度）。
 
 ---
 
@@ -402,6 +438,12 @@
 | **Phase 6＝Batch E** 🔍 找基金 | (1) 候選清單解耦；(2) 暫時篩選（只在本次瀏覽生效）；(3) search／filter／compare 呈現 | BL-0397 Data Source Decision Gate（未核准前搜尋區 `◇ 資料未備`）；CAP-GATE-05 | 八項全做 |
 | **Batch F** ⚙️ 設定＋帳號位置 | (1) 設定頁瘦身；(2) Google 帳號左側固定與手機控制；(3) desktop／mobile 互動 | callback 查證（6.2，可能再 Gate） | 八項全做 |
 | **Phase 7** One AI Brain／Decision Digest／AI 投資總結 | 依 67 第 5、6 節；先補 BL-0527 缺口與守衛 | BL-0526 入口形式；BL-0495 Risk Cap；BL-0496 減碼 trigger；`AI-1`、`AI-3` | Digest 契約定義前不寫 prompt 或 LLM glue |
+
+**Batch A 實際做了什麼（2026-10-29；`DEC-2026-10-29-07`；上表 Phase 2 列是計畫，保留）**：
+1. **測試契約遷移**：T2、T3、T4（hld、exp）已依新測試契約改寫（詳見 4.1）；T8 以新增情境補射程。
+2. **共用 presentation primitives**（原列在 Batch B，客戶 2026-10-29 要求 Batch A 先建）：`ui_v2/presentation.py`（純函式：chip、至多 5 枚 chips、圖卡模型、一句摘要、detail 四組、Missing 模型）與 `ui_v2/presentation_view.py`（Streamlit 畫法）；單元與畫面測試 `tests/ui_v2/test_presentation_logic.py`、`test_presentation_page.py`（T10 的兩半）。**尚未被任何頁面呼叫**（守衛釘住；頁面套用是 Batch C～F），所以不改任何畫面。
+3. **截圖工具鏈**：見第 7.1 節。
+本批實際工作項為上列三項，未超過每批 3 項；頁首狀態行與核心卡的 page 層拆分（原 Phase 2 第 (2) 點）依客戶「不重寫五頁」順延到 Batch C。**下一個唯一接手點**見 `docs/HANDOFF.md`。
 
 依 repo dependency 可微調順序；每批完成前走 Visual Fidelity Gate，CI 全綠不等於完成。進入 Batch B 以後的機械式 UI 實作，依客戶第二十四節與第三則末段走 Model／Effort Change Gate（建議 Sonnet 5.5／Medium）。
 
