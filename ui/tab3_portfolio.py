@@ -39,7 +39,7 @@ from infra.oauth import (
 )
 from ui.helpers.metric_explainers import render_metric_explainer
 from ui.helpers.tw_time import tw_now_str
-from services.moneydj_fetcher import auto_fetch_moneydj  # F-H6 v19.79: §8.2 L3→L2
+from services.moneydj_fetcher import auto_fetch_moneydj, normalize_manual_fund_input  # F-H6 v19.79: §8.2 L3→L2
 from repositories.ledger_repository import (
     load_all_ledgers,
 )
@@ -1516,17 +1516,19 @@ def render_portfolio_tab() -> None:
                 _existing_set = {(f["code"], f.get("policy_id", "") or "")
                                   for f in st.session_state.portfolio_funds}
                 _skipped_dup: list[str] = []
+                _dropped_lines: list[str] = []   # 2026-10-29 稽核 should-fix 3:抽不出代碼的行(例:網址沒有 a=)
                 for _line in pf_codes_input.splitlines():
                     _line = _line.strip()
                     if not _line:
                         continue
                     if "," in _line:
                         _parts = [p.strip() for p in _line.split(",", 1)]
-                        _code, _pid = _parts[0].upper(), _parts[1]
+                        _code, _pid = normalize_manual_fund_input(_parts[0]), _parts[1]  # DG-2 §10 A
                     else:
-                        _code = _line.upper()
+                        _code = normalize_manual_fund_input(_line)  # DG-2 §10 A:先判網址再轉大寫
                         _pid = default_pid
                     if not _code:
+                        _dropped_lines.append(_line)
                         continue
                     if (_code, _pid) in _existing_set:
                         _skipped_dup.append(f"{_code}@{_pid or '(未綁)'}")
@@ -1534,6 +1536,11 @@ def render_portfolio_tab() -> None:
                     _existing_set.add((_code, _pid))
                     _entries.append((_code, _pid))
 
+                if _dropped_lines:
+                    st.warning(
+                        f"⚠️ 以下 {len(_dropped_lines)} 行抽不出基金代碼，已略過：{', '.join(_dropped_lines[:10])}"
+                        f"{'…' if len(_dropped_lines) > 10 else ''}"
+                    )
                 if not _entries:
                     if _skipped_dup:
                         st.warning(

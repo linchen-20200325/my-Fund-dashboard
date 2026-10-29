@@ -1707,6 +1707,20 @@
 | supersedes／superseded by | supersedes：無。承接 `DEC-2026-10-28-03`（其指定的 DG-2 由本筆裁為 C+ shadow first）；`docs/v2/69` G-ID-1「平台後綴代表不同 NAV 序列」的 FACT 標記由本筆的例外路徑取代為「斷言，未經證據」。superseded by：無。 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-29-01｜客戶裁示：DG-2 最終整合——Sheet「基金代號」欄＝MoneyDJ 命名空間（只限該欄）、基金身份與持倉身份分開、MoneyDJ 專屬後綴規則
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-29 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-29_dg2_final_ruling.md`） |
+| 決策內容摘要 | **客戶裁示**：(1) Google Sheet「基金代號」欄現在及未來均為 **MoneyDJ 基本基金代碼**（例 `ACTI71`、`JFZN3`、`ACCP138`、`ACDD01`、`ACDD19`、`TLZF9`、`ACTI94`、`ALBT8`），該欄命名空間固定 MoneyDJ；**只適用於該欄**，不得推廣為整個 repo 的所有 code、所有 Sheet 或所有外部 API；不改 Sheet schema、不要求補 ISIN。(2) **基金身份與保單持倉身份分開**：同一基金可在多張保單，共用同一 MoneyDJ 基金身份（`moneydj:TLZF9` 為示意，不代表核准變更儲存鍵），不得合併不同保單的投入金額、單位數、交易、損益或持倉紀錄。(3) **MoneyDJ 專屬後綴規則**：`TLZF9-AL001`／`TLZF9-24A7` → 基本代碼 `TLZF9`（後綴為通路資訊）；`ACDD01-EQTAL005` → 客戶確認基本代碼 `ACDD01`（業務語意；來源、後綴對應與 NAV 等價性仍須證據）；不得把通用 `split("-")[0]` 套到其他來源，FundClear `AGIF-HT5`／`AGIF-HTG` 不得拆成 `AGIF`。(4) **Sheet 代碼解析最終採 C+ 加 Sheet MoneyDJ 來源契約**（取代 #1098 之後提出的 A／B／C 問題）：Sheet 基本代碼不需剝後綴；MoneyDJ 平台 URL 先解析 URL／頁型／來源，再依已驗證 mapping 辨識通路後綴；未知來源或未知後綴不得盲目剝除；不同 namespace 不得只靠字串相似合併；Sheet 出現不符基本代碼契約的輸入 → 標記資料驗證問題，不得靜默截斷、剝除或改寫原值。(5) 境內／境外頁型依既有程式與測試確認；網址明示頁型優先保留為證據，裸碼推斷不可靠則 Unknown。(7) FundClear：不把 Sheet MoneyDJ code 當 FundClear code、不自動產生對照、不要求客戶提供；未來作補充來源須有經驗證的跨來源 mapping，沒有 mapping 顯示無法判定。(8) Identity 與 NAV 分開；未知屬性不猜、不視為相同。(9) 網路 NAV 查證不可得 → UNVERIFIED，不虛構數值。(10) 四類解析缺陷可在局部、唯一修法、相容可驗證時修；會改 NAV 選源／身份歸併／持倉鍵／估值則停在 Decision Gate。(11) Shadow flag 維持預設關，不授權正式環境啟用或 production NAV resolver 接管。(12) 本輪禁止順帶修改：Sheet schema、NAV source precedence、`get_latest_nav` 選源語意、Morningstar `results[0]` 正式採用行為、valuation、FX cutoff、return formulas、正式基金頁／持股頁 UI、One AI Brain、Risk Cap、凍結的 vNext UI SSOT。 |
+| 理由／背景 | 客戶原話：「Same verified instrument / share class + same metric + same as-of + same currency = same canonical value.」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-29_dg2_final_ruling.md`；落地：`docs/v2/70_dg2_canonical_identity_proposal.md` 第 15 節、`shared/fund_identity.py`（`INPUT_SOURCE_SHEET_FUND_CODE`、`STATUS_SHEET_CONTRACT_VIOLATION`、`STATUS_SUFFIX_UNVERIFIED`、`CUSTOMER_CONFIRMED_SUFFIXES`、`MONEYDJ_PAGE_MARKET`）、`services/fund_identity.py`、`services/fund_identity_shadow.py`、`tests/test_fund_identity_dg2.py`、`docs/BACKLOG.md` BL-0521、`docs/HANDOFF.md`。 |
+| 影響範圍 | 只動 Shadow resolver 與其測試、文件；flag 仍預設關，production 行為不變；`resolve_full_keys` 的 hook 不宣告 Sheet 來源（輸入混有非該欄來源，見 `docs/v2/70` 第 15 節）。四類解析缺陷由另一組處理。不改 `CLAUDE.md`、`docs/v2/44_fund_ui_ssot.md`、`INDICATOR_SPECS`。 |
+| 是否可逆 | 可逆（客戶可另行裁示；shadow 關 flag 即無作用） |
+| supersedes／superseded by | supersedes：#1098 之後提出的 Sheet 代碼解析 A／B／C 三方案（第 4 項：原樣不再適用）；`DEC-2026-10-28-05` 下「MoneyDJ 命名空間內第一個 `-` 前一律＝基金碼」的實作讀法收窄為「只剝已驗證 mapping 命中的後綴」（第 4 項第 3、4 點）；BL-0521 子項 (h)「Sheet 裸帶後綴代碼的命名空間」由第 1、4 項裁定。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；「MoneyDJ 命名空間內也只剝已驗證 mapping 命中的後綴」、Sheet 契約大小寫與前後空白沿用 `fund_keys` 第 0～2 步為執行組讀法；屬 identity／data semantics 等級，依 `PROJECT_RULES.md` 第 8 節合併前須至少 1 組真正獨立稽核；單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1855,3 +1869,4 @@
 - 第四節 `DEC-2026-10-28-03`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_cross_view_dg1_ruling_b.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
 - 第四節 `DEC-2026-10-28-04`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_anti_bloat_rule.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
 - 第四節 `DEC-2026-10-28-05`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_dg2_identity_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
+- 第四節 `DEC-2026-10-29-01`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_dg2_final_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與「只剝已驗證 mapping 命中的後綴」等讀法為執行組讀法；由執行組單組寫成，未經第二組驗證。

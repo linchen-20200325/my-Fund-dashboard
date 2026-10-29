@@ -39,7 +39,7 @@ from models.policy import (
     migrate_ledger_dict,
     parse_pk,
 )
-from services.moneydj_fetcher import auto_fetch_moneydj  # F-H6 v19.79: §8.2 L3→L2
+from services.moneydj_fetcher import auto_fetch_moneydj, normalize_manual_fund_input  # F-H6 v19.79: §8.2 L3→L2
 from repositories.ledger_repository import (
     append_ledger_row,
     replace_ledgers_for_policy,
@@ -1482,7 +1482,7 @@ def render_t7_section() -> None:
                 if _asubmit:
                     # ── 新增基金模式：fetch + append + 單檔 subscribe（原 flow）──
                     if _a_mode == "新增基金":
-                        _new_code_clean = _a_new_code.strip().upper()
+                        _new_code_clean = normalize_manual_fund_input(_a_new_code)  # DG-2 §10 A:先判網址再轉大寫
                         if not _new_code_clean:
                             t7_abort("❌ 請輸入新基金代碼或 URL。")
                         if any(f["code"] == _new_code_clean for f in

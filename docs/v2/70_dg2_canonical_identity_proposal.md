@@ -183,19 +183,19 @@ print("3", f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01"), f("ht
 |---|---|---|---|---|
 | 1 | `repositories/fund/sources.py::parse_moneydj_input` 頁型辨識 | ADAPT | resolver 取其 `page_type` 作 metadata | ✅ |
 | 2 | 同上代碼文法 `主碼(-後綴)?` | ADAPT | 經 `fund_keys` 關卡使用，不單獨用（`a=` 未錨定、兜底收 `#FRAG`） | ✅ |
-| 3 | `canonicalize_moneydj_url` 內 `split("-", 1)[0]` | ADAPT | ~~resolver 對**所有**輸入一致套用第一個 `-` 前＝base~~ → 只在 MoneyDJ／平台代碼命名空間套用（反例見第 14 節第 7 點；2026-10-28 獨立稽核 MUST 1，有意識的更正，不是漏刪） | ✅ |
+| 3 | `canonicalize_moneydj_url` 內 `split("-", 1)[0]` | ADAPT | ~~resolver 對**所有**輸入一致套用第一個 `-` 前＝base~~ → 只在 MoneyDJ／平台代碼命名空間套用（反例見第 14 節第 7 點；2026-10-28 獨立稽核 MUST 1，有意識的更正，不是漏刪）；→ 2026-10-29 再收窄：只剝**已驗證 mapping** 命中的後綴（`DEC-2026-10-29-01`，第 15 節） | ✅ |
 | 4 | `canonicalize_moneydj_url` 整體（只改寫行動版網址） | LEGACY_COMPAT | 舊 tab2 行為維持；resolver 不依賴它 | ✅ |
 | 5 | `services/v2_tables/fund_keys.py::_resolve_one`／`_is_pure_code` | ADAPT（驗證≈REUSE） | resolver 的輸入關卡；`#frag`／`area=` 正確 | ✅ |
-| 6 | `repositories/policy/v1.py::_extract_code_from_url` | REJECT（身分）／LEGACY_COMPAT（保單同步） | `#frag`→`TLZF9-AL001#FRAG`、`area=TW`→`TW` | ✅ |
+| 6 | `repositories/policy/v1.py::_extract_code_from_url` | REJECT（身分）／LEGACY_COMPAT（保單同步） | `#frag`→`TLZF9-AL001#FRAG`、`area=TW`→`TW`；2026-10-29 讀碼：**也在 vNext 持倉路徑上**——v1 格式保單分頁（無 `基金代號`／`fund_code` 欄）經 `repositories/policy_supplement_repository.py::_process_policy_tab` → `repositories/policy/v2.py::_v1_frame_to_v2` 以它從 `fund_url` 推 `fund_code`（第 15 節〈hook 呼叫鏈〉） | ✅ |
 | 7 | 持倉主鍵 `policy_id::CODE`、`migrate_ledger_dict` | LEGACY_COMPAT | 不改存放鍵 | — |
 | 8 | `infra/cache.py::_normalize_moneydj_url_for_cache` | REJECT | 小寫與裸碼得空鍵、頁型恆 `default` | ✅ |
 | 9 | `fetch_fund_from_moneydj_url` 內 fallback regex | LEGACY_COMPAT | 函式內嵌、不可單獨呼叫，shadow 未納入 | ✅（讀碼） |
 | 10 | `_DEFAULT_MAPPING`／`load_fund_code_mapping` | LEGACY_COMPAT（別名可 ADAPT） | resolver 預設不套別名（`alias_mapping={}`）；shadow hook 傳入 production `resolve_full_keys` 已載入的同一份表（不另讀檔） | ✅（`ACTI171`／`ACTI7`／`ACTI71` → `ACTI71`） |
-| 11 | `sources.py::_BANK_PLATFORM_CODES` | ADAPT（channel 種子） | 6 個 base、鍵全是 base；shadow 綁定後注入 resolver 當 `channel_table` | ✅ |
+| 11 | `sources.py::_BANK_PLATFORM_CODES` | ADAPT（channel 種子；2026-10-29 起為「已驗證 mapping」之一） | 6 個 base、鍵全是 base；shadow 綁定後注入 resolver 當 `channel_table`；客戶 2026-10-29 舉的 `TLZF9-AL001`／`TLZF9-24A7` 都在表內，`ACDD01-EQTAL005` 不在（改列 L0 客戶確認表） | ✅ |
 | 12 | `_src_bank_platform_nav`（第一個成功通路即用） | UNVERIFIED | 不比對各通路是否一致；不可當「同 NAV」證據 | ✅（讀碼） |
 | 13 | `fund_fetcher.py::PORTAL_CFG` | LEGACY_COMPAT | 只有 URL 樣板 | — |
 | 14 | `fund_fetcher.py::_INSURANCE_SUBDOMAIN_HINTS` | REJECT（通路證據）／LEGACY_COMPAT（取數） | 以 base 前綴猜子網域，不可填 `channel_code` | — |
-| 15 | `get_page_types_to_try`、`_is_domestic_code` | LEGACY_COMPAT | 純頁面路由 | — |
+| 15 | `get_page_types_to_try`、`_is_domestic_code` | LEGACY_COMPAT（取數路由）／REJECT（身分或頁型證據） | 純頁面路由；2026-10-29 重驗：網址頁型優先、其次對照表、再前綴、預設境外；首選失敗即互換，推斷不可當證據（第 15 節） | ✅（讀碼＋測試） |
 | 16 | `nav_metrics.py::fetch_nav`／`fetch_div` 的 `split("-")[-1]` | REJECT | 以後綴當代碼重抓（`TLZF9-AL001`→`AL001`）；見第 14 節 | ✅ |
 | 17 | `_morningstar_search_secid`／`_resolve_ms_secid` 的 `results[0]` | REJECT | 改由 `validate_external_candidate` 驗（本階段只 shadow） | — |
 | 18 | `_MORNINGSTAR_SECID_MAP`、`_ALLIANZ_INSURANCE_CODES`、`cache/nav/TLZF9.json` | LEGACY_COMPAT（C+ 佐證） | 全以 base 為鍵 | — |
@@ -220,7 +220,7 @@ print("3", f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01"), f("ht
 | `services/v2_tables/fund_keys.py::resolve_full_keys` | L2 | 唯一 hook：flag 為真才於函式內 import shadow 並記 log；回傳值不變 |
 
 - **層級**：純 resolver 不 import `_BANK_PLATFORM_CODES`（通路表以 `channel_table` 參數注入，shadow 模組綁定）；它 import L1 `parse_moneydj_input` 與 L2 `fund_keys`（L2→L1 下行，`CLAUDE.md` §8.2 允許；`fund_keys` 既有同一 import）。v2_tables import 白名單加開 `fund_keys.py`→`services.fund_identity_shadow` 一個名字（`tests/test_v2_tables_market_indicator.py`）；`tests/test_services_purity_contract.py` 照舊綠。
-- **命名空間（2026-10-28 獨立稽核 MUST 1）**：「第一個 `-` 前＝基金碼」只在 MoneyDJ／平台代碼命名空間成立。證據任一即可：`namespace="moneydj"`；網址被 `parse_moneydj_input` 認出 MoneyDJ 頁型；完整代碼在注入的通路表內。沒有證據的帶 `-` 代碼 → `namespace_unknown_suffix_not_stripped`（不剝、`canonical_key` 為空、`same_canonical_fund` 只在完整代碼逐字相同時為真）；明示其他命名空間 → `out_of_scope_namespace`。shadow hook 不替 Sheet 代碼擔保命名空間：不在通路表的裸帶後綴代碼照實記為命名空間未知（Sheet 代碼命名空間屬 Stage-2 Decision Gate）。
+- **命名空間（2026-10-28 獨立稽核 MUST 1）**：「第一個 `-` 前＝基金碼」只在 MoneyDJ／平台代碼命名空間成立。證據任一即可：`namespace="moneydj"`；網址被 `parse_moneydj_input` 認出 MoneyDJ 頁型；完整代碼在注入的通路表內。沒有證據的帶 `-` 代碼 → `namespace_unknown_suffix_not_stripped`（不剝、`canonical_key` 為空、`same_canonical_fund` 只在完整代碼逐字相同時為真）；明示其他命名空間 → `out_of_scope_namespace`。shadow hook 不替 Sheet 代碼擔保命名空間：不在通路表的裸帶後綴代碼照實記為命名空間未知（~~Sheet 代碼命名空間屬 Stage-2 Decision Gate~~ → 2026-10-29 客戶已裁定，`DEC-2026-10-29-01`，見第 15 節；有意識的狀態更新，不是漏刪）。
 - **外部候選接受條件（MUST 2）**：`accepted` 必須 `base_fund_code` 或 `isin` 已確認；只有幣別等非身分鍵相符 → `unverified`。
 - **例外登記不會自動更新（SHOULD d）**：`evaluate_suffix_evidence` 的輸出在 Stage-1 **不**寫進 `IDENTITY_EXCEPTIONS`；登記新增須 Decision Gate。在那之前 `same_canonical_fund` 的結果不因任何證據紀錄而改變。
 - **hook 失敗隔離（SHOULD a）**：hook 的 import 與呼叫都包在 try 內，失敗只寫 `logging`（`fund_keys.py` 因此加開 `logging` 一個標準庫名字）；子程序測試確認 flag 關時 `services.fund_identity`／`services.fund_identity_shadow` 都不會被 import（SHOULD c）。
@@ -234,13 +234,53 @@ print("3", f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01"), f("ht
 以下皆於 2026-10-28 由本實作組重驗（純函式執行或讀碼；端到端 UI 未跑）；本批依裁示第 9／12 項**不改** production。
 
 1. **T7／tab3 手動加入把網址整行轉大寫**：`ui/tab3_t7_ledger.py` 新基金 `_a_new_code.strip().upper()`、`ui/tab3_portfolio.py` 手動批次每行 `.upper()` → `build_moneydj_url` 的 `startswith("http")` 對 `HTTPS` 不成立 → 組出 `…?a=HTTPS://…` → `parse_moneydj_input` 得 code `HTTPS`（執行確認）。
+   → ✅ **2026-10-29 已修**（`4eb5b7c8`，`DEC-2026-10-29-01` 第 10 項）：新 `services/moneydj_fetcher.py::normalize_manual_fund_input` 先判網址再轉大寫（沿用 `parse_moneydj_input`），`ui/tab3_t7_ledger.py`／`ui/tab3_portfolio.py` 改用它；行為差異：貼網址改得 `?a=` 代碼（原誤得 `HTTPS`），裸碼逐字不變；無版面變更。
 2. **`nav_metrics.fetch_nav`／`fetch_div` 以後綴當代碼**：`full_key.split("-")[-1]`，`TLZF9-AL001` → 打 `?a=AL001`（讀碼＋執行 split）；可達於 legacy 最終備援與 `nav_history_store.incremental_update`。
+   → ✅ **2026-10-29 已修**（`3a1cb35d`）：拔除 `split("-")[-1]` 後綴重試（yp004001／yp004003 的後綴網址與以後綴為檔名的預存檔讀取）；無 `-` 的鍵網址序列不變（只少一次與完整鍵相同的重複網址）；含 `-` 的鍵**不查**預存檔（`_attempts` 記「未查」）。⚠️ **開放問題（須決策，未做）**：含 `-` 的鍵改讀 `cache/nav/{full_key}.json` 當備援＝新增一條 fallback，屬 NAV 選源語意，未加。
 3. **`policy/v1._extract_code_from_url`**：`#frag` → `TLZF9-AL001#FRAG`、`?area=TW&a=…` → `TW`（執行確認；`shadow_compare` 測試釘住）。
+   → ✅ **2026-10-29 已修**（`dde3a3a6`）：改用 `urlsplit`，只認 `a`／`*code` 參數、丟棄 `#fragment`；合格輸入的輸出與持股鍵 `{policy_id}::{CODE}` 逐字不變（差分測試）；`#frag`／`area=TW` 不再得 `TLZF9-AL001#FRAG`／`TW`；xview 與 shadow 的對應分歧斷言已翻轉並註明。⚠️ 「真實 Sheet 的 `fund_url` 沒有 `#`／`area=`／`;`」**UNVERIFIED**（未讀真實 Sheet）；若有這類列，修正後抽出的代碼不同，持股主鍵 `{policy_id}::{CODE}` 也會跟著變。`urlsplit` 對不合法 netloc（例 `https://[bad/x?a=TLZF9`）會拋 `ValueError`，該輸入退回修正前寫法、輸出逐字相同（2026-10-29 稽核 should-fix）。
 4. **cache 正規化**：小寫 `a=` 與裸碼都得 `fetch_fund||default`（空碼鍵；執行確認）；production 0 呼叫者（引用第 10 節第 6 點）。
+   → **2026-10-29 只釘住現況、不改**（`befdc0c5`）：production 0 呼叫者，依裁示第 10 項 D 不為未使用的 helper 擴大重構；`tests/test_dg2_parsing_defects.py` 釘住空鍵／碰撞現況。
 5. **tab2 Step-1 `nav_latest` 不與序列對帳**：既有 `tests/test_xview_characterization.py::test_char_divergence_c5_scalar_nav_latest_and_series_last_are_not_reconciled` 綠（本批重跑）。
 6. **銀行平台第一個成功即用**：`_src_bank_platform_nav` 依序試各通路，第一個抓到資料的就回傳（moneydj 頁型要 ≥10 筆；台灣人壽 mobile 分支只要非空），不比對其他通路（讀碼）；且只對 base 碼觸發（`fund_orchestration` `_code in _BANK_PLATFORM_CODES`）。
 
-7. **反例：FundClear 級別碼也有 `-`**（2026-10-28 獨立稽核 MUST 1，重驗 `tests/test_fundclear_offshore.py::test_parse_selection`）：`AGIF-HT5`＝IT 累積類股、`AGIF-HTG`＝A 配息類股，是同一基金的不同級別。原 commit `539e660c` 的 resolver 會把兩者剝成同一 base `AGIF`（`same_canonical_fund` 為 True）；已改為命名空間未知時不剝（見第 13 節），測試釘住兩者不合併。⚠️ 守門只擋「沒有命名空間證據」：呼叫端若對 FundClear 級別碼誤傳 `namespace="moneydj"`，兩者仍會被合併（測試 `test_呼叫端明示moneydj時_AGIF級別碼會被合併_守門靠呼叫端不誤標` 釘住此現況）。
+7. **反例：FundClear 級別碼也有 `-`**（2026-10-29 補註：下方「⚠️ 守門只擋…仍會被合併」已因 `DEC-2026-10-29-01` 不成立——後綴須命中已驗證 mapping 才剝，誤傳 `namespace="moneydj"` 也不合併；測試改名 `test_呼叫端誤標moneydj時_AGIF級別碼也不被合併`）（2026-10-28 獨立稽核 MUST 1，重驗 `tests/test_fundclear_offshore.py::test_parse_selection`）：`AGIF-HT5`＝IT 累積類股、`AGIF-HTG`＝A 配息類股，是同一基金的不同級別。原 commit `539e660c` 的 resolver 會把兩者剝成同一 base `AGIF`（`same_canonical_fund` 為 True）；已改為命名空間未知時不剝（見第 13 節），測試釘住兩者不合併。⚠️ 守門只擋「沒有命名空間證據」：呼叫端若對 FundClear 級別碼誤傳 `namespace="moneydj"`，兩者仍會被合併（測試 `test_呼叫端明示moneydj時_AGIF級別碼會被合併_守門靠呼叫端不誤標` 釘住此現況）。
 8. **別名表缺口**：resolver 單獨呼叫時預設不套別名，`ACTI171`／`ACTI7`／`ACTI71`（內建表同一檔）會得到三個 base；shadow hook 已傳入 production 對照表，故 hook 記錄不受影響；Stage-2 啟用前須決定別名表是否為 resolver 的正式輸入。
 
 以上已列入 `docs/BACKLOG.md` BL-0521 子項，不另開 BL。
+
+## 15. 客戶最終裁示（`DEC-2026-10-29-01`）與 resolver 契約更新
+
+逐字：`docs/evidence/decisions/2026-10-29_dg2_final_ruling.md`。取代 #1098 之後提出的 Sheet 代碼解析 A／B／C 問題。仍為 Shadow：flag 預設關、production 不變。四類解析缺陷（第 14 節第 1～4 點）由另一組處理，本節不動。
+
+### 15.1 契約（`services/fund_identity.py::resolve_fund_identity`，L0 常數在 `shared/fund_identity.py`）
+
+- **Sheet「基金代號」欄**：呼叫端以 `input_source=INPUT_SOURCE_SHEET_FUND_CODE`（`"sheet_fund_code_column"`）宣告 → 命名空間固定 `moneydj`（`INPUT_SOURCE_NAMESPACES` 只有這一個鍵；未知來源、或與 `namespace` 衝突 → `ValueError`）。合格基本代碼（ASCII、非網址、不含 `-`、`[A-Z0-9]{3,30}`）原樣當 base。帶 `-`、網址、格式不符、非字串、空白 → `sheet_code_contract_violation`：`raw_input` 原物件保留，`base_fund_code`／`original_code`／`canonical_key` 皆空，不剝、不截、不改寫。大小寫與前後空白沿用 `fund_keys` 第 0～2 步（執行組讀法）。只限該欄，未宣告來源的輸入照舊走證據規則。
+- **後綴**：只在 MoneyDJ 證據（宣告命名空間、MoneyDJ 網址頁型、或命中下列 mapping）**且**已驗證 mapping 命中時才剝；mapping＝注入的通路表（`suffix_provenance="channel_table"`；⚠️ 把整張 L1 `_BANK_PLATFORM_CODES` 都當已驗證 mapping 是**執行組讀法**——客戶確認的只有 `TLZF9-AL001`／`TLZF9-24A7`（與下列 `ACDD01-EQTAL005`），表內其餘條目未經客戶確認）或 L0 `CUSTOMER_CONFIRMED_SUFFIXES`（目前只有 `("ACDD01","EQTAL005")`，`provenance="customer_confirmed_2026-10-29"`、`nav_equivalence="UNVERIFIED"`，不含通路名稱）。有 MoneyDJ 證據但後綴未驗 → `moneydj_suffix_unverified_not_stripped`（不剝、不合併；`same_canonical_fund` 只在完整代碼逐字相同時為真）。這是對裁示第 4 項第 3、4 點的**執行組讀法**：收窄了 `DEC-2026-10-28-05` 實作的「MoneyDJ 命名空間內第一個 `-` 前一律＝基金碼」；既有測試三處依此改寫（已註明）。
+- **FundClear**：`AGIF-HT5`／`AGIF-HTG` 在任何 `namespace`（含誤標 `moneydj`）都不剝成 `AGIF`。不產生 FundClear 對照；沒有已驗證跨來源 mapping 時 resolver 不宣稱同一基金。
+- **基金身份 vs 持倉身份**：resolver 只收單筆代碼，原始碼不含任何持倉欄位（測試以 AST 掃描釘住）；同基金多保單得同一 `canonical_key`，持倉列與 `(policy_id, fund_code)` 鍵不動、不彙總；hook 逐筆記錄、不去重。不改任何儲存鍵。
+- **Unknown**：currency／share class／配息／避險一律 Unknown、不預設 USD、缺 ISIN 不警告不影響。
+- `evaluate_suffix_evidence` 改用 MoneyDJ 文法的候選切分比對（只評估證據、不合併），新增 `channel_table` 參數。
+
+### 15.2 hook 呼叫鏈（`services/v2_tables/fund_keys.py::resolve_full_keys`）——為何 hook 不宣告 Sheet 來源
+
+hook 只拿到字串串列，`resolve_full_keys` 的呼叫端來源不一（讀碼，2026-10-29）：
+- `ui_v2/hld/source.py`、`ui_v2/alo/source.py`、`services/v2_tables/settings_store.py::_refetch_nav_run`：`holding[*]["fund_code"]`，來自 `services/v2_tables/alo_holdings.py::build_alo_tables`（`_key_text` 只去前後空白）← `repositories/policy_supplement_repository.py::_process_policy_tab`（服務帳戶路徑與 `repositories/personal_policy_reader.py::load_workbook_tables` 共用）。分頁有 `基金代號`／`fund_code` 欄 → 取該欄；**沒有**（v1 格式）→ `repositories/policy/v2.py::_v1_frame_to_v2` 以 `repositories/policy/v1.py::_extract_code_from_url` 從 `fund_url` 推出。
+- `ui_v2/exp/source.py::_load_funds`：`pool["codes"]`，來自 `services/v2_tables/exp_universe.py`（基金池分頁的 `code` 欄，`repositories/pool_repository.py::_HEADERS`），不是基金代號欄。
+
+→ 逐筆來源無法在 hook 證明，故 hook 一律不傳 `input_source`（測試釘住）；`resolve_full_keys` 簽名不改。要標記，須由能證明來源的呼叫端（例如在 `_process_policy_tab` 知道是哪一欄時）往下帶——那會改 production 介面，未做。
+
+### 15.3 MoneyDJ 境內／境外頁型（第 5 項；讀碼＋既有與新增測試）
+
+- `yp010000`＝境內頁、`yp010001`＝境外頁（`repositories/fund/sources.py::_is_domestic_code` docstring 與分支、`parse_moneydj_input` 註解、`tests/test_fund_url_canonicalize.py`）。其他頁型（`wb01`／`wb02`／`wb05`／`wr01`／`wr02`／`a1_mobile`／`b1_mobile`）不表示境內外。
+- **優先序**：`_is_domestic_code(code, page_type)`：網址明示的 `yp010000`／`yp010001` → 對照表（`load_fund_code_mapping`，csv 可覆寫）→ `_DOMESTIC_PREFIXES` 前綴 → 預設境外。`fund_orchestration` 只在 `page_type` 空白時推斷（`fetch_fund_from_moneydj_url`、`_fetch_fund_single`；網址或對照表給了頁型就照用），`canonicalize_moneydj_url` 只用前綴。
+- **推斷不可靠**：首選失敗即 `get_page_types_to_try` 互換重試；`fund_orchestration` 註解自陳「ACTI71 mapping table 標境內 yp010000 但實際境外」（未驗證的註解）；BL-0520 特徵化輸入 `https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=ACDD01` 的明示頁型與前綴推斷（境內）衝突；前綴表只列部分投信、預設境外是取數保守值。
+- **resolver**：網址明示頁型 → `page_type_source="url"`，`yp010000`／`yp010001` 另記 `url_page_market`＝`domestic`／`offshore`（MoneyDJ 頁面類別，不是基金屬性證明）；裸碼 → `page_type=""`、兩者皆 Unknown，不用前綴或對照表推斷。頁型不參與身分比較。
+
+### 15.4 NAV 網路查證（第 9 項）
+
+`TLZF9`、`TLZF9-AL001`、`TLZF9-24A7`、`ACDD01`、`ACDD01-EQTAL005` 的實際 NAV 等價性：**UNVERIFIED**。理由：本 container 對 MoneyDJ 的連線被網路政策擋下（proxy CONNECT 403，2026-10-29 查）；未嘗試繞過，未記任何數值。另：`tests/test_fund_url_canonicalize.py::test_canonicalize_chubb_wr01_passthrough` docstring 宣稱平台桌面頁 `ACDD01-EQTAL005` 是「扣手續費後的 NAV（與裸 ACDD01 不同）」——未經證據的註解，與客戶確認的身份語意不衝突（身份同一、NAV series 是否相同另驗），故客戶確認表標 `nav_equivalence="UNVERIFIED"`。
+
+### 15.5 測試與揭露
+
+`tests/test_fund_identity_dg2.py` 新增：Sheet 8 例（不注入／注入內建別名表）、命名空間只限該欄、契約違反 12 例、`ACDD01-EQTAL005` 裸碼與網址 4 例、通路表出處、`AGIF-HT5`／`AGIF-HTG` 三種命名空間、MoneyDJ 網址未驗後綴、頁型 5＋5 例與 L1 一致性、多保單身份分離、hook 逐筆不彙總、AST 無持倉欄位、Unknown 3 例；既有三處斷言依 `DEC-2026-10-29-01` 改寫並註明。單組寫成；identity 語意變更，合併前須至少 1 組真正獨立稽核（`PROJECT_RULES.md` 第 8 節）。

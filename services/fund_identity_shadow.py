@@ -24,7 +24,8 @@ from infra.cache import _normalize_moneydj_url_for_cache
 from repositories.fund.sources import _BANK_PLATFORM_CODES, canonicalize_moneydj_url, parse_moneydj_input
 from repositories.policy.v1 import _extract_code_from_url
 from services.fund_identity import resolve_fund_identity
-from shared.fund_identity import STATUS_NAMESPACE_UNKNOWN, STATUS_OUT_OF_SCOPE_NAMESPACE
+from shared.fund_identity import (STATUS_NAMESPACE_UNKNOWN, STATUS_OUT_OF_SCOPE_NAMESPACE,
+                                  STATUS_SHEET_CONTRACT_VIOLATION, STATUS_SUFFIX_UNVERIFIED)
 from services.v2_tables import fund_keys as _fund_keys
 
 logger = logging.getLogger(__name__)
@@ -53,28 +54,32 @@ def current_parser_results(raw, *, fund_keys_result: dict | None = None) -> dict
 
 
 def shadow_compare(raw, *, fund_keys_result: dict | None = None, channel_table=None,
-                   alias_mapping=None) -> dict:
+                   alias_mapping=None, input_source=None) -> dict:
     """單筆輸入的 shadow 紀錄。`channel_table` 預設綁定 L1 的 `_BANK_PLATFORM_CODES`。
 
     `alias_mapping`：hook 傳入 production `resolve_full_keys` 已載入的同一份對照表（不另讀檔）；
-    單獨呼叫時預設 `{}`（不做別名）。不傳 `namespace`：裸的帶後綴代碼若不在通路表、也不是 MoneyDJ 網址，
-    resolver 照實記 `namespace_unknown_suffix_not_stripped`（Sheet 代碼的命名空間屬 Stage-2 Decision Gate）。
+    單獨呼叫時預設 `{}`（不做別名）。不傳 `namespace`：裸的帶後綴代碼若不在通路表／客戶確認表、也不是 MoneyDJ 網址，
+    resolver 照實記 `namespace_unknown_suffix_not_stripped`。
+    `input_source`：只有**證明**輸入取自 Sheet「基金代號」欄的呼叫端才傳 `"sheet_fund_code_column"`
+    （`DEC-2026-10-29-01`）。hook 不傳：`resolve_full_keys` 的輸入混有其他來源（見 `docs/v2/70` 第 15 節〈hook 呼叫鏈〉）。
     """
     table = _BANK_PLATFORM_CODES if channel_table is None else channel_table
     ident = resolve_fund_identity(raw, channel_table=table, source="dg2_shadow",
-                                  alias_mapping=alias_mapping)
+                                  alias_mapping=alias_mapping, input_source=input_source)
     current = current_parser_results(raw, fund_keys_result=fund_keys_result)
     resolver = {"base_fund_code": ident.base_fund_code, "original_code": ident.original_code,
                 "platform_suffix": ident.platform_suffix, "channel_code": ident.channel_code,
                 "page_type": ident.page_type, "verification_status": ident.verification_status,
-                "error": ident.error}
+                "error": ident.error, "input_source": ident.input_source,
+                "suffix_provenance": ident.suffix_provenance, "page_type_source": ident.page_type_source,
+                "url_page_market": ident.url_page_market}
     difference, reason = {}, []
     for name, value in current.items():
         if value == ident.original_code:
             continue
         difference[name] = value
         if ident.original_code is None:
-            reason.append(f"{name}: resolver 判 unresolved（{ident.error}），parser 仍給 {value!r}")
+            reason.append(f"{name}: resolver 判 {ident.verification_status}（{ident.error}），parser 仍給 {value!r}")
         elif value == ident.base_fund_code:
             reason.append(f"{name}: 得 base {value!r}（剝掉後綴），resolver 保留 original_code {ident.original_code!r}")
         elif not value:
@@ -84,8 +89,14 @@ def shadow_compare(raw, *, fund_keys_result: dict | None = None, channel_table=N
     if ident.verification_status in (STATUS_NAMESPACE_UNKNOWN, STATUS_OUT_OF_SCOPE_NAMESPACE):
         reason.append(f"後綴未剝：無命名空間證據（不在通路表／非 MoneyDJ 頁型；status={ident.verification_status}），"
                       f"original_code {ident.original_code!r} 不合併")
+    if ident.verification_status == STATUS_SUFFIX_UNVERIFIED:
+        reason.append(f"後綴未剝：MoneyDJ 命名空間但後綴不在已驗證 mapping（通路表／客戶確認表；DEC-2026-10-29-01），"
+                      f"original_code {ident.original_code!r} 不合併")
+    if ident.verification_status == STATUS_SHEET_CONTRACT_VIOLATION:
+        reason.append(f"Sheet 基金代號欄契約違反（{ident.error}）；原值 {raw!r} 保留、不剝不截不改寫")
     if ident.platform_suffix:
-        reason.append(f"後綴 {ident.platform_suffix!r} 只作通路 metadata；base_fund_code ＝ {ident.base_fund_code!r}"
+        reason.append(f"後綴 {ident.platform_suffix!r} 只作通路 metadata（依據 {ident.suffix_provenance}，NAV 等價性未驗）；"
+                      f"base_fund_code ＝ {ident.base_fund_code!r}"
                       "（所有現有 parser 都保留完整代碼當身分，行動版網址的 canonicalize 例外）")
     return {"raw_input": raw, "current_parser_results": current, "resolver_result": resolver,
             "difference": difference, "reason": reason}

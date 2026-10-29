@@ -50,6 +50,23 @@ def build_moneydj_url(raw_input: str, page_type: str) -> str:
     return f"https://www.moneydj.com/funddj/ya/{page_type}.djhtm?a={_raw.upper()}"
 
 
+def normalize_manual_fund_input(text: str) -> str:
+    """手動加入基金的輸入 → 代碼（DG-2 §10 缺陷 A；docs/v2/70 §14 第 1 點）。
+
+    原 UI 先 `.strip().upper()` 才判斷是否為網址 → 貼上的網址被轉成 `HTTPS://…`，
+    `build_moneydj_url` 的 `startswith("http")` 不成立 → 組出 `?a=HTTPS://…`。
+    改為**先判斷網址、再轉大寫**：
+    - 網址（`http` 開頭，大小寫不拘）→ 由既有 `parse_moneydj_input` 取 `?a=`／`&a=` 代碼（已大寫）；
+      抽不出代碼 → 回 `""`（呼叫端依「空輸入」處理，不猜、不回傳網址本身）。
+    - 其餘（裸碼）→ `.strip().upper()`，與修正前逐字相同。
+    """
+    s = (text or "").strip()
+    if s.lower().startswith("http"):
+        from repositories.fund.sources import parse_moneydj_input
+        return parse_moneydj_input(s).get("code", "") or ""
+    return s.upper()
+
+
 def auto_fetch_moneydj(
     raw_input: str,
     *,

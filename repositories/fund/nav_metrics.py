@@ -170,7 +170,9 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
     資料真實更新頻率(T+1),且失敗過濾 > TTL 精度(_ttl_cache 會快取空結果)。
     portal 子網域 → tcbbankfund（境內/境外通用）→ moneydj 主站（境外用 yp004001）
     """
-    mj_short = full_key.split("-")[-1] if "-" in full_key else full_key
+    # DG-2 §10 缺陷 B(docs/v2/70 §14 第 2 點):原有 `mj_short = full_key.split("-")[-1]`
+    # (`TLZF9-AL001` → `AL001`)把平台後綴當基金代碼重試(yp004001 網址與預存檔),
+    # 無任何來源證據顯示後綴是 MoneyDJ 基金代碼 → 整段拔除;只用呼叫端給的 full_key。
     _is_dom = _is_domestic_code(full_key)
     urls = []
     if portal in PORTAL_CFG:
@@ -185,7 +187,6 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
     if not _is_dom:
         urls += [
             f"https://www.moneydj.com/funddj/yf/yp004001.djhtm?a={full_key}",
-            f"https://www.moneydj.com/funddj/yf/yp004001.djhtm?a={mj_short}",
         ]
     # E-8 旁路:逐一記下每個網址與預存檔的結果,全敗時掛到回傳的空 Series 上。
     _attempts: list[str] = []
@@ -235,8 +236,10 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
     # 退回 GitHub Actions 每日預存快取 cache/nav/{code}.json（§4.6 proxy/直連降級的最終保障）。
     # 只在 live 全敗時觸發、不覆蓋任何 live 資料;快取自帶 source/fetched_at provenance（§2.2）。
     try:
-        _cache_code = (mj_short or full_key).strip().upper()
-        _cs = _src_cache_files(_cache_code)
+        # DG-2 §10 B:含 `-` 的鍵(平台後綴)過去讀的是 `cache/nav/{後綴}.json`(讀不到別檔 → 實質無備援);
+        # 後綴不再當代碼,且本批不改備援語意 → 含 `-` 的鍵略過預存檔(不新增讀取;是否改讀完整鍵須另案決策)。
+        _cache_code = full_key.strip().upper()
+        _cs = None if "-" in _cache_code else _src_cache_files(_cache_code)
         if _cs is not None and not _cs.empty:
             # v2026-08-27:_src_cache_files 現在會擋掉筆數不足 / schema 違反的快取
             # (與 live 分支同一把尺),並把密度 / 空窗 / 新鮮度的疑義掛在 attrs。
@@ -248,8 +251,11 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
                   + ("" if _sa else " ⛔ 此序列稀疏/過期,年化指標(Sharpe/σ/回撤)不可信"))
             _cs.attrs[LIVE_FETCH_ERROR_ATTR] = "\n".join(_attempts)   # 2026-10-09:見 LIVE_FETCH_ERROR_ATTR
             return _cs
-        _attempts.append(f"預存檔 cache/nav/{_cache_code}.json → 無可用序列"
-                         f"(檔案不存在,或未通過 _src_cache_files 的筆數/schema 檢查)")
+        if "-" in _cache_code:
+            _attempts.append(f"預存檔 cache/nav/{_cache_code}.json → 未查(含 '-' 的鍵不查預存檔,見 DG-2 §10 B)")
+        else:
+            _attempts.append(f"預存檔 cache/nav/{_cache_code}.json → 無可用序列"
+                             f"(檔案不存在,或未通過 _src_cache_files 的筆數/schema 檢查)")
     except Exception as e:
         print(f"[fetch_nav] cache fallback ERR: {e}")
         _attempts.append(f"預存檔 cache/nav/ 讀取失敗 → {type(e).__name__}: {e}")
@@ -733,13 +739,12 @@ def fetch_div(full_key: str, portal: str = "") -> list:
     if portal in PORTAL_CFG:
         base = PORTAL_CFG[portal]["base_url"]
         urls.append(base + PORTAL_CFG[portal]["div_path"].format(fk=full_key))
-    mj = full_key.split("-")[-1] if "-" in full_key else full_key
+    # DG-2 §10 缺陷 B:同 fetch_nav,不再以 `split("-")[-1]` 的後綴當代碼重試。
     _is_dom = _is_domestic_code(full_key)
     # yp004003 = 境外基金配息頁；境內基金使用 funddividend（子網域通用）
     if not _is_dom:
         urls += [
             f"https://www.moneydj.com/funddj/yf/yp004003.djhtm?a={full_key}",
-            f"https://www.moneydj.com/funddj/yf/yp004003.djhtm?a={mj}",
         ]
     else:
         urls += [

@@ -197,12 +197,41 @@ def delete_policy_row(
 # 純函式：把保單表轉成 portfolio_funds 骨架，給既有 batch-load 流程接手
 # ──────────────────────────────────────────────────────────────────────
 def _extract_code_from_url(url: str) -> str:
-    """從 MoneyDJ URL 取基金代碼；若 url 本身像代碼就原樣回傳。"""
+    """從 MoneyDJ URL 取基金代碼；若 url 本身像代碼就原樣回傳。
+
+    DG-2 §10 缺陷 C(docs/v2/70 §14 第 3 點):改用 `urllib.parse.urlsplit` 取 query、丟棄 `#fragment`,
+    並**只**接受參數名恰為 `a`(大小寫不拘)或以 `code` 結尾者(後者為保留舊行為);
+    原寫法對整串 `replace("?", "&").split("&")` 並接受任何以 `a` 結尾的鍵 ——
+    `#frag` 會黏進代碼(`X#FRAG`)、`area=TW` 會被當成代碼(`TW`)。
+    對目前正確的輸入(`?a=X`、`&a=X`、小寫 `a=`、`code=X`、裸碼、無 query 的路徑尾段)輸出與修正前逐字相同;
+    代碼值不做 percent-decode(與修正前相同)。
+    """
     if not url:
         return ""
     s = str(url).strip()
     if "://" not in s and "/" not in s:
         return s.upper()
+    from urllib.parse import urlsplit
+    try:
+        # urlsplit 丟掉 #fragment;query 內若再出現 `?` 視為分隔(舊行為)
+        query = urlsplit(s).query.replace("?", "&")
+    except ValueError:
+        # 2026-10-29 獨立稽核 should-fix 1:netloc 不合法(例 `https://[bad/x?a=TLZF9`)時 urlsplit 會拋;
+        # 呼叫端(`sync_policies_to_portfolio_funds`、`policy/v2._v1_frame_to_v2` 的 `.map`)沒有 try,
+        # 一列壞值會讓整次同步失敗 → 該輸入退回修正前的寫法,輸出與修正前逐字相同。
+        return _extract_code_from_url_legacy(s)
+    for token in query.split("&"):
+        if "=" in token:
+            k, v = token.split("=", 1)
+            k = k.lower()
+            if (k == "a" or k.endswith("code")) and v:
+                return v.strip().upper()
+    tail = s.rstrip("/").split("/")[-1]
+    return tail.split(".")[0].upper()
+
+
+def _extract_code_from_url_legacy(s: str) -> str:
+    """DG-2 §10 C 修正前的寫法(逐字保留),只給 `urlsplit` 拋 ValueError 的輸入使用。"""
     for token in s.replace("?", "&").split("&"):
         if "=" in token:
             k, v = token.split("=", 1)
