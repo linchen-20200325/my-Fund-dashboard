@@ -16,7 +16,7 @@
 > - **⑥-b 2026-10-28 Cross-View DG-1 裁示（`DEC-2026-10-28-03`；與 BL-0509 平行，不互相阻塞）**：客戶選方案 B——先做 BL-0520 特徵化測試 C1～C9（`tests/test_xview_characterization.py` 已寫成，結果見 `docs/v2/69` 附錄 B，標示「描述現況，不代表核准現況語意」，不改 production；待獨立稽核）；DG-2 提案草案已寫（`docs/v2/70_dg2_canonical_identity_proposal.md`，待客戶裁示，未核准，不開始 production refactor；稽核完成後才正式送審）；稽核完成後才提 DG-2 canonical identity contract（BL-0521）；DG-2 核准前不做 canonical identity production refactor；方案 C（`get_latest_nav` 併入 A 鏈，BL-0522）暫緩。
 > - **⑥-c 2026-10-28 永久規則 Anti-Bloat / Minimum Governance Overhead**（`DEC-2026-10-28-04`）：見 `PROJECT_RULES.md` 13.4，不在此複製。
 > - **⑥-d 2026-10-28 DG-2 裁示（`DEC-2026-10-28-05`）**：C+ canonical identity Stage-1 Shadow 已實作（flag `DG2_SHADOW_ENABLED` 預設關、production 不變）；Stage-2 啟用須另一次 Decision Gate；設計與已知缺陷見 `docs/v2/70` 第 11～14 節、BL-0521。
-> - **⑥-e 2026-10-29 DG-2 最終整合裁示（`DEC-2026-10-29-01`）**：Sheet「基金代號」欄＝MoneyDJ 命名空間（只限該欄）、基金身份與持倉身份分開、只剝已驗證 mapping 命中的後綴；shadow resolver 契約已更新（`docs/v2/70` 第 15 節），flag 仍關、production 不變；NAV 網路查證 UNVERIFIED（container 網路政策）；四類解析缺陷另組處理（BL-0521）。
+> - **⑥-e 2026-10-29 DG-2 最終整合裁示（`DEC-2026-10-29-01`）**：Sheet「基金代號」欄＝MoneyDJ 命名空間（只限該欄）、基金身份與持倉身份分開、只剝已驗證 mapping 命中的後綴；shadow resolver 契約已更新（`docs/v2/70` 第 15 節），flag 仍關、production 不變；NAV 網路查證 UNVERIFIED（container 網路政策）；四類解析缺陷 A～C 已修、D 只釘住（`docs/v2/70` 第 14 節、BL-0521；B 的完整鍵預存檔備援待決策）。
 > - **⑦ BL-0512 裁示**：客戶逐字「頁內錨點：不另開獨立批次；等各頁內容 Batch 落地時順帶處理。」→ BL-0512 狀態 deferred（`DEC-2026-10-27-40`），未實作
 > - **⑧ 等待事項**：(1) ~~**BL-0518 客戶一行確認**~~（→ 客戶已裁示核准，`DEC-2026-10-27-43`，#1093 已合併；有意識的狀態更新，不是漏刪）；(2) **BL-0509 累積樣本後一次回報客戶**（不每日回報；若需客戶人工閱讀條款頁，只提供精確頁面、要確認的條款項目、為何影響正式接入，不阻塞 🌍 頁）
 > - **⑨ Risk Cap／減碼 trigger 未完成**：BL-0495、BL-0496 仍待客戶裁示；**方向性 AI Action 不得提前實作**（`DEC-2026-10-27-40`、`-22`、`-36`）

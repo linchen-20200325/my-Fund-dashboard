@@ -234,9 +234,13 @@ print("3", f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01"), f("ht
 以下皆於 2026-10-28 由本實作組重驗（純函式執行或讀碼；端到端 UI 未跑）；本批依裁示第 9／12 項**不改** production。
 
 1. **T7／tab3 手動加入把網址整行轉大寫**：`ui/tab3_t7_ledger.py` 新基金 `_a_new_code.strip().upper()`、`ui/tab3_portfolio.py` 手動批次每行 `.upper()` → `build_moneydj_url` 的 `startswith("http")` 對 `HTTPS` 不成立 → 組出 `…?a=HTTPS://…` → `parse_moneydj_input` 得 code `HTTPS`（執行確認）。
+   → ✅ **2026-10-29 已修**（`4eb5b7c8`，`DEC-2026-10-29-01` 第 10 項）：新 `services/moneydj_fetcher.py::normalize_manual_fund_input` 先判網址再轉大寫（沿用 `parse_moneydj_input`），`ui/tab3_t7_ledger.py`／`ui/tab3_portfolio.py` 改用它；行為差異：貼網址改得 `?a=` 代碼（原誤得 `HTTPS`），裸碼逐字不變；無版面變更。
 2. **`nav_metrics.fetch_nav`／`fetch_div` 以後綴當代碼**：`full_key.split("-")[-1]`，`TLZF9-AL001` → 打 `?a=AL001`（讀碼＋執行 split）；可達於 legacy 最終備援與 `nav_history_store.incremental_update`。
+   → ✅ **2026-10-29 已修**（`3a1cb35d`）：拔除 `split("-")[-1]` 後綴重試（yp004001／yp004003 的後綴網址與以後綴為檔名的預存檔讀取）；無 `-` 的鍵網址序列不變（只少一次與完整鍵相同的重複網址）；含 `-` 的鍵**不查**預存檔（`_attempts` 記「未查」）。⚠️ **開放問題（須決策，未做）**：含 `-` 的鍵改讀 `cache/nav/{full_key}.json` 當備援＝新增一條 fallback，屬 NAV 選源語意，未加。
 3. **`policy/v1._extract_code_from_url`**：`#frag` → `TLZF9-AL001#FRAG`、`?area=TW&a=…` → `TW`（執行確認；`shadow_compare` 測試釘住）。
+   → ✅ **2026-10-29 已修**（`dde3a3a6`）：改用 `urlsplit`，只認 `a`／`*code` 參數、丟棄 `#fragment`；合格輸入的輸出與持股鍵 `{policy_id}::{CODE}` 逐字不變（差分測試）；`#frag`／`area=TW` 不再得 `TLZF9-AL001#FRAG`／`TW`；xview 與 shadow 的對應分歧斷言已翻轉並註明。
 4. **cache 正規化**：小寫 `a=` 與裸碼都得 `fetch_fund||default`（空碼鍵；執行確認）；production 0 呼叫者（引用第 10 節第 6 點）。
+   → **2026-10-29 只釘住現況、不改**（`befdc0c5`）：production 0 呼叫者，依裁示第 10 項 D 不為未使用的 helper 擴大重構；`tests/test_dg2_parsing_defects.py` 釘住空鍵／碰撞現況。
 5. **tab2 Step-1 `nav_latest` 不與序列對帳**：既有 `tests/test_xview_characterization.py::test_char_divergence_c5_scalar_nav_latest_and_series_last_are_not_reconciled` 綠（本批重跑）。
 6. **銀行平台第一個成功即用**：`_src_bank_platform_nav` 依序試各通路，第一個抓到資料的就回傳（moneydj 頁型要 ≥10 筆；台灣人壽 mobile 分支只要非空），不比對其他通路（讀碼）；且只對 base 碼觸發（`fund_orchestration` `_code in _BANK_PLATFORM_CODES`）。
 
