@@ -296,4 +296,3 @@ hook 只拿到字串串列，`resolve_full_keys` 的呼叫端來源不一（讀�
 - **真實 Sheet 結構性檢查（裁示第 4 項）**：UNVERIFIED。本 container 沒有 Sheet 憑證（無服務帳戶設定、無相關環境變數），依裁示跳過，未讀任何 Sheet；不阻塞 probe。
 - **dashed key cache 備援**：不核准新增（裁示第 2 項）：即第 14 節 (c) 登記「未加、待決策」的答案，維持未加。
 - 單組寫成，未經第二組獨立驗證；probe 尚未實跑，上列皆為設計，不含任何 NAV 數值。
-
