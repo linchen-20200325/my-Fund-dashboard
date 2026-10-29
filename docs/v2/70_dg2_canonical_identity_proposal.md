@@ -299,6 +299,8 @@ hook 只拿到字串串列，`resolve_full_keys` 的呼叫端來源不一（讀�
 
 ### 16.1 首次實跑結果（2026-10-29）
 
+> 📌 **2026-10-29 加註（`DEC-2026-10-29-03`，不改下文歷史）**：下文把 `ACDD01-EQTAL005` 當成「NAV 等價」問題、並列出 O1～O3 選項，已由第 17 節取代：`ACDD01` 以 MoneyDJ 基本頁為 baseline，`EQTAL005` 是保險商品代碼，屬商品對應問題，不需要為它找另一個 NAV 頁；O1（多日累積）已改為排程，O2（以 base 頁幣別推定）客戶明示不採。
+
 - **來源**：workflow `moneydj_nav_equivalence_probe.yml`，run `40822928361`，`executed_sha` `b4b6d7ef`，報告 `results/20261029T052400Z_run40822928361/report.json.gz`，存於 GitHub 分支 `probe/moneydj-nav-results`（**未複製進 main**）。單次、單日。
 - **FACT（以下皆為報告值）**：連線——GitHub Actions 可連 MoneyDJ；直連（runner IP）與 `nas_proxy` 兩條路徑各 36 次請求、19 次 ok、0 blocked，HTTP 狀態序列完全相同。`tcbbankfund.moneydj.com` 對全部輸入皆回 404。
 
@@ -324,3 +326,15 @@ hook 只拿到字串串列，`resolve_full_keys` 的呼叫端來源不一（讀�
 - 選項：**O1** 以按鈕分支每日重跑 N 日累積樣本；**O2** 客戶裁示放寬幣別規則（接受 base 頁幣別為推論）；**O3** 客戶提供 EQTAL005 的平台網址。選項可併用。
 
 - 單組寫成，未經第二組獨立驗證；數值已對照 report.json 以腳本核對。
+
+## 17. 三層身份、商品對應與多日 probe（`DEC-2026-10-29-03`）
+
+逐字裁示：`docs/evidence/decisions/2026-10-29_dg2_fund_product_holding_ruling.md`。
+
+- **三層模型**：Fund（MoneyDJ 基本基金碼；Sheet「基金代號」欄只限此碼，違反標 `sheet_code_contract_violation`、原值保留）／Insurance Product-Channel（如 `EQTAL005`，不是 share class、不是另一檔基金、不是另一條 NAV 序列）／Holding（同一基金可有多張保單與多筆持倉，基金身份收斂不得合併持倉）。Identity、NAV、Product Mapping、Holding 四種 resolver 不得混用。
+- **現況對應（不改 production）**：resolver 現有欄位 `platform_suffix`／`channel_code` 暫時承載「商品／通路代碼」概念；專用 `insurance_product_code` 欄位是未來工作，只要 canonical contract 不變就不需要 Decision Gate。
+- **ACDD01 / EQTAL005**：`ACDD01` NAV 以 MoneyDJ 基本基金頁為 baseline（客戶提供 `https://m.moneydj.com/a1.aspx?a=acdd01`）；`EQTAL005 → ACDD01` 是商品對應，來源＝客戶確認（`customer_confirmed_2026-10-29`），probe 報告 `product_mapping.mapping_verified_against_moneydj` 預設 `null`（UNVERIFIED），只有請求回來的頁面真的出現該連結才改 `true`。
+- **TLZF9 標示**：三頁同日同 NAV 是 FACT；平台頁未明示幣別 → 只記 `strong_observational_evidence`，不是 strictly comparable；「base page reports USD」與「platform page currency not stated」兩欄分開記，不合併、不補 USD。
+- **多日計畫**：既有 workflow 加排程（`17 13 * * 1-5`），累積 3～5 個**不同交易日**；`scripts/analyze_moneydj_nav_series.py` 計不同 NAV 日（非 run 數）並分類 `insufficient_days`／`strong_observational_evidence_same_series`／`conflict_found`／`blocked`。結果只留在 `probe/moneydj-nav-results`，不每日開 PR 或改 HANDOFF／BACKLOG／DECISIONS。
+- **Shadow flag 維持 OFF，提 Decision Gate 前置**：(1) TLZF9 多日 probe 完成；(2) 無 NAV conflict；(3) resolver identity 穩定；(4) product／fund／holding 分層完成。dashed key cache 備援不新增；FundClear 獨立 namespace、ISIN 非必要。
+- 單組寫成，未經第二組獨立驗證。

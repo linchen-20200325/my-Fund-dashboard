@@ -152,7 +152,7 @@ def test_push_trigger_only_button_branch(wf):
     assert push["branches"] == [_TRIGGER]
     for forbidden in ("pull_request", "pull_request_target", "workflow_run", "issue_comment", "repository_dispatch"):
         assert forbidden not in on, f"不得有 {forbidden} 觸發"
-    assert set(on) == {"push", "workflow_dispatch"}, f"on: 只允許 push／workflow_dispatch（無排程）：{sorted(on, key=str)}"
+    assert set(on) == {"push", "schedule", "workflow_dispatch"}, f"on: 只允許 push／schedule／workflow_dispatch：{sorted(on, key=str)}"
 
 
 def test_exactly_one_checkout_and_it_pins_main(wf):
@@ -355,8 +355,23 @@ def test_only_commit_step_has_write_token_and_checkout_has_no_persisted_creds(wf
 
 # ───────────────────────── 本 probe 追加：唯讀邊界 ─────────────────────────
 
-def test_no_schedule_and_no_write_steps_outside_result_branch(wf):
-    assert "schedule" not in _on(wf), "MoneyDJ NAV probe 不得有排程"
+_EXPECTED_CRONS = ["17 13 * * 1-5"]   # UTC 13:17 ＝ 台北週一至週五 21:17（2026-10-29 客戶裁示）
+
+
+def test_schedule_exactly_this_weekday_cron_documented_in_header(wf):
+    sched = _on(wf).get("schedule")
+    assert isinstance(sched, list), "應有 schedule（2026-10-29 客戶裁示：沿用既有 workflow 累積多日）"
+    assert all(isinstance(x, dict) and set(x) == {"cron"} for x in sched), f"schedule 項目只允許 cron：{sched!r}"
+    assert [x["cron"] for x in sched] == _EXPECTED_CRONS
+    minute, _hour, _dom, _mon, dow = _EXPECTED_CRONS[0].split()
+    assert minute not in ("0", "30") and dow == "1-5"
+    head = "\n".join(l for l in _WF.read_text(encoding="utf-8").splitlines() if l.startswith("#"))
+    for needle in ("17 13 * * 1-5", "台北週一至週五 21:17", "如何停用", "刪除本檔 `on:` 下的整個 `schedule:` 區塊",
+                   "2026-10-29", "3～5 個不同交易日", "只讀保證不變", "請求量"):
+        assert needle in head, f"檔頭排程說明缺：{needle}"
+
+
+def test_no_write_steps_outside_result_branch(wf):
     text = "\n".join(l for l in _WF.read_text(encoding="utf-8").splitlines() if not l.strip().startswith("#"))
     for needle in ("gspread", "nav_history", "cache/nav", "worksheet", "update_cells", "gh pr", "gh api"):
         assert needle not in text, f"workflow 不應出現寫入類字樣：{needle}"

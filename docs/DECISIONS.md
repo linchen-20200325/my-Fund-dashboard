@@ -1735,6 +1735,20 @@
 | supersedes／superseded by | supersedes：無。承接 `DEC-2026-10-29-01` 第 9 項（網路 NAV 查證 UNVERIFIED）：本筆指定查證方式。superseded by：無。 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；影響範圍欄對 `3a1cb35d` 的關係是執行組讀法；單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-29-03｜客戶裁示：DG-2 最終整合（二）——基金／保險商品通路／持倉三層身份；ACDD01 baseline 與 EQTAL005 商品對應；多日 probe 沿用既有 workflow
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-29 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-29_dg2_fund_product_holding_ruling.md`） |
+| 決策內容摘要 | **客戶裁示**：(1) 身份分三層：Fund（MoneyDJ 基本基金碼，Sheet「基金代號」欄只接受此碼，出現 URL／`-` 後綴／格式異常標 `sheet_code_contract_violation`、原值保留不靜默改寫）、Insurance Product／Channel（`ACDD01-EQTAL005`：`ACDD01`＝MoneyDJ 基金碼、`EQTAL005`＝保險公司商品代碼，不是 share class／另一檔基金／另一條 NAV 序列）、Holding（同一基金可有多張保單／多筆持倉，基金身份收斂不得合併保單、金額、單位數、成本、損益、交易）；Identity／NAV／Product Mapping／Holding 四種 resolver 不得混用。(2) `ACDD01` 的 NAV 以 MoneyDJ 基本基金頁為 baseline（客戶提供有效頁 `https://m.moneydj.com/a1.aspx?a=acdd01`）；要驗的是 `EQTAL005 → ACDD01` 商品對應，不是 NAV 等價；mapping 已來自客戶 policy／Sheet／保險商品資料時保留 provenance 即可。(3) `TLZF9`／`-AL001`／`-24A7` 同日同 NAV 8.4121 是 FACT，平台頁無明示幣別，只能記「strong observational evidence」，不得寫成 strictly comparable、不得補 USD；不推定幣別，「base page reports USD」與「platform page currency not stated」分開記、不合併。(4) 沿用既有 probe workflow 累積 3～5 個不同交易日（每日記 NAV date／NAV／fund name／來源頁／幣別是否明示／HTTP 與 parse 狀態／source timestamp／parser SHA）；全程同 NAV date、同 NAV、名稱一致、無 identity conflict 才記「strong observational evidence: same NAV series」。(5) Shadow flag 維持 OFF，前置：TLZF9 多日 probe 完成、無 NAV conflict、resolver identity 穩定、product／fund／holding 分層完成，再提 Decision Gate；dashed key cache 不新增；FundClear 獨立 namespace、不自動 cross-map；ISIN 非必要。(6) probe 結果只寫 `probe/moneydj-nav-results`，不每日開 PR／改 HANDOFF／BACKLOG／DECISIONS；僅 NAV／名稱 conflict、parser failure、日期異常、來源失效、identity 語意衝突時回報，否則 3～5 個有效交易日後一次回報。(7) Model gate：fund vs share class identity、NAV semantics、product mapping 語意衝突、canonical contract 或 source precedence 要改時，先通知客戶升 Opus 5.5 + High。 |
+| 理由／背景 | 客戶原話：「missing ≠ known」「Same verified instrument / share class + same metric + same as-of + same currency = same canonical value across all views.」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-29_dg2_fund_product_holding_ruling.md`；落地：`.github/workflows/moneydj_nav_equivalence_probe.yml`（新增 `schedule`，`17 13 * * 1-5`）、`scripts/probe_moneydj_nav_equivalence.py`（v1.1：觀察性裁定、ACDD01 baseline、`product_mapping`）、`scripts/analyze_moneydj_nav_series.py`、`tests/test_analyze_moneydj_nav_series.py`、`docs/evidence/probe_moneydj_nav/README.md`、`docs/v2/70_dg2_canonical_identity_proposal.md` 第 17 節、`docs/BACKLOG.md` BL-0521。 |
+| 影響範圍 | 只動 probe（workflow 排程、腳本、分析腳本、測試）與文件；不動 resolver／production 程式碼（resolver 現有欄位 `platform_suffix`／`channel_code` 暫對應「商品代碼」概念，專用 `insurance_product_code` 欄位為未來工作，canonical contract 不變時不需 Decision Gate）、不動 NAV precedence、Sheet、cache、畫面、flag。 |
+| 是否可逆 | 可逆（刪除 workflow 的 `schedule:` 區塊即停止累積；flag 本來就關） |
+| supersedes／superseded by | supersedes：`docs/v2/70` 16.1 把 `ACDD01-EQTAL005` 視為 NAV 等價題的提法（第 17 節加註，不改歷史）；`-02` 第 (1) 項中 ACDD01 家族的比較目標。承接 `DEC-2026-10-29-01`、`-02`。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔（圍欄內文 sha256 見該檔與 README）；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1885,3 +1899,4 @@
 - 第四節 `DEC-2026-10-28-05`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-28_dg2_identity_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身。
 - 第四節 `DEC-2026-10-29-01`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_dg2_final_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與「只剝已驗證 mapping 命中的後綴」等讀法為執行組讀法；由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-29-02`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_dg2_nav_probe_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要的分段與影響範圍欄對 BL-0521 (c) 的對應為執行組讀法；由執行組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-29-03`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_dg2_fund_product_holding_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要分段為執行組讀法；由執行組單組寫成，未經第二組驗證。

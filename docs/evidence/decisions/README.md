@@ -27,6 +27,7 @@
 | `2026-10-28_dg2_identity_ruling.md` | 客戶 2026-10-28 DG-2 合併裁示全文（`TLZF9`／`TLZF9-AL001`／`TLZF9-24A7` 原則上同一核心基金、`base_fund_code` 為核心、平台後綴另存為通路 metadata；有證據時不得盲目剝後綴、走 Exception／Decision Gate；ISIN 本階段不依賴；currency／share class／配息／避險不得猜、Unknown；先 targeted audit 舊 UI 與 REUSE／ADAPT／LEGACY_COMPAT／REJECT／UNVERIFIED 分類；C+ resolver 先 Shadow Mode、feature flag 預設關；必要測試；NAV 與 identity 分開；本階段禁止順帶修改清單；Model／Effort；`docs/DECISIONS.md` `DEC-2026-10-28-05`）；全文逐字，無遮蔽 | 客戶 2026-10-28 對話中對 DG-2 的合併裁示，經總管於派工單內逐字轉存 | 2026-10-28 | main `5e5048d5`（全長 `5e5048d5c70e88fa83dd1e7e690b8b77eae04eaa`） | 9906 | `b689bb37c6796f459224df9d1012a57c90e2fc1cd9858529059bf622eebd4fe6` |
 | `2026-10-29_dg2_final_ruling.md` | 客戶 2026-10-29 DG-2 最終整合裁示全文（Sheet「基金代號」欄現在及未來皆為 MoneyDJ 基本代碼、命名空間固定 MoneyDJ 且只限該欄；基金身份與保單持倉身份分開；MoneyDJ 專屬後綴規則、`ACDD01-EQTAL005` → `ACDD01`、FundClear `AGIF-HT5`／`AGIF-HTG` 不得剝；Sheet 解析最終採 C+ 加 Sheet MoneyDJ 來源契約；境內／境外頁型；舊 UI 復用 targeted verification；FundClear 須經驗證 mapping；Identity 與 NAV 分開；網路 NAV 查證；四類解析缺陷；Shadow Mode；本輪禁止順帶修改；測試稽核治理；執行順序與停手條件；靜默自主巡航；Model／Effort；`docs/DECISIONS.md` `DEC-2026-10-29-01`）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的 DG-2 最終整合裁示，經總管於派工單內逐字轉存 | 2026-10-29 | main `84a956b5`（全長 `84a956b5e3271a542ea1aae7b02c038b3b5c70d5`） | 11793 | `7a3cfa9c24a4b4bc28dbc8f33f3f9b0f82744752d003edf82da0082a5b1898ae` |
 | `2026-10-29_dg2_nav_probe_ruling.md` | 客戶 2026-10-29 DG-2 下一步裁示全文（MoneyDJ NAV 網路查證採方案 A、獨立唯讀 probe workflow 與比較規則、probe 安全邊界；dashed key cache 備援不核准；DG-2 Shadow flag 維持 OFF 與下次提案必附清單；真實 Sheet URL 結構性檢查；BL-0509 獨立；`docs/DECISIONS.md` `DEC-2026-10-29-02`）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的 DG-2 下一步裁示，經總管於派工單內逐字轉存 | 2026-10-29 | main `89295c43` | 5394 | `7d80d0fbff89dd5b44d89c5199922e6b360cf420e50fcf25dcd547abba350566` |
+| `2026-10-29_dg2_fund_product_holding_ruling.md` | 客戶 2026-10-29 DG-2 最終整合（二）裁示全文（基金／保險商品通路／持倉三層身份、Sheet 基金代號欄契約與 `sheet_code_contract_violation`、`ACDD01` baseline＝MoneyDJ 基本頁、`EQTAL005`＝保險商品代碼而非 NAV 等價題、TLZF9 strong observational evidence 不得改寫為 strictly comparable、不推定幣別、多日 probe 3～5 個不同交易日、Shadow flag 維持 OFF 與前置清單、dashed key cache 不新增、Anti-Bloat 靜默規則、Model gate；`docs/DECISIONS.md` `DEC-2026-10-29-03`）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的 DG-2 最終整合（二）裁示，經總管於派工單內逐字轉存 | 2026-10-29 | main `ba1b54ee` | 10696 | `cca9d3495cec65dc785f0e67d420e4cf105e8b9f6854e38019ce45513b92d395` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 
@@ -228,6 +229,17 @@
 - 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-29_dg2_nav_probe_ruling.md`。
 - 雜湊為 2026-10-29 實跑。
 
+### `2026-10-29_dg2_fund_product_holding_ruling.md` 的兩個雜湊
+
+| 對象 | 大小（bytes） | sha256 |
+|---|---|---|
+| 整檔（檔頭說明＋圍欄） | 10696 | `cca9d3495cec65dc785f0e67d420e4cf105e8b9f6854e38019ce45513b92d395` |
+| 圍欄內文（＝檔內實際位元組；無跳脫碼，故沒有「換回原字」那一列） | 9485 | `2036965762f658585f3ec9f6c10f65261b2d61bf05e42d69fa58cec2c6a61d3e` |
+
+- 圍欄內文與總管轉存給執行組的原文檔逐位元組相同（執行組 2026-10-29 以 sha256 對 scratchpad 內的轉存檔與存檔圍欄實跑，兩值相同；轉存檔不入 repo）；唯一格式處理：無（行尾空白：0 行）。
+- 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-29_dg2_fund_product_holding_ruling.md`。
+- 雜湊為 2026-10-29 實跑。
+
 ## 撞字登記
 
 全文含交接本第 7 節〈客戶 2026-10-05 接手訊息：禁詞〉詞表的**第 7、8 個詞**，共 3 處，都在治理第 6 項「未來允許的方向」列舉內（圍欄內第 114、116、117 行）。依該節〈禁詞〉體例以 Unicode 跳脫碼書寫（`\u52a0\u78bc`、`\u6e1b\u78bc`），其餘一字未改。第 1～6 個詞以 2026-10-16 碼位組字掃描 0 命中。依客戶 2026-10-15 Phase 1.5（A+ 修正版）裁示，第 5～8 個詞已不是永久禁詞；本批新增行仍以 0 命中為目標，故改用跳脫碼並在此登記（與 `branch_archive/pr838/README.md` 不同：那裡是逐字摘錄照字面保留、只做登記）。
@@ -263,6 +275,8 @@
 `2026-10-29_dg2_final_ruling.md`：圍欄內以詞表第 7、8 個詞碼位組字掃描 0 命中（2026-10-29 實跑）；無撞字、無跳脫碼。
 
 `2026-10-29_dg2_nav_probe_ruling.md`：圍欄內以詞表第 7、8 個詞碼位組字掃描 0 命中（2026-10-29 實跑）；無撞字、無跳脫碼。
+
+`2026-10-29_dg2_fund_product_holding_ruling.md`：圍欄內以詞表第 7、8 個詞碼位組字掃描 0 命中（2026-10-29 實跑）；無撞字、無跳脫碼。
 
 已實測：無行尾空白、結尾單一換行、無 session 識別碼、無合併衝突標記。
 
