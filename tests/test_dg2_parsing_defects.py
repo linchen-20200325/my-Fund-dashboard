@@ -163,19 +163,28 @@ def test_C_持股鍵格式不變_對既有valid列(monkeypatch):
     assert any(k.endswith("::ACDD01-EQTAL005") for k in new_rep["added"])  # 平台後綴鍵仍保留
 
 
-# ── D. infra.cache._normalize_moneydj_url_for_cache（production 0 呼叫者）──
-def test_D_現況_小寫a與裸碼都得空碼鍵():
+# ── D. infra.cache._normalize_moneydj_url_for_cache ───────────
+# 僅釘住現況，本批不修:`git grep _normalize_moneydj_url_for_cache` 除定義與測試外唯一引用是
+# services/fund_identity_shadow.py(flag 預設關的 shadow 記錄),production 0 呼叫者(docs/v2/70 §10 第 6 點)。
+# 小寫 `a=`／裸碼得空碼鍵(`fetch_fund||default`)是已知缺陷;若日後有人把它接進 production,
+# 空碼鍵會讓不同基金共用同一把 cache 鍵 → 屆時必須先修(或改用 fund_keys 的代碼)再接線。
+def test_D_現況_小寫a與裸碼都得空碼鍵_production無呼叫者_僅釘住():
     from infra.cache import _normalize_moneydj_url_for_cache as n
     assert n("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=tlzf9-al001") == "fetch_fund||default"
     assert n("TLZF9-AL001") == "fetch_fund||default"
+    # 兩檔不同基金在空碼鍵下碰撞(這就是不得接進 production 的理由)
+    assert n("https://x/p?a=tlzf9") == n("https://x/p?a=acdd01")
 
 
-def test_A_兩個UI入口都改用helper_不再先轉大寫():
-    import pathlib
+def test_D_現況_大寫a正常_大寫碼與頁型():
+    from infra.cache import _normalize_moneydj_url_for_cache as n
+    assert n("https://x/p?A=ACDD01&yp=010001") == "fetch_fund|ACDD01|010001"
+    assert n("https://x/p?a=ACDD01") == "fetch_fund|ACDD01|default"
+
+
+def test_D_確認production無呼叫者():
+    import pathlib, subprocess
     root = pathlib.Path(__file__).resolve().parents[1]
-    t7 = (root / "ui/tab3_t7_ledger.py").read_text(encoding="utf-8")
-    pf = (root / "ui/tab3_portfolio.py").read_text(encoding="utf-8")
-    assert "_new_code_clean = normalize_manual_fund_input(_a_new_code)" in t7
-    assert "_a_new_code.strip().upper()" not in t7
-    assert "_code = normalize_manual_fund_input(_line)" in pf
-    assert "_code = _line.upper()" not in pf
+    out = subprocess.check_output(["git", "grep", "-l", "_normalize_moneydj_url_for_cache", "--", "*.py"], cwd=root, text=True).split()
+    prod = [f for f in out if not f.startswith("tests/") and f != "infra/cache.py"]
+    assert prod == ["services/fund_identity_shadow.py"]
