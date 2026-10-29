@@ -69,17 +69,27 @@ def _fresh(fn):
     return fn
 
 
-def test_B_現況_fetch_nav_以後綴AL001當代碼(_nav_spy):
+def test_B_fetch_nav_不再以後綴AL001當代碼(_nav_spy):
     nm, urls, cache_codes = _nav_spy
     nm.fetch_nav("TLZF9-AL001")
-    assert any(u.endswith("yp004001.djhtm?a=AL001") for u in urls)
-    assert cache_codes == ["AL001"]
+    assert not any("a=AL001" in u for u in urls)
+    assert any(u.endswith("yp004001.djhtm?a=TLZF9-AL001") for u in urls)  # 完整鍵照舊先試
+    assert "AL001" not in cache_codes and cache_codes == []  # 含 '-' 的鍵不查預存檔(不新增讀取)
 
 
-def test_B_現況_fetch_div_以後綴AL001當代碼(_nav_spy):
+def test_B_fetch_div_不再以後綴AL001當代碼(_nav_spy):
     nm, urls, _ = _nav_spy
     nm.fetch_div("TLZF9-AL001")
-    assert any(u.endswith("yp004003.djhtm?a=AL001") for u in urls)
+    assert not any("a=AL001" in u for u in urls)
+    assert any(u.endswith("yp004003.djhtm?a=TLZF9-AL001") for u in urls)
+
+
+def test_B_無破折號的鍵_網址序列與預存檔查詢逐字不變(_nav_spy):
+    nm, urls, cache_codes = _nav_spy
+    nm.fetch_nav("tlzf9")  # 修正前後皆:境外 → wb02、wf01、yp004001(一次,原本 mj_short==full_key 會重複同一網址)
+    assert cache_codes == ["TLZF9"]
+    assert urls[0].endswith("/w/wb/wb02.djhtm?a=tlzf9") and urls[1].endswith("/w/wf/wf01.djhtm?a=tlzf9")
+    assert urls.count("https://www.moneydj.com/funddj/yf/yp004001.djhtm?a=tlzf9") == 1
 
 
 # ── C. policy v1 _extract_code_from_url ───────────────────────
