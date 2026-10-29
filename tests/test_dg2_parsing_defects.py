@@ -13,13 +13,36 @@ _URL = "https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=TLZF9-AL001"
 
 
 # ── A. 手動加入把網址整行轉大寫 ───────────────────────────────
-def test_A_現況_網址先轉大寫再交給取數_組出a等於HTTPS的網址():
+def test_A_舊寫法仍會產生HTTPS_證明缺陷機制存在():
+    """舊 UI 寫法（先 upper）的機制仍成立；修正在 UI 端改用 normalize_manual_fund_input。"""
     from repositories.fund.sources import parse_moneydj_input
     from services.moneydj_fetcher import build_moneydj_url
-    up = _URL.strip().upper()  # ui/tab3_t7_ledger.py、ui/tab3_portfolio.py 現行寫法
-    built = build_moneydj_url(up, "yp010001")  # startswith("http") 大小寫敏感 → 不短路
-    assert built.endswith("?a=HTTPS://WWW.MONEYDJ.COM/FUNDDJ/YA/YP010001.DJHTM?A=TLZF9-AL001")
+    built = build_moneydj_url(_URL.strip().upper(), "yp010001")
     assert parse_moneydj_input(built)["code"] == "HTTPS"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    (_URL, "TLZF9-AL001"),
+    ("  " + _URL + "  ", "TLZF9-AL001"),
+    (_URL.upper(), "TLZF9-AL001"),
+    ("HTTPS://WWW.MONEYDJ.COM/FUNDDJ/YA/YP010000.DJHTM?a=acdd01", "ACDD01"),
+    ("https://m.moneydj.com/a1.aspx?a=acdd01", "ACDD01"),
+    ("https://www.moneydj.com/funddj/ya/yp010001.djhtm", ""),   # 抽不出代碼 → 空（不猜）
+])
+def test_A_網址先判斷再取代碼(raw, expected):
+    from services.moneydj_fetcher import normalize_manual_fund_input
+    assert normalize_manual_fund_input(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["tlzf9", "TLZF9", " acdd01 ", "TLZF9-AL001", "tlzf9-al001", "a" * 40, "", "  ", "ab c", "中文"])
+def test_A_裸碼行為與修正前逐字相同(raw):
+    from services.moneydj_fetcher import normalize_manual_fund_input
+    assert normalize_manual_fund_input(raw) == raw.strip().upper()
+
+
+def test_A_None安全():
+    from services.moneydj_fetcher import normalize_manual_fund_input
+    assert normalize_manual_fund_input(None) == ""
 
 
 # ── B. fetch_nav / fetch_div 以後綴當代碼 ─────────────────────
@@ -74,3 +97,14 @@ def test_D_現況_小寫a與裸碼都得空碼鍵():
     from infra.cache import _normalize_moneydj_url_for_cache as n
     assert n("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=tlzf9-al001") == "fetch_fund||default"
     assert n("TLZF9-AL001") == "fetch_fund||default"
+
+
+def test_A_兩個UI入口都改用helper_不再先轉大寫():
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[1]
+    t7 = (root / "ui/tab3_t7_ledger.py").read_text(encoding="utf-8")
+    pf = (root / "ui/tab3_portfolio.py").read_text(encoding="utf-8")
+    assert "_new_code_clean = normalize_manual_fund_input(_a_new_code)" in t7
+    assert "_a_new_code.strip().upper()" not in t7
+    assert "_code = normalize_manual_fund_input(_line)" in pf
+    assert "_code = _line.upper()" not in pf
