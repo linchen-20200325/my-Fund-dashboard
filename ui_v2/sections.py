@@ -225,7 +225,16 @@ def mark_hld1_rows(model: dict) -> int:
 
 
 def hld_counts(model: dict):
-    """持倉體檢 ① 的三個計數那一行；不該列時回 None。
+    """持倉體檢 ① 的三個計數那一行；不該列時回 None。字串由 `hld_count_values` 的 (n, m, j) 組成（BL-0525 Batch D 抽出，算法不變）。"""
+    values = hld_count_values(model)
+    if values is None:
+        return None
+    n, m, j = values
+    return HLD_COUNTS_TEXT.format(n=n, attention=SYMBOL_ATTENTION, m=m, undecidable=SYMBOL_UNDECIDABLE, j=j)
+
+
+def hld_count_values(model: dict):
+    """持倉體檢 ① 的三個計數 `(n, m, j)`；不該列時回 None。
 
     只在「有持倉、門檻已設、燈不是紅」時列：沒有持倉或門檻未設時燈的那一句就是答案（59 第 3.3、3.4 節），
     紅燈時這一頁的數字先不要照著讀（`HLD-0` 紅燈文案），列計數會把讀不到的說成讀到了。
@@ -242,7 +251,7 @@ def hld_counts(model: dict):
     m, j = light["_deviation_count"], hld1["_unevaluated_count"]
     if n < m + j:
         raise ValueError(f"持倉體檢計數不成立：持有 {n} 檔 < 需要注意 {m} 檔 ＋ 無法判定 {j} 檔")
-    return HLD_COUNTS_TEXT.format(n=n, attention=SYMBOL_ATTENTION, m=m, undecidable=SYMBOL_UNDECIDABLE, j=j)
+    return n, m, j
 
 
 _FAMILY_FETCH_FAILED = f"{SYMBOL_ERROR} 取數失敗"

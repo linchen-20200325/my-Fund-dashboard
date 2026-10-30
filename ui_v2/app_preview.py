@@ -125,6 +125,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from ui_v2.alo import page as alo_page  # noqa: E402
 from ui_v2.alo import source as alo_source  # noqa: E402
+from ui_v2.asset import page as asset_page  # noqa: E402
 from ui_v2.exp import page as exp_page  # noqa: E402
 from ui_v2.exp import source as exp_source  # noqa: E402
 from ui_v2.hld import page as hld_page  # noqa: E402
@@ -208,11 +209,15 @@ def page_mkt() -> None:
     )
 
 
-def page_hld() -> None:
-    _on_page("hld")
-    hld_page.render(
-        load_live=hld_source.load_live, mask_error=hld_source.mask_error, save_live=hld_source.save_setting,
-        settings_page=_settings_page(),
+def page_ast() -> None:
+    # 💼 我的資產（BL-0525 Batch D；`DEC-2026-10-30-02`）：⚖️ 資產配置與 💼 我的持股合成一頁。
+    # 兩側的載入／存檔／遮蔽函式與各自單頁入口（`ui_v2/app_alo_live.py`、`ui_v2/app_hld_live.py`）同名同物件（守衛：test_preview_entry）；
+    # 頁頂「持倉資料來源」重用設定頁既有的 picker（`set_source.picker_live`，不碰 OAuth）。
+    _on_page("ast")
+    asset_page.render(
+        alo_live={"load": alo_source.load_live, "save": alo_source.save_setting, "mask": alo_source.mask_error},
+        hld_live={"load": hld_source.load_live, "save": hld_source.save_setting, "mask": hld_source.mask_error},
+        picker_live=set_source.picker_live, settings_page=_settings_page(),
     )
 
 
@@ -227,18 +232,13 @@ def page_exp() -> None:
     )
 
 
-def page_alo() -> None:
-    _on_page("alo")
-    alo_page.render(
-        load_live=alo_source.load_live, save_live=alo_source.save_setting, mask_error=alo_source.mask_error,
-        settings_page=_settings_page(),
-    )
-
-
 def _page_links() -> dict:
     """四頁的 `st.Page`（BL-0250 批次 3-B：設定與診斷「各頁資料狀態總表」每列的「前往該頁」；只換頁）。
     與 `main()` 註冊進 `st.navigation` 的是同一個函式、同一個 url_path、同一個頁名（同 `_settings_page`）。"""
-    return {slug: st.Page(func, title=title, url_path=slug) for slug, title, func in PAGES if slug != "set"}
+    links = {slug: st.Page(func, title=title, url_path=slug) for slug, title, func in PAGES if slug != "set"}
+    # 各頁資料狀態總表仍以 `hld`／`alo` 兩格各記一列（`page_health.PAGE_NAMES`；隨對齊批定），兩列的「前往該頁」都指向合併後的那一頁。
+    links["hld"] = links["alo"] = links["ast"]
+    return links
 
 
 def page_set() -> None:
@@ -259,10 +259,13 @@ def page_set() -> None:
 # ~~("mkt", "市場總覽")、("hld", "持倉體檢")、("exp", "標的探索")、("alo", "資產配置")、("set", "設定與診斷")~~
 # → 2026-10-27 對齊批（BL-0478；有意識的政策變更，不是漏刪；決策者：客戶（`DEC-2026-10-27-02`））：頁序與頁名改為正式版；
 #   圖示寫在頁名字串裡（44 之十七其二第 1 條：圖示怎麼掛屬實作，畫面上的頁名與裁示一致）。url_path 一個都不改。
+# → 2026-10-30 Batch D（`DEC-2026-10-29-06`、`DEC-2026-10-30-02`；有意識的政策變更，不是漏刪；決策者：客戶）：⚖️ 資產配置與 💼 我的持股兩頁
+#   併為「💼 我的資產」（`url_path` `ast`；44 之二十其一的正式頁序第 2）。舊兩列（`alo`、`hld`）：
+#   ("alo", "⚖️ 資產配置", page_alo)、("hld", "💼 我的持股", page_hld) —— 在寫下當時為真；（單頁入口 `ui_v2/app_alo*.py`、`app_hld*.py` 仍用各自的 page 模組；預覽導覽不再註冊這兩頁，`page_alo`／`page_hld` 兩支函式同批刪除——
+#   它們各自的 `render(...)` 注入守衛改由 `page_ast` 的 `alo_live`／`hld_live` 比對，見 `tests/ui_v2/test_preview_entry.py`）。
 PAGES = (
     ("mkt", "🌍 市場與趨勢", page_mkt),
-    ("alo", "⚖️ 資產配置", page_alo),
-    ("hld", "💼 我的持股", page_hld),
+    ("ast", "💼 我的資產", page_ast),
     ("exp", "🔍 找基金", page_exp),
     ("set", "⚙️ 設定", page_set),
 )

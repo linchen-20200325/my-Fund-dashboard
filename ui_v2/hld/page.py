@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import active_gate, health, health_view, plain, readonly, sections, symbols
+from .. import active_gate, health, health_view, plain, presentation_view, readonly, sections, symbols
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -441,10 +441,17 @@ def _render_core_card(block: dict, *, plain_mode: bool = False, quiet=None) -> N
 # ───────────────────────── 層 3 ─────────────────────────
 
 
-def _render_detail_quiet(view: dict) -> None:
-    """④ 收合區比照規則 5（客戶 Q5 (b)；44 第七節第三小節之十五）：標題「標題　—　一句原因」，打開只有那一行（符號＋文字）。"""
+def _render_detail_quiet(view: dict, *, flat: bool = False) -> None:
+    """④ 收合區比照規則 5（客戶 Q5 (b)；44 第七節第三小節之十五）：標題「標題　—　一句原因」，打開只有那一行（符號＋文字）。
+    `flat=True`（合併頁 grouped container 內）：不巢狀展開區，標題行照舊、下接那一行原因。"""
     line = view["line"]
-    with st.expander(f"{view['title']}　—　{line['text']}", expanded=False):
+    head = f"{view['title']}　—　{line['text']}"
+    if flat:
+        with presentation_view.flat_block(head):
+            st.markdown(f'<div class="hld-quiet-line" style="color:{_tone(line["_tone"])}">{_esc(line["text"])}</div>',
+                        unsafe_allow_html=True)
+        return
+    with st.expander(head, expanded=False):
         st.markdown(f'<div class="hld-quiet-line" style="color:{_tone(line["_tone"])}">{_esc(line["text"])}</div>',
                     unsafe_allow_html=True)
 
@@ -456,6 +463,15 @@ def _expander(block: dict, *, keep_open: bool = False, plain_mode: bool = False)
         f"{head}　—　{block['summary_text']}",
         expanded=block["_default_open"] or keep_open,
     )
+
+
+def _section(block: dict, plain_mode: bool, flat: bool, *, keep_open: bool = False):
+    """層 3／層 4 的塊外殼：預設是各自收合的展開區（單頁，一字未改）；`flat=True`（BL-0525 Batch D：合併頁的 grouped
+    container 內，`DEC-2026-10-30-02` 不得巢狀 expander）改畫成小標題段落——標題與摘要同一支 `_expander` 的字面。"""
+    if not flat:
+        return _expander(block, keep_open=keep_open, plain_mode=plain_mode)
+    head = block["title"] if plain_mode else f"{block['code']}　{block['title']}"
+    return presentation_view.flat_block(f"{head}　—　{block['summary_text']}", code=block["code"])
 
 
 # ── 「套用」（S6a 第三、四輪）──
@@ -587,8 +603,8 @@ def _hld4_keep_open() -> bool:
         return False
 
 
-def _render_hld4(block: dict, *, on_save=None, plain_mode: bool = False) -> None:
-    with _expander(block, keep_open=_hld4_keep_open(), plain_mode=plain_mode):
+def _render_hld4(block: dict, *, on_save=None, plain_mode: bool = False, flat: bool = False) -> None:
+    with _section(block, plain_mode, flat, keep_open=_hld4_keep_open()):
         st.caption(block["answers"])
         # 第一階段唯讀（J-14 精神，2026-10-26）：存檔鈕拿掉後這組輸入已不影響本次畫面結果 → 正式模式不畫（`ui_v2/readonly.py`）。
         # 區間兩欄、門檻列（含每列的「清除這一列」）與門檻列的標題一併不畫。
@@ -669,8 +685,8 @@ def _kv_value_html(value) -> str:
     return f"<b>{_esc(value)}</b>"
 
 
-def _render_hld5(block: dict, *, plain_mode: bool = False) -> None:
-    with _expander(block, plain_mode=plain_mode):
+def _render_hld5(block: dict, *, plain_mode: bool = False, flat: bool = False) -> None:
+    with _section(block, plain_mode, flat):
         st.caption(block["answers"])
         _lines(block["detail_lines"])
         # `44` :707 與 §5.4 逐字「**展開區不巢狀第二層**」—— 本塊是**純文字列表**：
@@ -736,8 +752,8 @@ def _table_html(labels, rows, cells) -> str:
 _NAV_TIER_LABEL = "來源層級"   # 真身 `ui_v2/hld/logic.py` 的 `nav_labels`（測試比對）
 
 
-def _render_hld6(block: dict, *, plain_mode: bool = False) -> None:
-    with _expander(block, plain_mode=plain_mode):
+def _render_hld6(block: dict, *, plain_mode: bool = False, flat: bool = False) -> None:
+    with _section(block, plain_mode, flat):
         st.caption(block["answers"])
         def nav_cells(row):
             return [
@@ -805,8 +821,8 @@ def _render_hld6(block: dict, *, plain_mode: bool = False) -> None:
         _lines(block["detail_lines"])
 
 
-def _render_hld7(block: dict, *, plain_mode: bool = False) -> None:
-    with _expander(block, plain_mode=plain_mode):
+def _render_hld7(block: dict, *, plain_mode: bool = False, flat: bool = False) -> None:
+    with _section(block, plain_mode, flat):
         st.caption(block["answers"])
         if block["_rows"]:
             st.markdown(
@@ -825,8 +841,8 @@ def _render_hld7(block: dict, *, plain_mode: bool = False) -> None:
         _lines(block["detail_lines"])
 
 
-def _render_hld8(block: dict, *, plain_mode: bool = False) -> None:
-    with _expander(block, plain_mode=plain_mode):
+def _render_hld8(block: dict, *, plain_mode: bool = False, flat: bool = False) -> None:
+    with _section(block, plain_mode, flat):
         st.caption(block["answers"])
         if block["_rows"]:
             st.markdown(
@@ -918,6 +934,18 @@ def _live_error_line(exc: BaseException, mask_error) -> str:
 _LAST_VALID_PREFIX = live.CACHE_NOTE_FRESH.split("{", 1)[0]
 
 
+def record_live_error(exc: BaseException, mask_error) -> str:
+    """整頁錯誤畫面的「記錄」那一半（BL-0525 Batch D 從 `_render_live_error` 原樣抽出；合併頁的區段錯誤共用）：
+    原文組好、移到進階診斷、記進各頁資料狀態總表，回一般畫面那一句狀態（`plain_line`）。"""
+    error_line = _live_error_line(exc, mask_error)
+    # Phase 3 P0-①（44 第七節第三小節之七其二第 2 條）：一般畫面只寫一句狀態；「<型別>：<遮蔽後訊息>」那一行
+    # 照舊組好（不吞、不截斷），只移到設定與診斷頁的進階診斷。照印句跟著原文走，一般畫面不再印。
+    plain_line, raw = plain.plain_error_line(error_line, page="hld")
+    plain.record_raw(st.session_state, "hld", raw, datetime.now(timezone.utc))
+    health_view.record_load_failure("hld", error_line)   # BL-0250 批次 3-B：各頁資料狀態總表的順位 1
+    return plain_line
+
+
 def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> None:
     """正式模式取數或組模型失敗時的整頁畫面（S6b-1）。字面全部沿用既有的，不新寫句子：
 
@@ -965,12 +993,7 @@ def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> No
     （`ui_v2/plain.py::record_raw`，設定與診斷頁的進階診斷照印）；一般畫面改印一句狀態
     （`plain.plain_error_line`），`logic.PRINT_AS_IS_LINE` 跟著原文走、一般畫面不再印。上面各段在寫下當時為真。
     """
-    error_line = _live_error_line(exc, mask_error)
-    # Phase 3 P0-①（44 第七節第三小節之七其二第 2 條）：一般畫面只寫一句狀態；「<型別>：<遮蔽後訊息>」那一行
-    # 照舊組好（不吞、不截斷），只移到設定與診斷頁的進階診斷。照印句跟著原文走，一般畫面不再印。
-    plain_line, raw = plain.plain_error_line(error_line, page="hld")
-    plain.record_raw(st.session_state, "hld", raw, datetime.now(timezone.utc))
-    health_view.record_load_failure("hld", error_line)   # BL-0250 批次 3-B：各頁資料狀態總表的順位 1
+    plain_line = record_live_error(exc, mask_error)
     st.markdown(f'<div class="hld-title">{_esc(logic.PAGE_TITLE)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="hld-sub">{_esc(logic.PAGE_ANSWERS)}</div>', unsafe_allow_html=True)
     red = _tone("紅")
@@ -980,6 +1003,86 @@ def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> No
     # Phase 3 P0-②（44 第七節第三小節之七其五第 2 條）：整頁錯誤畫面那一行本身就是本頁唯一的失敗摘要；
     # 下面只加一枚只換頁的導覽（不觸發取數、重新整理、存檔或任何寫入）。
     health_view.render_settings_link(settings_page)
+
+
+class LiveFailed(Exception):
+    """`prepare_live` 的「去拿」或「組模型」那一步失敗（BL-0525 Batch D 抽出；原本直接畫錯誤畫面）。`exc` 是原例外。"""
+
+    def __init__(self, exc: BaseException):
+        self.exc = exc
+        super().__init__(type(exc).__name__)
+
+
+def prepare_live(*, load_live) -> dict:
+    """正式模式「載入 → 組模型 → 收集資料狀態 → 決定收起／收合」的整段（BL-0525 Batch D 從 `render` 原樣抽出，順序與副作用不變）。
+
+    單頁 `render` 與合併頁（`ui_v2/ast/page.py`）共用。`active_gate.NoActiveSource` 原樣往外拋；
+    「去拿」與「組模型」失敗包成 `LiveFailed`（其餘例外不接，是本檔 bug）。回傳畫面要用的全部狀態。
+    """
+    # S6b-1：只包「去拿」與「組模型」兩步；本檔自己的東西（讀 session 的兩支、畫面渲染）在 try 外先算好，
+    # 那些出錯是本檔的 bug，照常浮出來，不畫成取數失敗（第二輪，規格組建議 2）。
+    open_fund = _open_fund()
+    fields = _current_fields(None)
+    save_results = _current_save_results()   # 客戶 2026-10-16 裁示第 2 點（同理放在 try 外）；過期的不顯示
+    try:
+        loaded = load_live()
+        # 客戶 2026-10-16 裁示第 2 點：不轉 session 裡的套用值 —— 正式結果只讀已存設定（`build_live_model` 沒有那兩個參數）。
+        model = live.build_live_model(
+            loaded["dataset"], open_fund=open_fund, fields=fields,
+            save_results=save_results,
+            **loaded["live_args"]
+        )
+    except active_gate.NoActiveSource:
+        raise   # 由呼叫端畫「⬜ 尚未選定持倉資料來源」（批 3b-4 J-13；單頁與合併頁各自的畫法）
+    except Exception as exc:  # noqa: BLE001 —— 不是吞：呼叫端改畫錯誤畫面，型別與訊息原文照印（進階診斷）
+        raise LiveFailed(exc) from exc
+    # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
+    # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
+    model, raw, _status = plain.plain_model(model, page="hld")
+    # Phase 3 ◆／◇ 小批（44 第七節第三小節之七其三、其四，之八其三 (c-2)）：偏離的黃燈改不著色 ◆、「⬜ 資料未備」改 ◇。
+    # 只換符號、顏色與那一句說明；判定、門檻、算法一個都不動（`ui_v2/symbols.py`）。示範模式不經過這一步。
+    symbols.apply(model)
+    plain.record_raw(st.session_state, "hld", raw, datetime.now(timezone.utc))
+    # Phase 3 P0-②（44 第七節第三小節之七其二第 3、4 條）：同源錯誤只在頁首資料狀態行摘要一次；
+    # 核心卡的新鮮度徽章移到 ④「證據／來源」，「只顯示最後有效資料」的副標在卡上加 ◷。只改呈現（`ui_v2/health.py`）。
+    model, failures = health.dedupe_failures(model)
+    # 客戶 2026-10-19 裁示 G3（`DEC-2026-10-19-04`）：成因全部是「尚未設定」的塊，本頁自己擬的「取數失敗」字樣改寫成
+    # 「尚未設定：<哪一項>」（燈、展開區摘要；`ui_v2/health.py::relabel_unconfigured`）。判定與符號照舊。
+    health.relabel_unconfigured(model, failures)
+    cards = logic.codes_in_layer(model, 2)
+    health.mark_last_valid(model, cards, _LAST_VALID_PREFIX)   # 卡上「只顯示最後有效資料」的副標加 ◷（記錄那一步讀它）
+    # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
+    # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。
+    # 3-B 稽核回修第 3 條：收集與記錄包在錯誤邊界裡（`health_view.collect_page_health`）。
+    health_cards = sections.health_cards(cards, "hld")
+    collected = health_view.collect_page_health("hld", model, failures, _status["fetch_events"], health_cards)
+    # 核心卡的來源與新鮮度徽章拿下來；畫成黃的新鮮度徽章在卡上留「◷ <原字面>」。BL-0250 批次 3-C（G2；線框第六版第 7 節
+    # 第 2、7 列）：拿下來的那一份不再畫在 ④「核心卡的來源與新鮮度」—— 同一份已在總表明細（`normal_entries`，收集時讀）。
+    # ~~`provenance = health.move_card_provenance(...)` → `health_view.render_provenance(provenance)`~~（有意識的政策變更，
+    # 不是漏刪；`DEC-2026-10-21-01`）。
+    health.move_card_provenance(model, cards)
+    # BL-0250 批次 3-C（U9；44 第七節第三小節之十四）：頁首改畫主要原因＋另有，讀本頁剛記下的那一格（與總表同一份）；
+    # ◷ 由 `health.stale_items` 在記錄那一步補（讀的是 `mark_last_valid`／`move_card_provenance` 留在卡上的 ◷）。
+    # ~~`stale = stale or health.has_stale_marker(...)`、`status_line = health.status_line(...)`~~（有意識的政策變更，不是漏刪；
+    # `DEC-2026-10-21-01`）。
+    as_of = health.latest_date(loaded["dataset"].get("nav"), "nav_date")
+    health_view.record_page_health("hld", model, collected, health_cards, as_of=as_of)
+    # BL-0250 批次 3-C（G2；線框第六版第 7 節第 5、6 列）：淨值表逐檔分組標頭、最大回撤與本金類配息佔比表每一列的
+    # 「當日／延遲 N 日」拿掉（記錄總表之後；逐檔延遲已在總表明細）。◇ 那一種（超過 10 日）照留。
+    health.drop_delay_badges(model, ("HLD-6", "HLD-8"))
+    # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)、(a-2)）：`HLD-1` 結構上照舊屬層 2，畫面上畫在 ③，偏離列加 ◆；
+    # ① 另列三個計數（持有、◆ 需要注意、⬜ 無法判定）。只讀已算出的數，判定一個都不動（`ui_v2/sections.py`）。
+    sections.mark_hld1_rows(model)
+    counts_line = sections.hld_counts(model)
+    # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：整張卡主值全部讀不到 → 收起（卡名＋原因行）。在收集與記錄之後判定，
+    # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
+    quiet = health_view.quiet_cards("hld", model, collected)
+    # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
+    details = health_view.quiet_details("hld", model, collected)
+    # 新 B UI 第一階段唯讀（客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6）：寫 `user_setting` 的「存檔」不畫，
+    # 叫人存檔的說明一併改寫（`ui_v2/readonly.py`）。在收集與記錄之後做，判定與總表不受影響。
+    readonly.strip_write_controls(model)
+    return {"model": model, "counts_line": counts_line, "quiet": quiet, "details": details, "as_of": as_of}
 
 
 @health_view.guard_page("hld")   # 3-B 第二輪稽核回修可選 3：畫頁崩潰時總表不留上一筆正常記錄
@@ -1035,74 +1138,19 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
             applied_rules=applied.get("rules"),
         )
     else:
-        # S6b-1：只包「去拿」與「組模型」兩步；本檔自己的東西（讀 session 的兩支、畫面渲染）在 try 外先算好，
-        # 那些出錯是本檔的 bug，照常浮出來，不畫成取數失敗（第二輪，規格組建議 2）。
-        open_fund = _open_fund()
-        fields = _current_fields(None)
-        save_results = _current_save_results()   # 客戶 2026-10-16 裁示第 2 點（同理放在 try 外）；過期的不顯示
         try:
-            loaded = load_live()
-            # 客戶 2026-10-16 裁示第 2 點：不轉 session 裡的套用值 —— 正式結果只讀已存設定（`build_live_model` 沒有那兩個參數）。
-            model = live.build_live_model(
-                loaded["dataset"], open_fund=open_fund, fields=fields,
-                save_results=save_results,
-                **loaded["live_args"]
-            )
+            prep = prepare_live(load_live=load_live)
         except active_gate.NoActiveSource:
             # 批 3b-4（J-13）：沒有 Active Sheet ＝ 明確的第三種狀態「⬜ 尚未選定持倉資料來源」＋前往設定；不是錯誤、不是空持倉。
             active_gate.render_no_active(
                 "hld", title=logic.PAGE_TITLE, answers=logic.PAGE_ANSWERS, title_class="hld-title",
                 sub_class="hld-sub", tone_hex=_tone, settings_page=settings_page)
             return
-        except Exception as exc:  # noqa: BLE001 —— 不是吞：下一行整頁改畫錯誤畫面，型別與訊息原文照印（進階診斷）
-            _render_live_error(exc, mask_error, settings_page)
+        except LiveFailed as failed:   # 不是吞：整頁改畫錯誤畫面，型別與訊息原文照印（進階診斷）
+            _render_live_error(failed.exc, mask_error, settings_page)
             return
-        # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
-        # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
-        model, raw, _status = plain.plain_model(model, page="hld")
-        # Phase 3 ◆／◇ 小批（44 第七節第三小節之七其三、其四，之八其三 (c-2)）：偏離的黃燈改不著色 ◆、「⬜ 資料未備」改 ◇。
-        # 只換符號、顏色與那一句說明；判定、門檻、算法一個都不動（`ui_v2/symbols.py`）。示範模式不經過這一步。
-        symbols.apply(model)
-        plain.record_raw(st.session_state, "hld", raw, datetime.now(timezone.utc))
-        # Phase 3 P0-②（44 第七節第三小節之七其二第 3、4 條）：同源錯誤只在頁首資料狀態行摘要一次；
-        # 核心卡的新鮮度徽章移到 ④「證據／來源」，「只顯示最後有效資料」的副標在卡上加 ◷。只改呈現（`ui_v2/health.py`）。
-        model, failures = health.dedupe_failures(model)
-        # 客戶 2026-10-19 裁示 G3（`DEC-2026-10-19-04`）：成因全部是「尚未設定」的塊，本頁自己擬的「取數失敗」字樣改寫成
-        # 「尚未設定：<哪一項>」（燈、展開區摘要；`ui_v2/health.py::relabel_unconfigured`）。判定與符號照舊。
-        health.relabel_unconfigured(model, failures)
-        cards = logic.codes_in_layer(model, 2)
-        health.mark_last_valid(model, cards, _LAST_VALID_PREFIX)   # 卡上「只顯示最後有效資料」的副標加 ◷（記錄那一步讀它）
-        # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
-        # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。
-        # 3-B 稽核回修第 3 條：收集與記錄包在錯誤邊界裡（`health_view.collect_page_health`）。
-        health_cards = sections.health_cards(cards, "hld")
-        collected = health_view.collect_page_health("hld", model, failures, _status["fetch_events"], health_cards)
-        # 核心卡的來源與新鮮度徽章拿下來；畫成黃的新鮮度徽章在卡上留「◷ <原字面>」。BL-0250 批次 3-C（G2；線框第六版第 7 節
-        # 第 2、7 列）：拿下來的那一份不再畫在 ④「核心卡的來源與新鮮度」—— 同一份已在總表明細（`normal_entries`，收集時讀）。
-        # ~~`provenance = health.move_card_provenance(...)` → `health_view.render_provenance(provenance)`~~（有意識的政策變更，
-        # 不是漏刪；`DEC-2026-10-21-01`）。
-        health.move_card_provenance(model, cards)
-        # BL-0250 批次 3-C（U9；44 第七節第三小節之十四）：頁首改畫主要原因＋另有，讀本頁剛記下的那一格（與總表同一份）；
-        # ◷ 由 `health.stale_items` 在記錄那一步補（讀的是 `mark_last_valid`／`move_card_provenance` 留在卡上的 ◷）。
-        # ~~`stale = stale or health.has_stale_marker(...)`、`status_line = health.status_line(...)`~~（有意識的政策變更，不是漏刪；
-        # `DEC-2026-10-21-01`）。
-        as_of = health.latest_date(loaded["dataset"].get("nav"), "nav_date")
-        health_view.record_page_health("hld", model, collected, health_cards, as_of=as_of)
-        # BL-0250 批次 3-C（G2；線框第六版第 7 節第 5、6 列）：淨值表逐檔分組標頭、最大回撤與本金類配息佔比表每一列的
-        # 「當日／延遲 N 日」拿掉（記錄總表之後；逐檔延遲已在總表明細）。◇ 那一種（超過 10 日）照留。
-        health.drop_delay_badges(model, ("HLD-6", "HLD-8"))
-        # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)、(a-2)）：`HLD-1` 結構上照舊屬層 2，畫面上畫在 ③，偏離列加 ◆；
-        # ① 另列三個計數（持有、◆ 需要注意、⬜ 無法判定）。只讀已算出的數，判定一個都不動（`ui_v2/sections.py`）。
-        sections.mark_hld1_rows(model)
-        counts_line = sections.hld_counts(model)
-        # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：整張卡主值全部讀不到 → 收起（卡名＋原因行）。在收集與記錄之後判定，
-        # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
-        quiet = health_view.quiet_cards("hld", model, collected)
-        # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
-        details = health_view.quiet_details("hld", model, collected)
-        # 新 B UI 第一階段唯讀（客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6）：寫 `user_setting` 的「存檔」不畫，
-        # 叫人存檔的說明一併改寫（`ui_v2/readonly.py`）。在收集與記錄之後做，判定與總表不受影響。
-        readonly.strip_write_controls(model)
+        model, counts_line, quiet, details, as_of = (
+            prep["model"], prep["counts_line"], prep["quiet"], prep["details"], prep["as_of"])
     plain_mode = load_live is not None
 
     st.markdown(

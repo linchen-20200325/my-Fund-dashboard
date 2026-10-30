@@ -88,12 +88,9 @@ def _esc(value) -> str:
     return html.escape(str(value), quote=True)
 
 
-def render_no_active(slug: str, *, title: str, answers: str, title_class: str, sub_class: str, tone_hex,
-                     settings_page=None) -> None:
-    """整頁「尚未選定持倉資料來源」畫面：頁名、提問句、一行狀態（灰、`⬜`）、一枚只換頁的連結；其餘塊不畫。
-
-    各頁資料狀態總表記一筆「尚未設定：持倉資料來源」（不記成取數失敗、也不記成「沒有異常」）。只換頁、不取數、不寫入。
-    """
+def record_no_active(slug: str) -> None:
+    """各頁資料狀態總表記一筆「尚未設定：持倉資料來源」（`render_no_active` 的記錄那一半；BL-0525 Batch D 抽出，
+    合併頁一次要記 hld 與 alo 兩格）。"""
     if slug in page_health.PAGE_NAMES:
         page_health.record(
             st.session_state, slug,
@@ -102,8 +99,23 @@ def render_no_active(slug: str, *, title: str, answers: str, title_class: str, s
                 # 讓值讀不到（整頁沒有持倉資料）→ 擋主要原因，不落在「只影響比較值」（順位 6）
                 [page_health.affected(UNCONFIGURED_KEY, "", unreadable=True)], lamp=True, order=0)],
             as_of=None, now=datetime.now(timezone.utc))
+
+
+def render_no_active(slug: str, *, title: str, answers: str, title_class: str, sub_class: str, tone_hex,
+                     settings_page=None) -> None:
+    """整頁「尚未選定持倉資料來源」畫面：頁名、提問句、一行狀態（灰、`⬜`）、一枚只換頁的連結；其餘塊不畫。
+
+    各頁資料狀態總表記一筆「尚未設定：持倉資料來源」（不記成取數失敗、也不記成「沒有異常」）。只換頁、不取數、不寫入。
+    """
+    record_no_active(slug)
     st.markdown(f'<div class="{_esc(title_class)}">{_esc(title)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="{_esc(sub_class)}">{_esc(answers)}</div>', unsafe_allow_html=True)
+    render_no_active_status(tone_hex=tone_hex, settings_page=settings_page)
+
+
+def render_no_active_status(*, tone_hex, settings_page=None) -> None:
+    """「⬜ 尚未選定持倉資料來源」一行（灰）＋ 一枚只換頁的連結（沒有 `settings_page` 時只寫說明行）。
+    `render_no_active` 的畫面那一半（BL-0525 Batch D 抽出；合併頁把它放在頁頂「持倉資料來源」那一列）。只換頁、不取數、不寫入。"""
     st.markdown(
         f'<div class="v2-no-active" role="status" style="color:{tone_hex("灰")}">{_esc(TEXT_NO_ACTIVE)}</div>',
         unsafe_allow_html=True,
