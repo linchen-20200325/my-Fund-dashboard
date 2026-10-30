@@ -2452,6 +2452,7 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/69_cross_view_consistency_spec.md",   # 2026-10-28 Cross-View Data Consistency Gate 規格草案（DEC-2026-10-28-01）
     "docs/v2/70_dg2_canonical_identity_proposal.md",   # 2026-10-28 DG-2 canonical identity 提案（待客戶裁示；DEC-2026-10-28-03）
     "docs/v2/71_presentation_contract_migration.md",   # 2026-10-29 Presentation Contract Migration 盤點與分批計畫（DEC-2026-10-29-05／-06）
+    "docs/v2/72_mkt_wireframe_batch_c.md",   # 2026-10-30 BL-0525 Batch C 🌍 市場與趨勢 wireframe 草稿（待客戶拍板；不實作）
     "docs/v2/CONSTITUTION.md",
     "docs/v2/README_DRAFT_PACK.md",
 )
