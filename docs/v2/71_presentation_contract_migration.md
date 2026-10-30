@@ -450,6 +450,8 @@
 2. **Primitives 最小擴充**：`chart_card_model` 的摘要句可省略（`summary=None`；給了字串仍須是一句）、`presentation_view.inject_css` 公開。
 3. **測試與 Visual Fidelity**：T1、T9 遷移（舊斷言劃線保留理由）；T6＝`tests/ui_v2/test_sections_page.py` 新增 🌍 有 Data View 的新段序測試（舊四段順序測試對無 Data View 情境照舊成立）；T13＝`test_bl0345_dev_notes_page.py`、`test_plain_trend_page.py` 把新 detail／尚未取得／次要圖展開區與每個 Primary 序列、利率與信用子序列切換後的畫面納入開發註記與工程字樣掃描（皆讀過原測試內容後遷移，無需 skip_expanders）；`tests/visual_fidelity` 對 🌍 頁 V4～V8 升為 hard 並新增 M1～M6（視覺順序、Secondary ≤3、無頁級日期、Secondary 不高於 Primary、手機緊湊列、無圖表牆）。**CI fixture screenshot ≠ production-like Cloud screenshot**；Cloud capture 仍受環境網路政策阻擋，**Visual Fidelity Gate 的正式確認尚未執行**。
 
+**Batch D 裁示指標（2026-10-30；`DEC-2026-10-30-02`；上表 Phase 5 列是計畫，保留）**：客戶已對 `docs/v2/73_assets_wireframe_batch_d.md` 的 D-1～D-12 正式裁示（逐字 `docs/evidence/decisions/2026-10-30_batch_d_d1_d12_rulings.md`）：層 3／層 4 的「塊」按 presentation container 計（R-C；正式定義「Domain Block Identity ≠ Presentation Container Count」，block ID 不刪、Decision Digest 不減），整頁 S1（3a＋4a）；Primary 為資產配置現況 vs 目標；第一屏保留總資產／總損益／報酬／配息四項 compact summary slots（缺資料誠實 Missing），本批不准入新彙總公式；持倉資料來源 selector 頁頂獨立一列（OAuth 不得順手改）；**D-3 page-level 結論燈暫停，待最小 Formula Gate，Gate 落盤前不得實作**。本檔其餘處的「層 3／層 4 超限處置待客戶裁示」讀作已裁結（上表 Phase 5 列的前置條件已滿足；T7 帳號與 Sheet 位置仍隨 Batch D／F 實作）。Batch D 實作批的狀態見 `docs/HANDOFF.md` 與 `docs/BACKLOG.md` BL-0525。
+
 依 repo dependency 可微調順序；每批完成前走 Visual Fidelity Gate，CI 全綠不等於完成。進入 Batch B 以後的機械式 UI 實作，依客戶第二十四節與第三則末段走 Model／Effort Change Gate（建議 Sonnet 5.5／Medium）。
 
 ---
