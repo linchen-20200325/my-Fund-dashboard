@@ -433,7 +433,7 @@
 | **Phase 1**（本 PR） | Presentation Contract／VFG（44 之十九）；IA amendment（44 之二十）；Decision Digest／One AI Brain 最小契約（67 第 5～7 節） | — | 1 組獨立稽核（治理與 SSOT 等級）；CI |
 | **Phase 2＝Batch A** helper／tests migration | (1) T1～T6、T8 依新測試契約改寫（不刪資訊、不改產品行為）；(2) 頁首狀態行與核心卡的 page 層呈現責任拆分點（只動 page，不動模型）；(3) 截圖工具鏈落地（第七節兩層） | 預覽站 URL 與網路放行（只擋 (3) 的正式確認） | targeted tests、regression、CI、1 組獨立稽核；本批不改畫面時 Visual audit 註記「無可見變更」 |
 | **Phase 3＝Batch B** 共用元件 | (1) chart card；(2) metadata／status chip；(3) detail 展開區＋Missing placeholder（含圖表 placeholder） | 無（44 之十九已定）；符號照 44 現行 | 同上＋T10＋desktop／390 截圖 |
-| **Phase 4＝Batch C** 🌍 reference implementation | (1) 段序改為圖表優先、Primary 1＋Secondary ≤3（X-25、T1）；(2) 圖卡改 chips＋「▸」（X-26、T9）；(3) 核心卡 `answers`／`detail_lines` 下沉（X-27） | 無；BL-0517 三張新圖卡不在本批（方案 A 草稿另批） | 八項全做＋Visual audit 九問 |
+| **Phase 4＝Batch C** 🌍 reference implementation | (1) 段序改為圖表優先、Primary 1＋Secondary ≤3（X-25、T1）；(2) 圖卡改 chips＋「▸」（X-26、T9）；(3) 核心卡 `answers`／`detail_lines` 下沉（X-27） | 無；BL-0517 三張新圖卡不在本批（方案 A 草稿另批）〔2026-10-30：草稿已寫成，`docs/v2/72_mkt_wireframe_batch_c.md`，待客戶拍板；拍板前不開實作〕 | 八項全做＋Visual audit 九問 |
 | **Phase 5＝Batch D** 💼 我的資產 | (1) 合併頁 IA（含一枚結論燈的畫法、層 3／層 4 各超 2 塊的處置〔線框送客戶裁示〕、頁序頁名對齊批）；(2) 情境式持倉資料來源選擇；(3) portfolio visuals（Primary 1＋Secondary ≤3） | 線框草稿先行（新元件與合併頁）；**層 3／層 4 超限的客戶裁示**；BL-0526 若影響頁數，對齊批等它 | 八項全做 |
 | **Phase 6＝Batch E** 🔍 找基金 | (1) 候選清單解耦；(2) 暫時篩選（只在本次瀏覽生效）；(3) search／filter／compare 呈現 | BL-0397 Data Source Decision Gate（未核准前搜尋區 `◇ 資料未備`）；CAP-GATE-05 | 八項全做 |
 | **Batch F** ⚙️ 設定＋帳號位置 | (1) 設定頁瘦身；(2) Google 帳號左側固定與手機控制；(3) desktop／mobile 互動 | callback 查證（6.2，可能再 Gate） | 八項全做 |
