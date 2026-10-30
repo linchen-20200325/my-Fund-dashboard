@@ -122,7 +122,7 @@ def test_URL只登記在一處():
     for path in list((root / "tests").rglob("*.py")) + list((root / "ui_v2").rglob("*.py")) + list((root / ".github").rglob("*.yml")):
         if host in path.read_text(encoding="utf-8", errors="replace"):
             hits.append(str(path.relative_to(root)))
-    assert hits == ["tests/visual_fidelity/vf_config.py", "tests/visual_fidelity/test_layout_checks_logic.py"], hits
+    assert sorted(hits) == sorted(["tests/visual_fidelity/vf_config.py", "tests/visual_fidelity/test_layout_checks_logic.py"]), hits   # 與順序無關
 
 
 def test_desktop_內容區比視窗窄_寬度比例量內容區不量視窗():

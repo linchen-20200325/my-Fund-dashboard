@@ -45,7 +45,10 @@ def test_fund_age_years_5y_old():
 def test_fund_age_years_low_freq_still_works():
     """低頻 NAV（只 12 點但跨 3+ 年）— 取代 ret_3y 的脆弱判斷。"""
     today = pd.Timestamp.now()
-    start = (today - pd.Timedelta(days=365 * 3 + 30)).strftime("%Y-%m-%d")
+    # 2026-10-30 修正（與 BL-0525 無關；有意識的更正，不是漏刪）：舊值 `365 * 3 + 30` 只留 30 天餘裕，但 `freq="ME"` 會把第一個點
+    # 推到「起點之後的月底」，最多晚 30 天；起點落在月初那幾天（例：2023-10-01）時年資 2.998 < 3.0，測試隨日期紅。
+    # 餘裕放到 60 天，涵蓋月底對齊最多 30 天的位移；測試意圖（低頻、點數遠少於 756、跨 3+ 年仍判 ≥3 年）不變。
+    start = (today - pd.Timedelta(days=365 * 3 + 60)).strftime("%Y-%m-%d")
     # 只 12 個月線數據，遠不到 _ret(756) 的門檻
     idx = pd.date_range(start=start, periods=12, freq="ME")
     s = pd.Series([10.0 + i * 0.1 for i in range(12)], index=idx)
