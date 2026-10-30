@@ -26,7 +26,7 @@
 
 from __future__ import annotations
 
-import config
+import vf_config as config
 
 # 在頁面裡量。回傳可 JSON 序列化的 dict。展開區在 Streamlit 是 <details>；收合＝沒有 open 屬性。
 MEASURE_JS = """

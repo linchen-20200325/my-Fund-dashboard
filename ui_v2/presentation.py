@@ -9,7 +9,7 @@
    形狀不對（chip 數、摘要不只一句、缺標題）一律 `ValueError`（§1 Fail Loud），不默默截斷。
 3. **detail 模型**（`detail_model`）：「▸ 為什麼‧來源‧限制‧去哪補」四組，預設收合；空組不畫、**全空不畫展開區**；
    內容完整保留（資訊存在與資訊外露分離，之十九其二）。
-4. **Missing placeholder 模型**（`missing_model`）：卡＋`◇ 資料未備` chip＋一句短原因＋同卡 detail（含「去哪補」）。
+4. **Missing placeholder 模型**（`missing_model`）：卡＋`◇ 資料未備` chip＋一句短原因＋同卡 detail（必含「去哪補」組，缺了拋錯）。
    原因空白一律 `ValueError` —— Missing 不寫 0、不寫中性、不留空（missing ≠ 0；unavailable ≠ neutral）。
 
 **不做什麼**：不 import streamlit、不 import 舊樹（`tests/ui_v2/test_ui_v2_live_import_guard.py`）；不決定資料語意、符號語意、
@@ -190,7 +190,7 @@ def missing_model(title: str, reason: str, *, detail: dict | None = None, extra_
 
     - `reason` 空白或不只一句 → `ValueError`（不留空白 Missing 卡，也不拿數段技術文字填滿）。
     - 不產生任何數值欄位：這個模型沒有 value，所以不可能被畫成 0 或中性。
-    - 沒有 detail 時仍可成立，但呼叫端應盡量給「去哪補」。
+    - **detail 必須含「去哪補」組**（客戶契約：Missing 卡同卡有「▸ 去哪補」）；沒給或缺該組 → `ValueError`。
     """
     if not isinstance(title, str) or not title.strip():
         raise ValueError("Missing 卡標題不得為空")
@@ -200,7 +200,9 @@ def missing_model(title: str, reason: str, *, detail: dict | None = None, extra_
     if len(chips) > MAX_CHIPS:
         raise ValueError(f"Missing 卡 chips 至多 {MAX_CHIPS} 枚，收到 {len(chips)} 枚")
     split_chips(chips)
-    det = detail if detail is not None else detail_model()
+    if detail is None or "去哪補" not in [name for name, _ in detail["groups"]]:
+        raise ValueError("Missing 卡的 detail 必須含「去哪補」組（detail_model(where=[...])）")
+    det = detail
     return {"kind": "missing", "title": title.strip(), "chips": chips, "reason": reason.strip(), "detail": det}
 
 

@@ -13,7 +13,7 @@ import pytest
 _HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 
-import config  # noqa: E402
+import vf_config as config  # noqa: E402
 import layout_checks as LC  # noqa: E402
 
 
@@ -106,7 +106,7 @@ def test_config_標示與URL():
 
 
 def test_config不含任何疑似credential():
-    text = (_HERE / "config.py").read_text(encoding="utf-8")
+    text = (_HERE / "vf_config.py").read_text(encoding="utf-8")
     assert not re.search(r"(?i)(token|secret|password|api[_-]?key)\s*=", text)
     tree = ast.parse(text)
     imported = {n.names[0].name for n in ast.walk(tree) if isinstance(n, ast.Import)} | \
@@ -115,14 +115,14 @@ def test_config不含任何疑似credential():
 
 
 def test_URL只登記在一處():
-    """Cloud Preview URL 的單一位置是 `tests/visual_fidelity/config.py`；程式碼其他地方不得再寫死一份（文件可以指向它）。"""
+    """Cloud Preview URL 的單一位置是 `tests/visual_fidelity/vf_config.py`；程式碼其他地方不得再寫死一份（文件可以指向它）。"""
     root = _HERE.parents[1]
     host = "my-fund-dashboard-3atbdymetmxyi2fbkxujtv"
     hits = []
     for path in list((root / "tests").rglob("*.py")) + list((root / "ui_v2").rglob("*.py")) + list((root / ".github").rglob("*.yml")):
         if host in path.read_text(encoding="utf-8", errors="replace"):
             hits.append(str(path.relative_to(root)))
-    assert hits == ["tests/visual_fidelity/config.py", "tests/visual_fidelity/test_layout_checks_logic.py"], hits
+    assert hits == ["tests/visual_fidelity/vf_config.py", "tests/visual_fidelity/test_layout_checks_logic.py"], hits
 
 
 def test_desktop_內容區比視窗窄_寬度比例量內容區不量視窗():
@@ -136,12 +136,35 @@ def test_desktop_內容區比視窗窄_寬度比例量內容區不量視窗():
 # ── cloud_capture（不需要瀏覽器的部分）──
 
 
-def test_cloud_capture_網路被擋判定_與報告字樣():
+def test_cloud_capture_只有明確網路層錯誤才算blocked():
     import cloud_capture as CC
 
     assert CC.is_network_block("Page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://x/")
-    assert CC.is_network_block("Page.goto: Timeout 45000ms exceeded.")
-    assert not CC.is_network_block("Browser closed unexpectedly")      # 判不出來就不吞
+    assert CC.is_network_block("Page.goto: net::ERR_NAME_NOT_RESOLVED at https://x/")
+    assert CC.is_network_block("Page.goto: net::ERR_PROXY_CONNECTION_FAILED at https://x/")
+    # 這些不是網路政策阻擋：可能是 app 慢、站點狀態或被擋在別處 —— 不得冒充 blocked。
+    assert not CC.is_network_block("Page.goto: Timeout 45000ms exceeded.")
+    assert not CC.is_network_block("Page.wait_for_selector: Timeout 45000ms exceeded.")
+    assert not CC.is_network_block("HTTP 403 Forbidden")
+    assert not CC.is_network_block("Browser closed unexpectedly")
+
+
+def test_cloud_capture_頁面內容檢查_休眠頁與非app不報captured():
+    import cloud_capture as CC
+
+    assert CC.assess_page(has_app_container=True, body_text="") == "app"
+    assert CC.assess_page(has_app_container=False, body_text="This app has gone to sleep due to inactivity") == "sleeping"
+    assert CC.assess_page(has_app_container=False, body_text="Yes, get this app back up!") == "sleeping"
+    assert CC.assess_page(has_app_container=False, body_text="404 Not Found") == "not_app"
+    assert CC.assess_page(has_app_container=False, body_text="") == "not_app"
+
+
+def test_cloud_capture_狀態與exit_code要讓人看得到():
+    import cloud_capture as CC
+
+    assert CC.EXIT_OK == 0
+    assert len({CC.EXIT_UNDETERMINABLE, CC.EXIT_NOT_APP, CC.EXIT_USAGE}) == 3 and 0 not in (CC.EXIT_UNDETERMINABLE, CC.EXIT_NOT_APP)
+    assert "not determinable" in CC.NOT_DETERMINABLE_NOTE and "blocked" not in CC.NOT_DETERMINABLE_NOTE
     text = CC.report_text(url="https://x/", outcome=config.CLOUD_BLOCKED_NOTE, files=[], reason="net::ERR_TUNNEL_CONNECTION_FAILED")
     assert config.CLOUD_BLOCKED_NOTE in text and "production-like Cloud screenshot" in text
     assert config.CI_FILE_PREFIX not in text   # 兩層不混用：Cloud 報告不出現 CI 檔名前綴

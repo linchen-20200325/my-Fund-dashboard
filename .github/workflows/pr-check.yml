@@ -138,7 +138,7 @@ jobs:
   # Visual Fidelity safety net — CI deterministic screenshot（BL-0525 Batch A；`DEC-2026-10-29-07`）
   # ⚠️ CI fixture screenshot ≠ production-like Cloud screenshot：本 job 的截圖只代表「CI 固定 fixtures 渲染出的畫面」，
   #    是 automated safety net，**不是** Visual Fidelity Gate 的正式確認（正式確認＝B 線預覽站的 production-like Cloud screenshot，
-  #    見 tests/visual_fidelity/config.py 與 docs/v2/71 第七節）。兩者不得互相冒充。
+  #    見 tests/visual_fidelity/vf_config.py 與 docs/v2/71 第七節）。兩者不得互相冒充。
   # 非阻擋（continue-on-error）：理由同 slow lane —— 瀏覽器截圖可能受字型／渲染環境影響偶發差異，且今天的頁面尚未套用
   #    Presentation Contract（Batch C～F 才套用），hard 檢查（例外、程式碼區塊外露、水平溢出）以外的契約缺口只寫進報告、不轉紅。
   #    也就是說：這條 job 紅了**不會擋合併** —— 要看這條 job 的結果才知道。

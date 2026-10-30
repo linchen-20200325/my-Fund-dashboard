@@ -134,15 +134,28 @@ def test_missing_不寫0_不寫中性_不留空():
     assert "value" not in m and "value_text" not in m   # 模型沒有可被畫成 0 的欄位
     html = P.missing_card_html(m)
     assert "◇ 資料未備" in html and "尚未接上正式來源" in html
+    where = P.detail_model(where=["到設定頁補"])
     for bad in ("", "  ", "兩句。真的。", "多行\n原因"):
         with pytest.raises(ValueError):
-            P.missing_model("x", bad)
+            P.missing_model("x", bad, detail=where)
+
+
+def test_missing_必含去哪補_缺了轉紅():
+    with pytest.raises(ValueError):
+        P.missing_model("x", "原因")                                   # 沒給 detail
+    with pytest.raises(ValueError):
+        P.missing_model("x", "原因", detail=P.detail_model())           # 空 detail
+    with pytest.raises(ValueError):
+        P.missing_model("x", "原因", detail=P.detail_model(why=["只有為什麼"]))   # 缺「去哪補」組
+    m = P.missing_model("x", "原因", detail=P.detail_model(why=["甲"], where=["到設定頁補"]))
+    assert m["detail"]["title"] == "▸ 為什麼‧去哪補"
 
 
 def test_missing_額外chip也受上限約束():
-    P.missing_model("x", "原因", extra_chips=_chips(4))
+    where = P.detail_model(where=["到設定頁補"])
+    P.missing_model("x", "原因", detail=where, extra_chips=_chips(4))
     with pytest.raises(ValueError):
-        P.missing_model("x", "原因", extra_chips=_chips(5))
+        P.missing_model("x", "原因", detail=where, extra_chips=_chips(5))
 
 
 # ── 隔離 ──

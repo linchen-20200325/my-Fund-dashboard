@@ -293,7 +293,7 @@
 |---|---|---|
 | 44 第三節第零小節與之十七其二表的第一欄字面、列序；`ui_v2/app_preview.py::PAGES` 與頁數頁序守衛 | 照之十七其三前例：程式端頁清單與守衛逐字鎖住，本 PR 不改程式；AI 入口形式未定，頁數還不能定 | BL-0526 裁示後的對齊批（BL-0525 Batch D 或殼層批） |
 | 44 我的資產整頁「回答什麼」一句、合併頁塊組成與兩枚燈怎麼收 | 依 `DEC-2026-10-27-29`「等各頁內容 Batch 才定稿」；燈的畫法要線框 | Batch D（草稿先行） |
-| 🤖 AI 投資總結的頁數、44 之十八其一的 AI 區性質 | 待單一最小 Gate | BL-0526 |
+| 🤖 AI 投資總結的頁數、44 之十八其一的 AI 區性質 | 待單一最小 Gate | BL-0526 **→ 2026-10-29 已裁示方案 C（`DEC-2026-10-29-07`），BL-0526 closed；原文保留，不是漏刪。** |
 | 44 之十四頁首資料狀態改 chip 的字面 | 相容（44 之十九其七第 3 條），字面不必改 | 實作批若要改字面再開一輪 |
 | 子法 1 | 判斷相容（5.3） | 若客戶不採此讀法，走提案單 #9（先例 56→57：子法修改要客戶核准提案文字） |
 | `docs/wireframes/` 原件 | 客戶原件不得改寫；A 線不遷 | — |
@@ -312,7 +312,7 @@
 
 ## 6. 基金 IA amendment list（**客戶第三則已裁示 Gate 1、2、3、5**；正式條文 44 之二十）
 
-> 本節保留衝突分析作為紀錄；裁示後的落字與被 supersede 的舊 DEC 逐筆範圍見 44 之二十與 `DEC-2026-10-29-06`。仍待裁的只剩 🤖 AI 投資總結的入口形式（6.6，BL-0526）。
+> 本節保留衝突分析作為紀錄；裁示後的落字與被 supersede 的舊 DEC 逐筆範圍見 44 之二十與 `DEC-2026-10-29-06`。仍待裁的只剩 🤖 AI 投資總結的入口形式（6.6，BL-0526）。 **【2026-10-29 更新：BL-0526 已裁示方案 C，不再待裁，見 6.6 與 `DEC-2026-10-29-07`；上句保留，不是漏刪。】**
 
 ### 6.1 「⚖️ 資產配置＋💼 我的持股 → 💼 我的資產」（Gate 1 方案 A）
 
@@ -384,10 +384,10 @@
 
 | 項 | 落地 | 驗過的是什麼 |
 |---|---|---|
-| Cloud Preview URL | 登記在 `tests/visual_fidelity/config.py::CLOUD_PREVIEW_URL`（程式可讀的單一位置；公開網址，不含 credential）。守衛：同檔單元測試釘住「只在這一處」 | 單元測試（本機與 CI） |
+| Cloud Preview URL | 登記在 `tests/visual_fidelity/vf_config.py::CLOUD_PREVIEW_URL`（程式可讀的單一位置；公開網址，不含 credential）。守衛：同檔單元測試釘住「只在這一處」 | 單元測試（本機與 CI） |
 | 兩層標示 | `config.CI_FIXTURE_LABEL`＝「CI fixture screenshot ≠ production-like Cloud screenshot」；CI 截圖檔名前綴 `ci-fixture`、artifact 名 `ci-fixture-screenshots-NOT-production-cloud`、報告第一行都帶標示；Cloud 截圖前綴 `cloud-preview`，兩層不混用 | 單元測試與 workflow 解析測試 |
 | A. CI deterministic screenshot | `tests/visual_fidelity/test_ci_fixture_screenshots.py`（Playwright／Chromium、固定 fixtures、不打外部網路、desktop 1280x800 與 390x844、每畫面截兩次比對決定性、基本 layout 檢查 V1～V8）＋ `.github/workflows/pr-check.yml` 新 job `visual-fidelity-safety-net`（`actions/upload-artifact@v4`）。**非阻擋**（`continue-on-error: true`）：hard 檢查（例外、程式碼區塊外露、水平溢出）會轉紅，契約缺口（圖在首屏、chips 數）只寫進報告，因為今天的頁面尚未套用呈現契約，那是 Batch C～F 的工作；新建的 primitives 展示頁則全部檢查都是 hard | 本機以 Python playwright 與本機 Chromium 實跑過六個情境的截圖與檢查；CI job 本身待 PR 的 CI 結果 |
-| B. Streamlit Cloud screenshot | `tests/visual_fidelity/cloud_capture.py`（參數化 URL、desktop 與 390px；預設不在 CI 跑，只在手動 `workflow_dispatch` 時嘗試）。網路被擋時輸出並寫入「production-like Cloud capture blocked by current environment network policy」、exit 0 | 本機實跑：目前執行環境連不到該網域（`curl` 回 000；playwright 回 `net::ERR_TUNNEL_CONNECTION_FAILED`），腳本走到 blocked 分支。**尚未取得任何 production-like 截圖** |
+| B. Streamlit Cloud screenshot | `tests/visual_fidelity/cloud_capture.py`（參數化 URL、desktop 與 390px；預設不在 CI 跑，只在手動 `workflow_dispatch` 時嘗試）。只有明確的網路層錯誤（`net::ERR_*`）才輸出並寫入「production-like Cloud capture blocked by current environment network policy」、exit 0；`Timeout`／`403` 輸出「無法判定（not determinable）」、exit 3；休眠頁或找不到 app 容器輸出「未擷取」、exit 4；擷取成功前會檢查頁面確實是 app 內容（Community Cloud 的 app 在 iframe 內，逐框架找） | 本機實跑：目前執行環境連不到該網域（`curl` 回 000；playwright 回 `net::ERR_TUNNEL_CONNECTION_FAILED`），腳本走到 blocked 分支。**尚未取得任何 production-like 截圖** |
 
 **Cloud 正式確認的狀態**：production-like Cloud capture blocked by current environment network policy（2026-10-29）。依客戶裁示不停批、不重複向客戶要 URL；環境放行後執行 `python tests/visual_fidelity/cloud_capture.py --out <目錄>`（或手動觸發 workflow）補正式 Cloud confirmation。在補上之前，UI PR 寫「Visual Fidelity Gate 未執行」，不寫通過；Batch A 本身不改任何可見畫面，Visual audit 註記「無可見變更」。
 
@@ -437,7 +437,7 @@
 | **Phase 5＝Batch D** 💼 我的資產 | (1) 合併頁 IA（含一枚結論燈的畫法、層 3／層 4 各超 2 塊的處置〔線框送客戶裁示〕、頁序頁名對齊批）；(2) 情境式持倉資料來源選擇；(3) portfolio visuals（Primary 1＋Secondary ≤3） | 線框草稿先行（新元件與合併頁）；**層 3／層 4 超限的客戶裁示**；BL-0526 若影響頁數，對齊批等它 | 八項全做 |
 | **Phase 6＝Batch E** 🔍 找基金 | (1) 候選清單解耦；(2) 暫時篩選（只在本次瀏覽生效）；(3) search／filter／compare 呈現 | BL-0397 Data Source Decision Gate（未核准前搜尋區 `◇ 資料未備`）；CAP-GATE-05 | 八項全做 |
 | **Batch F** ⚙️ 設定＋帳號位置 | (1) 設定頁瘦身；(2) Google 帳號左側固定與手機控制；(3) desktop／mobile 互動 | callback 查證（6.2，可能再 Gate） | 八項全做 |
-| **Phase 7** One AI Brain／Decision Digest／AI 投資總結 | 依 67 第 5、6 節；先補 BL-0527 缺口與守衛 | BL-0526 入口形式；BL-0495 Risk Cap；BL-0496 減碼 trigger；`AI-1`、`AI-3` | Digest 契約定義前不寫 prompt 或 LLM glue |
+| **Phase 7** One AI Brain／Decision Digest／AI 投資總結 | 依 67 第 5、6 節；先補 BL-0527 缺口與守衛 | ~~BL-0526 入口形式~~（→ 已裁示方案 C，`DEC-2026-10-29-07`；Phase 7 才加入導覽）；BL-0495 Risk Cap；BL-0496 減碼 trigger；`AI-1`、`AI-3` | Digest 契約定義前不寫 prompt 或 LLM glue |
 
 **Batch A 實際做了什麼（2026-10-29；`DEC-2026-10-29-07`；上表 Phase 2 列是計畫，保留）**：
 1. **測試契約遷移**：T2、T3、T4（hld、exp）已依新測試契約改寫（詳見 4.1）；T8 以新增情境補射程。

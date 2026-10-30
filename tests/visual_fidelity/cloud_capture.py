@@ -8,8 +8,8 @@
 
     python tests/visual_fidelity/cloud_capture.py --out <輸出目錄> [--url <網址>] [--path <頁面路徑，例如 mkt>] [--timeout-ms 45000]
 
-網路被擋住時（目前執行環境連不到該網域）：**不當成失敗**。腳本印出並寫入報告
-`production-like Cloud capture blocked by current environment network policy`，附上原始錯誤，exit code 0 —— 客戶 2026-10-29 裁示
+網路被擋住時（目前執行環境連不到該網域；只認 `net::ERR_*` 這類明確的網路層錯誤）：**不當成失敗**。腳本印出並寫入報告
+`production-like Cloud capture blocked by current environment network policy`，附上原始錯誤，exit code 0 —— `Timeout`／`403`／休眠頁／非 app 內容**不是** blocked：分別以「無法判定」（exit 3）、「未擷取」（exit 4）呈現，讓人看得到。客戶 2026-10-29 裁示
 Batch A 不得因此停批；環境放行後重跑本腳本即可補上正式 Cloud confirmation。其他錯誤（參數、瀏覽器啟動失敗）才 exit 非 0。
 
 不含 credential：預覽站是公開網址，真資料需要的 Secrets 在 Streamlit Cloud 端，本腳本不讀不寫任何 secret。
@@ -25,14 +25,38 @@ import sys
 _HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 
-import config  # noqa: E402
+import vf_config as config  # noqa: E402
 
-_NAV_ERRORS = ("net::ERR_", "Timeout", "ERR_PROXY", "ERR_TUNNEL", "ERR_CONNECTION", "ERR_NAME_NOT_RESOLVED", "403")
+# 結果狀態與 exit code（只有 blocked 與 captured 以 0 結束；無法判定與非真實 app 要讓人看得到，所以非 0）。
+EXIT_OK = 0
+EXIT_USAGE = 2
+EXIT_UNDETERMINABLE = 3
+EXIT_NOT_APP = 4
+
+NOT_DETERMINABLE_NOTE = "無法判定（not determinable）：導覽失敗但不是明確的網路阻擋，不得當成網路政策阻擋"
+SLEEPING_NOTE = "未擷取：預覽站顯示休眠頁（app 需要喚醒），不是真實 app 內容"
+NOT_APP_NOTE = "未擷取：頁面載入了但找不到 Streamlit app 容器，不是真實 app 內容"
+
+_SLEEP_MARKERS = ("gone to sleep", "get this app back up", "app back up")
 
 
 def is_network_block(message: str) -> bool:
-    """把 playwright 的導覽錯誤判成「網路被擋」。判不出來的一律不吞（當成真錯誤往外拋）。"""
-    return any(token in message for token in _NAV_ERRORS)
+    """只認明確的網路層阻擋（`net::ERR_*`：tunnel、proxy、name 解析、連線被拒／重置等）。
+
+    `Timeout`、`403`、`wait_for_selector` 逾時、休眠頁都**不是**這一類 —— 它們可能是 app 慢、被擋在別處或站點本身的狀態，
+    把它們說成「blocked by current environment network policy」會是假的結論（無法判定就說無法判定）。
+    """
+    return "net::ERR_" in message
+
+
+def assess_page(*, has_app_container: bool, body_text: str) -> str:
+    """擷取後的最小內容檢查：回 `app`（真實 app）、`sleeping`（休眠頁）、`not_app`（其他）。"""
+    if has_app_container:
+        return "app"
+    lowered = (body_text or "").lower()
+    if any(marker in lowered for marker in _SLEEP_MARKERS):
+        return "sleeping"
+    return "not_app"
 
 
 def report_text(*, url: str, outcome: str, files: list, reason: str = "") -> str:
@@ -46,6 +70,21 @@ def report_text(*, url: str, outcome: str, files: list, reason: str = "") -> str
     return "\n".join(lines) + "\n"
 
 
+def _find_app(tab, timeout_ms: int) -> bool:
+    """Streamlit Community Cloud 把 app 放在 iframe 裡；本機或自架則在主框架。逐框架找 `stApp`，輪詢到逾時。"""
+    waited = 0
+    while waited <= timeout_ms:
+        for frame in tab.frames:
+            try:
+                if frame.locator("[data-testid=stApp]").count() > 0:
+                    return True
+            except Exception:  # noqa: BLE001 - 框架正在導覽，下一輪再看
+                pass
+        tab.wait_for_timeout(1000)
+        waited += 1000
+    return False
+
+
 def capture(url: str, out: pathlib.Path, *, path: str = "", timeout_ms: int = 45000) -> int:
     out.mkdir(parents=True, exist_ok=True)
     target = url.rstrip("/") + ("/" + path.strip("/") if path else "/")
@@ -54,7 +93,7 @@ def capture(url: str, out: pathlib.Path, *, path: str = "", timeout_ms: int = 45
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         print(f"匯入不到 playwright：{exc}", file=sys.stderr)
-        return 2
+        return EXIT_USAGE
     exe = os.environ.get("UI_V2_CHROMIUM") or None
     files = []
     with sync_playwright() as p:
@@ -66,18 +105,30 @@ def capture(url: str, out: pathlib.Path, *, path: str = "", timeout_ms: int = 45
                 tab = ctx.new_page()
                 try:
                     tab.goto(target, wait_until="networkidle", timeout=timeout_ms)
-                    tab.wait_for_selector("[data-testid=stApp]", timeout=timeout_ms)
+                    state = assess_page(has_app_container=_find_app(tab, timeout_ms),
+                                        body_text=tab.inner_text("body") if tab.locator("body").count() else "")
+                    if state != "app":
+                        note = SLEEPING_NOTE if state == "sleeping" else NOT_APP_NOTE
+                        print(note)
+                        report.write_text(report_text(url=target, outcome=note, files=files), encoding="utf-8")
+                        return EXIT_NOT_APP
                     tab.wait_for_timeout(3000)
                     fname = f"{config.CLOUD_FILE_PREFIX}__{vp_name}.png"
                     tab.screenshot(path=str(out / fname), full_page=True, animations="disabled")
                     files.append(fname)
-                except Exception as exc:  # noqa: BLE001 - 分類後決定是記錄 blocked 還是往外拋
+                except Exception as exc:  # noqa: BLE001 - 分類後決定是 blocked、無法判定還是往外拋
                     message = str(exc)
+                    first = message.splitlines()[0][:300] if message else repr(exc)
                     if is_network_block(message):
                         print(config.CLOUD_BLOCKED_NOTE)
                         report.write_text(report_text(url=target, outcome=config.CLOUD_BLOCKED_NOTE, files=files,
-                                                      reason=message.splitlines()[0][:300]), encoding="utf-8")
-                        return 0
+                                                      reason=first), encoding="utf-8")
+                        return EXIT_OK
+                    if "Timeout" in message or "403" in message:
+                        print(NOT_DETERMINABLE_NOTE)
+                        report.write_text(report_text(url=target, outcome=NOT_DETERMINABLE_NOTE, files=files,
+                                                      reason=first), encoding="utf-8")
+                        return EXIT_UNDETERMINABLE
                     raise
                 finally:
                     ctx.close()
@@ -85,7 +136,7 @@ def capture(url: str, out: pathlib.Path, *, path: str = "", timeout_ms: int = 45
             browser.close()
     report.write_text(report_text(url=target, outcome="captured", files=files), encoding="utf-8")
     print(f"captured: {', '.join(files)}")
-    return 0
+    return EXIT_OK
 
 
 def main(argv=None) -> int:

@@ -111,6 +111,6 @@ def test_畫錯模型種類_轉紅():
     from ui_v2 import presentation_view as V
 
     with pytest.raises(ValueError):
-        V.render_chart_card(P.missing_model("x", "原因"), draw_chart=lambda: None)
+        V.render_chart_card(P.missing_model("x", "原因", detail=P.detail_model(where=["去設定頁"])), draw_chart=lambda: None)
     with pytest.raises(ValueError):
         V.render_missing_placeholder(P.chart_card_model("x", [P.chip("a"), P.chip("b"), P.chip("c")], "一句"))

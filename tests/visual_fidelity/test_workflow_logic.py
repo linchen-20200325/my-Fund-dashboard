@@ -16,7 +16,7 @@ import yaml
 _HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 
-import config  # noqa: E402
+import vf_config as config  # noqa: E402
 
 _WF = _HERE.parents[1] / ".github" / "workflows" / "pr-check.yml"
 _JOB = "visual-fidelity-safety-net"

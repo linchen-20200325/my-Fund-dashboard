@@ -2,7 +2,7 @@
 """CI deterministic screenshot ＋ 基本 layout 檢查（BL-0525 Batch A；Visual Fidelity 的 automated safety net；slow lane）。
 
 ⚠️ **CI fixture screenshot ≠ production-like Cloud screenshot。** 本檔產生的截圖只代表「CI 固定 fixtures 渲染出的畫面」，
-不能拿來宣稱 Visual Fidelity Gate 通過；正式確認是 `cloud_capture.py` 從 B 線預覽站取的 production-like 截圖（見 `config.py`）。
+不能拿來宣稱 Visual Fidelity Gate 通過；正式確認是 `cloud_capture.py` 從 B 線預覽站取的 production-like 截圖（見 `vf_config.py`）。
 截圖檔名、artifact 名、報告第一行都帶這個標示。
 
 做什麼：每個情境起一個 streamlit 子行程（固定 fixtures／替身、不打任何外部網路），用 Chromium 開 desktop（1280x800）與
@@ -42,7 +42,7 @@ for _p in (str(_HERE), str(_UI_V2_TESTS), str(_ROOT)):
 pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 streamlit")
 
 import _ui_v2_chromium  # noqa: E402  瀏覽器解析（CI 找不到要 fail）
-import config  # noqa: E402
+import vf_config as config  # noqa: E402
 import layout_checks as LC  # noqa: E402
 from test_live_390_page import _LAMP, _SCRIPTS  # noqa: E402
 
