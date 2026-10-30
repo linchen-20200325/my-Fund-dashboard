@@ -1830,7 +1830,7 @@
 | evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-30_batch_d_d1_d12_rulings.md`；草稿 `docs/v2/73_assets_wireframe_batch_d.md`（檔頭標「已裁示」，舊推薦保留）；落地（本批只動文件）：`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九其一之一第 6 條與之二十其二第 5 條行尾加註（行數不變；`tests/ui_v2/test_alo_logic.py`、`test_exp_logic.py` 的 md5 基準同批更新）、`docs/v2/71_presentation_contract_migration.md`（Batch D 裁示指標）、`docs/BACKLOG.md` BL-0525、`docs/HANDOFF.md`（唯一接手點）。 |
 | 影響範圍 | 本批只動文件與守衛基準值；不改任何 `.py` 的行為、資料語意、identity／NAV、Risk Cap、Decision Digest semantics、來源與 provenance。後續 Batch D implementation（S1，不含 D-3 page-level 燈）才動 `ui_v2/` 與測試；D-5A 不准入新彙總公式、D-5B 四項 summary slots 第一屏保留 Missing、D-8 OAuth 不得順手改，是對該實作批的硬限制。「Domain Block Identity ≠ Presentation Container Count」適用全站未來 Presentation Migration（🌍 已完成的 Batch C、🔍／⚙️ 未來批次同此定義）。D-3 暫停範圍：page-level combined light 不得實作；`HLD-0`、`ALO-0` 各自的燈、判定與色規則一字不改。 |
 | 是否可逆 | 可逆（客戶可另行裁示；UI 版型可再改，block ID、四件事、Digest 與 provenance 內容不變） |
-| supersedes／superseded by | supersedes（逐筆核對後只列真正被取代的部分）：(1) `docs/v2/73` 第 10.2 節與第 11 節的文件組推薦中被客戶推翻者：D-3 推薦 L-a（被 L-c 方向＋Formula Gate 取代）、D-5 附帶的「第一屏不放四項 placeholder、改進『▸ 尚未取得』摘要列」（被 D-5B 取代）、D-10 推薦 C1（被 C2 取代）、D-11 擬容器名含「證據」（被「我的條件／持股明細／配置明細」取代）；D-1（R-C）、D-2（S1）、D-4、D-6、D-7、D-8（頁頂獨立一列）、D-9、D-12 與推薦相同，推薦成為裁示。(2) `docs/v2/44_fund_ui_ssot.md` 之二十其二第 5 條的「前置 Gate：處置留給線框送客戶裁示、客戶裁示之前不得宣稱合併頁塊數合規」——已由客戶以 R-C／S1 裁結（「層 3、層 4 各 3 塊」按 presentation container 計）；該條「層 3＝5、層 4＝5 的 block 數是實數」不被取代，block ID 數仍是 5 與 5。(3) 之二十其二第 4 條「畫面上由哪一枚當頁面結論燈、另一枚怎麼呈現，由線框送客戶拍板」——客戶裁示為 L-c 方向、待最小 Formula Gate；**在 Gate 落盤前該條的「不發明兩枚燈的合讀規則」仍然有效**。(4) `DEC-2026-10-29-06` 中「合併頁塊數的計法」的執行組讀法（`DEC-2026-10-29-06` provenance 欄已自陳為執行組單組寫成、可被客戶推翻）——被 R-C 取代。**不 supersede**：之十八其二第 1 條整頁摘要卡 ≤5／核心圖 ≤4／一頁至多 16 塊的上限；之十九其一之一的 Visual Budget；之二十其三第 3 條 Sheet 狀態語意與「💼 頁內只有這一個 Sheet 選擇入口」；OAuth scope／callback／credential／token；canonical identity；NAV；Risk Cap；`HLD-2` 不做跨幣別合計；`FX_OBS_DATE_RULE_VERIFIED`。superseded by：無。 |
+| supersedes／superseded by | supersedes（逐筆核對後只列真正被取代的部分）：(1) `docs/v2/73` 第 10.2 節與第 11 節的文件組推薦中被客戶推翻者：D-3 推薦 L-a（被 L-c 方向＋Formula Gate 取代）、D-5 附帶的「第一屏不放四項 placeholder、改進『▸ 尚未取得』摘要列」（被 D-5B 取代）、D-10 推薦 C1（被 C2 取代）、D-11 擬容器名含「證據」（被「我的條件／持股明細／配置明細」取代）；D-1（R-C）、D-2（S1）、D-4、D-6、D-7、D-8（頁頂獨立一列）、D-9、D-12 與推薦相同，推薦成為裁示。(2) `docs/v2/44_fund_ui_ssot.md` 之二十其二第 5 條的「前置 Gate：處置留給線框送客戶裁示、客戶裁示之前不得宣稱合併頁塊數合規」——已由客戶以 R-C／S1 裁結（「層 3、層 4 各 3 塊」按 presentation container 計）；該條「層 3＝5、層 4＝5 的 block 數是實數」不被取代，block ID 數仍是 5 與 5。(3) 之二十其二第 4 條「畫面上由哪一枚當頁面結論燈、另一枚怎麼呈現，由線框送客戶拍板」——客戶裁示為 L-c 方向、待最小 Formula Gate；**在 Gate 落盤前該條的「不發明兩枚燈的合讀規則」仍然有效**。(4) `DEC-2026-10-29-06` 中「合併頁塊數的計法」的執行組讀法（`DEC-2026-10-29-06` provenance 欄已自陳為執行組單組寫成、可被客戶推翻）——被 R-C 取代。**不 supersede**：之十八其二第 1 條整頁摘要卡 ≤5／核心圖 ≤4／一頁至多 16 塊的上限；之十九其一之一的 Visual Budget；之二十其三第 3 條 Sheet 狀態語意與「💼 頁內只有這一個 Sheet 選擇入口」；OAuth scope／callback／credential／token；canonical identity；NAV；Risk Cap；`HLD-2` 不做跨幣別合計；`FX_OBS_DATE_RULE_VERIFIED`。superseded by：~~無~~（狀態更新，不是漏刪：寫下當時為真）。**superseded by（部分，2026-10-30 追加）**：`DEC-2026-10-30-04`（D-3 Formula／Rule Gate 已裁 P3／β；page-level 燈的暫停改以「先修 F-13／F-2／F-14／F-19 與 BL-0411、BL-0411 修好才允許 P3 production」延續）、`DEC-2026-10-30-05`（D-8 OAuth 回原頁 Gate 已裁 F）。 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理（分段與用詞可能略有不同），以原文為準；supersedes 欄的逐筆範圍判斷由執行組核對 `docs/v2/73` 與 44 原文後寫成，可被客戶推翻；單組寫成，未經第二組獨立驗證。 |
 
 ### DEC-2026-10-30-03｜客戶裁示：No Progress Narration Gate（禁止對客戶輸出過程直播；Silent Autonomous Cruise＝不需要客戶行動時根本不要發訊息）
@@ -1846,6 +1846,34 @@
 | 是否可逆 | 可逆（客戶可另行裁示） |
 | supersedes／superseded by | **收緊，不取代**：`DEC-2026-10-17-04`（`PROJECT_RULES.md` 3.1）與 `DEC-2026-10-27-45`（3.2）的四種出聲情形、固定一行「靜默巡航中。」、完整批次回報格式照舊有效；本筆把「哪些內容絕對不得對客戶出現」逐項點名（internal execution telemetry），並把完成回報定為「一次講完、不拆多則」。與 3.2 第 3 點九項格式的關係（本筆六項內容與其對得上，格式以 3.2 第 3 點為準、本筆不另立）是文件組判讀，可被客戶推翻。無被取代的舊條文 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；與 3.1／3.2 的關係判讀由執行組單組寫成，可被客戶推翻；未經第二組獨立驗證。 |
+
+### DEC-2026-10-30-04｜客戶裁示：D-3 Formula／Rule Gate 採 P3、precedence 採 β（只限 page-level presentation status）；F-13／F-2／F-14 必修、F-18 先修 BL-0411、F-19 算「沒評估到」
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-30 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-30_d3_oauth_gate_rulings.md`） |
+| 決策內容摘要 | **客戶裁示**（以逐字檔為準）：`docs/v2/74_assets_d3_formula_gate.md` 的 D-3 Formula／Rule Gate **採 P3，precedence 採 β**。**正式原則**（客戶原話）：「整頁狀態必須同時涵蓋持股與配置；任何一區有異常、資料不足或尚未完整評估時，不得被另一區的正常結果遮蔽成「正常」。」**precedence**（客戶原話）：「取數失敗 > 無持倉 > ◆ > ◇ > ⬜ > 持股只評估一部分（H7） > 無偏離／帶內」。**範圍限制**：此 aggregation 僅用於 page-level presentation status；不得藉此改 Risk Cap、改 domain block 原判定、改 canonical data、改 Decision Digest 原始 rule result、新增買賣判斷、把 Missing 推論成任何投資結論；各 domain block 的原始狀態與 reason 必須仍完整保留、可追溯。**F-13 必修**：只要任何配置類別沒有成功評估，不得顯示「各類別皆在容許帶內」，應改成正式 Missing／無法完整判定語意；已成功評估的類別結果可以保留，但不能從「已評估子集合」推論整體配置正常。**F-2 必修**：持股只評估一部分時，不得只顯示「無偏離項」，必須同時讓使用者看得到既有的缺值／未評估原因；不要新增第二套 Missing vocabulary。**F-14 必修**：任何正式狀態不得出現「有狀態但沒有文字」；在該市值基準情境無法形成完整配置判定時，使用既有正式 Missing／無法判定語意；不得補成正常、帶內或無偏離。**F-18／BL-0411**：先修 BL-0411，再允許 P3 production 上線；如果部分列目前被略過但 UI 沒揭露，頁燈、持有 N 檔、配置／持股整體判定都不能假裝覆蓋完整集合，必須先讓 omitted rows／未納入集合的事實可被辨識；不要為了 P3 在 page layer 臨時掩蓋 BL-0411。**F-19 採「算沒評估到」**：有市值但沒有設定目標的類別不能視為「帶內」（沒有目標，就沒有足夠條件判斷是否在容許帶內），因此進未完整評估語意。**P3 實作驗收**：至少補完整組合矩陣測試，確認下列八種都不會發生 Unknown／Missing／Error 被正常狀態蓋掉——(1) HLD 正常＋ALO 異常、(2) HLD 異常＋ALO 正常、(3) 一側 Missing、(4) 一側取數失敗、(5) 一側部分評估、(6) ALO 有未設定目標類別、(7) BL-0411 omitted rows、(8) 雙方皆完整正常；並確認 page-level aggregation 不回寫 domain block。**Model／Effort**：這一輪 D-3 Formula／SSOT 落盤與阻擋項修正＝Claude Opus 5.5＋High；P3、F-13／F-2／F-14／F-18／F-19 全部正式落盤並驗證後，立即走 Model／Effort Change Gate，降回 Claude Sonnet 5.5＋Medium；後續 UI／tests／Visual Fidelity 不需要繼續用 Opus。維持 No Progress Narration Gate／Silent Autonomous Cruise（除真 Decision Gate、真 blocker、Model／Effort Change Gate 或整批完成，不回報過程）。**客戶本則未逐項提及**（據實登記，不是裁示）：74 第 5 節 F-5（區段標籤「持股：」「配置：」、合成正常行、同源行字樣）、F-6～F-12、F-15～F-17；其中 F-5 依派工單處置為「P3 裁示未逐項提及；實作沿用 74 推薦字樣，列為待客戶確認字樣」。 |
+| 理由／背景 | 客戶原話：「整頁狀態必須同時涵蓋持股與配置；任何一區有異常、資料不足或尚未完整評估時，不得被另一區的正常結果遮蔽成「正常」。」「因為沒有目標，就沒有足夠條件判斷是否在容許帶內。」「不要為了 P3 在 page layer 臨時掩蓋 BL-0411。」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-30_d3_oauth_gate_rulings.md`（圍欄內文 sha256 `3ba8c91b7388690ac639816d3c10d64bd92eaef97740e864e56c3a44c31d1dfd`）；Gate 文件 `docs/v2/74_assets_d3_formula_gate.md`（檔頭改「已裁示（DEC-2026-10-30-04）；尚未實作」，第 5 節各 F 項就地記裁示）；`docs/BACKLOG.md` BL-0525（子項 BL-0525-D3）與 BL-0411；`docs/HANDOFF.md`（唯一接手點） |
+| 影響範圍 | 本批只動文件；不改任何 `.py`、資料語意、identity／NAV、Risk Cap、Decision Digest semantics、來源與 provenance。**實作順序（依裁示）**：先修 F-13、F-2、F-14、F-19 與 BL-0411，再實作 P3；P3 production 上線以 BL-0411 修好為前提。aggregation 只是 page-level presentation status，不是 rule result，不進 Digest，不得當 Risk Cap 的輸入或輸出（後半句與 74 F-11 推薦同向，屬執行組讀法） |
+| 是否可逆 | 可逆（客戶可另行裁示；頁級呈現可再改，domain block 原狀態與 reason 保留、可追溯） |
+| supersedes／superseded by | supersedes（逐筆核對後只列真正被取代的部分）：(1) `docs/v2/74` 檔頭「Decision Gate，待客戶裁示」與第 4、5 節「待客戶裁示」的狀態——F-1（P3）、F-3（β）、F-13、F-2、F-14、F-18、F-19 已裁；(2) `DEC-2026-10-30-02` 的 D-3 暫停（「在這個 Gate 正式落盤前：不要 production implementation page-level combined light」）——Gate 已裁示，但 **P3 production 仍以 BL-0411 修好為前提**，所以暫停以新條件延續，不是解除；(3) `docs/BACKLOG.md` BL-0411「修法屬產品語意（Stop Gate）」——客戶已裁為 P3 production 前必修。**執行組讀法（可被客戶推翻，未經第二組驗證）**：(a) 客戶 β 階梯「◆ > ◇ > ⬜」與 74 F-4 推薦「依 5.5（M ＞ U＝X）」對得上，視為 F-4 一併採推薦；(b) 階梯把「持股只評估一部分（H7）」排在「無偏離／帶內」之上，對應 74 F-2 (i)「算非正常」；F-2 (ii) 客戶寫的是「必須同時讓使用者看得到既有的缺值／未評估原因」，74 推薦附帶的「先出線框」客戶未提及，是否仍須草稿先行未判定；(c) F-13、F-14 修的是 `ALO-0` 既有缺陷的字樣；`DEC-2026-10-30-02` 影響範圍欄「`HLD-0`、`ALO-0` 各自的燈、判定與色規則一字不改」是執行組當時的整理（Batch D 逐字檔的 D-3 段沒有這一句），本則範圍限制「不得藉此改 domain block 原判定」管的是 aggregation；F-13、F-14 是客戶另行明示的必修，兩者讀作不衝突 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理（分段與用詞可能略有不同），以原文為準；supersedes 欄的逐筆範圍判斷與 (a)～(c) 讀法由執行組單組寫成，可被客戶推翻；未經第二組獨立驗證。 |
+
+### DEC-2026-10-30-05｜客戶裁示：OAuth 回原頁 Gate 採 F（維持現況）；不做 A、不做 B、暫不做 G
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-30 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-30_d3_oauth_gate_rulings.md`） |
+| 決策內容摘要 | **客戶裁示**（以逐字檔為準）：`docs/v2/73_assets_wireframe_batch_d.md` 第 15 節的 OAuth 回原頁 Gate **採 F：維持現況**。流程接受：登入 → `/set` → 確認 → 使用導覽回「💼 我的資產」；目前只多一次點擊，不值得改 OAuth callback／redirect contract。因此：**不做 A**（pending 記錄加 `return_slug`）、**不做 B**（`redirect_uri` 改指向各頁）、**暫不做 G**。若未來實際 Visual Fidelity／使用者操作證明這一步造成明顯摩擦，再考慮 G（客戶原話：「"/set" 確認後提供靜態「回到 💼 我的資產」」）；但 G 屆時仍先出最小 UI 線框，不碰 OAuth。 |
+| 理由／背景 | 客戶原話：「目前只多一次點擊，不值得改 OAuth callback / redirect contract。」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-30_d3_oauth_gate_rulings.md`（與 `DEC-2026-10-30-04` 同檔，圍欄內文 sha256 `3ba8c91b7388690ac639816d3c10d64bd92eaef97740e864e56c3a44c31d1dfd`）；Gate 文件 `docs/v2/73_assets_wireframe_batch_d.md` 第 15 節（狀態改已裁示 F）；`docs/BACKLOG.md` BL-0525（子項 BL-0525-OAUTH closed、G deferred 註記） |
+| 影響範圍 | 只動文件；不改任何 `.py`、OAuth 模組、callback、redirect URI、credential 設定。G 的重啟條件是實際 Visual Fidelity／使用者操作證明明顯摩擦，重啟時先出最小 UI 線框（`CLAUDE.md` §-1.5.4 草稿先行），不碰 OAuth |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：`docs/v2/73` 第 15 節標題與 BL-0525-OAUTH「待客戶裁示，未實作」的狀態（推薦 F 成為裁示）。無被取代的條文 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
@@ -1944,6 +1972,8 @@
 - 第四節 `DEC-2026-10-30-01`：原文已落盤於 `docs/evidence/decisions/2026-10-30_batch_c_d1_d7_rulings.md`（總管逐字轉存；執行組未見客戶對話本身，只核對轉存檔與圍欄逐位元組相同）；supersedes 欄對藍圖第 5 節／44 之十八其二第 3 條「僅限 🌍 頁呈現」的範圍判斷，以及「BL-0517 三序列資料通道不屬本裁示」的區分，是執行組單組寫成，可被客戶推翻。
 - 第四節 `DEC-2026-10-30-02`：原文已落盤於 `docs/evidence/decisions/2026-10-30_batch_d_d1_d12_rulings.md`（總管逐字轉存；執行組未見客戶對話本身，只核對轉存檔與圍欄逐位元組相同）；「決策內容摘要」的分段、supersedes 欄對 `docs/v2/73` 推薦與 44 之二十其二第 4、5 條的逐筆範圍判斷，是執行組單組寫成，可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-10-30-03`：原文已落盤於 `docs/evidence/decisions/2026-10-30_no_progress_narration_gate.md`（總管逐字轉存；執行組未見客戶對話本身，只核對轉存檔與圍欄逐位元組相同）；「決策內容摘要」的分段與 supersedes 欄對 3.1／3.2 的收緊判讀是執行組單組寫成，可被客戶推翻；未經第二組驗證。
+- 第四節 `DEC-2026-10-30-04`：原文已落盤於 `docs/evidence/decisions/2026-10-30_d3_oauth_gate_rulings.md`（總管逐字轉存；執行組未見客戶對話本身，只核對轉存檔與圍欄逐位元組相同）；「決策內容摘要」的分段、supersedes 欄的逐筆範圍判斷與 (a)～(c) 讀法（F-4 一併採推薦、F-2 (ii) 是否仍須草稿先行未判定、F-13／F-14 與 `DEC-2026-10-30-02`「一字不改」整理句的關係）是執行組單組寫成，可被客戶推翻；未經第二組驗證。
+- 第四節 `DEC-2026-10-30-05`：原文同上檔；「決策內容摘要」由執行組單組整理，以原文為準；未經第二組驗證。
 - 第四節 `DEC-2026-10-16-01`、`-02` 兩筆的客戶原話 repo 內沒有；內容依總管派工單與交接本轉述，本組未見原文。
 - 第四節 `DEC-2026-10-16-03`～`-13`：原文已落盤於 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔逐位元組相同）。各筆中標「總管讀法」「總管整理」者不是客戶裁示；「supersedes」欄的例示由文件實作組判讀，不宣稱窮舉，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-14`：原文已落盤於 `docs/evidence/decisions/2026-10-16_proposal8_approval.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔圍欄還原後逐位元組相同）。該筆中標「總管判定」「總管設計基準」者不是客戶裁示；「supersedes」欄的條文清單以 57 為準，由文件實作組整理，未經第二組驗證。

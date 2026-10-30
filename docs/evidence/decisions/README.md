@@ -34,6 +34,7 @@
 | `2026-10-30_batch_c_d1_d7_rulings.md` | 客戶 2026-10-30 Batch C（🌍 市場與趨勢）wireframe 核准裁示全文（D1 Primary＋序列切換、D2 利率與信用 P2、D3 頁首一句話不放頁級日期、D4 EPS×PE 併入尚未取得、D5 結論燈一行 chip、D6 手機 Secondary 緊湊列、D7 依據卡位置 E2；第一眼／第二眼／第三眼 guardrail、避免圖表牆、Batch C 範圍與禁止事項、Cloud Visual Fidelity 處理、Durable Memory、Model／Effort；`docs/DECISIONS.md` `DEC-2026-10-30-01`）；全文逐字，無遮蔽 | 客戶 2026-10-30 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-30 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `7ce28478` 之後） | 6660 | `e58ae6ff444787d5e9f8e19b7080f30d5ad9435ff8a124181e9e35d5d1e2b04a` |
 | `2026-10-30_batch_d_d1_d12_rulings.md` | 客戶 2026-10-30 Batch D（💼 我的資產）D-1～D-12 正式裁示全文（D-1 採 R-C 並正式定義「Domain Block Identity ≠ Presentation Container Count」、D-2 採 S1、D-3 不採 L-a 改 L-c 方向並先走最小 Formula Gate、D-4 Primary 為資產配置現況 vs 目標、D-5 本批不准入新彙總公式但第一屏保留四項 summary slots、D-6 Secondary 2 張、D-7 圖表是 presentation component、D-8 持倉資料來源 selector 頁頂獨立一列與 OAuth 不得順手改、D-9 沿用頁面問句、D-10 採 C2、D-11 容器名改「我的條件／持股明細／配置明細」、D-12 全列＋卡內捲動；Batch D 產品結構順序、390px、Decision Digest 保全、Model／Effort）；`docs/DECISIONS.md` `DEC-2026-10-30-02`；全文逐字，無遮蔽 | 客戶 2026-10-30 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-30 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `b816df1c` 之後） | 10781 | `3800326451b4d96ca0dd5e20db8e77d49aee69f9567b6222bcc4bfbac3c52d99` |
 | `2026-10-30_no_progress_narration_gate.md` | 客戶 2026-10-30 No Progress Narration Gate 正式裁示全文（禁止對客戶輸出過程直播／internal execution telemetry；只在真 Decision Gate、真 blocker、Model／Effort Change Gate、完整 Batch／Phase 完成四類發訊息；完成回報一次講完；Silent Autonomous Cruise＝不需要客戶行動時根本不要發訊息；`docs/DECISIONS.md` `DEC-2026-10-30-03`）；全文逐字，無遮蔽 | 客戶 2026-10-30 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-30 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `b816df1c` 之後） | 3478 | `f3c83417ed5dc6299cfc88eb7a98c0f846cfb2ed29b139a7d5280d1327259df9` |
+| `2026-10-30_d3_oauth_gate_rulings.md` | 客戶 2026-10-30 D-3 Formula／Rule Gate 與 OAuth 回原頁 Gate 正式裁示全文（D-3 採 P3、precedence 採 β「取數失敗 > 無持倉 > ◆ > ◇ > ⬜ > 持股只評估一部分（H7） > 無偏離／帶內」，aggregation 僅用於 page-level presentation status 及六項不得；F-13、F-2、F-14 必修；F-18／BL-0411 先修再允許 P3 production；F-19 算「沒評估到」；P3 實作驗收組合矩陣八項；OAuth 回原頁採 F、不做 A／B、暫不做 G；Model／Effort；`docs/DECISIONS.md` `DEC-2026-10-30-04`、`-05`）；全文逐字，無遮蔽 | 客戶 2026-10-30 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-30 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `9e508046` 之後） | 4686 | `623f1f193225beb0ac24d0b2be621c88ad184eb194ffeccf3daf904ed9a9fec9` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 
@@ -314,6 +315,17 @@
 - 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-30_no_progress_narration_gate.md`。
 - 雜湊為 2026-10-30 實跑。
 
+### `2026-10-30_d3_oauth_gate_rulings.md` 的兩個雜湊
+
+| 對象 | 大小（bytes） | sha256 |
+|---|---|---|
+| 整檔（檔頭說明＋圍欄） | 4686 | `623f1f193225beb0ac24d0b2be621c88ad184eb194ffeccf3daf904ed9a9fec9` |
+| 圍欄內文（＝檔內實際位元組；無跳脫碼，故沒有「換回原字」那一列） | 3441 | `3ba8c91b7388690ac639816d3c10d64bd92eaef97740e864e56c3a44c31d1dfd` |
+
+- 圍欄內文與總管轉存給執行組的原文檔逐位元組相同（執行組 2026-10-30 以 sha256 對 scratchpad 內的轉存檔與存檔圍欄實跑，兩值相同；轉存檔不入 repo）；唯一格式處理：無（行尾空白：0 行）。
+- 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-30_d3_oauth_gate_rulings.md`。
+- 雜湊為 2026-10-30 實跑。
+
 ## 撞字登記
 
 全文含交接本第 7 節〈客戶 2026-10-05 接手訊息：禁詞〉詞表的**第 7、8 個詞**，共 3 處，都在治理第 6 項「未來允許的方向」列舉內（圍欄內第 114、116、117 行）。依該節〈禁詞〉體例以 Unicode 跳脫碼書寫（`\u52a0\u78bc`、`\u6e1b\u78bc`），其餘一字未改。第 1～6 個詞以 2026-10-16 碼位組字掃描 0 命中。依客戶 2026-10-15 Phase 1.5（A+ 修正版）裁示，第 5～8 個詞已不是永久禁詞；本批新增行仍以 0 命中為目標，故改用跳脫碼並在此登記（與 `branch_archive/pr838/README.md` 不同：那裡是逐字摘錄照字面保留、只做登記）。
@@ -363,6 +375,8 @@
 `2026-10-30_batch_d_d1_d12_rulings.md`：圍欄內含詞表**第 7、8 個詞**各 1 處（共 2 處），都在 D-10 客戶列舉「不寫」的字樣清單內（\u52a0\u78bc／\u6e1b\u78bc 兩組碼位，各 1 次；第 1～6 個詞 0 命中，2026-10-30 實跑）。**照字面保留、不改跳脫碼**，理由同 `2026-10-29_presentation_contract_migration.md` 與 `2026-10-27_g44_amendment_rulings.md` 那兩條：本檔是客戶就一句主判讀「只描述既有事實、不寫什麼」的邊界裁示，跳脫後讀不出被排除的是哪兩個字樣。
 
 `2026-10-30_no_progress_narration_gate.md`：圍欄內以詞表第 7、8 個詞碼位組字掃描 0 命中（2026-10-30 實跑）；無撞字、無跳脫碼。
+
+`2026-10-30_d3_oauth_gate_rulings.md`：圍欄內以詞表八個詞碼位組字掃描 0 命中（2026-10-30 實跑）；無撞字、無跳脫碼。
 
 已實測：無行尾空白、結尾單一換行、無 session 識別碼、無合併衝突標記。
 
