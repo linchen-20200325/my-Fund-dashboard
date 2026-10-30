@@ -133,20 +133,40 @@ def _render_source_row(picker_live, picker_data, no_active: bool, settings_page)
 
 
 def _prepare(page_mod, slug: str, live: dict) -> dict:
+    """一側的「載入 → 組模型 → 資料狀態收集」。一側的任何失敗都只讓**這一側**改畫狀態、另一側照常：
+    `LiveFailed`（去拿或組模型失敗）與 `ValueError`（組出來的模型不成立，例：持倉體檢計數 n < m ＋ j；`prepare_live` 內的
+    `sections.hld_counts` 會拋）一律原文進進階診斷、記進總表、寫 log（`record_live_error`），一般畫面只畫一句狀態——不吞、不往另一側擴散。"""
     try:
         if slug == "alo":
             prep = page_mod.prepare_live(load_live=live["load"], save_live=live.get("save"))
         else:
             prep = page_mod.prepare_live(load_live=live["load"])
+        holding_n = sections.hld_holding_count(prep["model"]) if slug == "hld" else None
     except active_gate.NoActiveSource:
-        return {"state": "no_active"}
+        return {"state": "no_active", "line": active_gate.TEXT_NO_ACTIVE}
     except page_mod.LiveFailed as failed:   # 不是吞：原文進進階診斷、記進總表（同單頁）；區段改畫一句狀態
         return {"state": "error", "line": page_mod.record_live_error(failed.exc, live.get("mask"))}
-    return {"state": "ok", **prep}
+    except ValueError as exc:   # 不是吞：同上（只是這一種單頁沒人接、會炸整頁；合併頁不讓它拖垮另一側）
+        return {"state": "error", "line": page_mod.record_live_error(exc, live.get("mask"))}
+    return {"state": "ok", "holding_n": holding_n, **prep}
 
 
 def _error_line(side: dict) -> None:
+    """這一側沒載入的完整那一句（頁首每側只畫一次）：載入失敗＝一般畫面那句取數失敗、沒有 Active＝既有的「⬜ 尚未選定持倉資料來源」。"""
     st.markdown(f'<div class="ast-err" role="alert">{_esc(side["line"])}</div>', unsafe_allow_html=True)
+
+
+def _short_state(side: dict) -> str:
+    """區段內標示「這一區沒載入」的短句：沿用既有狀態族字面（`sections.LINE_FETCH_FAILED`、`active_gate.TEXT_NO_ACTIVE`），
+    完整那一句只在頁首畫一次（單頁整頁也只有一句）。"""
+    return sections.LINE_FETCH_FAILED if side["state"] == "error" else active_gate.TEXT_NO_ACTIVE
+
+
+def _side_notice(side: dict, label=None) -> None:
+    text = _short_state(side)
+    if label:
+        text = f"{label}　{text}"
+    st.markdown(f'<div class="ast-err" role="alert">{_esc(text)}</div>', unsafe_allow_html=True)
 
 
 def _label(text: str) -> None:
@@ -219,11 +239,12 @@ def _render_primary(alo: dict, settings_page) -> None:
     with st.container(border=True, key="ast_primary"):
         st.markdown(f'<div class="ast-card-title" data-section="primary">{_esc(OV.PRIMARY_TITLE)}</div>', unsafe_allow_html=True)
         if alo["state"] != "ok":
-            _error_line(alo)
+            _side_notice(alo)
             return
         model, ctx, quiet = alo["model"], alo["ctx"], alo["quiet"]
         alo2, alo1, alo4 = (alo_logic.find_block(model, c) for c in ("ALO-2", "ALO-1", "ALO-4"))
         alo_page._render_alo0(alo_logic.find_block(model, "ALO-0"), plain_mode=True)   # D-3 暫行：ALO-0 維持既有燈，放在配置區段開頭
+        alo_page._lines(model["top_lines"], "alo-topline")   # 單頁頁面頂端那一行灰字（例：「目標合計 90%」）；合併頁放在現況 vs 目標之上
         if quiet.get("ALO-2") is not None:
             alo_page._render_alo2(alo2, LAYER_KEY, ctx, plain_mode=True, quiet=quiet["ALO-2"])
         else:
@@ -243,7 +264,7 @@ def _secondary_share(alo: dict) -> None:
     with st.container(border=True, key="ast_sec_share"):
         st.markdown(f'<div class="ast-card-title" data-section="secondary">{_esc(OV.SHARE_TITLE)}</div>', unsafe_allow_html=True)
         if alo["state"] != "ok":
-            _error_line(alo)
+            _side_notice(alo)
             return
         model, details = alo["model"], alo["details"]
         alo6, alo4 = alo_logic.find_block(model, "ALO-6"), alo_logic.find_block(model, "ALO-4")
@@ -262,7 +283,7 @@ def _secondary_returns(hld: dict) -> None:
     with st.container(border=True, key="ast_sec_returns"):
         st.markdown(f'<div class="ast-card-title" data-section="secondary">{_esc(OV.RETURNS_TITLE)}</div>', unsafe_allow_html=True)
         if hld["state"] != "ok":
-            _error_line(hld)
+            _side_notice(hld)
             return
         model, quiet = hld["model"], hld["quiet"]
         hld2, hld4 = hld_logic.find_block(model, "HLD-2"), hld_logic.find_block(model, "HLD-4")
@@ -284,18 +305,18 @@ def _render_attention(alo: dict, hld: dict) -> None:
             st.markdown(f'<div class="v2-attention" style="color:{theme.tone_hex(item["_tone"])}">{_esc(text)}</div>',
                         unsafe_allow_html=True)
     else:
-        _error_line(alo)
+        _side_notice(alo, OV.ALLOC_LABEL)
     if hld["state"] == "ok":
         hld_page._render_hld1(hld_logic.find_block(hld["model"], sections.HLD_ATTENTION_CODE), plain_mode=True,
                               quiet=hld["quiet"].get(sections.HLD_ATTENTION_CODE))
     else:
-        _error_line(hld)
+        _side_notice(hld, OV.HOLDINGS_LABEL)
 
 
 def _render_holdings(hld: dict) -> None:
     _label(OV.HOLDINGS_LABEL)
     if hld["state"] != "ok":
-        _error_line(hld)
+        _side_notice(hld)
         return
     model, quiet = hld["model"], hld["quiet"]
     hld_page._render_lamp(hld_logic.find_block(model, "HLD-0"), plain_mode=True)   # D-3 暫行：HLD-0 維持既有燈，放在持股區段開頭
@@ -308,11 +329,10 @@ def _render_holdings(hld: dict) -> None:
 
 
 def _render_alo_block(alo: dict, code: str, *, flat: bool) -> None:
+    """規則順序同單頁 `alo/page.py::render` 層 3：`ALO-1` 先（展開區標題帶摘要）、再看收合區比照、最後各塊自己的畫法。"""
     model, ctx, details = alo["model"], alo["ctx"], alo["details"]
     block = alo_logic.find_block(model, code)
-    if code in details:
-        alo_page._render_detail_quiet(details[code], flat=flat)
-    elif code == "ALO-1":
+    if code == "ALO-1":
         head = f"{block['title']}　—　{sections.alo1_summary(block)}"
         if flat:
             with presentation_view.flat_block(head, code=code):
@@ -320,45 +340,73 @@ def _render_alo_block(alo: dict, code: str, *, flat: bool) -> None:
         else:
             with st.expander(head, expanded=block["_default_open"]):
                 alo_page._RENDERERS[code](block, LAYER_KEY, ctx, plain_mode=True)
+    elif code in details:
+        alo_page._render_detail_quiet(details[code], flat=flat)
     else:
         alo_page._RENDERERS[code](block, LAYER_KEY, ctx, plain_mode=True, flat=flat)
 
 
 def _render_hld_block(hld: dict, code: str, *, flat: bool, on_save) -> None:
+    """規則順序同單頁 `hld/page.py::render` 層 3：`HLD-4` 先、再看收合區比照、最後各塊自己的畫法。"""
     block = hld_logic.find_block(hld["model"], code)
-    if code in hld["details"]:
-        hld_page._render_detail_quiet(hld["details"][code], flat=flat)
-    elif code == "HLD-4":
+    if code == "HLD-4":
         hld_page._render_hld4(block, on_save=on_save, plain_mode=True, flat=flat)
+    elif code in hld["details"]:
+        hld_page._render_detail_quiet(hld["details"][code], flat=flat)
     else:
         hld_page._RENDERERS[code](block, plain_mode=True, flat=flat)
 
 
+def _block_state(side: dict, code: str):
+    """這一塊在單頁展開區標題「—」後面那一句（有狀態才回；正常回 None）。取法與單頁一致：`ALO-1` 讀 `sections.alo1_summary`、
+    收合區比照的塊讀它那一行原因、其餘讀 `summary_text`；這一側沒載入 → 既有狀態族短句。"""
+    if side["state"] != "ok":
+        return _short_state(side)
+    mod = alo_logic if code.startswith("ALO") else hld_logic
+    block = mod.find_block(side["model"], code)
+    if code == "ALO-1":
+        summary = sections.alo1_summary(block)
+    elif code != "HLD-4" and code in side["details"]:
+        return side["details"][code]["line"]["text"]
+    else:
+        summary = block["summary_text"]
+    return OV.block_state(block, summary)
+
+
 def _render_group(name, codes, alo: dict, hld: dict, on_save) -> None:
     """一個 presentation container（D-1 R-C）。多塊容器＝一個預設收合的展開區，**其內**各塊以小標題分組（`flat=True`，不巢狀展開區）；
-    單塊容器＝該塊自己的展開區（標題就是塊的正式標題）。某側載入失敗 → 該側的塊不畫、改畫一句狀態（不靜默消失）。"""
+    單塊容器＝該塊自己的展開區（標題就是塊的正式標題）。標題列帶出容器內有狀態的塊（取數失敗、資料未備…；同單頁標題的字面）。
+    某側沒載入 → 該側的塊不畫，容器內每一側只畫一句短狀態（標題列已點名是哪幾塊，不逐塊重複）。"""
     sides = {"ALO": alo, "HLD": hld}
-
-    def one(code, flat):
-        side = sides[code[:3]]
-        if side["state"] != "ok":
-            _error_line(side)
-        elif code.startswith("ALO"):
-            _render_alo_block(side, code, flat=flat)
-        else:
-            _render_hld_block(side, code, flat=flat, on_save=on_save)
-
-    if name is None:
-        one(codes[0], False)
-        return
-    titles = {}
+    titles, states = {}, {}
     for code in codes:
         side = sides[code[:3]]
         mod = alo_logic if code.startswith("ALO") else hld_logic
-        titles[code] = mod.find_block(side["model"], code)["title"] if side["state"] == "ok" else code
-    with st.expander(OV.container_title(name, codes, titles), expanded=False):
+        titles[code] = mod.find_block(side["model"], code)["title"] if side["state"] == "ok" else mod.BLOCK_TITLES[code]
+        states[code] = _block_state(side, code)
+
+    if name is None:
+        code = codes[0]
+        side = sides[code[:3]]
+        if side["state"] != "ok":
+            st.markdown(f'<div class="ast-err" role="alert">{_esc(titles[code])}　—　{_esc(states[code])}</div>', unsafe_allow_html=True)
+        elif code.startswith("ALO"):
+            _render_alo_block(side, code, flat=False)
+        else:
+            _render_hld_block(side, code, flat=False, on_save=on_save)
+        return
+    noticed = set()
+    with st.expander(OV.container_title(name, codes, titles, states), expanded=False):
         for code in codes:
-            one(code, True)
+            side = sides[code[:3]]
+            if side["state"] != "ok":
+                if code[:3] not in noticed:
+                    noticed.add(code[:3])
+                    _side_notice(side, OV.ALLOC_LABEL if code.startswith("ALO") else OV.HOLDINGS_LABEL)
+            elif code.startswith("ALO"):
+                _render_alo_block(side, code, flat=True)
+            else:
+                _render_hld_block(side, code, flat=True, on_save=on_save)
 
 
 def _record_collect_failure(exc: Exception) -> None:
@@ -381,33 +429,50 @@ def render(*, alo_live: dict, hld_live: dict, picker_live=None, settings_page=No
         raise
 
 
+def _render_header_state(alo: dict, hld: dict, settings_page) -> None:
+    """頁首資料狀態：每側（配置、持股）各一組——載入成功的側先畫單頁頁首同一支「主要原因／另有」，再畫該側的資料日
+    （「資料截至 ‹日期›」，字樣取 `page_health`；沒有日期寫「—」，不補、不借另一側的）；沒載入的側畫「資料截至 —」與完整的那一句狀態
+    （載入失敗＝一般畫面那句取數失敗，沒有 Active＝既有字樣）。兩側日期各自誠實，不合成一個頁級日期。"""
+    for slug, side, label in (("alo", alo, OV.ALLOC_LABEL), ("hld", hld, OV.HOLDINGS_LABEL)):
+        if side["state"] == "ok":
+            health_view.render_header_reasons(slug, as_of=side["as_of"], tone_hex=theme.tone_hex)
+        as_of = side["as_of"] if side["state"] == "ok" else None
+        st.markdown(f'<div class="v2-status-line" role="status" style="color:{theme.tone_hex("灰")}">'
+                    f'{_esc(OV.data_date_line(label, as_of))}</div>', unsafe_allow_html=True)
+        if side["state"] != "ok":
+            _error_line(side)
+    health_view.render_settings_link(settings_page)
+
+
 def _render(alo_live, hld_live, picker_live, settings_page) -> None:
     _inject_css()
     # 先讀 picker（列清單遇到登入失效會清整個 session，兩側載入才看得到清掉之後的狀態；同設定頁的順序理由）。
     picker_data = picker_live["load"]() if picker_live is not None else None
     alo = _prepare(alo_page, "alo", alo_live)
     hld = _prepare(hld_page, "hld", hld_live)
-    no_active = "no_active" in (alo["state"], hld["state"])
+    no_active_slugs = [slug for slug, side in (("alo", alo), ("hld", hld)) if side["state"] == "no_active"]
+    failed = any(side["state"] == "error" for side in (alo, hld))
+    # 取數失敗優先於「尚未設定」：任何一側載入失敗，整頁就不是「沒有 Active Sheet」——失敗那一側的記錄（`record_live_error`）與錯誤句
+    # 照留，不得被「尚未設定：持倉資料來源」覆寫成另一種狀態；沒有 Active 的那一側（若有）只記它自己。
+    whole_page_no_active = bool(no_active_slugs) and not failed
 
-    _render_source_row(picker_live, picker_data, no_active, settings_page)
+    _render_source_row(picker_live, picker_data, bool(no_active_slugs), settings_page)
     st.markdown(f'<div class="ast-title">{_esc(OV.PAGE_TITLE)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="ast-sub">{_esc(OV.PAGE_ANSWERS)}</div>', unsafe_allow_html=True)
-    if no_active:
-        # 沒有 Active Sheet ＝ 明確的第三種狀態（批 3b-4 J-13）：不是 0、不是中性、不是空持倉；兩格總表各記一筆「尚未設定：持倉資料來源」。
-        active_gate.record_no_active("alo")
-        active_gate.record_no_active("hld")
+    # 沒有 Active Sheet ＝ 明確的第三種狀態（批 3b-4 J-13）：不是 0、不是中性、不是空持倉；總表記一筆「尚未設定：持倉資料來源」。
+    for slug in no_active_slugs:
+        active_gate.record_no_active(slug)
+    if whole_page_no_active:
         return
 
-    # 資料狀態（主要原因／另有）：各側讀自己剛記下的那一格（與設定頁總表同一份）；日期只在各圖卡 chip，頁首不放頁級日期（同 🌍 頁）。
-    for slug, side in (("alo", alo), ("hld", hld)):
-        if side["state"] == "ok":
-            health_view.render_header_reasons(slug, as_of=side["as_of"], tone_hex=theme.tone_hex)
-    health_view.render_settings_link(settings_page)
+    _render_header_state(alo, hld, settings_page)
 
     _render_summary()
-    counts = sections.hld_count_values(hld["model"]) if hld["state"] == "ok" else None
+    n = hld["holding_n"] if hld["state"] == "ok" else None
     alo0 = alo_logic.find_block(alo["model"], "ALO-0") if alo["state"] == "ok" else None
-    st.markdown(f'<div class="ast-hero" data-section="hero">{_esc(OV.hero_sentence(counts, alo0))}</div>', unsafe_allow_html=True)
+    incomplete = alo["state"] == "ok" and OV.has_unevaluated_category(alo_logic.find_block(alo["model"], "ALO-2"))
+    st.markdown(f'<div class="ast-hero" data-section="hero">{_esc(OV.hero_sentence(n, alo0, incomplete=incomplete))}</div>',
+                unsafe_allow_html=True)
 
     _render_primary(alo, settings_page)
     with st.container(key="ast_pair"):

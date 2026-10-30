@@ -233,6 +233,19 @@ def hld_counts(model: dict):
     return HLD_COUNTS_TEXT.format(n=n, attention=SYMBOL_ATTENTION, m=m, undecidable=SYMBOL_UNDECIDABLE, j=j)
 
 
+def hld_holding_count(model: dict):
+    """持倉體檢 `HLD-2` 實際列出的持有檔數 n（不重複基金代碼；BL-0525 Batch D 稽核回修從 `hld_count_values` 抽出，算法不變）。
+
+    n 與門檻（m、j）無關：門檻未設、燈紅時 n 仍然讀得到（`HLD-2` 照列各檔）；**沒有任何一檔被列出**（沒有持倉、讀不到持倉清單）→ None，
+    不寫 0、不補數。合併頁一句主判讀只讀這個數；`hld_count_values` 的「該不該列三個計數」判定不受影響。
+    """
+    hld2 = _find(model, "HLD-2")
+    # n、m、j 同一個單位：不重複基金代碼數（總管 2026-10-18 裁定）。`fund_groups` 是逐筆持倉（保單 × 基金代碼）分組，
+    # 同一檔分在兩張保單時有兩組 ⇒ 只數不重複的 `_fund_code`；HLD-2 顯示的內容一格不動。
+    n = len({group["_fund_code"] for group in hld2["fund_groups"]})
+    return n or None
+
+
 def hld_count_values(model: dict):
     """持倉體檢 ① 的三個計數 `(n, m, j)`；不該列時回 None。
 
@@ -243,10 +256,8 @@ def hld_count_values(model: dict):
     light, hld1, hld2 = _find(model, "HLD-0"), _find(model, "HLD-1"), _find(model, "HLD-2")
     if light["_tone"] == "紅" or light["text"] in (HLD_TEXT_NO_HOLDING, HLD_TEXT_NO_RULES):
         return None
-    # n、m、j 同一個單位：不重複基金代碼數（總管 2026-10-18 裁定）。`fund_groups` 是逐筆持倉（保單 × 基金代碼）分組，
-    # 同一檔分在兩張保單時有兩組 ⇒ 只數不重複的 `_fund_code`；HLD-2 顯示的內容一格不動。
-    n = len({group["_fund_code"] for group in hld2["fund_groups"]})
-    if n == 0:
+    n = hld_holding_count(model)
+    if n is None:
         return None
     m, j = light["_deviation_count"], hld1["_unevaluated_count"]
     if n < m + j:

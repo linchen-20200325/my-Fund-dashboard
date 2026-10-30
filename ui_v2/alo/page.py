@@ -364,7 +364,7 @@ def _render_detail_quiet(view: dict, *, flat: bool = False) -> None:
     line = view["line"]
     head = f"{view['title']}　—　{line['text']}"
     if flat:
-        with presentation_view.flat_block(head):
+        with presentation_view.flat_block(head, code=view["code"]):   # 塊代號進 data-block（收合區比照時 block ID 也要留著）
             _html(f'<div class="alo-empty alo-quiet-line" style="--alo-tone:{_tone(line["_tone"])}">{_esc(line["text"])}</div>')
         return
     with st.expander(head, expanded=False):
@@ -665,7 +665,7 @@ class LiveFailed(Exception):
 def prepare_live(*, load_live, save_live=None) -> dict:
     """正式模式「載入 → 組模型 → 收集資料狀態 → 決定收起／收合」的整段（BL-0525 Batch D 從 `render` 原樣抽出，順序與副作用不變）。
 
-    單頁 `render` 與合併頁（`ui_v2/ast/page.py`）共用。`active_gate.NoActiveSource` 原樣往外拋；
+    單頁 `render` 與合併頁（`ui_v2/asset/page.py`）共用。`active_gate.NoActiveSource` 原樣往外拋；
     「去拿」與「組模型」失敗包成 `LiveFailed`（其餘例外不接，是本檔 bug）。回傳畫面要用的全部狀態。
     """
     ctx = None
@@ -751,7 +751,6 @@ def prepare_live(*, load_live, save_live=None) -> dict:
     # 新 B UI 第一階段唯讀（客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6）：寫 `user_setting` 的「存檔」不畫，
     # 叫人存檔的說明一併改寫（`ui_v2/readonly.py`）。在收集與記錄之後做，判定與總表不受影響。
     readonly.strip_write_controls(model)
-    key = "live"
     return {"model": model, "ctx": ctx, "quiet": quiet, "details": details, "attention": attention,
             "as_of": as_of, "key": "live"}
 

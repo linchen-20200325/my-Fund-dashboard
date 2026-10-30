@@ -17,9 +17,9 @@ _ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
 from ui_v2 import presentation as P, sections  # noqa: E402
-from ui_v2.alo import logic as alo_logic  # noqa: E402
+from ui_v2.alo import fixtures as alo_fixtures, logic as alo_logic  # noqa: E402
 from ui_v2.asset import overview as OV  # noqa: E402
-from ui_v2.hld import logic as hld_logic  # noqa: E402
+from ui_v2.hld import fixtures as hld_fixtures, logic as hld_logic  # noqa: E402
 
 FORBIDDEN = ("加碼", "減碼", "買進", "賣出", "再平衡", "偏多", "偏空", "目標價", "建議", "應該")
 
@@ -58,16 +58,16 @@ def _alo0(tone="黃", text="核心 與目標差 6.0 個百分點", leaders=("核
 
 
 def test_hero_有n有最大差距類別():
-    assert OV.hero_sentence((3, 2, 0), _alo0()) == "持有 3 檔基金；目前最大配置差距在 核心。"
+    assert OV.hero_sentence(3, _alo0()) == "持有 3 檔基金；目前最大配置差距在 核心。"
 
 
 def test_hero_同差多類全列_沿ALO0全列規則():
-    s = OV.hero_sentence((5, 0, 0), _alo0(leaders=("核心", "衛星")))
+    s = OV.hero_sentence(5, _alo0(leaders=("核心", "衛星")))
     assert s == "持有 5 檔基金；目前最大配置差距在 核心、衛星。"
 
 
 def test_hero_各類別皆在容許帶內_照ALO0既有字_不編差距():
-    s = OV.hero_sentence((2, 0, 0), _alo0(tone="灰", text=alo_logic.TEXT_ALL_IN_BAND, leaders=()))
+    s = OV.hero_sentence(2, _alo0(tone="灰", text=alo_logic.TEXT_ALL_IN_BAND, leaders=()))
     assert s == f"持有 2 檔基金；{alo_logic.TEXT_ALL_IN_BAND}。"
     assert "差距在" not in s
 
@@ -75,7 +75,7 @@ def test_hero_各類別皆在容許帶內_照ALO0既有字_不編差距():
 @pytest.mark.parametrize("text", [alo_logic.TEXT_NO_HOLDING, alo_logic.TEXT_NO_TARGET, alo_logic.TEXT_NO_TOLERANCE,
                                   "⛔ 取數失敗", "尚未選定比重基準"])
 def test_hero_配置差距讀不到_照實無法判定_不推成正常(text):
-    s = OV.hero_sentence((3, 0, 0), _alo0(tone="灰", text=text, leaders=()))
+    s = OV.hero_sentence(3, _alo0(tone="灰", text=text, leaders=()))
     assert s == "持有 3 檔基金；配置差距無法判定。"
     assert alo_logic.TEXT_ALL_IN_BAND not in s
 
@@ -91,7 +91,7 @@ def test_hero_兩側都沒有_兩句都無法判定():
 
 
 def test_hero_任何狀態都不出現方向或建議字樣():
-    cases = [((3, 1, 0), _alo0()), (None, None), ((1, 0, 0), _alo0(tone="灰", text=alo_logic.TEXT_ALL_IN_BAND, leaders=()))]
+    cases = [(3, _alo0()), (None, None), (1, _alo0(tone="灰", text=alo_logic.TEXT_ALL_IN_BAND, leaders=()))]
     for counts, alo0 in cases:
         s = OV.hero_sentence(counts, alo0)
         assert not any(w in s for w in FORBIDDEN), s
@@ -108,6 +108,78 @@ def test_hero_n只取sections既有計數_不另算():
         n=2, attention=sections.SYMBOL_ATTENTION, m=1, undecidable=sections.SYMBOL_UNDECIDABLE, j=0)
     red = {"blocks": [{**model["blocks"][0], "_tone": "紅"}, *model["blocks"][1:]]}
     assert sections.hld_count_values(red) is None and sections.hld_counts(red) is None
+
+
+# ───────────────────────── D-10 C2 稽核回修：n 取實際列出的檔數；F-13（A6m）不複述「皆在容許帶內」─────────────────────────
+
+
+@pytest.mark.parametrize("name,expected", [("full", 3), ("nothr", 3), ("fetchfail", 3), ("holdfail_nothr", 3), ("twofail", 3),
+                                           ("empty", None), ("emptyfail", None)])
+def test_hld_holding_count_與門檻燈色無關_沒列出任何一檔才是None(name, expected):
+    model = hld_logic.build_page_model(**hld_fixtures.scenario(name))
+    assert sections.hld_holding_count(model) == expected
+
+
+@pytest.mark.parametrize("name", ["nothr", "fetchfail", "holdfail_nothr"])
+def test_門檻未設或燈紅_計數行不列_但持有檔數照HLD2列出的寫(name):
+    model = hld_logic.build_page_model(**hld_fixtures.scenario(name))
+    assert sections.hld_count_values(model) is None            # 「該不該列三個計數」的判定一字未動
+    n = sections.hld_holding_count(model)
+    assert n == 3
+    assert OV.hero_sentence(n, _alo0()) == "持有 3 檔基金；目前最大配置差距在 核心。"
+    assert OV.TEXT_UNDECIDABLE_COUNT not in OV.hero_sentence(n, _alo0())
+
+
+def test_持有檔數同一檔兩張保單只數一檔_與計數行同一個單位():
+    model = {"blocks": [{"code": "HLD-2", "fund_groups": [{"_fund_code": "A"}, {"_fund_code": "A"}, {"_fund_code": "B"}]}]}
+    assert sections.hld_holding_count(model) == 2
+    assert sections.hld_holding_count({"blocks": [{"code": "HLD-2", "fund_groups": []}]}) is None   # 不寫 0
+
+
+def _rows(*diffs):
+    return {"_rows": [{"_diff": d} for d in diffs]}
+
+
+def test_has_unevaluated_category_只讀ALO2已算出的_diff():
+    assert OV.has_unevaluated_category(_rows(1.0, -2.0, 0.0)) is False
+    assert OV.has_unevaluated_category(_rows(1.0, None)) is True
+    assert OV.has_unevaluated_category(_rows()) is False
+    assert OV.has_unevaluated_category(None) is False
+
+
+@pytest.mark.parametrize("name,incomplete", [("full", False), ("inband", False), ("mvbasis", False), ("policyfail", False),
+                                             ("partial", True), ("unbkt", True), ("nobucket", True)])
+def test_真fixture_哪些情境有類別沒評估到(name, incomplete):
+    model = alo_logic.build_page_model(alo_fixtures.scenario(name))
+    assert OV.has_unevaluated_category(alo_logic.find_block(model, "ALO-2")) is incomplete
+
+
+def test_F13_有類別沒評估到_不寫皆在容許帶內_也不點名最大差距():
+    in_band = _alo0(tone="灰", text=alo_logic.TEXT_ALL_IN_BAND, leaders=())
+    s = OV.hero_sentence(3, in_band, incomplete=True)
+    assert s == "持有 3 檔基金；配置差距無法判定。"
+    assert alo_logic.TEXT_ALL_IN_BAND not in s
+    s = OV.hero_sentence(3, _alo0(), incomplete=True)           # 最大值取自不完整的類別集合
+    assert s == "持有 3 檔基金；配置差距無法判定。" and "最大配置差距在" not in s
+    assert OV.hero_sentence(3, in_band) == f"持有 3 檔基金；{alo_logic.TEXT_ALL_IN_BAND}。"   # 完整評估時照 ALO-0 既有字
+
+
+def _inband_with_blank_target():
+    """`inband` 情境，第一個類別的目標比重留空（使用者設定留空）：ALO-0 不看這一列、仍寫「各類別皆在容許帶內」（docs/v2/74 A6m (1)）。"""
+    import copy
+    dataset = copy.deepcopy(alo_fixtures.scenario("inband"))
+    for row in dataset["user_setting"]:
+        if row["setting_key"] == "alo_target_weights":
+            row["setting_value"][0]["weight_ratio"] = None
+    return dataset
+
+
+def test_F13_ALO0本身沒被改_目標留空的inband仍寫皆在容許帶內_由主判讀自己擋():
+    model = alo_logic.build_page_model(_inband_with_blank_target())
+    alo0, alo2 = alo_logic.find_block(model, "ALO-0"), alo_logic.find_block(model, "ALO-2")
+    assert alo0["text"] == alo_logic.TEXT_ALL_IN_BAND            # 既有缺陷仍在 ALO-0（docs/v2/74 F-13 由客戶另裁；本批不改 ALO-0）
+    assert OV.has_unevaluated_category(alo2) is True
+    assert OV.hero_sentence(3, alo0, incomplete=True) == "持有 3 檔基金；配置差距無法判定。"
 
 
 # ───────────────────────── D-12：Secondary 全列 ─────────────────────────
@@ -137,6 +209,29 @@ def test_return_rows全列_標籤含幣別_非數值格只印原字():
     assert OV.return_scale(out) == 3.28
     assert OV.return_scale([{"value": None}]) == 1.0
     assert not any(k in OV.returns_detail({"answers": "x", "detail_lines": []})["groups"][0][1][0] for k in ("平均", "合計"))
+
+
+def test_return_rows_缺區間報酬率那一格的檔仍列出_寫資料未備_不靜默丟列():
+    groups = [{"_fund_code": "A", "_ccy": "USD", "head_text": "基金A · 幣別 USD",
+               "main_values": [{"label": "區間報酬率", "_has_number": True, "_raw": 1.5, "text": "+1.50%"}]},
+              {"_fund_code": "B", "_ccy": "TWD", "head_text": "基金B · 幣別 TWD",
+               "main_values": [{"label": "期間波動", "_has_number": True, "_raw": 7.0, "text": "7.00%"}]}]
+    out = OV.return_rows({"fund_groups": groups})
+    assert [r["label"] for r in out] == ["基金A · 幣別 USD", "基金B · 幣別 TWD"]
+    assert out[1]["value"] is None and out[1]["text"] == P.MISSING_CHIP_TEXT == "◇ 資料未備"
+    assert OV.return_scale(out) == 1.5
+
+
+def test_detail_不過濾空白行_空行當場ValueError_與P_detail_model契約一致():
+    good = {"answers": "x", "footer_lines": ["a"], "detail_lines": ["b"]}
+    assert OV.share_detail(good)["groups"]
+    for bad in ({**good, "answers": " "}, {**good, "detail_lines": [""]}, {**good, "footer_lines": ["  "]}):
+        with pytest.raises(ValueError, match="空白行"):
+            OV.share_detail(bad)
+    with pytest.raises(ValueError, match="空白行"):
+        OV.returns_detail({"answers": "x", "detail_lines": [""]})
+    with pytest.raises(KeyError):
+        OV.share_detail({"footer_lines": [], "detail_lines": []})      # 缺鍵＝上游漏了資訊，不以空代替
 
 
 def test_return_chips與share_chips_最多五枚且區間未設照實寫():
@@ -175,12 +270,43 @@ def test_grouped容器涵蓋層3層4全部10個block_ID_且各一次():
 def test_容器名依D11_我的條件_持股明細_配置明細_不用證據一詞():
     names = [n for n, _ in OV.LAYER3_CONTAINERS + OV.LAYER4_CONTAINERS if n]
     assert names == ["我的條件", "持股明細", "配置明細"]
-    assert not any("證據" in s for s in OV.page_strings((1, 0, 0), _alo0()))
+    assert not any("證據" in s for s in OV.page_strings(1, _alo0()))
 
 
 def test_container_title只用既有塊標題():
     titles = {"HLD-4": "檢視區間與門檻輸入", "ALO-1": "目標輸入卡", "ALO-4": "分組定義"}
     assert OV.container_title("我的條件", ("HLD-4", "ALO-1", "ALO-4"), titles) == "我的條件　—　檢視區間與門檻輸入、目標輸入卡、分組定義"
+
+
+def test_container_title_有狀態的塊寫成_標題_破折_狀態_同單頁展開區標題():
+    titles = {"HLD-4": "檢視區間與門檻輸入", "ALO-1": "目標輸入卡", "ALO-4": "分組定義"}
+    out = OV.container_title("我的條件", ("HLD-4", "ALO-1", "ALO-4"), titles,
+                             {"ALO-1": "⛔ 取數失敗", "ALO-4": "基準 取不到；缺 持倉", "HLD-4": None})
+    assert out == "我的條件　—　檢視區間與門檻輸入、目標輸入卡　—　⛔ 取數失敗、分組定義　—　基準 取不到；缺 持倉"
+    assert OV.container_title("我的條件", ("HLD-4", "ALO-1", "ALO-4"), titles, {}) == OV.container_title("我的條件", ("HLD-4", "ALO-1", "ALO-4"), titles)
+
+
+@pytest.mark.parametrize("summary,expect_state", [
+    ("3 個類別；容許帶 ±5 個百分點", False), ("區間 2026-01-01 至 2026-09-19 · 門檻 2 列", False), ("淨值 1020 列 · 配息 14 列", False),
+    ("4 檔", False), ("目標比重、容許帶皆已設定", False), ("可匯出 3 列", False),
+    ("⛔ 取數失敗", True), ("取數失敗", True), ("缺 持倉", True), ("4 檔；被排除 2 檔", True), ("3 檔 · 有值取不到或不適用", True),
+    ("◇ 資料未備：持倉", True), ("⛔ 尚未設定：目標比重", True), ("基準 未設定；類別 0 個；缺 計算基礎", True),
+])
+def test_block_state_只在單頁標題帶狀態字樣時才回_正常的塊容器標題照舊(summary, expect_state):
+    got = OV.block_state({"_tone": "中性"}, summary)
+    assert (got == summary) if expect_state else got is None
+
+
+def test_block_state_佔位或紅灰色調也算有狀態_空句不算():
+    assert OV.block_state({"placeholder": {"text": "x"}}, "3 檔") == "3 檔"
+    assert OV.block_state({"_tone": "紅"}, "3 檔") == "3 檔" and OV.block_state({"_tone": "灰"}, "3 檔") == "3 檔"
+    assert OV.block_state({"_tone": "紅"}, None) is None and OV.block_state({"_tone": "紅"}, "  ") is None
+
+
+def test_data_date_line_字樣取page_health_沒有日期寫破折_不補():
+    assert OV.data_date_line("資產配置", "2026-09-23") == "資產配置　資料截至 2026-09-23"
+    assert OV.data_date_line("持股明細", None) == "持股明細　資料截至 —"
+    assert OV.data_date_line("持股明細", "") == "持股明細　資料截至 —"
 
 
 def test_尚未取得群組_九項全部Missing_摘要列點名():
@@ -191,7 +317,7 @@ def test_尚未取得群組_九項全部Missing_摘要列點名():
 
 
 def test_固定字串不含不寫n項資料未備_也不含方向性字樣():
-    for s in OV.page_strings((3, 1, 0), _alo0()):
+    for s in OV.page_strings(3, _alo0()):
         assert not re.search(r"\d+ ?項資料未備", s), s
         assert not any(w in s for w in FORBIDDEN), s
 
@@ -220,3 +346,25 @@ def test_selector的widget_key與設定頁picker同值_且動作白名單沒被�
     assert f'PICKER_WIDGET_KEY = "{key}"' in page
     assert '_PICKER_ACTIONS = ("select", "use", "relist")' in source
     assert "picker_live[\"act\"](\"select\"" in page or "picker_live['act']('select'" in page
+
+
+# ───────────────────────── 稽核回修：合併後已不是導覽頁的名字，不得再當「請到哪裡」的指路 ─────────────────────────
+
+
+def test_市場與找基金的頁尾_指路改到我的資產_不再指向已併掉的兩頁():
+    from ui_v2 import plain
+    for page in ("mkt", "exp"):
+        sentence = plain.PLAIN_FOOTERS[page]
+        assert "我的資產" in sentence, page
+        assert "我的持股" not in sentence and "資產配置" not in sentence, page
+    assert plain.PLAIN_FOOTERS["mkt"].startswith("這一頁只看市場環境，不談個別標的；")
+    assert plain.PLAIN_FOOTERS["exp"].startswith("這一頁只篩選與並排對照，不排名、不標最佳；")
+    assert "挑標的請到找基金" in plain.PLAIN_FOOTERS["mkt"]
+
+
+def test_預覽側欄說明_指路改到我的資產():
+    import ast as _ast
+    tree = _ast.parse((_ROOT / "ui_v2" / "app_preview.py").read_text(encoding="utf-8"))
+    note = next("".join(c.value for c in _ast.walk(n.value) if isinstance(c, _ast.Constant))
+                for n in tree.body if isinstance(n, _ast.Assign) and any(getattr(t, "id", "") == "PREVIEW_NOTE" for t in n.targets))
+    assert "我的資產" in note and "我的持股" not in note
