@@ -354,16 +354,14 @@ def test_主判讀的n_沒有任何持倉才寫無法判定_不寫0檔():
 
 
 def test_F13_有類別沒評估到_主判讀不寫皆在容許帶內():
-    """`ALO-0` 寫皆在帶內、但有類別沒評估到 → 無法判定。`ALO-0` 已點名類別（A7）的情境（`partial`、`unbkt`、`nobucket`）見 S5：照 parent 點名。"""
-    for kw in ({"alo": "inband", "blank_target": True},):
+    """有類別沒評估到（`incomplete`）→ 主判讀一律「配置差距無法判定」，不論 `ALO-0` 寫皆在帶內或已點名類別（稽核回修第三輪 SF-2）。"""
+    for kw in ({"alo": "inband", "blank_target": True}, {"alo": "partial"}, {"alo": "unbkt"}, {"alo": "nobucket"}):
         at = _s(**kw)
         hero = _hero(at)
         assert "各類別皆在容許帶內" not in hero and "最大配置差距在" not in hero, (kw, hero)
         assert hero.endswith("配置差距無法判定。"), (kw, hero)
-    # ~~原清單還有 `partial`、`unbkt`、`nobucket`，並斷言主判讀不點名「最大配置差距在 X」~~ → 稽核回修第二輪（S5，總管讀法，待客戶確認；
-    #   有意識的更正，不是漏刪）：這三個情境的 `ALO-0` 本身就點名了類別（A7），主判讀不再把它蓋成「無法判定」，見 `test_S5_*`。
-    for kw in ({"alo": "partial"}, {"alo": "unbkt"}, {"alo": "nobucket"}):
-        assert "各類別皆在容許帶內" not in _hero(_s(**kw))
+    # ~~第二輪曾把 `partial`、`unbkt`、`nobucket` 改成斷言主判讀照 `ALO-0` 點名「最大配置差距在 X」（S5）~~ → 第三輪 SF-2 還原（有意識的更正，不是漏刪）：
+    #   有類別差距未知時不得宣稱「最大」，見 `test_S5_*`。
 
 
 def test_F13_ALO0本身一字沒改_空白目標的inband燈仍寫皆在容許帶內_主判讀另擋():
@@ -577,22 +575,21 @@ def test_S1_正常情境_我的條件容器標題仍只列標題():
     assert _container(_s(alo="inband"), "我的條件") == "我的條件　—　檢視區間與門檻輸入、目標輸入卡、分組定義"
 
 
-# ───── S5：主判讀 A7 點名不被 incomplete 蓋掉 ─────
+# ───── S5／SF-2：有類別沒評估到 → 主判讀一律無法判定（第二輪「A7 照 parent 點名」已還原）─────
 
 
-def test_S5_unbkt_ALO0點名衛星差距_主判讀照點名_不寫無法判定():
+# ~~第二輪：`unbkt` 的主判讀照 `ALO-0` 點名衛星，斷言 startswith「持有 3 檔基金；目前最大配置差距在 」且不含「配置差距無法判定」~~
+# → 第三輪 SF-2（有意識的更正，不是漏刪）：「最大」是對整個類別集合的宣稱，有類別 `_diff=None` 時差距未知、可能才是最大（D-10）。
+#   `ALO-0` 那一行仍寫「與目標差」，且不說「最大」，兩者不矛盾。
+def test_S5_unbkt_ALO0點名衛星差距_主判讀寫無法判定_不說最大():
     at = _s(alo="unbkt")
     md = _md(at)
     hero = _hero(at)
-    assert "與目標差" in md                                                                       # ALO-0 同一畫面上寫著偏離
-    assert hero.startswith("持有 3 檔基金；目前最大配置差距在 "), hero
-    assert "配置差距無法判定" not in hero
+    assert "與目標差" in md                                                                       # ALO-0 同一畫面上仍寫著偏離（不動）
+    assert hero == "持有 3 檔基金；配置差距無法判定。", hero
+    assert "最大配置差距" not in hero
 
 
-def test_S5_只擋皆在容許帶內那一句_其餘有類別沒評估到的情境依ALO0自己的字():
-    for kw in ({"alo": "inband", "blank_target": True},):
-        assert _hero(_s(**kw)).endswith("配置差距無法判定。")
-    for name in ("partial", "nobucket", "unbkt"):          # 三個情境的 ALO-0 都點名了類別（A7）：主判讀照點名，字取自 ALO-0 的 _leaders
-        at = _s(alo=name)
-        hero = _hero(at)
-        assert hero.startswith("持有 3 檔基金；目前最大配置差距在 ") and "皆在容許帶內" not in hero, (name, hero)
+def test_S5_有類別沒評估到的每個情境_主判讀都是無法判定():
+    for kw in ({"alo": "inband", "blank_target": True}, {"alo": "partial"}, {"alo": "nobucket"}, {"alo": "unbkt"}):
+        assert _hero(_s(**kw)) == "持有 3 檔基金；配置差距無法判定。", kw

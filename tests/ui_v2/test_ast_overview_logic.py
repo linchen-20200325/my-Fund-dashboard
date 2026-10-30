@@ -191,19 +191,19 @@ def test_F13_有類別沒評估到_不寫皆在容許帶內():
     assert OV.hero_sentence(3, in_band) == f"持有 3 檔基金；{alo_logic.TEXT_ALL_IN_BAND}。"   # 完整評估時照 ALO-0 既有字
 
 
-# ~~原斷言：`incomplete=True` 時連 `ALO-0` 已點名的最大差距類別（A7）也蓋成「配置差距無法判定」（理由：最大值取自不完整的類別集合）~~
-# → 稽核回修第二輪（S5，總管讀法，待客戶確認；有意識的更正，不是漏刪）：舊斷言在寫下當時有它的理由（最大值確實可能取自不完整的類別集合），
-#   但 `ALO-0` 同一個畫面上緊接著就寫「衛星 與目標差 30.0 個百分點」；主判讀說「無法判定」是在否定一條已算出的規則結果、淡化真實的偏離。
-#   被權衡掉的是它的範圍——`incomplete` 只擋「各類別皆在容許帶內」那句（missing 被讀成 normal），不擋 A7 點名（照 parent）。
-#   A7 的「N 個百分點」可能建立在不完整的分母上（`docs/v2/74` 的 A7 列）：那是 `ALO-0` 的缺陷（F-13），本頁不改它、也不複述得比它更多。
-def test_S5_ALO0已點名類別_A7_不被incomplete蓋掉_照parent點名():
-    s = OV.hero_sentence(3, _alo0(), incomplete=True)
-    assert s == "持有 3 檔基金；目前最大配置差距在 核心。"
-    s = OV.hero_sentence(3, _alo0(leaders=("核心", "衛星")), incomplete=True)
-    assert s == "持有 3 檔基金；目前最大配置差距在 核心、衛星。"
-    # 其餘情形 incomplete 不改變結果：讀不到仍是無法判定
+# ~~第二輪 S5 斷言：`incomplete=True` 時 `ALO-0` 已點名類別（A7）照 parent 點名「目前最大配置差距在 X」~~
+# → 稽核回修第三輪（SF-2；有意識的更正，不是漏刪）：還原第一輪的嚴格行為。第二輪斷言在寫下當時的理由是「主判讀不該否定 `ALO-0` 已算出的規則結果」；
+#   被權衡掉的原因：「最大」是對整個類別集合的宣稱，有類別 `_diff=None`（例：`partial` 的債券有目標但值缺）時該類別的差距未知、可能才是最大，
+#   在不完整的集合上宣稱最大值違反 D-10（不把 Missing 推論成正常；資料不足照實「無法判定」）。`ALO-0` 本身仍寫它自己的「X 與目標差 N 個百分點」
+#   （從不說「最大」），兩者不矛盾。客戶若要放寬，是 `hero_sentence` 的一行改動。
+def test_SF2_incomplete時一律無法判定_ALO0已點名類別也不說最大():
+    assert OV.hero_sentence(3, _alo0(), incomplete=True) == "持有 3 檔基金；配置差距無法判定。"
+    assert OV.hero_sentence(3, _alo0(leaders=("核心", "衛星")), incomplete=True) == "持有 3 檔基金；配置差距無法判定。"
     assert OV.hero_sentence(3, _alo0(tone="灰", text=alo_logic.TEXT_NO_TARGET, leaders=()), incomplete=True) == "持有 3 檔基金；配置差距無法判定。"
     assert OV.hero_sentence(3, None, incomplete=True) == "持有 3 檔基金；配置差距無法判定。"
+    # incomplete=False 時 A7 點名照 parent（完整評估才可說最大）
+    assert OV.hero_sentence(3, _alo0(), incomplete=False) == "持有 3 檔基金；目前最大配置差距在 核心。"
+    assert OV.hero_sentence(3, _alo0(leaders=("核心", "衛星"))) == "持有 3 檔基金；目前最大配置差距在 核心、衛星。"
 
 
 def _inband_with_blank_target():

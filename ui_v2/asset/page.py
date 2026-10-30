@@ -82,6 +82,7 @@ def _css() -> str:
     .ast-bar-hatch {{ background: repeating-linear-gradient(135deg, {theme.TEAL_DARK} 0 3px, {theme.SURFACE} 3px 6px); }}
     .ast-note {{ font-size: .76rem; color: {theme.TEXT_MUTED}; margin: .2rem 0; overflow-wrap: anywhere; }}
     .ast-err {{ color: {theme.tone_hex("紅")}; font-size: .85rem; margin: .3rem 0; overflow-wrap: anywhere; }}
+    .ast-status {{ font-size: .85rem; margin: .3rem 0; overflow-wrap: anywhere; }}
     .ast-block-head {{ font-weight: 700; font-size: .84rem; color: {theme.TEAL_DARK}; margin: .9rem 0 .3rem;
       border-top: 1px dashed {theme.BORDER}; padding-top: .5rem; overflow-wrap: anywhere; }}
     .ast-missing-item {{ font-size: .82rem; margin: .2rem 0; overflow-wrap: anywhere; }}

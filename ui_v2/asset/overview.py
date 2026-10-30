@@ -73,17 +73,21 @@ def hero_sentence(n, alo0, *, incomplete: bool = False) -> str:
     - `alo0`：`ALO-0` 的 block（或 None＝配置那一側整個沒載入）。黃燈且有 `_leaders` → 點名全部並列類別（沿用 `ALO-0` 已算出的全列規則，
       與 parent 相同）；「各類別皆在容許帶內」→ 照 `ALO-0` 的字（不編「差距在 X」）；其餘（沒有持倉、目標或容許帶未設、讀不到…）→
       「配置差距無法判定」，原因由 `ALO-0` 自己那一行承擔。不寫加碼／減碼、不寫方向、不新算差距。
-    - `incomplete`：`has_unevaluated_category(ALO-2)`。**只作用在「各類別皆在容許帶內」那一句**：`ALO-0` 寫皆在帶內、但有類別沒評估到
-      → 不得照抄（F-13 的 missing 被讀成 normal）→ 「配置差距無法判定」。`ALO-0` 已點名類別（A7，黃燈有 `_leaders`）時**照 parent 點名**，
-      不被 `incomplete` 蓋掉——那是 `ALO-0` 同一個畫面上已經算出來的規則結果，主判讀不得說「無法判定」去否定它、淡化真實的偏離。
-      （總管讀法，待客戶確認；A7 的「N 個百分點」可能建立在不完整的分母上，見 `docs/v2/74` 的 A7 列（v5 補），該句仍沿 `ALO-0` 原字、本頁不另改。）
+    - `incomplete`：`has_unevaluated_category(ALO-2)`。**為真時一律「配置差距無法判定」**，不論 `ALO-0` 寫皆在帶內或已點名類別（A7）。
+      理由：「目前最大配置差距在 X」是對整個類別集合的最大值宣稱；有類別 `_diff=None`（例：`partial` 的債券有目標但值缺）時，
+      該類別的差距未知、可能才是最大，說「最大」就是在不完整的集合上宣稱最大值（客戶裁示 D-10：不把 Missing 推論成正常；資料不足照實「無法判定」）。
+      `ALO-0` 本身不動，仍在 Primary 寫它自己的「X 與目標差 N 個百分點」——它從不說「最大」，兩者不矛盾。
+      （稽核回修第三輪 SF-2：還原第一輪的嚴格行為，取代第二輪 S5 的「A7 照 parent 點名」。客戶若要放寬為「有 A7 領先者就點名」，
+      只需把下面 `incomplete` 判斷搬到只包「皆在帶內」那個分支，是一行改動。）
     """
     head = f"持有 {n} 檔基金" if n else TEXT_UNDECIDABLE_COUNT
     leaders = tuple((alo0 or {}).get("_leaders") or ())
-    if leaders:
+    if incomplete:
+        tail = TEXT_UNDECIDABLE_GAP
+    elif leaders:
         tail = f"目前最大配置差距在 {'、'.join(leaders)}"
     elif alo0 is not None and alo0.get("text") == alo_logic.TEXT_ALL_IN_BAND:
-        tail = TEXT_UNDECIDABLE_GAP if incomplete else alo_logic.TEXT_ALL_IN_BAND
+        tail = alo_logic.TEXT_ALL_IN_BAND
     else:
         tail = TEXT_UNDECIDABLE_GAP
     return f"{head}；{tail}。"
