@@ -9,6 +9,7 @@
 390px mobile（390x844），各截一張整頁 PNG、量一次 layout（`layout_checks.MEASURE_JS`），把 PNG 與報告寫到 `$VISUAL_FIDELITY_OUT`。
 
 情境：
+- 💼 `ast`（BL-0525 Batch D，合併頁）：desktop 1280×800 與 390×844；V1～V6、A1～A6 hard。
 - 五頁（`mkt`／`hld`／`exp`／`alo`／`set`）：沿用 `tests/ui_v2/test_live_390_page.py` 的正式模式腳本（同一份替身資料）。
   🌍 `mkt`（BL-0525 Batch C 已套用 Presentation Contract）：V1～V8 與 M1～M6 全部 hard（`layout_checks.evaluate(page="mkt")`）；
   其餘四頁只有 V1～V3 hard，契約缺口（V4～V8）寫進報告，不轉紅 —— 還沒套用（Batch D～F 的工作）。
@@ -41,6 +42,7 @@ for _p in (str(_HERE), str(_UI_V2_TESTS), str(_ROOT)):
 
 pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 streamlit")
 
+import _ast_fixture  # noqa: E402  💼 我的資產頁的固定 fixtures 腳本（BL-0525 Batch D）
 import _ui_v2_chromium  # noqa: E402  瀏覽器解析（CI 找不到要 fail）
 import vf_config as config  # noqa: E402
 import layout_checks as LC  # noqa: E402
@@ -75,6 +77,8 @@ _CHART_READY = "[data-testid=stVegaLiteChart] canvas, [data-testid=stVegaLiteCha
 # (情境名, 腳本, 等待的選擇器們, strict)
 SCENARIOS = [(name, _SCRIPTS[name], (_LAMP[name],), False) for name in ("mkt", "hld", "exp", "alo", "set")]
 SCENARIOS.append(("primitives", _PRIMITIVES_SCRIPT, (".pc-card-title", _CHART_READY), True))
+# 💼 我的資產（BL-0525 Batch D）：V1～V6 與 A1～A6 全部 hard（`layout_checks.evaluate(page="ast")`）；圖是 HTML 條（不是 vega），V7／V8 維持 advisory。
+SCENARIOS.append(("ast", _ast_fixture.script("full"), (".ast-title", ".ast-hero"), False))
 
 _ENTRIES: list = []
 

@@ -15,6 +15,7 @@
 | V6 | 每個 chips 群組至多 5 枚 | strict 才 hard |
 | V7 | 首屏看得到至少一張圖（Primary Visual 在首屏） | advisory；**🌍 頁（`page="mkt"`）起 hard**（BL-0525 Batch C） |
 | V8 | 首屏 chips／badge 數 ≤ 5 | advisory；**🌍 頁起 hard** |
+| A1～A6 | 💼 我的資產頁專屬（`page="ast"`；D-1 容器不巢狀、D-5B summary strip、D-6／D-12 Secondary 兩張全列捲動、頁頂 selector 順序）：全部 hard |
 | M1～M6 | 🌍 頁專屬（D1～D7 的可自動量測部分）：視覺順序、Secondary ≤3、無頁級日期、Secondary 不高於 Primary、手機緊湊列、圖表牆 | 只在 `page="mkt"` 時評估，全部 hard |
 
 **hard** 失敗＝測試轉紅（安全網抓到真的壞掉：例外、原始碼外露、橫捲）；**advisory** 失敗＝只寫進報告「契約缺口」，**不轉紅**
@@ -67,8 +68,25 @@ MEASURE_JS = """
     evidence: one('[data-block="MKT-1"]'),
     page_date: /資料截至|最新到/.test(document.body.innerText),
   };
+  // 💼 我的資產頁專屬量測（BL-0525 Batch D；其他頁量不到 → null／空）。
+  const ast = {
+    source: one('.st-key-ast_source'),
+    summary: one('.ast-summary'),
+    slots: all('.ast-summary .ast-slot').length,
+    summaries: all('.ast-summary').length,
+    hero: one('.ast-hero'),
+    primary: one('.st-key-ast_primary'),
+    primary_chart: one('[data-chart=primary]'),   // Primary 是 HTML 條（presentation component），不是 vega；V7 對本頁改量它
+    secondary: all('.st-key-ast_sec_share, .st-key-ast_sec_returns').map((el) => rect(el)),
+    scrolls: all('.ast-scroll').map((el) => {
+      const cs = getComputedStyle(el);
+      return {overflowY: cs.overflowY, maxHeight: cs.maxHeight};
+    }),
+    nested_details: all('details details').length,
+  };
   return {
     mkt,
+    ast,
     viewport: {width: vw, height: vh},
     main_width: mainWidth,
     exceptions: all('[data-testid=stException]').length,
@@ -127,11 +145,46 @@ def evaluate_mkt(measure: dict) -> list:
     return out
 
 
+AST_MAX_SECONDARY = 2            # 客戶 2026-10-30 D-6：2 張真資料，不湊第三張
+AST_MOBILE_SUMMARY_MAX_PX = 190  # 手機 summary 為 2×2 緊湊（安全網下限，不是設計目標）
+
+
+def evaluate_ast(measure: dict) -> list:
+    """💼 我的資產頁專屬檢查 A1～A6（`DEC-2026-10-30-02`；全部 hard）。只量結構與相對位置，不判美醜。"""
+    a = measure.get("ast") or {}
+    out = []
+    secondary = a.get("secondary") or []
+    chain = [("持倉資料來源", a.get("source")), ("summary strip", a.get("summary")), ("一句主判讀", a.get("hero")),
+             ("Primary", a.get("primary")), ("Secondary", secondary[0] if secondary else None)]
+    missing = [name for name, item in chain if item is None]
+    tops = [item["top"] for _n, item in chain if item is not None]
+    ordered = not missing and all(x < y for x, y in zip(tops, tops[1:]))
+    out.append(_check("A1", "視覺順序：持倉資料來源 → summary → 主判讀 → Primary → Secondary", ordered,
+                      f"缺少 {missing}" if missing else "上緣 " + " < ".join(f"{n} {t:.0f}" for (n, _), t in zip(chain, tops)),
+                      hard=True))
+    out.append(_check("A2", f"Secondary 恰 {AST_MAX_SECONDARY} 個（不湊第三張）", len(secondary) == AST_MAX_SECONDARY,
+                      f"Secondary {len(secondary)} 個", hard=True))
+    out.append(_check("A3", "summary 是一個容器、四格", a.get("summaries") == 1 and a.get("slots") == 4,
+                      f"summary 容器 {a.get('summaries')}、格 {a.get('slots')}", hard=True))
+    out.append(_check("A4", "沒有巢狀展開區（D-1）", a.get("nested_details") == 0, f"details 內的 details {a.get('nested_details')} 個", hard=True))
+    mobile = measure["viewport"]["width"] <= MOBILE_MAX_WIDTH
+    summary = a.get("summary")
+    tall = bool(mobile and summary and summary["height"] > AST_MOBILE_SUMMARY_MAX_PX)
+    out.append(_check("A5", f"手機 summary 為緊湊（≤ {AST_MOBILE_SUMMARY_MAX_PX}px）", not tall,
+                      f"{'手機' if mobile else '桌機（不適用）'}；summary 高 {summary['height'] if summary else 'n/a'}px", hard=True))
+    scrolls = a.get("scrolls") or []
+    bad = [s for s in scrolls if s["overflowY"] not in ("auto", "scroll") or s["maxHeight"] in ("none", "")]
+    out.append(_check("A6", "Secondary 清單為固定高度垂直捲動（D-12，不截斷）", len(scrolls) == AST_MAX_SECONDARY and not bad,
+                      f"捲動區 {len(scrolls)} 個，不合格 {len(bad)} 個", hard=True))
+    return out
+
+
 def evaluate(measure: dict, *, strict: bool = False, page: str | None = None) -> list:
     """把量測值判成檢查結果。`strict`：V4～V6 也算 hard（Batch A 自己控制的 primitives 展示頁用）。
     `page="mkt"`（BL-0525 Batch C）：V4～V8 全部 hard，並附加 M1～M6；其他頁維持原判定。"""
     mkt = page == "mkt"
-    strict = strict or mkt
+    ast = page == "ast"
+    strict = strict or mkt or ast
     content_w = measure.get("main_width") or measure["viewport"]["width"]
     out = []
     out.append(_check("V1", "沒有未處理例外", measure["exceptions"] == 0, f"stException={measure['exceptions']}", hard=True))
@@ -154,12 +207,17 @@ def evaluate(measure: dict, *, strict: bool = False, page: str | None = None) ->
                       f"群組 {len(measure['chips_groups'])} 個，最多 {biggest} 枚", hard=strict))
     vh = measure["viewport"]["height"]
     first_chart = [c for c in charts if not c["collapsed"] and c["top"] < vh]
+    if ast:   # 💼 頁的 Primary 是 HTML 條（不進 `charts`）；改量它在不在首屏
+        pc = (measure.get("ast") or {}).get("primary_chart")
+        first_chart = [pc] if pc and pc["top"] < vh else []
     out.append(_check("V7", "首屏看得到至少一張圖（Primary Visual）", bool(first_chart),
-                      f"首屏高 {vh}px；首屏圖 {len(first_chart)} 張", hard=mkt))
+                      f"首屏高 {vh}px；首屏圖 {len(first_chart)} 張", hard=mkt or ast))
     out.append(_check("V8", f"首屏 chips／badge ≤ {config.MAX_CHIPS_PER_CARD}", measure["first_screen_chips"] <= config.MAX_CHIPS_PER_CARD,
                       f"首屏 {measure['first_screen_chips']} 枚", hard=mkt))
     if mkt:
         out.extend(evaluate_mkt(measure))
+    if ast:
+        out.extend(evaluate_ast(measure))
     return out
 
 

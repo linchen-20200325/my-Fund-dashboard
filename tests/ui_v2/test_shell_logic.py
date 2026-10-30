@@ -70,8 +70,10 @@ def _imports(path: pathlib.Path) -> set:
 
 def test_第一層順序與頁名就是PAGES_一個字不改():
     pages = _preview_pages()
-    assert [t for _s, t in pages] == ["🌍 市場與趨勢", "⚖️ 資產配置", "💼 我的持股", "🔍 找基金", "⚙️ 設定"]
-    items = shell_nav.build_items(pages, "💼 我的持股")
+    # → 2026-10-30 Batch D（`DEC-2026-10-30-02`；有意識的政策變更，不是漏刪）：舊五項 ["🌍 市場與趨勢", "⚖️ 資產配置", "💼 我的持股",
+    #   "🔍 找基金", "⚙️ 設定"] 的第 2、3 項併成「💼 我的資產」（44 之二十其一的正式頁序）；順序與頁名仍逐字取自 PAGES。
+    assert [t for _s, t in pages] == ["🌍 市場與趨勢", "💼 我的資產", "🔍 找基金", "⚙️ 設定"]
+    items = shell_nav.build_items(pages, "💼 我的資產")
     assert [(i["slug"], i["title"]) for i in items] == pages
     # 名稱與圖示切開後再接回去必須與 PAGES 的頁名逐字相同（不新增、不改字）。
     for item in items:
@@ -97,8 +99,8 @@ def test_目前頁恰好一項_找不到就一項都沒有():
         items = shell_nav.build_items(pages, title)
         assert [i["current"] for i in items].count(True) == 1
         assert next(i for i in items if i["current"])["title"] == title
-    assert [i["current"] for i in shell_nav.build_items(pages, "不存在的頁")] == [False] * 5   # 不猜
-    assert [i["current"] for i in shell_nav.build_items(pages, "")] == [False] * 5
+    assert [i["current"] for i in shell_nav.build_items(pages, "不存在的頁")] == [False] * len(pages)   # 不猜
+    assert [i["current"] for i in shell_nav.build_items(pages, "")] == [False] * len(pages)
     assert shell_nav.build_items([], "x") == []
 
 
@@ -108,7 +110,7 @@ def test_容器key_目前頁多一個結尾_兩個導覽不重複():
         for slug, _ in _preview_pages():
             for current in (False, True):
                 keys.append(shell_nav.container_key(prefix, slug, current))
-    assert len(keys) == len(set(keys)) == 20
+    assert len(keys) == len(set(keys)) == 4 * len(_preview_pages())   # 兩個導覽 × 每頁（目前／非目前）
     assert shell_nav.container_key("shell-side", "mkt", True).endswith(shell_nav.CURRENT_SUFFIX)
     assert not shell_nav.container_key("shell-side", "mkt", False).endswith(shell_nav.CURRENT_SUFFIX)
     # 底部導覽容器本身的 key 不能與任何一項的 key 重複。

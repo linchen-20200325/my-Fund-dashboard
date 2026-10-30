@@ -38,8 +38,7 @@ _APP = _ROOT / "ui_v2" / "app_preview.py"
 # (slug, url 路徑, 頁名)。預設頁（mkt）的網址是根路徑；其餘為 url_path。頁名逐字取自 `PAGES`（fast lane 守衛另鎖）。
 _PAGES = (
     ("mkt", "", "市場與趨勢"),
-    ("alo", "alo", "資產配置"),
-    ("hld", "hld", "我的持股"),
+    ("ast", "ast", "我的資產"),    # → 2026-10-30 Batch D（`DEC-2026-10-30-02`；有意識的政策變更，不是漏刪）：舊 ("alo","alo","資產配置")、("hld","hld","我的持股") 兩列併成一頁
     ("exp", "exp", "找基金"),
     ("set", "set", "設定"),
 )
