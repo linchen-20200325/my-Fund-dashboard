@@ -448,7 +448,7 @@
 **Batch C 實際做了什麼（2026-10-30；`DEC-2026-10-30-01`；上表 Phase 4 列是計畫，保留）**：
 1. **🌍 頁視覺層級**（`ui_v2/mkt/overview.py` 純函式模型＋`ui_v2/mkt/page.py` 畫法）：status chip（一行，既有字樣）→ 一句主判讀（不放頁級日期）→ Primary（五序列切換、一組期間切換、圖 300px）→ Secondary（風險 VIX／國際 S&P 500／利率與信用，各為迷你折線＋3 枚 chips；「利率與信用」內部切換期限利差／信用利差／政策利率）→ 依據卡 `MKT-1`～`MKT-3`（位置後移）→ ③ → 「▸ 尚未取得」群組（EPS×PE 排最前）→ 「▸ 各項資料狀態」→ ④ 詳細資料。X-25（段序）、X-26（圖下常駐小字）、X-27（核心卡 `answers`／`detail_lines`）中，X-25、X-26 已處理；X-27 的 `answers`／`detail_lines` 仍在依據卡內，**未下沉**（見 HANDOFF，後續批次再議）。
 2. **Primitives 最小擴充**：`chart_card_model` 的摘要句可省略（`summary=None`；給了字串仍須是一句）、`presentation_view.inject_css` 公開。
-3. **測試與 Visual Fidelity**：T1、T9 遷移（舊斷言劃線保留理由）；T6、T13 經實際讀內容後的處置見 PR 說明；`tests/visual_fidelity` 對 🌍 頁 V4～V8 升為 hard 並新增 M1～M6（視覺順序、Secondary ≤3、無頁級日期、Secondary 不高於 Primary、手機緊湊列、無圖表牆）。**CI fixture screenshot ≠ production-like Cloud screenshot**；Cloud capture 仍受環境網路政策阻擋，**Visual Fidelity Gate 的正式確認尚未執行**。
+3. **測試與 Visual Fidelity**：T1、T9 遷移（舊斷言劃線保留理由）；T6＝`tests/ui_v2/test_sections_page.py` 新增 🌍 有 Data View 的新段序測試（舊四段順序測試對無 Data View 情境照舊成立）；T13＝`test_bl0345_dev_notes_page.py`、`test_plain_trend_page.py` 把新 detail／尚未取得／次要圖展開區與每個 Primary 序列、利率與信用子序列切換後的畫面納入開發註記與工程字樣掃描（皆讀過原測試內容後遷移，無需 skip_expanders）；`tests/visual_fidelity` 對 🌍 頁 V4～V8 升為 hard 並新增 M1～M6（視覺順序、Secondary ≤3、無頁級日期、Secondary 不高於 Primary、手機緊湊列、無圖表牆）。**CI fixture screenshot ≠ production-like Cloud screenshot**；Cloud capture 仍受環境網路政策阻擋，**Visual Fidelity Gate 的正式確認尚未執行**。
 
 依 repo dependency 可微調順序；每批完成前走 Visual Fidelity Gate，CI 全綠不等於完成。進入 Batch B 以後的機械式 UI 實作，依客戶第二十四節與第三則末段走 Model／Effort Change Gate（建議 Sonnet 5.5／Medium）。
 

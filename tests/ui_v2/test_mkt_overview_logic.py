@@ -309,3 +309,40 @@ def test_overview不import_streamlit也不import舊樹():
         elif isinstance(node, ast.ImportFrom) and node.level == 0:
             roots.add((node.module or "").split(".")[0])
     assert not roots & {"streamlit", "ui", "services", "repositories", "shared", "infra", "requests"}, roots
+
+
+# ───────────────────────── 非 OK 路徑不丟 L2 reason（D7：不得刪除依據內容）─────────────────────────
+
+
+@pytest.mark.parametrize("status", ["資料未備", "業務例外"])
+def test_非OK卡_L2_reason進detail限制組_主卡只有chip加一句短原因(status):
+    why = "歷史不足 5y：XYZ原因"
+    view = _view(sp500=_dom("sp500", status, reason=why, reason_code="x"))
+    domain = ms.domain_by_key(view)["sp500"]
+    for card in (O.primary_card(domain, "sp500", "1Y"), O.secondary_card(domain, "sp500", O.SECONDARY_INTL_TITLE)):
+        assert card["kind"] == "status"
+        assert why in P.detail_texts(card["detail"]) or f"原因：{why}" in P.detail_texts(card["detail"])
+        assert why not in card["reason"] and all(why not in c["text"] for c in card["chips"])   # 不在主卡常駐
+        assert ("限制" in [n for n, _ in card["detail"]["groups"]])
+
+
+def test_取數失敗_原文不上一般畫面_含展開區_原文走進階診斷():
+    why = "Yahoo:^TWII 失敗：HTTP 429"
+    domain = ms.domain_by_key(_view(taiex=_dom("taiex", "系統錯誤", reason=why)))["taiex"]
+    card = O.primary_card(domain, "taiex", "1Y")
+    assert "429" not in "\n".join(P.detail_texts(card["detail"]))
+    assert why in [e["text"].split("：", 1)[1] for e in ms.raw_entries({"domains": [domain]})]
+
+
+def test_利率與信用_Missing路徑_沒有reason可丟_狀態與去哪補在detail():
+    card = O.rates_card({"rows": [], "errors": {}}, "credit_spread_pct")
+    texts = P.detail_texts(card["detail"])
+    assert "狀態：⬜ 資料未備" in texts and any("設定與診斷" in t for t in texts)
+
+
+def test_尚未取得群組_各項仍逐項用既有固定文案_與各項資料狀態列_沒有新的reason遺失():
+    view = _view()
+    domains = ms.domain_by_key(view)
+    for key in O.missing_group(view)["keys"]:
+        assert ms.missing_copy(domains[key])          # 逐項文案（沿用 market_section，一字未改）
+    assert [r["label"] for r in ms.conclusion_model(view)["rows"]] == [ms.LABELS[d["domain"]] for d in view["domains"]]

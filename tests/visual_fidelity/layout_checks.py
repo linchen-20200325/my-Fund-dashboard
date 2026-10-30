@@ -62,7 +62,8 @@ MEASURE_JS = """
     status_chip: one('.mkt-light--chip'),
     hero: one('.mkt-hero'),
     primary: one('[data-section=primary]'),
-    secondary: all('.mkt-sec-card').map(rect),
+    // 量外層框（含「利率與信用」卡內的 radio 列）；找不到外層框才退回卡片本身。
+    secondary: all('.mkt-sec-card').map((el) => rect(el.closest('[data-testid=stVerticalBlockBorderWrapper]') || el)),
     evidence: one('[data-block="MKT-1"]'),
     page_date: /資料截至|最新到/.test(document.body.innerText),
   };

@@ -149,3 +149,31 @@ def test_Secondary使用的資料列只有B線既有三鍵_page沒有新的取�
     keys = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)
             and n.value.endswith("_pct")}
     assert keys == {"term_spread_pct", "credit_spread_pct", "policy_rate_pct"}
+
+
+def test_頁首主要原因另有_在各項資料狀態最前面_不含日期_第一屏不畫():
+    # MKT-2 兩鍵 pending、MKT-1 缺一鍵 → 總表記錄有主要原因
+    script = _OK.replace("_dataset = fixtures.dataset_all_ok()", "_dataset = fixtures.dataset_mkt1_one_key_missing()")
+    at = _run(script)
+    assert not at.exception, [e.value for e in at.exception]
+    blobs = _ordered_markdown(at)
+    reasons = [b for b in blobs if 'class="v2-status-reasons"' in b]
+    assert len(reasons) == 1 and "資料截至" not in reasons[0] and "主要原因" in reasons[0]
+    nodes = []
+    def walk(n):
+        if type(n).__name__ == "Expander":
+            nodes.append(("e", str(n.label)))
+        ch = getattr(n, "children", None)
+        if not ch:
+            if type(n).__name__ == "Markdown":
+                nodes.append(("m", n.value))
+            return
+        for c in ch.values():
+            walk(c)
+    walk(at.main)
+    i_exp = next(i for i, (k, v) in enumerate(nodes) if k == "e" and v == overview.STATUS_DETAIL_TITLE)
+    i_rea = next(i for i, (k, v) in enumerate(nodes) if k == "m" and 'class="v2-status-reasons"' in v)
+    i_card = next(i for i, (k, v) in enumerate(nodes) if k == "m" and 'data-section="trend-conclusion"' in v)
+    assert i_exp < i_rea < i_card                 # 展開區內、市場結論卡之前
+    i_prim = next(i for i, (k, v) in enumerate(nodes) if k == "m" and 'data-section="primary"' in v)
+    assert i_rea > i_prim                          # 不在第一屏（Primary 之前）

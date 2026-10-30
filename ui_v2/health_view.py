@@ -72,6 +72,26 @@ def render_page_header(slug: str, *, as_of, tone_hex, settings_page=None, status
     render_settings_link(settings_page)
 
 
+def render_header_reasons(slug: str, *, as_of, tone_hex) -> None:
+    """頁首的「主要原因／另有」兩行，**不畫資料截至日**（BL-0525 Batch C：🌍 頁 D3 只禁頁級日期，沒授權移除這兩行；
+    它們改放進「▸ 各項資料狀態」最前面）。內容與 `render_page_header` 同一支 `page_health.header_view`、同一份記錄；
+    沒有主要原因（含「只有比較值尚未設定」的單行寫法）時什麼都不畫。"""
+    view = page_health.header_view(page_health.recorded(st.session_state, slug), as_of=as_of)
+    rows = []
+    if view["inline"]:
+        if view["main"]:
+            rows.append(f'<div style="color:{tone_hex("中性")}">{_esc(view["main"])}</div>')
+    else:
+        rows.append(f'<div style="color:{tone_hex(HEADER_TONES[view["main_kind"]])}">{_esc(view["main"])}</div>')
+        if view["others"]:
+            parts = page_health.HEADER_SEP.join(
+                f'<span style="color:{tone_hex(OTHER_TONES[kind])}">{_esc(text)}</span>' for kind, text in view["others"])
+            head, _sep, _rest = page_health.TEXT_OTHERS.partition("{parts}")
+            rows.append(f"<div>{_esc(head)}{parts}</div>")
+    if rows:
+        st.markdown(f'<div class="v2-status-reasons" role="status">{"".join(rows)}</div>', unsafe_allow_html=True)
+
+
 def render_attention(items, *, tone_hex, label_class: str) -> None:
     """③需要注意（Phase 3 P1-④；`ui_v2/sections.py::attention_items` 的回傳）：段標籤＋逐項一行，預設展開（不是展開區）。
     一項都沒有 → 整段不畫（之七其一第 2 條：沒有這類項目時不為了有內容而列）。"""

@@ -119,8 +119,15 @@ def _date_chip_text(domain: dict) -> str:
 def _status_card(title: str, domain: dict) -> dict:
     """非 ok 的卡：狀態 chip（符號＋字）＋一句短原因；原文不上一般畫面（44 P0-①）。"""
     error = domain["status"] == logic.STATE_ERROR
+    # 資料未備／業務例外的 L2 `reason`（例：歷史不足、同一觀測日重複、沒有任何通過收盤規則的觀測）舊版常駐在卡上（「⬜ 資料未備：<reason>」）；
+    # 新版主卡只留 chip＋一句短原因，reason 一字不刪、放進 detail「限制」組（可展開取得）。
+    # 取數失敗的 reason 是原文：44 P0-① 規定一般畫面（含展開區）不印，原文走跨頁原始訊息 → 設定與診斷頁的進階診斷
+    # （`market_section.raw_entries` 已記），所以只有非失敗狀態才進 detail。
+    reason = domain.get("reason")
+    limits = [f"原因：{reason}"] if reason and not error else []
     detail = P.detail_model(
         source=[f"狀態：{MS.status_text(domain)}"],
+        limits=limits,
         where=[TEXT_WHERE_ERROR if error else TEXT_WHERE_UNAVAILABLE],
     )
     return {"kind": "status", "title": title, "chips": [P.chip(MS.status_text(domain), "紅" if error else "灰")],

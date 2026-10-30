@@ -815,10 +815,10 @@ def _render_market_top(view: dict, dataset: dict, light: dict, settings_page=Non
     _render_secondary(view, dataset)
 
 
-def _render_market_rest(view: dict, light: dict) -> None:
+def _render_market_rest(view: dict, light: dict, as_of=None) -> None:
     """第三眼：「▸ 尚未取得」群組與「▸ 各項資料狀態」（依據卡與 ③ 在它們之前、④ 詳細資料在它們之後，由 `render` 排）。"""
     _render_missing_group(view)
-    _render_status_detail(view, light)
+    _render_status_detail(view, light, as_of)
 
 
 def _render_missing_group(view: dict) -> None:
@@ -832,9 +832,10 @@ def _render_missing_group(view: dict) -> None:
         st.markdown(f'<div class="mkt-trend-grid">{cards}</div>', unsafe_allow_html=True)
 
 
-def _render_status_detail(view: dict, light: dict) -> None:
-    """「▸ 各項資料狀態」：市場結論（各 domain 狀態列）與原結論燈下那句說明。"""
+def _render_status_detail(view: dict, light: dict, as_of=None) -> None:
+    """「▸ 各項資料狀態」：頁首「主要原因／另有」（不含日期）、市場結論（各 domain 狀態列）與原結論燈下那句說明。"""
     with st.expander(overview.STATUS_DETAIL_TITLE, expanded=False):
+        health_view.render_header_reasons("mkt", as_of=as_of, tone_hex=theme.tone_hex)
         st.markdown(_conclusion_html(view), unsafe_allow_html=True)
         if light.get("answers"):
             st.markdown(f'<div class="mkt-mv-note">{_esc(light["answers"])}</div>', unsafe_allow_html=True)
@@ -1047,7 +1048,7 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
             sections.attention_items(model, "mkt"), tone_hex=theme.tone_hex, label_class="mkt-layer-label"
         )
         if new_layout:
-            _render_market_rest(market_view, light)
+            _render_market_rest(market_view, light, as_of)
         # ④詳細資料（預設收合）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
         st.markdown(f'<div class="mkt-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
     st.markdown(
