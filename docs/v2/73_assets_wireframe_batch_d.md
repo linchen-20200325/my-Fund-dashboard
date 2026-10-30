@@ -753,6 +753,7 @@
 > 追加段，**不改上方任何裁示文字**（第 11 節 D-8 列與 `DEC-2026-10-30-02` 照舊）。追蹤於 `docs/BACKLOG.md` BL-0525 子項 BL-0525-OAUTH；登記不構成動工授權（`CLAUDE.md` §-1）。
 > 出處：客戶 D-8 裁示（逐字見 `docs/evidence/decisions/2026-10-30_batch_d_d1_d12_rulings.md`）：「目前 callback 只能回 "/set" 的問題：先做 read-only 技術查證。」若只是 navigation return-state 能在既有 OAuth contract 內安全解，可提出最小方案；若涉及 scope、redirect URI、callback contract、credential、OAuth architecture，則停在新 Gate；不要在 Batch D 順手改 OAuth。
 > v2（2026-10-30）：依另一輪獨立稽核意見逐點對碼回修（分支 `9d0da7d2`）：補 15.1 第 5～8 點、改寫方案 A／B 的風險欄、增列方案 G、補資安級稽核與 BL-0465 交叉引用；**推薦仍是 F**（重新評估的理由見 15.2）。本段由文件組單組產出，未經再複驗（`CLAUDE.md` §-2 規則 6）。
+> v3（2026-10-30）：依再一輪獨立稽核意見逐點對碼回修（分支 `4dec17e0`）：15.1 第 8 點補連結字樣與舊頁名、方案 A 補「pending 在 callback 當下就被取出」、方案 G 的推論改註 grep 依據、F 的一鍵回頁補前提（多頁入口）；15.3 第 5 點前半結案。**推薦仍是 F**。本段同樣由文件組單組產出，未經再複驗。
 
 ### 15.1 查證事實（讀碼，分支 `3ea336fc`；第 5～8 點為 v2 依 `9d0da7d2` 讀碼；唯讀，沒有改任何程式）
 
@@ -763,19 +764,19 @@
 5. **`redirect_uri` 只有一個**：`infra/personal_oauth.py::ClientConfig` 只有一個 `redirect_uri` 欄位，由 `load_client_config` 從部署 secrets 的 `[google_oauth]` 區塊讀入；`build_authorize_url` 與 `exchange_code` 兩處送的都是同一個 `cfg.redirect_uri`。OAuth 授權碼流程要求換 token 時送的 `redirect_uri` 與授權請求時相同（協定規定，非本 repo 程式）。
 6. **同一 session 重用未過期的 pending**：`begin_authorization` 在同一 session 已有未過期、仍在 store 內的 pending state（`KEY_AUTH_PENDING_STATE`／`KEY_AUTH_PENDING_EXPIRES`，經 `_peek_pending` 確認）時重用它，不新登記。
 7. **既有防護**：待確認登入的 TTL 為 `PENDING_LOGIN_TTL_SEC` 300 秒（pending state 本身 `PENDING_TTL_SEC` 600 秒，見第 1 點）；`ui_v2/set/source.py::_handle_oauth_callback` 先把 `code`／`state` 等 callback 參數從網址拿掉、再處理；`_KEY_CB_SEEN` 記下這個工作階段已處理過的 state，重跑時同一個 state 不送第二次（防重放）。
-8. **從設定頁回合併頁的既有路徑**：`ui_v2/app_preview.py::main` 在 `navigation.run()` 之前畫 `shell.render`（桌機側欄＋手機底部導覽，四頁連結），設定頁也在內，所以登入確認後點導覽的「💼 我的資產」即可回去；設定頁的「各頁資料狀態總表」另有每列「前往該頁」（`ui_v2/set/page.py::_render_page_health` 的 `st.page_link`；`hld`／`alo` 兩列都指向 `ast`，`app_preview.py::_page_links`）。
+8. **從設定頁回合併頁的既有路徑**：`ui_v2/app_preview.py::main` 在 `navigation.run()` 之前畫 `shell.render`（桌機側欄＋手機底部導覽，四頁連結），設定頁也在內，所以登入確認後點導覽的「💼 我的資產」即可回去；設定頁的「各頁資料狀態總表」另有每列「前往該頁」（`ui_v2/set/page.py::_render_page_health` 的 `st.page_link`；`hld`／`alo` 兩列都指向 `ast`，`app_preview.py::_page_links`）。v3 補（依 `4dec17e0` 讀碼）：那兩枚連結的字樣是 `page_health.TEXT_GOTO`「前往{page}」配 `page_health.PAGE_NAMES` 的**舊頁名**，畫成「前往💼 我的持股」「前往⚖️ 資產配置」，去處都是 💼 我的資產（`ast`）；`page_health.summary_rows` 依 `PAGE_ORDER` 列出每一頁（沒開過的頁也列），所以只要有傳 `pages`，OAuth 導回後的新 session 裡這些連結照樣出現。舊頁名是已知缺口（`docs/v2/71`〈沒做或沒驗〉、BACKLOG BL-0525 列尾），本批不改程式。前提：以上兩條路徑都只在多頁入口 `ui_v2/app_preview.py` 成立；單頁入口 `ui_v2/app_set_live.py`（BL-0465 的另一個 callback 落點）沒有殼層導覽，也沒有傳 `pages`（總表改畫「這個入口只有這一頁，沒有換頁連結。」）。
 
 ### 15.2 方案
 
 | 方案 | 優點 | 缺點 | 風險 |
 |---|---|---|---|
-| **F｜維持現況退路**（合併頁只重用 picker；登入在設定頁） | 零 OAuth 契約變更、可逆；字樣沿用既有 | 從合併頁要登入須先換到設定頁，登入確認後不會自動回到合併頁（回去仍是殼層導覽一鍵，15.1 第 8 點） | 低：沒有新字樣、沒有新轉址 |
-| **A｜pending 記錄加 `return_slug`，確認後 `switch_page` 回原頁** | 登入確認後自動回到發起頁 | 要改 `_PENDING` 的 value 結構與 `register_pending`／`consume_pending` 的介面，並在確認動作後加換頁 | 動到 callback contract／OAuth architecture，依 D-8 必須停在新 Gate。**pending 重用**：`begin_authorization` 會重用同一 session 未過期的 pending state（15.1 第 6 點），使用者若先在甲頁發起登入、再從乙頁發起，存下的 `return_slug` 仍是甲頁（過期的回頁目標），須一併改重用規則或把 slug 綁在每次發起上。**轉址風險的精確說法**：slug 只存在伺服器端 pending 記錄、確認後經 `st.switch_page` 換頁時，外部 open-redirect 風險低（INFERENCE：pinned streamlit 1.59 的 `switch_page` 會不會拒絕未註冊頁，本組未驗；`app_preview.py` 註解只記載 `st.page_link` 會驗是否為已註冊頁）；slug 放進網址或 OAuth `state` 參數時風險才是真的；不論哪一種，slug 仍須以頁面白名單驗證。多 process 時 pending 本來就會失效（模組既有的單 process 假設） |
+| **F｜維持現況退路**（合併頁只重用 picker；登入在設定頁） | 零 OAuth 契約變更、可逆；字樣沿用既有 | 從合併頁要登入須先換到設定頁，登入確認後不會自動回到合併頁（回去仍是殼層導覽一鍵，15.1 第 8 點；只在多頁入口成立，單頁 `app_set_live` 沒有殼層導覽） | 低：沒有新字樣、沒有新轉址 |
+| **A｜pending 記錄加 `return_slug`，確認後 `switch_page` 回原頁** | 登入確認後自動回到發起頁 | 要改 `_PENDING` 的 value 結構與 `register_pending`／`consume_pending` 的介面，並在確認動作後加換頁。v3 補：`consume_pending` 在 callback 當下（`set/source.py::_handle_oauth_callback` → `personal_session.complete_login` → `personal_oauth.complete_authorization` → `exchange_code`）就把 pending 記錄取出，比使用者按［確認］早；所以 `return_slug` 還得再帶進待確認登入的狀態（`session_state[KEY_PENDING_LOGIN]`），才撐得到確認那一步——這更說明 A 會改契約 | 動到 callback contract／OAuth architecture，依 D-8 必須停在新 Gate。**pending 重用**：`begin_authorization` 會重用同一 session 未過期的 pending state（15.1 第 6 點），使用者若先在甲頁發起登入、再從乙頁發起，存下的 `return_slug` 仍是甲頁（過期的回頁目標），須一併改重用規則或把 slug 綁在每次發起上。**轉址風險的精確說法**：slug 只存在伺服器端 pending 記錄、確認後經 `st.switch_page` 換頁時，外部 open-redirect 風險低（INFERENCE：pinned streamlit 1.59 的 `switch_page` 會不會拒絕未註冊頁，本組未驗；`app_preview.py` 註解只記載 `st.page_link` 會驗是否為已註冊頁）；slug 放進網址或 OAuth `state` 參數時風險才是真的；不論哪一種，slug 仍須以頁面白名單驗證。多 process 時 pending 本來就會失效（模組既有的單 process 假設） |
 | **B｜`redirect_uri` 改指向各頁** | 不必回跳 | 各頁都要處理 callback；Google 端要登記多個 redirect URI | 涉及 redirect URI 與 credential 設定，依 D-8 必須停在新 Gate。**也改 pending／callback 契約**：`exchange_code` 必須送與 `build_authorize_url` 相同的 `redirect_uri`，而 `ClientConfig` 只有一個（15.1 第 5 點）；改成各頁 URI 需要憑證設定 schema 變更、Google console 登記多個 URI、每筆 pending 記住當次用的是哪一個 URI。callback 處理分散到多頁，擴大攻擊面（推論）；並推翻 BL-0465 的部署前提（導回必須落在 `/set`） |
-| **G｜設定頁按［確認］後顯示一個靜態連結「回到 💼 我的資產」**（v2 增列，最小選項） | 不帶任何 return-state、不改 OAuth、不改 callback；確認後一鍵回合併頁，提示放在確認當下 | 連結固定指向 💼，不記得使用者從哪一頁來（INFERENCE：讀 Active Sheet 的內容現在只在 💼）；屬 UI 新增元件與新字樣，依草稿先行（`CLAUDE.md` §-1.5.4）須先出線框送客戶 | 低：沒有轉址參數；與殼層導覽、資料狀態總表的「前往該頁」重疊，同一個去處在畫面上多出一次 |
+| **G｜設定頁按［確認］後顯示一個靜態連結「回到 💼 我的資產」**（v2 增列，最小選項） | 不帶任何 return-state、不改 OAuth、不改 callback；確認後一鍵回合併頁，提示放在確認當下 | 連結固定指向 💼，不記得使用者從哪一頁來（INFERENCE：讀 Active Sheet 的內容現在只在 💼；v3：單次 grep 支持——`ui_v2/mkt`、`ui_v2/exp` 沒有 `active_gate`／`NoActiveSource`／`load_alo_tables_active` 的引用，單組單次 grep，未窮舉）；屬 UI 新增元件與新字樣，依草稿先行（`CLAUDE.md` §-1.5.4）須先出線框送客戶 | 低：沒有轉址參數；與殼層導覽、資料狀態總表的「前往該頁」重疊，同一個去處在畫面上多出一次 |
 
 AI 總管推薦：**F（維持現況退路）**（v2 加入 G 後重新評估，推薦不變）。理由：
-1. **F 已有一鍵回去的路**：設定頁本來就畫殼層導覽（15.1 第 8 點），登入確認後點「💼 我的資產」即回合併頁；可逆、零契約變更，已滿足 D-8「selector 頁頂獨立一列」與「不要在 Batch D 順手改 OAuth」。
+1. **F 已有一鍵回去的路**：設定頁本來就畫殼層導覽（15.1 第 8 點），登入確認後點「💼 我的資產」即回合併頁（v3 補：這條論證以部署多頁入口 `app_preview` 為前提，單頁 `app_set_live` 沒有殼層導覽；資料狀態總表那兩枚連結寫的是舊頁名，去處對、字樣過期，對這條論證略為削弱，主要支撐仍是殼層導覽——`app_preview.main` 在每一頁〔含 `/set`〕的 `navigation.run()` 之前畫 `shell.render`）；可逆、零契約變更，已滿足 D-8「selector 頁頂獨立一列」與「不要在 Batch D 順手改 OAuth」。
 2. **G 換來的只是確認當下多一個提示**，代價是一個新元件、一句新字樣、一輪線框審查，而且同一個去處在畫面上多出一次（與殼層導覽、資料狀態總表重疊）。依最小必要變更（`PROJECT_RULES.md` 第 9 節），在客戶表示現況不夠之前不做。**若客戶認為「確認後沒有明確提示回去」就是要解決的問題，推薦 G 而不是 A**：G 不碰 OAuth、可逆、不需要資安級稽核。
 3. **A 是最小的「回原頁」方案**，但它改的是 OAuth 模組介面與 pending 重用規則，不屬「在既有 OAuth contract 內安全解」，列為後續 Gate（BL-0525-OAUTH），待客戶裁示後才可動。**B 不推薦**。
 4. **A 或 B 若要做，屬資安等級**：依客戶治理第 3 項（`DEC-2026-10-16-05`）須 2 組獨立稽核；並須與 BL-0465 併讀（部署的 `redirect_uri` 必須指向設定頁；A 保留這個前提，B 推翻它）。
@@ -787,5 +788,5 @@ AI 總管推薦：**F（維持現況退路）**（v2 加入 G 後重新評估，
 2. 沒有實跑登入流程、沒有在 Cloud 上驗證導回行為。
 3. A、B 的風險欄中標「推論」或 INFERENCE 者沒有驗證；「A 是最小的回原頁方案」是讀法，沒有窮舉其他做法。
 4. （v2）pinned streamlit 1.59 的 `st.switch_page` 遇到未註冊頁時的行為沒有查（本環境沒有安裝 streamlit，無法讀套件原始碼）。
-5. （v2）OAuth 導回後是新的 session：資料狀態總表讀的是本次瀏覽記下的狀態（`ui_v2/set/page.py` 該段註解），新 session 裡「前往該頁」那幾列會不會出現沒有驗；殼層導覽在手機底部導覽的實際樣子沒有看畫面。
-6. （v2）「讀 Active Sheet 的內容現在只在 💼」是讀法，沒有逐頁確認 🌍／🔍 不讀 Active Sheet。
+5. （v2）OAuth 導回後是新的 session：資料狀態總表讀的是本次瀏覽記下的狀態（`ui_v2/set/page.py` 該段註解），~~新 session 裡「前往該頁」那幾列會不會出現沒有驗~~ → v3 結案（讀碼）：`summary_rows` 依 `PAGE_ORDER` 列出每一頁，沒開過的頁也列，所以連結照樣出現（字樣是舊頁名，見 15.1 第 8 點）；殼層導覽在手機底部導覽的實際樣子仍沒有看畫面。
+6. （v2）「讀 Active Sheet 的內容現在只在 💼」是讀法，沒有逐頁確認 🌍／🔍 不讀 Active Sheet。（v3：單次 grep 支持此讀法，見方案 G 列；仍未逐頁讀碼。）
