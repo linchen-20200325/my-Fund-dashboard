@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import functools
+import logging
 import re
 from datetime import datetime, timezone
 
@@ -18,6 +19,8 @@ import streamlit as st
 
 from .. import active_gate, health, health_view, plain, presentation_view, readonly, sections, symbols
 from . import fixtures, live, logic, theme
+
+_log = logging.getLogger(__name__)
 
 _MAX_PROBE_WIDTH = 2000
 
@@ -943,6 +946,8 @@ def record_live_error(exc: BaseException, mask_error) -> str:
     plain_line, raw = plain.plain_error_line(error_line, page="hld")
     plain.record_raw(st.session_state, "hld", raw, datetime.now(timezone.utc))
     health_view.record_load_failure("hld", error_line)   # BL-0250 批次 3-B：各頁資料狀態總表的順位 1
+    # `CLAUDE.md` 第三節第三小節：接住例外至少要 log（體例同 `ui_v2/alo/page.py::record_live_error`；原文已經過 `mask_error`，沒傳時只有型別）。
+    _log.warning("ui_v2 hld 正式頁載入或組模型失敗：%s", error_line)
     return plain_line
 
 
@@ -1082,7 +1087,11 @@ def prepare_live(*, load_live) -> dict:
     # 新 B UI 第一階段唯讀（客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6）：寫 `user_setting` 的「存檔」不畫，
     # 叫人存檔的說明一併改寫（`ui_v2/readonly.py`）。在收集與記錄之後做，判定與總表不受影響。
     readonly.strip_write_controls(model)
-    return {"model": model, "counts_line": counts_line, "quiet": quiet, "details": details, "as_of": as_of}
+    # `holding_error`：持倉來源本身有錯（整張讀不到，或部分分頁被略過而 `errors["holding"]` 有字）。只把 `dataset["errors"]["holding"]` 這個
+    # 既有旗標原樣交出去（HLD 自己的判定一個都不動）；合併頁的主判讀靠它判斷「持有檔數」建立在不完整的持倉上，不得當成完整。
+    holding_error = bool(loaded["dataset"].get("errors", {}).get("holding"))
+    return {"model": model, "counts_line": counts_line, "quiet": quiet, "details": details, "as_of": as_of,
+            "holding_error": holding_error}
 
 
 @health_view.guard_page("hld")   # 3-B 第二輪稽核回修可選 3：畫頁崩潰時總表不留上一筆正常記錄

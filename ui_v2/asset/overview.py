@@ -48,33 +48,42 @@ TEXT_UNDECIDABLE_COUNT = "持有檔數無法判定"
 TEXT_UNDECIDABLE_GAP = "配置差距無法判定"
 
 
+def hero_holding_count(n, holding_error: bool):
+    """主判讀用的持有檔數：持倉來源本身有錯（`prepare_live` 回傳的 `holding_error`＝`dataset["errors"]["holding"]` 有字：整張讀不到，
+    或部分分頁被略過）時，`HLD-2` 列出的檔數建立在不完整的持倉上，不能當成「持有 n 檔」→ None（「持有檔數無法判定」，D-10：資料不足照實說）。
+    沒有持倉來源錯誤（含只是門檻未設、燈紅是別的原因）→ 原樣用 `sections.hld_holding_count` 的 n。HLD 自己的判定、`HLD-2` 的列一個都不動。"""
+    return None if holding_error else n
+
+
 def has_unevaluated_category(alo2) -> bool:
     """`ALO-2` 有沒有任何一列沒評估到差距（`_diff` 為 None）：目標比重留空、持倉類別沒有目標（例：未分類）、或比重基準值缺。
     只讀 `ALO-2` 已算出的 `_diff`，不另算；沒有 `ALO-2`（配置那一側沒載入）或沒有任何列 → False（沒有「被漏掉的類別」可說，
     該情形的字樣由 `ALO-0` 自己那一行承擔）。`docs/v2/74` A6m（既有缺陷 F-13）：`ALO-0` 在這幾種情形仍寫「各類別皆在容許帶內」，
-    本頁一句主判讀不複述那一句。"""
+    本頁一句主判讀不複述那一句。
+    ⚠️ 只涵蓋 A6m 條件 (1)(2)；條件 (3)（持倉來源有略過的 ALO 分頁）**沒有**涵蓋：`prepare_live` 的回傳不帶 `notes["skipped"]`，
+    已記在 `docs/v2/71`（稽核回修〈沒做或沒驗〉第 4 點）與 `docs/v2/74`（A6m、檔頭 v5 更正），待客戶裁示後再接。"""
     return any(row["_diff"] is None for row in (alo2 or {}).get("_rows") or ())
 
 
 def hero_sentence(n, alo0, *, incomplete: bool = False) -> str:
     """「持有 ‹n› 檔基金；目前最大配置差距在 ‹類別›。」
 
-    - `n`：`sections.hld_holding_count(hld_model)`（持有檔數 int，或 None＝`HLD-2` 沒列出任何一檔）。None → 「持有檔數無法判定」，
-      不從別處補數、不把 missing 推成 0 或正常；門檻未設或燈紅時 `n` 仍照 `HLD-2` 列出的檔數（它與門檻無關）。
-    - `alo0`：`ALO-0` 的 block（或 None＝配置那一側整個沒載入）。黃燈且有 `_leaders` → 點名全部並列類別（沿用 `ALO-0` 已算出的全列規則）；
-      「各類別皆在容許帶內」→ 照 `ALO-0` 的字（不編「差距在 X」）；其餘（沒有持倉、目標或容許帶未設、讀不到…）→ 「配置差距無法判定」，
-      原因由 `ALO-0` 自己那一行承擔。不寫加碼／減碼、不寫方向、不新算差距。
-    - `incomplete`：`has_unevaluated_category(ALO-2)`。為真時**不得**寫「各類別皆在容許帶內」（有類別沒評估到，不能說皆在帶內），
-      也不點名「最大差距在 X」（最大值取自不完整的類別集合）→ 一律「配置差距無法判定」（F-13 的 missing 被讀成 normal）。
+    - `n`：`hero_holding_count(sections.hld_holding_count(hld_model), holding_error)`（持有檔數 int，或 None）。None → 「持有檔數無法判定」，
+      不從別處補數、不把 missing 推成 0 或正常；門檻未設或燈紅（持倉來源沒有錯）時 `n` 仍照 `HLD-2` 列出的檔數（它與門檻無關）。
+    - `alo0`：`ALO-0` 的 block（或 None＝配置那一側整個沒載入）。黃燈且有 `_leaders` → 點名全部並列類別（沿用 `ALO-0` 已算出的全列規則，
+      與 parent 相同）；「各類別皆在容許帶內」→ 照 `ALO-0` 的字（不編「差距在 X」）；其餘（沒有持倉、目標或容許帶未設、讀不到…）→
+      「配置差距無法判定」，原因由 `ALO-0` 自己那一行承擔。不寫加碼／減碼、不寫方向、不新算差距。
+    - `incomplete`：`has_unevaluated_category(ALO-2)`。**只作用在「各類別皆在容許帶內」那一句**：`ALO-0` 寫皆在帶內、但有類別沒評估到
+      → 不得照抄（F-13 的 missing 被讀成 normal）→ 「配置差距無法判定」。`ALO-0` 已點名類別（A7，黃燈有 `_leaders`）時**照 parent 點名**，
+      不被 `incomplete` 蓋掉——那是 `ALO-0` 同一個畫面上已經算出來的規則結果，主判讀不得說「無法判定」去否定它、淡化真實的偏離。
+      （總管讀法，待客戶確認；A7 的「N 個百分點」可能建立在不完整的分母上，見 `docs/v2/74` 的 A7 列（v5 補），該句仍沿 `ALO-0` 原字、本頁不另改。）
     """
     head = f"持有 {n} 檔基金" if n else TEXT_UNDECIDABLE_COUNT
     leaders = tuple((alo0 or {}).get("_leaders") or ())
-    if incomplete:
-        tail = TEXT_UNDECIDABLE_GAP
-    elif leaders:
+    if leaders:
         tail = f"目前最大配置差距在 {'、'.join(leaders)}"
     elif alo0 is not None and alo0.get("text") == alo_logic.TEXT_ALL_IN_BAND:
-        tail = alo_logic.TEXT_ALL_IN_BAND
+        tail = TEXT_UNDECIDABLE_GAP if incomplete else alo_logic.TEXT_ALL_IN_BAND
     else:
         tail = TEXT_UNDECIDABLE_GAP
     return f"{head}；{tail}。"
@@ -230,18 +239,24 @@ def container_title(name, codes, titles: dict, states: dict | None = None) -> st
 
 
 # 單頁展開區標題「—」後面那一句，凡帶下列字樣就是在說「這一塊現在不完整」（字樣全部是各頁 `logic`／`sections` 既有的；本頁不新編）。
-STATE_MARKERS = (sections.SYMBOL_ERROR, sections.SYMBOL_MISSING, "取數失敗", "取不到", "尚未設定", "資料未備", "缺 ", "被排除")
+STATE_MARKERS = (sections.SYMBOL_ERROR, sections.SYMBOL_MISSING, sections.SYMBOL_UNDECIDABLE, "取數失敗", "取不到", "未設定", "資料未備",
+                 "缺 ", "被排除", "門檻 0 列")
+# 塊上本來就有的「這一塊有東西沒到位」旗標（非空串列＝有狀態）：先看旗標、再看字樣。`ALO-1` 的 `unset_lines`（目標比重未設）、
+# `ALO-4` 的 `unassigned_lines`（有基金未指派類別）／`bucket_unset_lines`（類別名稱未設）／`mismatch_lines`（類別名稱對不上）。
+STATE_LIST_FLAGS = ("unset_lines", "unassigned_lines", "bucket_unset_lines", "mismatch_lines")
 
 
 def block_state(block: dict, summary) -> str | None:
     """一塊在單頁展開區標題上「—」後面那一句（`summary`）→ 這一塊現在是不是有狀態：有 → 回那一句，沒有 → None。
 
-    判斷只讀塊上既有的東西，不新判定：佔位（`placeholder`）、紅／灰色調（`_tone`）、
+    判斷只讀塊上既有的東西，不新判定：佔位（`placeholder`）、紅／灰色調（`_tone`）、`STATE_LIST_FLAGS` 的旗標、
     或那一句本身帶 `STATE_MARKERS` 的字樣（字樣判斷是啟發式：漏掉的狀態只會讓標題比單頁短，不會多編狀態）。正常的塊（類別數、檔數、列數、設定摘要）回 None，容器標題照舊只列標題。
+    已知還沒涵蓋的字樣見 `docs/v2/71`（稽核回修第二輪〈沒做或沒驗〉）；`tests/ui_v2/test_ast_page.py` 對 ALO／HLD 全部 fixture 情境逐塊釘住。
     """
     if not isinstance(summary, str) or not summary.strip():
         return None
-    if block.get("placeholder") or block.get("_tone") in ("紅", "灰") or any(m in summary for m in STATE_MARKERS):
+    if (block.get("placeholder") or block.get("_tone") in ("紅", "灰") or any(block.get(flag) for flag in STATE_LIST_FLAGS)
+            or any(m in summary for m in STATE_MARKERS)):
         return summary
     return None
 

@@ -224,6 +224,11 @@ def mark_hld1_rows(model: dict) -> int:
     return count
 
 
+class HoldingCountsInconsistent(ValueError):
+    """持倉體檢計數不成立（n < m ＋ j）。是 `ValueError` 的子類別，所以單頁 `render` 原有的行為不變（照舊往上拋、由 `guard_page` 接）；
+    合併頁（`ui_v2/asset/page.py::_prepare`）只接這一種，其餘 `ValueError` 是本檔案自己的 bug、照舊往上浮出，不畫成取數失敗。"""
+
+
 def hld_counts(model: dict):
     """持倉體檢 ① 的三個計數那一行；不該列時回 None。字串由 `hld_count_values` 的 (n, m, j) 組成（BL-0525 Batch D 抽出，算法不變）。"""
     values = hld_count_values(model)
@@ -261,7 +266,7 @@ def hld_count_values(model: dict):
         return None
     m, j = light["_deviation_count"], hld1["_unevaluated_count"]
     if n < m + j:
-        raise ValueError(f"持倉體檢計數不成立：持有 {n} 檔 < 需要注意 {m} 檔 ＋ 無法判定 {j} 檔")
+        raise HoldingCountsInconsistent(f"持倉體檢計數不成立：持有 {n} 檔 < 需要注意 {m} 檔 ＋ 無法判定 {j} 檔")
     return n, m, j
 
 

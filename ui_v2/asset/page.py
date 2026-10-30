@@ -133,27 +133,44 @@ def _render_source_row(picker_live, picker_data, no_active: bool, settings_page)
 
 
 def _prepare(page_mod, slug: str, live: dict) -> dict:
-    """一側的「載入 → 組模型 → 資料狀態收集」。一側的任何失敗都只讓**這一側**改畫狀態、另一側照常：
-    `LiveFailed`（去拿或組模型失敗）與 `ValueError`（組出來的模型不成立，例：持倉體檢計數 n < m ＋ j；`prepare_live` 內的
-    `sections.hld_counts` 會拋）一律原文進進階診斷、記進總表、寫 log（`record_live_error`），一般畫面只畫一句狀態——不吞、不往另一側擴散。"""
+    """一側的「載入 → 組模型 → 資料狀態收集」。一側的取數失敗只讓**這一側**改畫狀態、另一側照常：
+    `LiveFailed`（`prepare_live` 內「去拿」與「組模型」兩步失敗；已包好）與 `sections.HoldingCountsInconsistent`
+    （`prepare_live` 內 `sections.hld_counts` 的持倉體檢計數不成立：n < m ＋ j）一律原文進進階診斷、記進總表、寫 log（`record_live_error`），
+    一般畫面只畫一句狀態——不吞、不往另一側擴散。
+
+    **只接這兩種。** `prepare_live` 在 try 之外（或其他地方）拋的其他例外（包括別的 `ValueError`）是本檔案自己的 bug，不是取數失敗，
+    不得畫成取數失敗——照舊往上浮出，由 `render` 的 `_record_collect_failure` 記一筆再往上拋（同單頁 `guard_page` 的體例）。
+    `NoActiveSource` 是第三種狀態，不是失敗（J-13）。"""
     try:
         if slug == "alo":
             prep = page_mod.prepare_live(load_live=live["load"], save_live=live.get("save"))
         else:
             prep = page_mod.prepare_live(load_live=live["load"])
-        holding_n = sections.hld_holding_count(prep["model"]) if slug == "hld" else None
     except active_gate.NoActiveSource:
         return {"state": "no_active", "line": active_gate.TEXT_NO_ACTIVE}
     except page_mod.LiveFailed as failed:   # 不是吞：原文進進階診斷、記進總表（同單頁）；區段改畫一句狀態
         return {"state": "error", "line": page_mod.record_live_error(failed.exc, live.get("mask"))}
-    except ValueError as exc:   # 不是吞：同上（只是這一種單頁沒人接、會炸整頁；合併頁不讓它拖垮另一側）
+    except sections.HoldingCountsInconsistent as exc:   # 不是吞：同上（這一種單頁沒人接、會炸整頁；合併頁不讓它拖垮另一側）
         return {"state": "error", "line": page_mod.record_live_error(exc, live.get("mask"))}
+    holding_n = None
+    if slug == "hld":   # 持倉來源本身有錯時 n 建立在不完整持倉上 → 不當成「持有 n 檔」（OV.hero_holding_count；D-10）
+        holding_n = OV.hero_holding_count(sections.hld_holding_count(prep["model"]), prep["holding_error"])
     return {"state": "ok", "holding_n": holding_n, **prep}
+
+
+def _state_div(side: dict, text: str) -> None:
+    """一側沒載入的那一句：載入失敗（紅、`role="alert"`）與「沒有 Active Sheet」（灰、`role="status"`，同 `active_gate.render_no_active_status`）
+    分開畫——J-13 的三種狀態（有資料／沒有 Active／系統出錯）在合併頁混合情形下也不能被畫成同一種紅。"""
+    if side["state"] == "no_active":
+        st.markdown(f'<div class="ast-status" role="status" style="color:{theme.tone_hex("灰")}">{_esc(text)}</div>',
+                    unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="ast-err" role="alert">{_esc(text)}</div>', unsafe_allow_html=True)
 
 
 def _error_line(side: dict) -> None:
     """這一側沒載入的完整那一句（頁首每側只畫一次）：載入失敗＝一般畫面那句取數失敗、沒有 Active＝既有的「⬜ 尚未選定持倉資料來源」。"""
-    st.markdown(f'<div class="ast-err" role="alert">{_esc(side["line"])}</div>', unsafe_allow_html=True)
+    _state_div(side, side["line"])
 
 
 def _short_state(side: dict) -> str:
@@ -166,7 +183,7 @@ def _side_notice(side: dict, label=None) -> None:
     text = _short_state(side)
     if label:
         text = f"{label}　{text}"
-    st.markdown(f'<div class="ast-err" role="alert">{_esc(text)}</div>', unsafe_allow_html=True)
+    _state_div(side, text)
 
 
 def _label(text: str) -> None:
@@ -389,7 +406,7 @@ def _render_group(name, codes, alo: dict, hld: dict, on_save) -> None:
         code = codes[0]
         side = sides[code[:3]]
         if side["state"] != "ok":
-            st.markdown(f'<div class="ast-err" role="alert">{_esc(titles[code])}　—　{_esc(states[code])}</div>', unsafe_allow_html=True)
+            _state_div(side, f"{titles[code]}　—　{states[code]}")
         elif code.startswith("ALO"):
             _render_alo_block(side, code, flat=False)
         else:
@@ -460,7 +477,9 @@ def _render(alo_live, hld_live, picker_live, settings_page) -> None:
     st.markdown(f'<div class="ast-title">{_esc(OV.PAGE_TITLE)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="ast-sub">{_esc(OV.PAGE_ANSWERS)}</div>', unsafe_allow_html=True)
     # 沒有 Active Sheet ＝ 明確的第三種狀態（批 3b-4 J-13）：不是 0、不是中性、不是空持倉；總表記一筆「尚未設定：持倉資料來源」。
-    for slug in no_active_slugs:
+    # 整頁畫成「尚未選定」（沒有任何一側失敗、至少一側沒有 Active）時，兩格都記尚未設定——使用者看到的整頁就是「尚未選定」，
+    # 總表不能還留著另一側「載入成功」的記錄（parent aba1ee1a 的行為）。混合（有一側失敗）時才只記沒有 Active 的那一側。
+    for slug in ("alo", "hld") if whole_page_no_active else no_active_slugs:
         active_gate.record_no_active(slug)
     if whole_page_no_active:
         return

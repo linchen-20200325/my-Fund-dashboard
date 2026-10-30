@@ -120,14 +120,43 @@ def test_hld_holding_count_與門檻燈色無關_沒列出任何一檔才是None
     assert sections.hld_holding_count(model) == expected
 
 
-@pytest.mark.parametrize("name", ["nothr", "fetchfail", "holdfail_nothr"])
-def test_門檻未設或燈紅_計數行不列_但持有檔數照HLD2列出的寫(name):
-    model = hld_logic.build_page_model(**hld_fixtures.scenario(name))
+def _hero_n(name):
+    """合併頁主判讀實際用的 n：`HLD-2` 列出的檔數，再經 `hero_holding_count` 看持倉來源有沒有錯（`prepare_live` 回的 `holding_error`
+    ＝ `dataset["errors"]["holding"]` 有字）。"""
+    scenario = hld_fixtures.scenario(name)
+    model = hld_logic.build_page_model(**scenario)
+    holding_error = bool(scenario["dataset"].get("errors", {}).get("holding"))
+    return model, OV.hero_holding_count(sections.hld_holding_count(model), holding_error), holding_error
+
+
+@pytest.mark.parametrize("name", ["nothr", "fetchfail"])
+def test_門檻未設或燈紅_計數行不列_但持倉來源沒有錯時持有檔數照HLD2列出的寫(name):
+    model, n, holding_error = _hero_n(name)
+    assert holding_error is False                              # 只是門檻未設／燈紅是別的原因：持倉來源本身沒有錯
     assert sections.hld_count_values(model) is None            # 「該不該列三個計數」的判定一字未動
-    n = sections.hld_holding_count(model)
     assert n == 3
     assert OV.hero_sentence(n, _alo0()) == "持有 3 檔基金；目前最大配置差距在 核心。"
     assert OV.TEXT_UNDECIDABLE_COUNT not in OV.hero_sentence(n, _alo0())
+
+
+# ~~原斷言（`holdfail_nothr` 與 `nothr`／`fetchfail` 併在上一個參數化裡）：`holdfail_nothr` 的主判讀寫「持有 3 檔基金」~~
+# → 稽核回修第二輪（B1，有意識的更正，不是漏刪）：持倉來源有錯（`errors["holding"]`：整張讀不到，或部分分頁被略過）時，
+#   `HLD-2` 列出的 3 檔建立在不完整的持倉上；寫「持有 3 檔」是把「部分讀到」說成「完整」（D-10：資料不足照實「無法判定」）。
+#   舊斷言在寫下當時為真（第一輪只想修「門檻未設也寫無法判定」那個方向）；被權衡掉的是它的前提——n 與「持倉來源有沒有錯」無關。
+#   `sections.hld_holding_count` 本身仍與門檻、燈色無關（見上方 `test_hld_holding_count_與門檻燈色無關…`，該函式 HLD 沒動）。
+def test_持倉來源有錯_主判讀的持有檔數無法判定_即使HLD2仍列著檔數():
+    model, n, holding_error = _hero_n("holdfail_nothr")
+    assert holding_error is True
+    assert sections.hld_holding_count(model) == 3              # HLD-2 照列這幾檔（HLD 自己的邏輯沒動）
+    assert n is None
+    s = OV.hero_sentence(n, _alo0())
+    assert s == "持有檔數無法判定；目前最大配置差距在 核心。" and "持有 3 檔" not in s
+
+
+def test_hero_holding_count_只看持倉來源有沒有錯_沒有錯就原樣_沒有n也不補():
+    assert OV.hero_holding_count(3, False) == 3
+    assert OV.hero_holding_count(3, True) is None
+    assert OV.hero_holding_count(None, False) is None
 
 
 def test_持有檔數同一檔兩張保單只數一檔_與計數行同一個單位():
@@ -154,14 +183,27 @@ def test_真fixture_哪些情境有類別沒評估到(name, incomplete):
     assert OV.has_unevaluated_category(alo_logic.find_block(model, "ALO-2")) is incomplete
 
 
-def test_F13_有類別沒評估到_不寫皆在容許帶內_也不點名最大差距():
+def test_F13_有類別沒評估到_不寫皆在容許帶內():
     in_band = _alo0(tone="灰", text=alo_logic.TEXT_ALL_IN_BAND, leaders=())
     s = OV.hero_sentence(3, in_band, incomplete=True)
     assert s == "持有 3 檔基金；配置差距無法判定。"
     assert alo_logic.TEXT_ALL_IN_BAND not in s
-    s = OV.hero_sentence(3, _alo0(), incomplete=True)           # 最大值取自不完整的類別集合
-    assert s == "持有 3 檔基金；配置差距無法判定。" and "最大配置差距在" not in s
     assert OV.hero_sentence(3, in_band) == f"持有 3 檔基金；{alo_logic.TEXT_ALL_IN_BAND}。"   # 完整評估時照 ALO-0 既有字
+
+
+# ~~原斷言：`incomplete=True` 時連 `ALO-0` 已點名的最大差距類別（A7）也蓋成「配置差距無法判定」（理由：最大值取自不完整的類別集合）~~
+# → 稽核回修第二輪（S5，總管讀法，待客戶確認；有意識的更正，不是漏刪）：舊斷言在寫下當時有它的理由（最大值確實可能取自不完整的類別集合），
+#   但 `ALO-0` 同一個畫面上緊接著就寫「衛星 與目標差 30.0 個百分點」；主判讀說「無法判定」是在否定一條已算出的規則結果、淡化真實的偏離。
+#   被權衡掉的是它的範圍——`incomplete` 只擋「各類別皆在容許帶內」那句（missing 被讀成 normal），不擋 A7 點名（照 parent）。
+#   A7 的「N 個百分點」可能建立在不完整的分母上（`docs/v2/74` 的 A7 列）：那是 `ALO-0` 的缺陷（F-13），本頁不改它、也不複述得比它更多。
+def test_S5_ALO0已點名類別_A7_不被incomplete蓋掉_照parent點名():
+    s = OV.hero_sentence(3, _alo0(), incomplete=True)
+    assert s == "持有 3 檔基金；目前最大配置差距在 核心。"
+    s = OV.hero_sentence(3, _alo0(leaders=("核心", "衛星")), incomplete=True)
+    assert s == "持有 3 檔基金；目前最大配置差距在 核心、衛星。"
+    # 其餘情形 incomplete 不改變結果：讀不到仍是無法判定
+    assert OV.hero_sentence(3, _alo0(tone="灰", text=alo_logic.TEXT_NO_TARGET, leaders=()), incomplete=True) == "持有 3 檔基金；配置差距無法判定。"
+    assert OV.hero_sentence(3, None, incomplete=True) == "持有 3 檔基金；配置差距無法判定。"
 
 
 def _inband_with_blank_target():
@@ -179,6 +221,7 @@ def test_F13_ALO0本身沒被改_目標留空的inband仍寫皆在容許帶內_�
     alo0, alo2 = alo_logic.find_block(model, "ALO-0"), alo_logic.find_block(model, "ALO-2")
     assert alo0["text"] == alo_logic.TEXT_ALL_IN_BAND            # 既有缺陷仍在 ALO-0（docs/v2/74 F-13 由客戶另裁；本批不改 ALO-0）
     assert OV.has_unevaluated_category(alo2) is True
+    assert alo0["_leaders"] == ()                                 # 帶內字樣、沒有點名類別 → 這條路才由 incomplete 擋下
     assert OV.hero_sentence(3, alo0, incomplete=True) == "持有 3 檔基金；配置差距無法判定。"
 
 
@@ -291,10 +334,27 @@ def test_container_title_有狀態的塊寫成_標題_破折_狀態_同單頁展
     ("4 檔", False), ("目標比重、容許帶皆已設定", False), ("可匯出 3 列", False),
     ("⛔ 取數失敗", True), ("取數失敗", True), ("缺 持倉", True), ("4 檔；被排除 2 檔", True), ("3 檔 · 有值取不到或不適用", True),
     ("◇ 資料未備：持倉", True), ("⛔ 尚未設定：目標比重", True), ("基準 未設定；類別 0 個；缺 計算基礎", True),
+    # 稽核回修第二輪（S1）：單頁 `ALO-1` 標題「⬜ 未設定；容許帶：⬜ 未設定」與 `HLD-4`「門檻 0 列」原本都漏掉
+    ("⬜ 未設定；容許帶：⬜ 未設定", True), ("3 個類別；容許帶：⬜ 未設定", True), ("⬜ 未設定；容許帶：4", True),
+    ("區間 2026-01-01 至 2026-09-19 · 門檻 0 列", True), ("區間 2026-01-01 至 2026-09-19 · 門檻 10 列", False),
+    ("基準 成本（新臺幣）；類別 3 個；未指派 0 檔", False),
 ])
 def test_block_state_只在單頁標題帶狀態字樣時才回_正常的塊容器標題照舊(summary, expect_state):
     got = OV.block_state({"_tone": "中性"}, summary)
     assert (got == summary) if expect_state else got is None
+
+
+@pytest.mark.parametrize("flag", OV.STATE_LIST_FLAGS)
+def test_block_state_塊上有未到位旗標_即使標題句看不出來也算有狀態(flag):
+    summary = "基準 成本（新臺幣）；類別 3 個；未指派 1 檔"        # 單頁 `ALO-4` 標題：沒有任何 STATE_MARKERS 字樣
+    assert not any(m in summary for m in OV.STATE_MARKERS)
+    assert OV.block_state({"_tone": "中性", flag: []}, summary) is None
+    assert OV.block_state({"_tone": "中性", flag: ["未指派：某基金（CCCC）"]}, summary) == summary
+
+
+def test_block_state_旗標名單只含塊上既有的鍵_不是新編的欄位():
+    src = (_ROOT / "ui_v2" / "alo" / "logic.py").read_text(encoding="utf-8")
+    assert all(f'"{flag}"' in src for flag in OV.STATE_LIST_FLAGS), OV.STATE_LIST_FLAGS
 
 
 def test_block_state_佔位或紅灰色調也算有狀態_空句不算():

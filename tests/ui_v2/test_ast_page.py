@@ -319,12 +319,33 @@ def test_容器標題正常時照舊只列標題_沒有被誤標狀態():
     assert _container(at, "配置明細") == "配置明細　—　歸屬明細、目標修改紀錄"
 
 
-@pytest.mark.parametrize("kw", [{"hld": "nothr"}, {"hld": "fetchfail"}, {"hld": "holdfail_nothr"}])
+@pytest.mark.parametrize("kw", [{"hld": "nothr"}, {"hld": "fetchfail"}])
 def test_主判讀的n取HLD2實際列出的檔數_門檻未設或燈紅也不寫無法判定(kw):
     at = _s(**kw)
     assert _hero(at).startswith("持有 3 檔基金；")
     assert "持有檔數無法判定" not in _md(at)
     assert re.search(r"基金 A", _md(at))                                      # Secondary 確實列了這幾檔
+
+
+# ~~原參數化還有 `{"hld": "holdfail_nothr"}`：持倉來源 `errors["holding"]` 有字，主判讀仍寫「持有 3 檔基金」~~
+# → 稽核回修第二輪（B1，有意識的更正，不是漏刪）：持倉來源有錯（整張讀不到，或部分分頁被略過）時，`HLD-2` 列出的檔數建立在不完整的
+#   持倉上；主判讀寫「持有 3 檔」是把「部分讀到」讀成「完整」，而同一畫面的 HLD 頁首／持股區已是紅的（D-10：資料不足照實「無法判定」）。
+#   舊斷言在寫下當時為真（第一輪只修「門檻未設也寫無法判定」那個方向）；被權衡掉的是它的前提——n 與持倉來源有沒有錯無關。
+#   只是門檻未設（上面的 `nothr`、`fetchfail` 沒有 `errors["holding"]`）仍照 `HLD-2` 列出的檔數寫，那一半不變。
+def test_持倉來源有錯_主判讀的持有檔數無法判定_HLD2仍照列():
+    at = _s(hld="holdfail_nothr")
+    assert [e.value for e in at.exception] == []
+    hero = _hero(at)
+    assert hero.startswith("持有檔數無法判定；") and "持有 3 檔" not in hero, hero
+    assert re.search(r"基金 A", _md(at))                                      # HLD-2 照列這幾檔，HLD 自己的畫面沒動
+
+
+def test_稽核探針_持倉少一檔且errors_holding有字_主判讀寫無法判定_不寫持有2檔():
+    """稽核員的探針原樣：3 檔掉 1 檔、放一筆 `errors["holding"]`（部分分頁被略過的樣子）。修之前主判讀寫「持有 2 檔基金」，同一畫面 HLD 頁首卻是紅的。"""
+    at = _run(script=F.script("full", drop_one_holding=True))
+    assert [e.value for e in at.exception] == []
+    assert _hero(at).startswith("持有檔數無法判定；"), _hero(at)
+    assert "持有 2 檔" not in _md(at) and "持有 3 檔" not in _md(at)
 
 
 def test_主判讀的n_沒有任何持倉才寫無法判定_不寫0檔():
@@ -333,11 +354,16 @@ def test_主判讀的n_沒有任何持倉才寫無法判定_不寫0檔():
 
 
 def test_F13_有類別沒評估到_主判讀不寫皆在容許帶內():
-    for kw in ({"alo": "partial"}, {"alo": "unbkt"}, {"alo": "nobucket"}, {"alo": "inband", "blank_target": True}):
+    """`ALO-0` 寫皆在帶內、但有類別沒評估到 → 無法判定。`ALO-0` 已點名類別（A7）的情境（`partial`、`unbkt`、`nobucket`）見 S5：照 parent 點名。"""
+    for kw in ({"alo": "inband", "blank_target": True},):
         at = _s(**kw)
         hero = _hero(at)
         assert "各類別皆在容許帶內" not in hero and "最大配置差距在" not in hero, (kw, hero)
         assert hero.endswith("配置差距無法判定。"), (kw, hero)
+    # ~~原清單還有 `partial`、`unbkt`、`nobucket`，並斷言主判讀不點名「最大配置差距在 X」~~ → 稽核回修第二輪（S5，總管讀法，待客戶確認；
+    #   有意識的更正，不是漏刪）：這三個情境的 `ALO-0` 本身就點名了類別（A7），主判讀不再把它蓋成「無法判定」，見 `test_S5_*`。
+    for kw in ({"alo": "partial"}, {"alo": "unbkt"}, {"alo": "nobucket"}):
+        assert "各類別皆在容許帶內" not in _hero(_s(**kw))
 
 
 def test_F13_ALO0本身一字沒改_空白目標的inband燈仍寫皆在容許帶內_主判讀另擋():
@@ -383,6 +409,26 @@ def test_持倉體檢計數拋ValueError_只有持股這一側改畫狀態_配�
     assert _hero(at).startswith("持有檔數無法判定；目前最大配置差距在 ")
 
 
+def test_別的ValueError不是取數失敗_照舊浮出_總表記一筆載入崩潰():
+    """S2：`_prepare` 只接 `LiveFailed` 與 `sections.HoldingCountsInconsistent`；`prepare_live` 其他地方拋的 `ValueError` 是本檔案的 bug，
+    不得畫成取數失敗（同單頁 `guard_page`）：例外照舊浮出，`render` 的 `_record_collect_failure` 先記一筆再往上拋。"""
+    at = _run("hld_other_valueerror")
+    assert [e.value for e in at.exception] == ["本檔案自己的 bug：不是持倉體檢計數"]
+    for slug in ("alo", "hld"):
+        assert _health(at, slug)["collect_error"] == "ValueError" and not _health(at, slug)["items"], slug
+
+
+def test_持倉體檢計數不成立_是ValueError的子類別_單頁行為不變():
+    from ui_v2 import sections
+    assert issubclass(sections.HoldingCountsInconsistent, ValueError)
+    model = {"blocks": [{"code": "HLD-0", "_tone": "黃", "text": "x", "_deviation_count": 2},
+                        {"code": "HLD-1", "_unevaluated_count": 1},
+                        {"code": "HLD-2", "fund_groups": [{"_fund_code": "A"}, {"_fund_code": "B"}]}]}
+    with pytest.raises(ValueError) as caught:                # 單頁原本接的型別
+        sections.hld_counts(model)
+    assert type(caught.value) is sections.HoldingCountsInconsistent
+
+
 def test_一側失敗_完整那一句只畫一次_各區段只寫短狀態並點名是哪一區():
     at = _run("alo_fail")
     errs = re.findall(r'class="ast-err"[^>]*>([^<]*)<', _md(at))
@@ -406,3 +452,147 @@ def test_規則順序同單頁_ALO1先於收合區比照_展開區標題帶摘�
     at = _s(alo="settingfail")
     assert "ALO-1" in _blocks(at)                                              # 即使收合區比照也想把它換成一行，單頁是先走 ALO-1
     assert "目標輸入卡　—　⛔ 取數失敗" in _container(at, "我的條件")
+
+
+# ═════════════ 稽核回修（第二輪）：S3 整頁尚未選定兩格都記、S4 沒有Active不畫紅、S1 容器標題逐情境、S5 主判讀 ═════════════
+
+
+@pytest.mark.parametrize("variant", ["alo_noactive_hld_ok", "alo_ok_hld_noactive"])
+def test_S3_只有一側沒有Active_整頁畫尚未選定_兩格都記尚未設定(variant):
+    """一側沒有 Active、另一側載入成功：整頁畫成「尚未選定」（沒有 summary、沒有任何區段），總表兩格都要記尚未設定——
+    不能讓使用者看到整頁「尚未選定」、總表卻還留著另一側「載入成功」的記錄（parent aba1ee1a 的行為）。"""
+    at = _run(variant)
+    assert [e.value for e in at.exception] == []
+    md = _md(at)
+    assert md.count(active_gate.TEXT_NO_ACTIVE) == 1 and 'class="ast-summary"' not in md and "ALO-0" not in md and "HLD-0" not in md
+    for slug in ("alo", "hld"):
+        assert [i["kind"] for i in _health(at, slug)["items"]] == [page_health.KIND_UNCONFIGURED], slug
+        assert not _health(at, slug)["page_failure"], slug
+
+
+def test_S3_混合_一側失敗_一側沒有Active_仍只記沒有Active的那一側():
+    at = _run("alo_fail_hld_noactive")
+    assert _health(at, "alo")["page_failure"] and not _health(at, "alo")["items"]
+    assert [i["kind"] for i in _health(at, "hld")["items"]] == [page_health.KIND_UNCONFIGURED]
+
+
+def _status_and_err_texts(md):
+    status = re.findall(r'<div class="ast-status" role="status"[^>]*>([^<]*)<', md)
+    err = re.findall(r'<div class="ast-err" role="alert">([^<]*)<', md)
+    return status, err
+
+
+@pytest.mark.parametrize("variant,no_active_side,failed_side", [("alo_fail_hld_noactive", "持股明細", "資產配置"),
+                                                                ("alo_noactive_hld_fail", "資產配置", "持股明細")])
+def test_S4_混合情形_沒有Active那一側畫灰色狀態_不畫紅色警示_失敗那一側照舊紅(variant, no_active_side, failed_side):
+    """J-13 三種狀態：沒有 Active（灰、`role="status"`）≠ 系統出錯（紅、`role="alert"`）。混合情形下兩者同頁出現，不能都畫成紅。"""
+    at = _run(variant)
+    assert [e.value for e in at.exception] == []
+    status, err = _status_and_err_texts(_md(at))
+    assert status and all(active_gate.TEXT_NO_ACTIVE in t for t in status), status        # 灰色狀態那幾句全是「尚未選定持倉資料來源」
+    assert not any(active_gate.TEXT_NO_ACTIVE in t for t in err), err                      # 紅色警示裡一句「尚未選定」都沒有
+    assert any(t.startswith(f"{no_active_side}　") for t in status), status                  # 區段內短句點名是哪一區
+    assert err and all("取數失敗" in t for t in err), err                                     # 紅的只剩失敗那一側
+    assert any(t.startswith(f"{failed_side}　") for t in err), err
+    # 灰色狀態也要有 role="status"、顏色取灰（不是紅）
+    assert 'class="ast-err" role="alert">⬜' not in _md(at)
+
+
+def test_S4_純失敗時畫面不變_沒有任何ast_status():
+    status, err = _status_and_err_texts(_md(_run("alo_fail")))
+    assert status == [] and err
+
+
+# ───── S1：容器標題逐情境（ALO、HLD 全部 fixture 情境，逐塊）─────
+
+# 單頁展開區標題「—」後面那一句**帶狀態**（有東西未設定、缺、取數失敗、被排除、資料未備…）的 (塊, 情境)；沒列的一律是正常、容器標題只列標題。
+# 手寫的金標準（逐情境逐塊看過單頁字面後列出），不由 `STATE_MARKERS` 推導——否則字樣表漏了什麼，這張表會跟著漏。
+# 單塊容器（`ALO-5`／`HLD-5`）本來就整句畫在自己的展開區標題上、不經容器標題，不在此列。
+_ALL_BUT = lambda names, *skip: tuple(n for n in names if n not in skip)  # noqa: E731
+_HLD_ALL = ("full", "srcmiss", "bizexc", "fetchfail", "nothr", "empty", "emptyfail", "noexceed", "other_window", "onenav", "tiedstate",
+            "twofail", "holdfail", "profilefail", "holdfail_nothr", "badrange", "full_then_badrange")
+STATE_GOLDEN = {
+    "ALO-1": ("first", "notarget", "notol", "partial", "settingfail"),
+    "ALO-4": ("first", "noholding", "nobasis", "nofx", "unbkt", "nobucket", "holdfail", "fxfail", "settingfail"),
+    "ALO-6": ("first", "noholding", "nobasis", "nofx", "holdfail", "fxfail", "settingfail", "policyfail"),
+    "ALO-7": ("first", "notarget", "notol", "settingfail"),
+    "HLD-4": ("nothr", "empty", "emptyfail", "holdfail_nothr", "badrange"),
+    "HLD-6": ("empty", "emptyfail"),
+    "HLD-7": ("empty", "emptyfail", "onenav", "tiedstate", "twofail", "badrange"),
+    "HLD-8": _ALL_BUT(_HLD_ALL, "other_window"),
+}
+
+
+@pytest.fixture(scope="module")
+def sweep():
+    from streamlit.testing.v1 import AppTest
+    at = AppTest.from_string(F.SWEEP_SCRIPT, default_timeout=300)
+    at.run()
+    assert [e.value for e in at.exception] == []
+    return at.session_state["sweep"]
+
+
+def test_S1_掃描涵蓋ALO與HLD全部fixture情境(sweep):
+    from ui_v2.alo import fixtures as alo_fx
+    from ui_v2.hld import fixtures as hld_fx
+    assert set(hld_fx.ALL_SCENARIO_NAMES) == set(_HLD_ALL)                   # 新增情境時這張金標準要跟著看一遍
+    seen = {tuple(key.split("|")[:2]) for key in sweep}
+    assert seen == {("ALO", n) for n in alo_fx.ALL_SCENARIO_NAMES} | {("HLD", n) for n in hld_fx.ALL_SCENARIO_NAMES}
+    assert len(sweep) == 4 * len(alo_fx.ALL_SCENARIO_NAMES) + 4 * len(hld_fx.ALL_SCENARIO_NAMES)
+
+
+def test_S1_單頁標題帶狀態的塊_合併頁容器標題一定帶出_且是單頁同一句(sweep):
+    missed = []
+    for key, (single, state) in sweep.items():
+        side, name, code = key.split("|")
+        if name in STATE_GOLDEN.get(code, ()):
+            if state != single:
+                missed.append((key, single, state))
+    assert missed == [], missed
+
+
+def test_S1_反向_正常的塊_容器標題不得多出狀態(sweep):
+    gained = []
+    for key, (single, state) in sweep.items():
+        side, name, code = key.split("|")
+        if name not in STATE_GOLDEN.get(code, ()) and state is not None:
+            gained.append((key, single, state))
+    assert gained == [], gained
+
+
+@pytest.mark.parametrize("kw,container,expected", [
+    ({"alo": "first"}, "我的條件", "目標輸入卡　—　⬜ 未設定；容許帶：⬜ 未設定"),
+    ({"alo": "notarget"}, "我的條件", "目標輸入卡　—　⬜ 未設定；容許帶：4"),
+    ({"alo": "notol"}, "我的條件", "目標輸入卡　—　3 個類別；容許帶：⬜ 未設定"),
+    ({"alo": "unbkt"}, "我的條件", "分組定義　—　基準 成本（新臺幣）；類別 3 個；未指派 1 檔"),
+    ({"hld": "nothr"}, "我的條件", "檢視區間與門檻輸入　—　區間 2026-01-01 至 2026-09-19 · 門檻 0 列"),
+])
+def test_S1_稽核點名的五個漏網_容器標題現在帶出狀態_與單頁同字(kw, container, expected):
+    at = _s(**kw)
+    assert [e.value for e in at.exception] == []
+    assert expected in _container(at, container), (_container(at, container), expected)
+
+
+def test_S1_正常情境_我的條件容器標題仍只列標題():
+    assert _container(_s(alo="inband"), "我的條件") == "我的條件　—　檢視區間與門檻輸入、目標輸入卡、分組定義"
+
+
+# ───── S5：主判讀 A7 點名不被 incomplete 蓋掉 ─────
+
+
+def test_S5_unbkt_ALO0點名衛星差距_主判讀照點名_不寫無法判定():
+    at = _s(alo="unbkt")
+    md = _md(at)
+    hero = _hero(at)
+    assert "與目標差" in md                                                                       # ALO-0 同一畫面上寫著偏離
+    assert hero.startswith("持有 3 檔基金；目前最大配置差距在 "), hero
+    assert "配置差距無法判定" not in hero
+
+
+def test_S5_只擋皆在容許帶內那一句_其餘有類別沒評估到的情境依ALO0自己的字():
+    for kw in ({"alo": "inband", "blank_target": True},):
+        assert _hero(_s(**kw)).endswith("配置差距無法判定。")
+    for name in ("partial", "nobucket", "unbkt"):          # 三個情境的 ALO-0 都點名了類別（A7）：主判讀照點名，字取自 ALO-0 的 _leaders
+        at = _s(alo=name)
+        hero = _hero(at)
+        assert hero.startswith("持有 3 檔基金；目前最大配置差距在 ") and "皆在容許帶內" not in hero, (name, hero)
