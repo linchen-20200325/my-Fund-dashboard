@@ -288,7 +288,7 @@ def test_390寬_正式模式_渲染無例外_DataHealth燈在首屏(live_page):
     assert m["lamp"] is not None, (name, "找不到 Data Health 燈", _LAMP[_slug(name)])
     top, _bottom, height = m["lamp"]
     assert height > 0 and 0 <= top < m["vh"], (name, "Data Health 燈不在首屏", m["lamp"])
-    if _slug(name) == "mkt":
+    if name == "mkt":     # 只有帶 Data View 的主情境；3-D 補的「mkt/…」情境沒有 market_view，走舊版面、沒有主圖
         # BL-0525 Batch C（T1 遷移，44 之十九其七第 2 條）：燈改一行 chip 仍在首屏，而且首屏要看得到 Primary 主圖
         # （~~舊斷言只驗燈可見~~：舊版圖排在燈＋三張卡之後，首屏沒有圖——那正是 X-25）。
         assert m["chartTop"] is not None and 0 <= m["chartTop"] < m["vh"], (name, "首屏看不到主圖", m["chartTop"])
