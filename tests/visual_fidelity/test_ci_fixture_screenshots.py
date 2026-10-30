@@ -9,9 +9,9 @@
 390px mobile（390x844），各截一張整頁 PNG、量一次 layout（`layout_checks.MEASURE_JS`），把 PNG 與報告寫到 `$VISUAL_FIDELITY_OUT`。
 
 情境：
-- 五頁（`mkt`／`hld`／`exp`／`alo`／`set`）：沿用 `tests/ui_v2/test_live_390_page.py` 的正式模式腳本（同一份替身資料），
-  只有 hard 檢查（V1～V3：例外、程式碼區塊外露、水平溢出）會轉紅；契約缺口（V4～V8）寫進報告，不轉紅 —— 今天的頁面還沒套用
-  Presentation Contract（Batch C～F 的工作）。
+- 五頁（`mkt`／`hld`／`exp`／`alo`／`set`）：沿用 `tests/ui_v2/test_live_390_page.py` 的正式模式腳本（同一份替身資料）。
+  🌍 `mkt`（BL-0525 Batch C 已套用 Presentation Contract）：V1～V8 與 M1～M6 全部 hard（`layout_checks.evaluate(page="mkt")`）；
+  其餘四頁只有 V1～V3 hard，契約缺口（V4～V8）寫進報告，不轉紅 —— 還沒套用（Batch D～F 的工作）。
 - `primitives`：Batch A 新建的共用 presentation primitives 展示頁（`ui_v2/presentation_view.py`）。這一頁完全受本批控制，
   所以 V1～V6 全部 hard（strict）。
 
@@ -98,7 +98,11 @@ def _write_report():
     if _OUT and _ENTRIES:
         out = pathlib.Path(_OUT)
         out.mkdir(parents=True, exist_ok=True)
-        (out / f"{config.CI_FILE_PREFIX}__report.md").write_text(LC.render_report(_ENTRIES), encoding="utf-8")
+        report = LC.render_report(_ENTRIES)
+        (out / f"{config.CI_FILE_PREFIX}__report.md").write_text(report, encoding="utf-8")
+        # 同一份報告印進 CI 日誌（artifact 要下載才看得到；日誌直接可讀）。
+        sys.__stdout__.write("\n" + report + "\n")
+        sys.__stdout__.flush()
 
 
 def _shot(tab) -> bytes:
@@ -138,7 +142,7 @@ def test_CI_fixture_截圖與layout檢查(browser, tmp_path, name, script, ready
             assert first[:8] == b"\x89PNG\r\n\x1a\n" and len(first) > 1000, fname
             if strict:   # 展示頁必須真的畫出圖表，否則 V4／V5 是空過
                 assert measure["charts"], (name, vp_name, "strict 情境量不到任何圖表 —— 等待條件或腳本失效")
-            results = LC.evaluate(measure, strict=strict)
+            results = LC.evaluate(measure, strict=strict, page=name)
             _ENTRIES.append({"scenario": name, "viewport": vp_name, "file": fname, "results": results,
                              "deterministic": hashlib.sha256(first).digest() == hashlib.sha256(second).digest()})
             failures.extend((vp_name, r) for r in LC.hard_failures(results))

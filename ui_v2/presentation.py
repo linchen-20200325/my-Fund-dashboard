@@ -156,10 +156,12 @@ def detail_texts(detail: dict) -> list:
 # ───────────────────────── chart card ─────────────────────────
 
 
-def chart_card_model(title: str, chips, summary: str, *, detail: dict | None = None) -> dict:
+def chart_card_model(title: str, chips, summary: str | None = None, *, detail: dict | None = None) -> dict:
     """圖卡的資料：標題＋3～5 枚 chips＋至多一句摘要＋detail。圖表本身由呼叫端畫（外露、不放進展開區）。
 
     chips 超過上限的由呼叫端先 `split_chips`、溢出放 detail；這裡超過或不足一律 `ValueError`。
+    `summary`：`None` ＝ 這張卡不需要摘要句（BL-0525 Batch C 最小擴充：44 之十九寫的是「至多一句」，chips 已講完事實時不補湊一句）；
+    給了字串就仍須是非空的一句（空字串、多句、含換行一律 `ValueError`，行為與擴充前相同）。
     """
     if not isinstance(title, str) or not title.strip():
         raise ValueError("圖卡標題不得為空")
@@ -167,18 +169,20 @@ def chart_card_model(title: str, chips, summary: str, *, detail: dict | None = N
     if not (MIN_CHART_CHIPS <= len(items) <= MAX_CHIPS):
         raise ValueError(f"圖卡 chips 須 {MIN_CHART_CHIPS}～{MAX_CHIPS} 枚，收到 {len(items)} 枚")
     split_chips(items)  # 驗每枚都是 chip() 產的
-    if not is_one_sentence(summary):
+    if summary is not None and not is_one_sentence(summary):
         raise ValueError(f"圖卡摘要須為至多一句、非空、不含換行：{summary!r}")
     det = detail if detail is not None else detail_model()
-    return {"kind": "chart_card", "title": title.strip(), "chips": items, "summary": summary.strip(), "detail": det}
+    return {"kind": "chart_card", "title": title.strip(), "chips": items,
+            "summary": None if summary is None else summary.strip(), "detail": det}
 
 
 def chart_card_head_html(model: dict) -> str:
     """圖卡「圖表之前」的那一段：標題、chips、一句摘要（短，確保圖表在首屏）。"""
+    summary = f'<div class="pc-summary">{_esc(model["summary"])}</div>' if model.get("summary") else ""
     return (
         f'<div class="pc-card-head"><span class="pc-card-title">{_esc(model["title"])}</span></div>'
         f'{chips_html(model["chips"])}'
-        f'<div class="pc-summary">{_esc(model["summary"])}</div>'
+        f'{summary}'
     )
 
 

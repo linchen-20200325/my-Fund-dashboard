@@ -433,7 +433,7 @@
 | **Phase 1**（本 PR） | Presentation Contract／VFG（44 之十九）；IA amendment（44 之二十）；Decision Digest／One AI Brain 最小契約（67 第 5～7 節） | — | 1 組獨立稽核（治理與 SSOT 等級）；CI |
 | **Phase 2＝Batch A** helper／tests migration | (1) T1～T6、T8 依新測試契約改寫（不刪資訊、不改產品行為）；(2) 頁首狀態行與核心卡的 page 層呈現責任拆分點（只動 page，不動模型）；(3) 截圖工具鏈落地（第七節兩層） | 預覽站 URL 與網路放行（只擋 (3) 的正式確認） | targeted tests、regression、CI、1 組獨立稽核；本批不改畫面時 Visual audit 註記「無可見變更」 |
 | **Phase 3＝Batch B** 共用元件 | (1) chart card；(2) metadata／status chip；(3) detail 展開區＋Missing placeholder（含圖表 placeholder） | 無（44 之十九已定）；符號照 44 現行 | 同上＋T10＋desktop／390 截圖 |
-| **Phase 4＝Batch C** 🌍 reference implementation | (1) 段序改為圖表優先、Primary 1＋Secondary ≤3（X-25、T1）；(2) 圖卡改 chips＋「▸」（X-26、T9）；(3) 核心卡 `answers`／`detail_lines` 下沉（X-27） | 無；BL-0517 三張新圖卡不在本批（方案 A 草稿另批）〔2026-10-30：草稿已寫成，`docs/v2/72_mkt_wireframe_batch_c.md`，待客戶拍板；拍板前不開實作〕 | 八項全做＋Visual audit 九問 |
+| **Phase 4＝Batch C** 🌍 reference implementation | (1) 段序改為圖表優先、Primary 1＋Secondary ≤3（X-25、T1）；(2) 圖卡改 chips＋「▸」（X-26、T9）；(3) 核心卡 `answers`／`detail_lines` 下沉（X-27） | 無；BL-0517 三張新圖卡不在本批（方案 A 草稿另批）〔2026-10-30：草稿已寫成，`docs/v2/72_mkt_wireframe_batch_c.md`，~~待客戶拍板；拍板前不開實作~~ → **同日客戶核准 D1～D7（`DEC-2026-10-30-01`），Batch C 實作批已做，見下方「Batch C 實際做了什麼」**；狀態更新，不是漏刪〕 | 八項全做＋Visual audit 九問 |
 | **Phase 5＝Batch D** 💼 我的資產 | (1) 合併頁 IA（含一枚結論燈的畫法、層 3／層 4 各超 2 塊的處置〔線框送客戶裁示〕、頁序頁名對齊批）；(2) 情境式持倉資料來源選擇；(3) portfolio visuals（Primary 1＋Secondary ≤3） | 線框草稿先行（新元件與合併頁）；**層 3／層 4 超限的客戶裁示**；BL-0526 若影響頁數，對齊批等它 | 八項全做 |
 | **Phase 6＝Batch E** 🔍 找基金 | (1) 候選清單解耦；(2) 暫時篩選（只在本次瀏覽生效）；(3) search／filter／compare 呈現 | BL-0397 Data Source Decision Gate（未核准前搜尋區 `◇ 資料未備`）；CAP-GATE-05 | 八項全做 |
 | **Batch F** ⚙️ 設定＋帳號位置 | (1) 設定頁瘦身；(2) Google 帳號左側固定與手機控制；(3) desktop／mobile 互動 | callback 查證（6.2，可能再 Gate） | 八項全做 |
@@ -444,6 +444,11 @@
 2. **共用 presentation primitives**（原列在 Batch B，客戶 2026-10-29 要求 Batch A 先建）：`ui_v2/presentation.py`（純函式：chip、至多 5 枚 chips、圖卡模型、一句摘要、detail 四組、Missing 模型）與 `ui_v2/presentation_view.py`（Streamlit 畫法）；單元與畫面測試 `tests/ui_v2/test_presentation_logic.py`、`test_presentation_page.py`（T10 的兩半）。**尚未被任何頁面呼叫**（守衛釘住；頁面套用是 Batch C～F），所以不改任何畫面。
 3. **截圖工具鏈**：見第 7.1 節。
 本批實際工作項為上列三項，未超過每批 3 項；頁首狀態行與核心卡的 page 層拆分（原 Phase 2 第 (2) 點）依客戶「不重寫五頁」順延到 Batch C。**下一個唯一接手點**見 `docs/HANDOFF.md`。
+
+**Batch C 實際做了什麼（2026-10-30；`DEC-2026-10-30-01`；上表 Phase 4 列是計畫，保留）**：
+1. **🌍 頁視覺層級**（`ui_v2/mkt/overview.py` 純函式模型＋`ui_v2/mkt/page.py` 畫法）：status chip（一行，既有字樣）→ 一句主判讀（不放頁級日期）→ Primary（五序列切換、一組期間切換、圖 300px）→ Secondary（風險 VIX／國際 S&P 500／利率與信用，各為迷你折線＋3 枚 chips；「利率與信用」內部切換期限利差／信用利差／政策利率）→ 依據卡 `MKT-1`～`MKT-3`（位置後移）→ ③ → 「▸ 尚未取得」群組（EPS×PE 排最前）→ 「▸ 各項資料狀態」→ ④ 詳細資料。X-25（段序）、X-26（圖下常駐小字）、X-27（核心卡 `answers`／`detail_lines`）中，X-25、X-26 已處理；X-27 的 `answers`／`detail_lines` 仍在依據卡內，**未下沉**（見 HANDOFF，後續批次再議）。
+2. **Primitives 最小擴充**：`chart_card_model` 的摘要句可省略（`summary=None`；給了字串仍須是一句）、`presentation_view.inject_css` 公開。
+3. **測試與 Visual Fidelity**：T1、T9 遷移（舊斷言劃線保留理由）；T6、T13 經實際讀內容後的處置見 PR 說明；`tests/visual_fidelity` 對 🌍 頁 V4～V8 升為 hard 並新增 M1～M6（視覺順序、Secondary ≤3、無頁級日期、Secondary 不高於 Primary、手機緊湊列、無圖表牆）。**CI fixture screenshot ≠ production-like Cloud screenshot**；Cloud capture 仍受環境網路政策阻擋，**Visual Fidelity Gate 的正式確認尚未執行**。
 
 依 repo dependency 可微調順序；每批完成前走 Visual Fidelity Gate，CI 全綠不等於完成。進入 Batch B 以後的機械式 UI 實作，依客戶第二十四節與第三則末段走 Model／Effort Change Gate（建議 Sonnet 5.5／Medium）。
 

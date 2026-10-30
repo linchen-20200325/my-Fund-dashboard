@@ -10,7 +10,7 @@
   圖表絕不放進展開區，也不被長說明推到首屏以下（摘要至多一句由模型保證）。
 - `render_missing_placeholder(model, *, nested=False)`：卡＋`◇ 資料未備` chip＋一句短原因＋detail。
 
-⛔ 本檔**沒有被任何頁面呼叫**（頁面套用屬 Batch C～F）；加進頁面之前，不改變任何畫面。
+頁面套用：BL-0525 Batch C 起 🌍 市場與趨勢頁（`ui_v2/mkt/page.py`）使用本檔的 `inject_css`／`render_detail`；其餘四頁屬 Batch D～F。
 """
 
 from __future__ import annotations
@@ -20,8 +20,12 @@ import streamlit as st
 from ui_v2 import presentation
 
 
-def _inject_css() -> None:
+def inject_css() -> None:
+    """注入共用 CSS（頁面自己組合圖卡零件時用；BL-0525 Batch C 把私有的 `_inject_css` 公開）。"""
     st.markdown(f"<style>{presentation.PRESENTATION_CSS}</style>", unsafe_allow_html=True)
+
+
+_inject_css = inject_css
 
 
 def render_detail(detail: dict, *, nested: bool = False) -> None:

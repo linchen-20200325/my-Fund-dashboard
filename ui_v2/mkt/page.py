@@ -15,8 +15,8 @@ from datetime import date, datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain, readonly, sections, symbols
-from . import chart, fixtures, live, logic, market_section, theme
+from .. import health, health_view, plain, presentation, presentation_view, readonly, sections, symbols
+from . import chart, fixtures, live, logic, market_section, overview, theme
 
 # 層 2／層 3 的斷點直接由 logic 那支**已被測試釘住**的純函式推出來，
 # 不在本檔另寫一份數字（同一個事實只准有一個真相源）。
@@ -92,6 +92,22 @@ def _base_css() -> str:
     }}
     .mkt-light-text {{ font-size: 1.02rem; font-weight: 600; }}
     .mkt-light-code {{ color: {theme.TEXT_MUTED}; font-size: .78rem; margin-left: auto; }}
+    .mkt-light--chip {{
+      display: inline-flex; max-width: 100%; border-left-width: 1px; border-radius: 999px;
+      padding: .3rem .8rem; gap: .5rem; margin: .15rem 0 .1rem;
+    }}
+    .mkt-light--chip .mkt-light-text {{ font-size: .92rem; }}
+    .mkt-hero {{ font-size: 1.02rem; margin: .45rem 0 .7rem; color: {theme.TEXT_PRIMARY}; }}
+    .st-key-mkt_sec_row {{
+      display: grid !important; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px;
+      margin: .6rem 0 .3rem;
+    }}
+    .st-key-mkt_sec_row > * {{ min-width: 0; }}
+    .mkt-sec-card {{ container-type: inline-size; }}
+    .mkt-sec-body {{ display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 40%); gap: .5rem; align-items: center; }}
+    @container (max-width: 300px) {{ .mkt-sec-body {{ grid-template-columns: minmax(0, 1fr); }} }}
+    .mkt-spark {{ display: block; width: 100%; height: 56px; color: {theme.TEAL_DARK}; }}
+    .mkt-sec-note {{ color: {theme.TEXT_MUTED}; font-size: .82rem; }}
     .mkt-card {{
       border: 1px solid {theme.BORDER}; background: {theme.SURFACE};
       border-radius: 8px; padding: .9rem 1rem; height: 100%;
@@ -662,11 +678,9 @@ def _render_mkt7(block: dict, *, plain_mode: bool = False) -> None:
 # ⚠️ 本區段**不用 `st.columns`**：`_grid_css` 的 `.mkt-layer2 ~ div` 選擇器會把其後所有欄切成三欄，
 # 本區段用自己的 CSS grid（`.mkt-trend-grid`），窄螢幕自動堆成一欄。
 
-_VIX_PERIOD_KEY = "mkt_vix_period"
-_TAIEX_PERIOD_KEY = "mkt_taiex_period"
-_SP500_PERIOD_KEY = "mkt_sp500_period"
-_US10Y_PERIOD_KEY = "mkt_us10y_period"
-_US2Y_PERIOD_KEY = "mkt_us2y_period"
+_PRIMARY_SERIES_KEY = "mkt_primary_series"
+_PRIMARY_PERIOD_KEY = "mkt_primary_period"
+_RATES_SERIES_KEY = "mkt_rates_series"
 
 
 def _trend_card(title: str, inner_html: str, section: str) -> str:
@@ -693,48 +707,137 @@ def _missing_card_html(domain: dict) -> str:
     return _trend_card(label, inner, f"trend-{domain['domain']}")
 
 
+# ── BL-0525 Batch C：視覺層級（D1～D7；`ui_v2/mkt/overview.py` 是純函式模型，這裡只負責畫）──
+# 順序：status chip → 一句主判讀 → Primary → Secondary → 依據卡 → ③ → 尚未取得／各項資料狀態／④ 詳細資料。
+
+
+def _render_status_chip(block: dict, *, settings_page=None) -> None:
+    """D5：結論燈改一行 chip（燈點＋既有文案，不加新字樣）；不是 Primary Visual。燈的輸入與色規則一字未動（`logic.conclusion_light`）。
+    原本燈下那句 `answers` 與右側塊名移進「▸ 各項資料狀態」，資訊不刪。"""
+    tone = theme.tone_hex(block["_tone"])
+    text = f'<div class="mkt-light-text">{_esc(block["text"])}</div>' if block["text"] else ""
+    st.markdown(
+        f'<div class="mkt-light mkt-light--chip" role="status" aria-label="環境結論燈" style="--mkt-tone:{tone}"'
+        f'{_block_attr(block, True)}><div class="mkt-light-dot"></div>{text}</div>',
+        unsafe_allow_html=True,
+    )
+    _render_buttons(block, True)
+    if live.light_needs_settings_link(block):
+        health_view.render_settings_link(settings_page)
+
+
+def _render_hero(view: dict) -> None:
+    """D3：頁首只有一句資料事實（不放頁級日期；日期只在各圖卡的 chip）。"""
+    st.markdown(f'<div class="mkt-hero" data-section="hero">{_esc(overview.hero_sentence(view))}</div>',
+                unsafe_allow_html=True)
+
+
 @st.fragment
-def _render_price_card(domain: dict, key: str, model_fn, period_key: str) -> None:
-    """日頻折線圖卡（VIX、TAIEX、S&P 500、美債殖利率共用，同一個 `chart`）。期間切換在 fragment 內：只重跑這一張卡，不重跑整頁（§5 重繪成本）。"""
-    model = model_fn(domain, chart.DEFAULT_PERIOD)
+def _render_primary(view: dict) -> None:
+    """D1：一張 Primary Visual＋序列切換（預設台股）。切換在 fragment 內、資料已在 view 內：不重取數、不重跑整頁（§5 重繪成本）。"""
+    domains = market_section.domain_by_key(view)
     with st.container(border=True):
-        st.markdown(
-            f'<div class="mkt-card-head" data-section="trend-{_esc(key)}"><span class="mkt-card-title">'
-            f'{_esc(market_section.LABELS[key])}</span></div>', unsafe_allow_html=True)
-        if domain["status"] == logic.STATE_OK:
-            avail = model["availability"]
+        head = st.container()
+        key = st.radio(
+            "序列", overview.PRIMARY_KEYS, index=overview.PRIMARY_KEYS.index(overview.DEFAULT_PRIMARY), horizontal=True,
+            key=_PRIMARY_SERIES_KEY, label_visibility="collapsed", format_func=overview.PRIMARY_OPTION_LABELS.get)
+        domain = domains[key]
+        card = overview.primary_card(domain, key, chart.DEFAULT_PERIOD)
+        if card["kind"] == "chart_card":
+            avail = card["availability"]
             period = st.radio(
                 "期間", chart.PERIODS, index=chart.PERIODS.index(chart.DEFAULT_PERIOD), horizontal=True,
-                key=period_key, label_visibility="collapsed",
-                format_func=lambda p: market_section.period_option_label(p, avail[p]),
-            )
-            model = model_fn(domain, period)
-        if model["spec"] is not None:
-            st.vega_lite_chart(spec=model["spec"], width="stretch")
-        elif model["message"]:
-            st.markdown(f'<div class="mkt-trend-missing">{_esc(model["message"])}</div>', unsafe_allow_html=True)
-        if model.get("period_return") is not None:
-            st.markdown(f'<div class="mkt-trend-note" data-section="trend-{_esc(key)}-return">'
-                        f'{_esc(model["period_return"]["text"])}</div>', unsafe_allow_html=True)
-        for line in model["caption_lines"]:
-            st.markdown(f'<div class="mkt-trend-note">{_esc(line)}</div>', unsafe_allow_html=True)
+                key=_PRIMARY_PERIOD_KEY, label_visibility="collapsed",
+                format_func=lambda p: market_section.period_option_label(p, avail[p]))
+            card = overview.primary_card(domain, key, period)
+        with head:
+            if card["kind"] == "chart_card":
+                st.markdown(f'<div data-section="primary" data-series="{_esc(key)}">'
+                            f'{presentation.chart_card_head_html(card)}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div data-section="primary" data-series="{_esc(key)}">'
+                            f'{presentation.missing_card_html(card)}</div>', unsafe_allow_html=True)
+        if card["kind"] == "chart_card":
+            if card["spec"] is not None:
+                st.vega_lite_chart(spec=card["spec"], width="stretch")
+            elif card["message"]:
+                st.markdown(f'<div class="mkt-trend-missing">{_esc(card["message"])}</div>', unsafe_allow_html=True)
+        presentation_view.render_detail(card["detail"])
 
 
-def _render_market_section(view: dict) -> None:
+def _secondary_html(card: dict) -> str:
+    """Secondary 卡（D6：緊湊列——現在值、期間變動、資料日三枚 chip＋迷你圖；沒有座標軸、沒有期間切換）。"""
+    if card["kind"] != "chart_card":
+        body = presentation.missing_card_html(card)
+    else:
+        side = card["spark"] or f'<div class="mkt-sec-note">{_esc(card["message"] or "")}</div>'
+        head = (f'<div class="pc-card-head"><span class="pc-card-title">{_esc(card["title"])}</span></div>'
+                f'{presentation.chips_html(card["chips"])}')
+        body = f'<div class="mkt-sec-body"><div>{head}</div><div class="mkt-sec-side">{side}</div></div>'
+    return f'<div class="mkt-sec-card" data-section="secondary">{body}</div>'
+
+
+@st.fragment
+def _render_rates_card(dataset: dict) -> None:
+    """D2 P2：「利率與信用」一個 Secondary，內部切換期限利差／信用利差／政策利率；同時只顯示一個主要序列。"""
+    with st.container(border=True):
+        body = st.container()
+        key = st.radio(
+            "利率與信用序列", overview.RATES_KEYS, index=overview.RATES_KEYS.index(overview.DEFAULT_RATES), horizontal=True,
+            key=_RATES_SERIES_KEY, label_visibility="collapsed", format_func=overview.RATES_OPTION_LABELS.get)
+        with body:
+            st.markdown(_secondary_html(overview.rates_card(dataset, key)), unsafe_allow_html=True)
+
+
+def _render_secondary(view: dict, dataset: dict) -> None:
+    """Secondary 列：風險（VIX）、國際（S&P 500）、利率與信用——3 是上限、不是 KPI；每張回答的是不同面向（不複製 Primary）。"""
     domains = market_section.domain_by_key(view)
-    st.markdown(f'<div class="mkt-layer-label">{_esc(market_section.SECTION_LABEL)}</div>', unsafe_allow_html=True)
-    st.markdown(_conclusion_html(view), unsafe_allow_html=True)
-    _render_price_card(domains["vix"], "vix", market_section.vix_model, _VIX_PERIOD_KEY)
-    _render_price_card(domains["taiex"], "taiex", market_section.taiex_model, _TAIEX_PERIOD_KEY)
-    taiex = "".join(_missing_card_html(domains[k]) for k in ("taiex_volume", "market_stats"))
-    st.markdown(f'<div class="mkt-trend-grid">{taiex}</div>', unsafe_allow_html=True)
-    _render_price_card(domains["sp500"], "sp500", market_section.sp500_model, _SP500_PERIOD_KEY)
-    _render_price_card(domains["us10y"], "us10y", market_section.us10y_model, _US10Y_PERIOD_KEY)
-    _render_price_card(domains["us2y"], "us2y", market_section.us2y_model, _US2Y_PERIOD_KEY)
-    intl = "".join(_missing_card_html(domains[k]) for k in ("nasdaq", "msci_world", "msci_em"))
-    st.markdown(f'<div class="mkt-trend-grid">{intl}</div>', unsafe_allow_html=True)
-    eps = "".join(_missing_card_html(domains[k]) for k in ("eps_pe_scenario", "implied_trailing_index_earnings"))
-    st.markdown(f'<div class="mkt-trend-grid">{eps}</div>', unsafe_allow_html=True)
+    with st.container(key="mkt_sec_row"):
+        with st.container(border=True):
+            st.markdown(_secondary_html(overview.secondary_card(domains["vix"], "vix", overview.SECONDARY_RISK_TITLE)),
+                        unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown(_secondary_html(overview.secondary_card(domains["sp500"], "sp500", overview.SECONDARY_INTL_TITLE)),
+                        unsafe_allow_html=True)
+        _render_rates_card(dataset)
+    with st.expander(overview.SECONDARY_DETAIL_TITLE, expanded=False):
+        for title, detail in overview.secondary_detail_blocks(view, dataset):
+            st.markdown(f'<div class="pc-detail-name">{_esc(title)}</div>{presentation.detail_html(detail)}',
+                        unsafe_allow_html=True)
+
+
+def _render_market_top(view: dict, dataset: dict, light: dict, settings_page=None) -> None:
+    """第一眼與第二眼：status chip → 一句主判讀 → Primary → Secondary（`render` 只呼叫這一個，方便測試替身整段換掉）。"""
+    presentation_view.inject_css()
+    _render_status_chip(light, settings_page=settings_page)
+    _render_hero(view)
+    _render_primary(view)
+    _render_secondary(view, dataset)
+
+
+def _render_market_rest(view: dict, light: dict) -> None:
+    """第三眼：「▸ 尚未取得」群組與「▸ 各項資料狀態」（依據卡與 ③ 在它們之前、④ 詳細資料在它們之後，由 `render` 排）。"""
+    _render_missing_group(view)
+    _render_status_detail(view, light)
+
+
+def _render_missing_group(view: dict) -> None:
+    """D4 β：Missing 併入「尚未取得」群組（預設收合、標題列就點名缺哪幾項）；逐項文案一字未改、仍逐項可見於展開區。"""
+    group = overview.missing_group(view)
+    if group is None:
+        return
+    domains = market_section.domain_by_key(view)
+    with st.expander(group["title"], expanded=False):
+        cards = "".join(_missing_card_html(domains[k]) for k in group["keys"])
+        st.markdown(f'<div class="mkt-trend-grid">{cards}</div>', unsafe_allow_html=True)
+
+
+def _render_status_detail(view: dict, light: dict) -> None:
+    """「▸ 各項資料狀態」：市場結論（各 domain 狀態列）與原結論燈下那句說明。"""
+    with st.expander(overview.STATUS_DETAIL_TITLE, expanded=False):
+        st.markdown(_conclusion_html(view), unsafe_allow_html=True)
+        if light.get("answers"):
+            st.markdown(f'<div class="mkt-mv-note">{_esc(light["answers"])}</div>', unsafe_allow_html=True)
 
 # ───────────────────────── 整頁 ─────────────────────────
 
@@ -894,6 +997,9 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         # 叫人存檔的說明一併改寫（`ui_v2/readonly.py`）。在收集與記錄之後做，判定與總表不受影響。
         readonly.strip_write_controls(model)
     plain_mode = live_input is not None
+    # BL-0516 批 1：市場趨勢資料（唯讀 Data View；`notes["market_view"]` 沒給〔舊替身、示範模式〕就維持舊版面）。
+    market_view = live_input["notes"].get("market_view") if plain_mode else None
+    new_layout = market_view is not None      # BL-0525 Batch C：有 Data View 才套用新的視覺層級
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
 
@@ -908,14 +1014,23 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
             f'<div class="mkt-page-sub">{_esc(model["answers"])}</div>',
             unsafe_allow_html=True,
         )
-        health_view.render_page_header("mkt", as_of=as_of, tone_hex=theme.tone_hex, settings_page=settings_page)
+        # BL-0525 Batch C（D3）：新層級下頁首不畫「主要原因／另有／資料截至」——頁首只有 status chip＋一句資料事實，頁級日期不放；
+        # 總表（設定與診斷）那一格的記錄（`record_page_health`）照舊，只是這一頁不再把它畫成文字。
+        health_view.render_page_header("mkt", as_of=as_of, tone_hex=theme.tone_hex, settings_page=settings_page,
+                                       status_line=not new_layout)
 
     label1, label2, label3, label4 = (
         (plain.LABEL_LAYER1, plain.LABEL_LAYER2, plain.LABEL_LAYER3, plain.LABEL_LAYER4) if plain_mode
         else ("層 1　結論", "層 2　核心卡", "層 3　操作（預設收合）", "層 4　佐證（預設收合）")
     )
-    st.markdown(f'<div class="mkt-layer-label">{label1}</div>', unsafe_allow_html=True)
-    _render_light(logic.find_block(model, "MKT-0"), plain_mode=plain_mode, settings_page=settings_page)
+    light = logic.find_block(model, "MKT-0")
+    if new_layout:
+        # BL-0525 Batch C（D1～D7）：第一眼＝有沒有異常（status chip＋一句主判讀）、第二眼＝主要趨勢（Primary，再 Secondary）、
+        # 第三眼＝為什麼這樣顯示／資料從哪來（依據卡、detail、尚未取得、provenance）。不為舊藍圖「3～5 張摘要卡」重堆第一屏。
+        _render_market_top(market_view, dataset, light, settings_page)
+    else:
+        st.markdown(f'<div class="mkt-layer-label">{label1}</div>', unsafe_allow_html=True)
+        _render_light(light, plain_mode=plain_mode, settings_page=settings_page)
 
     st.markdown(
         f'<div class="mkt-layer-label mkt-layer2">{label2}</div>', unsafe_allow_html=True
@@ -931,10 +1046,8 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         health_view.render_attention(
             sections.attention_items(model, "mkt"), tone_hex=theme.tone_hex, label_class="mkt-layer-label"
         )
-        # BL-0516 批 1：市場趨勢區段（唯讀 Data View；`notes["market_view"]` 沒給〔舊替身、示範模式〕就整段不畫）。
-        market_view = live_input["notes"].get("market_view")
-        if market_view is not None:
-            _render_market_section(market_view)
+        if new_layout:
+            _render_market_rest(market_view, light)
         # ④詳細資料（預設收合）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
         st.markdown(f'<div class="mkt-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
     st.markdown(

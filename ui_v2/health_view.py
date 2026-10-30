@@ -45,9 +45,15 @@ OTHER_TONES = {page_health.KIND_UNCONFIGURED: "中性", page_health.KIND_FETCH: 
                page_health.KIND_STALE: "中性"}
 
 
-def render_page_header(slug: str, *, as_of, tone_hex, settings_page=None) -> None:
+def render_page_header(slug: str, *, as_of, tone_hex, settings_page=None, status_line: bool = True) -> None:
     """四頁頁首（U9）＋導覽。讀本頁剛由 `record_page_health` 記下的那一格（`page_health.recorded`），交給
-    `page_health.header_view` 組字；本函式只負責畫。`tone_hex`：該頁 `theme.tone_hex`。"""
+    `page_health.header_view` 組字；本函式只負責畫。`tone_hex`：該頁 `theme.tone_hex`。
+
+    `status_line=False`（BL-0525 Batch C，🌍 頁 D3：頁首不放頁級日期）：不畫「主要原因／另有／資料截至」文字，只留導覽連結；
+    總表（設定與診斷頁）讀的記錄不受影響（記錄在 `record_page_health`，不在這裡）。預設 True，其餘各頁行為不變。"""
+    if not status_line:
+        render_settings_link(settings_page)
+        return
     view = page_health.header_view(page_health.recorded(st.session_state, slug), as_of=as_of)
     muted = tone_hex("灰")
     rows = []

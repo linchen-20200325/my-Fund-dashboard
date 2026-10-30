@@ -74,3 +74,14 @@ _DEMO = {p: f"from ui_v2.{p} import page\npage.render()\n" for p in ("alo", "exp
 def test_正控_示範模式照舊命中開發註記(page):
     texts = SCAN.screen_texts(_run(SCAN._HEAD + _DEMO[page]))
     assert [t for t in texts if DEV_NOTE.search(t) and not any(a in t for a in _ALLOW)]
+
+
+# ── BL-0525 Batch C（T13 遷移）：新視覺層級的 detail 容器也不得有純開發註記 ──
+# 舊母體 `SCAN.SCRIPTS["mkt"]` 的五個情境沒有餵 `market_view`（走舊版面）；新層級只在有 Data View 時出現，所以另掃 `MKT_TREND`。
+def test_正式模式_市場趨勢新層級_一般畫面沒有開發註記():
+    texts = _texts(_run(SCAN.MKT_TREND), "mkt")
+    assert len(texts) >= 10
+    assert any("尚未取得" in t for t in texts), "新層級沒畫出來 —— 掃描是空掃"
+    hits = [t for t in texts if DEV_NOTE.search(t)]
+    assert hits == [], [" ".join(h.split())[:160] for h in hits]
+    assert [t for t in texts if any(k in t for k in _ALSO_GONE)] == []
