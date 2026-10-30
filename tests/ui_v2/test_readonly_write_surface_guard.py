@@ -549,10 +549,76 @@ def _strip_problems(source: str, fn_name: str) -> list:
     return problems
 
 
+# → 2026-10-30 BL-0525 Batch D（`DEC-2026-10-30-02`；有意識的更正，不是漏刪）：`hld`、`alo` 的「載入→組模型→收集→收合判定→
+#   `readonly.strip_write_controls`」整段從 `render` 原樣抽進 `prepare_live`（單頁 `render` 與合併頁共用）。舊守衛的兩個性質照舊成立、
+#   只是分成兩半驗：(1) `prepare_live` 內恰一處 strip、不在示範分支裡；(2) 單頁 `render` 在**第一個畫塊呼叫之前**先呼叫 `prepare_live`
+#   （且是正式模式分支）；合併頁 `ui_v2/asset/page.py::_render` 同樣在第一個畫塊呼叫之前就把兩側 `prepare_live` 都跑完（`_prepare`）。
+_PREPARED_PAGES = ("hld", "alo")
+
+
+def _calls_before_first_render(source: str, fn_name: str, callee: str) -> list:
+    tree = ast.parse(source)
+    fn = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == fn_name), None)
+    if fn is None:
+        return [f"找不到 {fn_name}"]
+    parents = _parents(tree)
+
+    def in_except(n):
+        while n is not fn:
+            n = parents[n]
+            if isinstance(n, ast.ExceptHandler):
+                return True
+        return False
+
+    def calls(name):
+        return [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call)
+                and ((isinstance(n.func, ast.Name) and n.func.id == name)
+                     or (isinstance(n.func, ast.Attribute) and n.func.attr == name))]
+
+    prepared = calls(callee)
+    renders = [n.lineno for n in ast.walk(fn) if _is_render_call(n) and not in_except(n)]
+    if not prepared:
+        return [f"{fn_name} 沒有呼叫 {callee}"]
+    if not renders:
+        return ["找不到任何畫塊呼叫"]
+    if max(prepared) > min(renders):
+        return [f"{callee} 的呼叫（第 {max(prepared)} 行）在第一個畫塊呼叫（第 {min(renders)} 行）之後"]
+    return []
+
+
 @pytest.mark.parametrize("page", PAGES)
 def test_live_render_path_strips_write_controls_before_rendering(page):
     source = (ROOT / "ui_v2" / page / "page.py").read_text(encoding="utf-8")
+    if page in _PREPARED_PAGES:
+        assert _strip_problems_prepare(source) == []
+        assert _calls_before_first_render(source, _LIVE_RENDER_FN[page], "prepare_live") == []
+        return
     assert _strip_problems(source, _LIVE_RENDER_FN[page]) == []
+
+
+def _strip_problems_prepare(source: str) -> list:
+    """`prepare_live` 內恰一處 `readonly.strip_write_controls`、不落在示範分支裡（`prepare_live` 本身不含畫塊呼叫，順序性質由另一半驗）。"""
+    tree = ast.parse(source)
+    fn = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "prepare_live"), None)
+    if fn is None:
+        return ["找不到 prepare_live"]
+    strips = [n for n in ast.walk(fn) if _is_strip_call(n)]
+    if len(strips) != 1:
+        return [f"prepare_live 內 readonly.strip_write_controls 呼叫 {len(strips)} 處（應為 1）"]
+    if any(_is_render_call(n) for n in ast.walk(fn)):
+        return ["prepare_live 內不得有畫塊呼叫（畫塊屬 render）"]
+    return []
+
+
+def test_合併頁_兩側prepare_live都在第一個畫塊呼叫之前跑完_且只經prepare_live取模型():
+    source = (ROOT / "ui_v2" / "asset" / "page.py").read_text(encoding="utf-8")
+    assert _calls_before_first_render(source, "_render", "_prepare") == []
+    tree = ast.parse(source)
+    prepare = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_prepare")
+    called = {ast.unparse(c.func) for c in ast.walk(prepare) if isinstance(c, ast.Call)}
+    assert "page_mod.prepare_live" in called                      # 合併頁自己不建模型、不呼叫 build_page_model／build_live_model
+    for banned in ("build_page_model", "build_live_model", "strip_write_controls"):
+        assert banned not in source, banned
 
 
 def test_set_page_hides_set4_in_live_layers():

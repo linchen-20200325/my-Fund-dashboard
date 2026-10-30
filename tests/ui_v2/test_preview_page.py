@@ -61,6 +61,7 @@ from services.v2_tables import exp_universe as EXP_UNIVERSE  # noqa: E402
 from services.v2_tables import market_indicator as MI  # noqa: E402
 from ui_v2.alo import page as alo_page  # noqa: E402
 from ui_v2.alo import source as alo_source  # noqa: E402
+from ui_v2.asset import page as asset_page  # noqa: E402
 from ui_v2.exp import page as exp_page  # noqa: E402
 from ui_v2.exp import source as exp_source  # noqa: E402
 from ui_v2.hld import page as hld_page  # noqa: E402
@@ -74,8 +75,15 @@ _PREVIEW_PATH = _ROOT / "ui_v2" / "app_preview.py"
 _MARK = "正式路徑碰到 fixtures"
 _NO_NET = "測試替身：本測試不打網路"
 # 2026-10-13：標的探索接上正式模式（狀態更新，不是漏刪），加入 exp。
-_LIVE_PAGES = {"mkt": mkt_page, "hld": hld_page, "exp": exp_page, "alo": alo_page, "set": set_page}
-_SOURCES = {"mkt": mkt_source, "hld": hld_source, "exp": exp_source, "alo": alo_source, "set": set_source}
+# → 2026-10-30 Batch D（`DEC-2026-10-30-02`；有意識的更正，不是漏刪；決策者：客戶）：預覽導覽的 `alo`、`hld` 併成一頁 `ast`（💼 我的資產）。
+#   舊值：{"mkt": mkt_page, "hld": hld_page, "exp": exp_page, "alo": alo_page, "set": set_page}。
+#   本檔原本用 `_go(at, "alo")`／`_go(at, "hld")` 驗的流程（換頁清單、存檔失敗帳、暫存帶回、同名輸入欄不跨頁、套用值）都落在合併頁的
+#   配置區段與持股區段（widget key、session key 與單頁一字不差），所以舊 slug 經 `_PAGE_OF` 對到 `ast`，斷言內容不放寬。
+_LIVE_PAGES = {"mkt": mkt_page, "ast": asset_page, "exp": exp_page, "set": set_page}
+_SOURCES = {"mkt": mkt_source, "exp": exp_source, "set": set_source}
+_PAGE_OF = {"alo": "ast", "hld": "ast"}
+_RECORDED_SOURCES = {"mkt": mkt_source, "hld": hld_source, "exp": exp_source, "alo": alo_source, "set": set_source}   # `_recorders` 逐一包住（合併頁經 alo／hld 兩個 source 取數）
+_FIXTURE_PAGES = (mkt_page, hld_page, exp_page, alo_page, set_page)   # 有 `fixtures` 屬性的頁模組（合併頁沒有，它讀的是 alo／hld 兩個）
 
 # 真的 `st.navigation`：與 `streamlit run ui_v2/app_preview.py` 跑的是同一個 `main()`。
 # 用 `from ui_v2 import app_preview`（而不是 `AppTest.from_file`）是為了讓測試能 monkeypatch 那個模組物件。
@@ -91,9 +99,10 @@ app_preview.main()
 # 有意識的政策變更，不是漏刪。
 _TITLE = {
     "mkt": '<div class="mkt-page-title">🌍 市場與趨勢</div>',
-    "hld": '<div class="hld-title">💼 我的持股</div>',
+    "ast": '<div class="ast-title">💼 我的資產</div>',
+    "hld": '<div class="ast-title">💼 我的資產</div>',   # → Batch D：舊 '<div class="hld-title">💼 我的持股</div>'（舊 slug 對到合併頁）
     "exp": '<div class="exp-title">🔍 找基金</div>',
-    "alo": '<div class="alo-title">⚖️ 資產配置</div>',
+    "alo": '<div class="ast-title">💼 我的資產</div>',   # → Batch D：舊 '<div class="alo-title">⚖️ 資產配置</div>'
     "set": '<div class="set-title">⚙️ 設定</div>',
 }
 
@@ -131,7 +140,7 @@ def no_secrets(monkeypatch):
 @pytest.fixture
 def biting(monkeypatch):
     """四頁真資料的 `page` 模組上的 `fixtures` 一律換成替身：任何一條正式路徑碰到就炸。"""
-    for page in _LIVE_PAGES.values():
+    for page in _FIXTURE_PAGES:
         monkeypatch.setattr(page, "fixtures", _FixturesThatBite())
 
 
@@ -146,7 +155,7 @@ def _app_test(**query):
 
 def _select(at, slug):
     """選 `st.navigation` 的頁（下一次 `run()` 生效）。`calc_hash(url_path)` ＝ `st.Page._script_hash`。"""
-    at._page_hash = calc_hash(slug)
+    at._page_hash = calc_hash(_PAGE_OF.get(slug, slug))
     return at
 
 
@@ -207,8 +216,7 @@ _MISSING = {
     # ~~"hld"／"alo": (POL.NOT_CONFIGURED_MESSAGE, SET_REPO.NOT_CONFIGURED_MESSAGE)~~ → 2026-10-26 批 3b-4（有意識的更正，不是漏刪；
     # 決策者：客戶 J-7／J-13）：持倉體檢與資產配置只讀個人 Active Sheet，不再讀 `POLICY_SHEET_ID`；沒有 Active ＝
     # 「⬜ 尚未選定持倉資料來源」（明確狀態，不是取數失敗，下面另驗），所以這兩頁沒有「未設定保單試算表 ID」原文。
-    "hld": (),
-    "alo": (),
+    "ast": (),
     "set": (SET_REPO.NOT_CONFIGURED_MESSAGE,),
     # ~~"exp": (EXP_UNIVERSE.TEXT_NOT_CLOUD, ...)~~ → 2026-10-26（有意識的更正，不是漏刪）：POOL_SHEET_ID 寫死預設本已移除，
     # 無憑證替身之下試算表 ID 也未設定，`load_pool_codes` 改回 TEXT_NO_SHEET_ID（原因寫對）；仍走 STATUS_NOT_CLOUD。
@@ -227,10 +235,10 @@ def test_e_無憑證_四頁照實顯示缺失_沒有Traceback_不碰fixtures_沒
         assert needle in where, (slug, needle)
         if slug != "set":
             assert needle not in text, (slug, needle)
-    if slug in ("hld", "alo"):
+    if slug == "ast":
         from ui_v2 import active_gate
 
-        assert active_gate.TEXT_NO_ACTIVE in text, slug
+        assert text.count(active_gate.TEXT_NO_ACTIVE) == 1, slug   # 合併頁整頁只寫一次（頁頂「持倉資料來源」那一列）
         assert "取數失敗" not in text and "HOLD" not in text, slug
         assert POL.NOT_CONFIGURED_MESSAGE not in text and POL.NOT_CONFIGURED_MESSAGE not in _raw_text(at, slug), slug
         # 預覽入口傳了 settings_page → 一枚只換頁的連結（st.page_link），不是單頁入口的說明行
@@ -278,6 +286,9 @@ def test_b_執行期_四頁傳入的物件與live入口傳的是同一批(no_sec
     at = _select(_app_test(), slug)
     at.run()
     assert not at.exception, [e.value for e in at.exception]
+    if slug == "ast":
+        _assert_ast_injection(monkeypatch, calls)
+        return
     live = AppTest.from_file(str(_ROOT / "ui_v2" / f"app_{slug}_live.py"), default_timeout=120)
     live.run()
     assert not live.exception, [e.value for e in live.exception]
@@ -293,8 +304,9 @@ def test_b_執行期_四頁傳入的物件與live入口傳的是同一批(no_sec
     if slug == "set":
         from streamlit.navigation.page import StreamlitPage
 
-        assert set(pages) == {"mkt", "hld", "exp", "alo"} and all(isinstance(p, StreamlitPage) for p in pages.values())
-        assert {s: p.url_path for s, p in pages.items()} == {s: s for s in pages}
+        # → Batch D：舊 {"mkt","hld","exp","alo"}（url_path 與 slug 相同）；`hld`、`alo` 兩列（總表仍各記一格）的連結都指向合併頁 `ast`。
+        assert set(pages) == {"mkt", "ast", "exp", "hld", "alo"} and all(isinstance(p, StreamlitPage) for p in pages.values())
+        assert {s: p.url_path for s, p in pages.items()} == {"mkt": "mkt", "ast": "ast", "exp": "exp", "hld": "ast", "alo": "ast"}
     else:
         assert pages is None
     assert "pages" not in live_kwargs
@@ -313,6 +325,31 @@ def test_b_執行期_四頁傳入的物件與live入口傳的是同一批(no_sec
         # 逐一檢查每個值的 `__module__`；其他物件的斷言不變。
         for part in (obj.values() if isinstance(obj, dict) else (obj,)):
             assert getattr(part, "__module__", None) == _SOURCES[slug].__name__, (slug, name)
+
+
+def _assert_ast_injection(monkeypatch, ast_calls) -> None:
+    """合併頁（BL-0525 Batch D）：預覽傳給 `asset_page.render` 的 `alo_live`／`hld_live`，其中每個函式與各自單頁 live 入口傳給
+    `page.render` 的是**同一個物件**（同 `source` 模組）；`picker_live` 是設定頁那一份；`settings_page` 只換頁。"""
+    from streamlit.navigation.page import StreamlitPage
+    from streamlit.testing.v1 import AppTest
+
+    assert len(ast_calls) == 1, ast_calls
+    args, kwargs = ast_calls[0]
+    assert args == () and set(kwargs) == {"alo_live", "hld_live", "picker_live", "settings_page"}, kwargs
+    for slug, module, page_module in (("alo", alo_source, alo_page), ("hld", hld_source, hld_page)):
+        live_calls = _record_render(monkeypatch, page_module)
+        live = AppTest.from_file(str(_ROOT / "ui_v2" / f"app_{slug}_live.py"), default_timeout=120)
+        live.run()
+        assert not live.exception, [e.value for e in live.exception]
+        assert len(live_calls) == 1, live_calls
+        live_kwargs = live_calls[0][1]
+        got = kwargs[f"{slug}_live"]
+        assert got["load"] is live_kwargs["load_live"] and got["save"] is live_kwargs["save_live"] \
+            and got["mask"] is live_kwargs["mask_error"], (slug, got, live_kwargs)
+        for fn in got.values():
+            assert fn.__module__ == module.__name__, (slug, fn)
+    assert kwargs["picker_live"] is set_source.picker_live
+    assert isinstance(kwargs["settings_page"], StreamlitPage) and kwargs["settings_page"].url_path == "set"
 
 
 def test_b_執行期_標的探索的示範入口照舊不傳任何參數(monkeypatch):
@@ -656,6 +693,10 @@ def hld_dataset(monkeypatch, no_secrets):
         "nav_provenance": {row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]},
     }
     monkeypatch.setattr(hld_source, "load_live", lambda: {"dataset": dataset, "live_args": live_args})
+    # → Batch D：合併頁一次載入配置與持股兩側；配置側沒有 Active 會讓整頁成為「尚未選定持倉資料來源」，所以配置側也給固定資料（體例同單頁測試）。
+    from ui_v2.alo import fixtures as alo_fixtures
+
+    monkeypatch.setattr(alo_source, "load_live", lambda: {"dataset": alo_fixtures.scenario("full"), "notes": {}})
 
 
 def _hld_cards(at):
@@ -748,7 +789,7 @@ def test_P0_1_開過市場總覽再到設定與診斷_進階診斷照印那一�
 def _recorders(monkeypatch):
     """五頁 source 的 load／save／refetch 換成「記下呼叫再照原樣做」的替身（預覽的頁函式在呼叫時才取屬性）。"""
     calls = {"save": [], "refetch": [], "load": []}
-    for slug, source in _SOURCES.items():
+    for slug, source in _RECORDED_SOURCES.items():
         for attr, kind in (("save_setting", "save"), ("refetch", "refetch"), ("load_live", "load")):
             real = getattr(source, attr, None)
             if real is None:
@@ -763,7 +804,7 @@ def _recorders(monkeypatch):
     return calls
 
 
-@pytest.mark.parametrize("slug", ["mkt", "hld", "exp", "alo"])
+@pytest.mark.parametrize("slug", ["mkt", "ast", "exp"])   # → Batch D：舊 ["mkt", "hld", "exp", "alo"]
 def test_P0_2_四頁的前往設定與診斷是頁面連結_指向設定與診斷_沒有同名按鈕(no_secrets, biting, slug):
     from ui_v2 import health
 
@@ -772,9 +813,9 @@ def test_P0_2_四頁的前往設定與診斷是頁面連結_指向設定與診�
     # 不是頁首的「前往設定與診斷」（整頁只有那一枚、同樣只換頁、指向同一頁）。
     from ui_v2 import active_gate
 
-    label = active_gate.LINK_LABEL if slug in ("hld", "alo") else health.SETTINGS_LINK_LABEL
+    label = active_gate.LINK_LABEL if slug == "ast" else health.SETTINGS_LINK_LABEL
     links = [e for e in at.get("page_link") if e.proto.label == label]
-    assert len(links) == 1, [e.proto for e in at.get("page_link")]
+    assert len(links) == 1, [e.proto for e in at.get("page_link")]   # 合併頁沒有 Active：整頁只有頁頂那一列的那一枚
     assert links[0].proto.page == "set" and links[0].proto.page_script_hash == calc_hash("set")
     assert health.SETTINGS_LINK_LABEL not in [b.label for b in at.button]
     assert health.SETTINGS_ELSEWHERE_TEXT not in [c.value for c in at.main.caption]   # 預覽有連結，不寫那一行
@@ -789,7 +830,7 @@ def _book_state(book):
     return rows, writes
 
 
-@pytest.mark.parametrize("slug", ["mkt", "hld", "exp", "alo"])
+@pytest.mark.parametrize("slug", ["mkt", "ast", "exp"])   # → Batch D：舊 ["mkt", "hld", "exp", "alo"]
 def test_P0_2_畫頁面連結與換到設定與診斷_save與refetch都是0次_試算表一列未動(settings_book, biting, monkeypatch, slug):
     """護欄 3：導覽只換頁（44 第七節第三小節之七其五第 4 條的驗法）。畫出連結的那一輪、以及換到設定與診斷之後：
     任何一頁的存檔與重新取數都沒有被呼叫，設定試算表每一分頁的列與寫入呼叫都與換頁之前相同（讀取照常）。"""
