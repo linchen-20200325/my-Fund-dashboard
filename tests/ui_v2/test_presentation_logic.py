@@ -173,13 +173,27 @@ def test_純函式模組不import_streamlit_也不import舊樹():
     assert not roots & {"ui", "services", "repositories", "shared", "infra", "fund_fetcher"}, roots
 
 
-def test_primitives_目前沒有被任何頁面呼叫_Batch_A不改畫面():
-    """Batch A 只建 primitives；頁面套用屬 Batch C～F。哪一批開始套用，就在那一批把這條改成正向守衛。"""
-    users = []
+def test_primitives_只有已套用的頁面呼叫_Batch_C起只有mkt():
+    """~~Batch A 只建 primitives，沒有任何頁面呼叫（`users == []`）~~（有意識的更正，不是漏刪；BL-0525 Batch C，`DEC-2026-10-30-01`）：
+    Batch C 起 🌍 頁（`ui_v2/mkt/page.py`、`ui_v2/mkt/overview.py`）套用；舊斷言的理由仍成立——「還沒輪到的頁面不得偷偷套用」，
+    所以改成正向守衛：套用清單必須**逐字**等於已核准批次的頁面。Batch D～F 各批把自己的頁加進來（加進來即是簽名承認）。"""
+    users = set()
     for path in (_ROOT / "ui_v2").rglob("*.py"):
         if path.name in ("presentation.py", "presentation_view.py"):
             continue
         text = path.read_text(encoding="utf-8")
-        if "presentation_view" in text or "from ui_v2 import presentation" in text or "from . import presentation" in text:
-            users.append(str(path.relative_to(_ROOT)))
-    assert users == [], users
+        if ("presentation_view" in text or "from ui_v2 import presentation" in text or "from . import presentation" in text
+                or "from .. import presentation" in text or ", presentation," in text):
+            users.add(str(path.relative_to(_ROOT)))
+    assert users == {"ui_v2/mkt/page.py", "ui_v2/mkt/overview.py"}, users
+
+
+def test_圖卡摘要可省略_None不畫摘要句_空字串與多句仍然拒絕():
+    """BL-0525 Batch C 最小擴充：chips 已講完事實時不補湊一句（44 之十九寫的是「至多一句」）；給了字串就仍須是一句。"""
+    chips = [P.chip("a"), P.chip("b"), P.chip("c")]
+    model = P.chart_card_model("VIX", chips)
+    assert model["summary"] is None and "pc-summary" not in P.chart_card_head_html(model)
+    assert "pc-summary" in P.chart_card_head_html(P.chart_card_model("VIX", chips, "一句。"))
+    for bad in ("", "  ", "兩句。真的。", "換行\n句"):
+        with pytest.raises(ValueError):
+            P.chart_card_model("VIX", chips, bad)

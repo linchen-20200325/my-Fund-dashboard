@@ -179,6 +179,12 @@ jobs:
           GEMINI_API_KEY: "ci-test-key"
         run: python -m pytest tests/visual_fidelity/test_ci_fixture_screenshots.py -v -m "slow" --tb=short
 
+      - name: Print layout-check report to job summary (CI fixture; NOT production-like)
+        if: always()
+        run: |
+          f=visual-fidelity-out/ci-fixture/ci-fixture__report.md
+          if [ -f "$f" ]; then cat "$f"; cat "$f" >> "$GITHUB_STEP_SUMMARY"; else echo "no report file"; fi
+
       - name: Upload CI fixture screenshots (NOT production-like)
         if: always()
         uses: actions/upload-artifact@v4

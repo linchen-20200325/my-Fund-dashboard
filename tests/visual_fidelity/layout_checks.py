@@ -13,8 +13,9 @@
 | V4 | 圖表沒有放進收合的展開區 | strict 才 hard |
 | V5 | 圖表高度不低於下限、寬度不低於內容區寬度的一定比例（外露不是一條線；比例量內容區，不量視窗——desktop 內容區置中、比視窗窄） | strict 才 hard |
 | V6 | 每個 chips 群組至多 5 枚 | strict 才 hard |
-| V7 | 首屏看得到至少一張圖（Primary Visual 在首屏） | 一律 advisory |
-| V8 | 首屏 chips／badge 數 ≤ 5 | 一律 advisory |
+| V7 | 首屏看得到至少一張圖（Primary Visual 在首屏） | advisory；**🌍 頁（`page="mkt"`）起 hard**（BL-0525 Batch C） |
+| V8 | 首屏 chips／badge 數 ≤ 5 | advisory；**🌍 頁起 hard** |
+| M1～M6 | 🌍 頁專屬（D1～D7 的可自動量測部分）：視覺順序、Secondary ≤3、無頁級日期、Secondary 不高於 Primary、手機緊湊列、圖表牆 | 只在 `page="mkt"` 時評估，全部 hard |
 
 **hard** 失敗＝測試轉紅（安全網抓到真的壞掉：例外、原始碼外露、橫捲）；**advisory** 失敗＝只寫進報告「契約缺口」，**不轉紅**
 （例：今天 🌍 頁的圖排在燈與三張文字卡之後，V7 會 fail —— 那是 `docs/v2/71` X-25，Batch C 的工作，不是這個安全網要擋的）。
@@ -54,7 +55,20 @@ MEASURE_JS = """
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0 && r.top < vh;
   }).length;
+  const rect = (el) => { const r = el.getBoundingClientRect(); return {top: r.top + window.scrollY, height: r.height, width: r.width}; };
+  const one = (sel) => { const el = document.querySelector(sel); return el ? rect(el) : null; };
+  // 🌍 頁專屬量測（其他頁這些選擇器都量不到 → null／[]，不影響他們的檢查）。
+  const mkt = {
+    status_chip: one('.mkt-light--chip'),
+    hero: one('.mkt-hero'),
+    primary: one('[data-section=primary]'),
+    // 量外層框（含「利率與信用」卡內的 radio 列）；找不到外層框才退回卡片本身。
+    secondary: all('.mkt-sec-card').map((el) => rect(el.closest('[data-testid=stVerticalBlockBorderWrapper]') || el)),
+    evidence: one('[data-block="MKT-1"]'),
+    page_date: /資料截至|最新到/.test(document.body.innerText),
+  };
   return {
+    mkt,
     viewport: {width: vw, height: vh},
     main_width: mainWidth,
     exceptions: all('[data-testid=stException]').length,
@@ -76,8 +90,48 @@ def _check(cid: str, title: str, ok: bool, detail: str, *, hard: bool) -> dict:
     return {"id": cid, "title": title, "status": "pass" if ok else "fail", "hard": hard, "detail": detail}
 
 
-def evaluate(measure: dict, *, strict: bool = False) -> list:
-    """把量測值判成檢查結果。`strict`：V4～V6 也算 hard（Batch A 自己控制的 primitives 展示頁用）。"""
+MKT_MAX_SECONDARY = 3          # 客戶 2026-10-30：1 Primary＋最多 3 Secondary（3 不是 KPI）
+MKT_MOBILE_SECONDARY_MAX_PX = 240   # 手機 Secondary 是緊湊列：單張高度上限（安全網下限，不是設計目標）
+MOBILE_MAX_WIDTH = 500
+
+
+def evaluate_mkt(measure: dict) -> list:
+    """🌍 頁專屬檢查 M1～M6（`DEC-2026-10-30-01` D1～D7＋額外 UI guardrail；全部 hard）。只量結構與相對位置，不判美醜。"""
+    m = measure.get("mkt") or {}
+    charts = [c for c in measure["charts"] if not c["collapsed"]]
+    out = []
+    chip, hero, primary = m.get("status_chip"), m.get("hero"), m.get("primary")
+    secondary, evidence = m.get("secondary") or [], m.get("evidence")
+    first_chart = charts[0] if charts else None
+    chain = [("status chip", chip), ("一句主判讀", hero), ("Primary", primary),
+             ("Primary 圖", first_chart), ("Secondary", secondary[0] if secondary else None), ("依據卡", evidence)]
+    missing = [name for name, item in chain if item is None]
+    tops = [item["top"] for _name, item in chain if item is not None]
+    ordered = not missing and all(a < b for a, b in zip(tops, tops[1:]))
+    out.append(_check("M1", "視覺順序：status chip → 一句主判讀 → Primary → Secondary → 依據卡", ordered,
+                      f"缺少 {missing}" if missing else "上緣 " + " < ".join(f"{n} {t:.0f}" for (n, _), t in zip(chain, tops)),
+                      hard=True))
+    out.append(_check("M2", f"Secondary 至少 1 個、至多 {MKT_MAX_SECONDARY} 個", 1 <= len(secondary) <= MKT_MAX_SECONDARY,
+                      f"Secondary {len(secondary)} 個", hard=True))
+    out.append(_check("M3", "沒有頁級日期（日期只在圖卡 chip）", not m.get("page_date"),
+                      "頁面文字含「資料截至／最新到」" if m.get("page_date") else "頁面文字不含頁級日期字樣", hard=True))
+    tallest = max((c["height"] for c in secondary), default=0)
+    out.append(_check("M4", "Secondary 不高於 Primary 圖", bool(first_chart) and tallest <= first_chart["height"],
+                      f"最高 Secondary {tallest:.0f}px；Primary 圖 {first_chart['height'] if first_chart else 'n/a'}px", hard=True))
+    mobile = measure["viewport"]["width"] <= MOBILE_MAX_WIDTH
+    too_tall = [c for c in secondary if c["height"] > MKT_MOBILE_SECONDARY_MAX_PX] if mobile else []
+    out.append(_check("M5", f"手機 Secondary 是緊湊列（單張 ≤ {MKT_MOBILE_SECONDARY_MAX_PX}px）", not too_tall,
+                      f"{'手機' if mobile else '桌機（不適用）'}；超高 {len(too_tall)} 張", hard=True))
+    out.append(_check("M6", "沒有圖表牆：整頁只有 Primary 一張可見圖", len(charts) == 1,
+                      f"外露圖表 {len(charts)} 張", hard=True))
+    return out
+
+
+def evaluate(measure: dict, *, strict: bool = False, page: str | None = None) -> list:
+    """把量測值判成檢查結果。`strict`：V4～V6 也算 hard（Batch A 自己控制的 primitives 展示頁用）。
+    `page="mkt"`（BL-0525 Batch C）：V4～V8 全部 hard，並附加 M1～M6；其他頁維持原判定。"""
+    mkt = page == "mkt"
+    strict = strict or mkt
     content_w = measure.get("main_width") or measure["viewport"]["width"]
     out = []
     out.append(_check("V1", "沒有未處理例外", measure["exceptions"] == 0, f"stException={measure['exceptions']}", hard=True))
@@ -101,9 +155,11 @@ def evaluate(measure: dict, *, strict: bool = False) -> list:
     vh = measure["viewport"]["height"]
     first_chart = [c for c in charts if not c["collapsed"] and c["top"] < vh]
     out.append(_check("V7", "首屏看得到至少一張圖（Primary Visual）", bool(first_chart),
-                      f"首屏高 {vh}px；首屏圖 {len(first_chart)} 張", hard=False))
+                      f"首屏高 {vh}px；首屏圖 {len(first_chart)} 張", hard=mkt))
     out.append(_check("V8", f"首屏 chips／badge ≤ {config.MAX_CHIPS_PER_CARD}", measure["first_screen_chips"] <= config.MAX_CHIPS_PER_CARD,
-                      f"首屏 {measure['first_screen_chips']} 枚", hard=False))
+                      f"首屏 {measure['first_screen_chips']} 枚", hard=mkt))
+    if mkt:
+        out.extend(evaluate_mkt(measure))
     return out
 
 

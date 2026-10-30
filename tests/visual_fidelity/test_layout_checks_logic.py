@@ -168,3 +168,105 @@ def test_cloud_capture_狀態與exit_code要讓人看得到():
     text = CC.report_text(url="https://x/", outcome=config.CLOUD_BLOCKED_NOTE, files=[], reason="net::ERR_TUNNEL_CONNECTION_FAILED")
     assert config.CLOUD_BLOCKED_NOTE in text and "production-like Cloud screenshot" in text
     assert config.CI_FILE_PREFIX not in text   # 兩層不混用：Cloud 報告不出現 CI 檔名前綴
+
+
+# ── BL-0525 Batch C：🌍 頁專屬檢查（page="mkt"）──
+
+
+def _mkt_measure(**over):
+    """桌機 1280x800 的合格 🌍 頁量測：status chip → hero → Primary → Primary 圖 → Secondary ×3 → 依據卡，由上而下。"""
+    base = _measure(
+        viewport={"width": 1280, "height": 800}, main_width=730,
+        charts=[{"top": 330, "height": 300, "width": 700, "collapsed": False}],
+        chips_groups=[3, 3, 3, 3, 3], first_screen_chips=3,
+        mkt={
+            "status_chip": {"top": 120, "height": 36, "width": 200},
+            "hero": {"top": 170, "height": 30, "width": 600},
+            "primary": {"top": 220, "height": 520, "width": 730},
+            "secondary": [{"top": 760, "height": 190, "width": 230}] * 3,
+            "evidence": {"top": 1000, "height": 200, "width": 230},
+            "page_date": False,
+        },
+    )
+    base.update(over)
+    return base
+
+
+def test_mkt_合格頁面_V1到V8與M1到M6全部通過_且全部hard():
+    results = LC.evaluate(_mkt_measure(), page="mkt")
+    assert [r["id"] for r in results] == ["V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "M1", "M2", "M3", "M4", "M5", "M6"]
+    assert all(r["status"] == "pass" and r["hard"] for r in results), [r for r in results if r["status"] != "pass" or not r["hard"]]
+
+
+def test_mkt_V7與V8對mkt是hard_對其他頁仍是advisory():
+    m = _mkt_measure(charts=[{"top": 2000, "height": 300, "width": 700, "collapsed": False}], first_screen_chips=9)
+    assert {"V7", "V8"} <= {r["id"] for r in LC.hard_failures(LC.evaluate(m, page="mkt"))}
+    assert LC.hard_failures(LC.evaluate(m)) == []                       # 沒帶 page：舊行為不變
+    assert {"V7", "V8"} == {r["id"] for r in LC.advisory_gaps(LC.evaluate(m, page="hld"))}
+
+
+def test_mkt_順序錯誤_M1轉紅():
+    swapped = _mkt_measure()
+    swapped["mkt"] = {**swapped["mkt"], "hero": {"top": 700, "height": 30, "width": 600}}    # 一句主判讀跑到 Primary 之後
+    assert "M1" in [r["id"] for r in LC.hard_failures(LC.evaluate(swapped, page="mkt"))]
+    no_chip = _mkt_measure()
+    no_chip["mkt"] = {**no_chip["mkt"], "status_chip": None}
+    failed = [r for r in LC.hard_failures(LC.evaluate(no_chip, page="mkt")) if r["id"] == "M1"]
+    assert failed and "status chip" in failed[0]["detail"]
+
+
+def test_mkt_Secondary超過三個_或零個_M2轉紅():
+    four = _mkt_measure()
+    four["mkt"] = {**four["mkt"], "secondary": [{"top": 760, "height": 190, "width": 230}] * 4}
+    zero = _mkt_measure()
+    zero["mkt"] = {**zero["mkt"], "secondary": []}
+    for m in (four, zero):
+        assert "M2" in [r["id"] for r in LC.hard_failures(LC.evaluate(m, page="mkt"))]
+    two = _mkt_measure()      # 2 個夠就不硬塞第三張：少於 3 是合格
+    two["mkt"] = {**two["mkt"], "secondary": [{"top": 760, "height": 190, "width": 230}] * 2}
+    assert "M2" not in [r["id"] for r in LC.hard_failures(LC.evaluate(two, page="mkt"))]
+
+
+def test_mkt_頁級日期_M3轉紅():
+    m = _mkt_measure()
+    m["mkt"] = {**m["mkt"], "page_date": True}
+    assert [r["id"] for r in LC.hard_failures(LC.evaluate(m, page="mkt"))] == ["M3"]
+
+
+def test_mkt_Secondary比Primary圖高_M4轉紅():
+    m = _mkt_measure()
+    m["mkt"] = {**m["mkt"], "secondary": [{"top": 760, "height": 320, "width": 230}] * 3}
+    assert "M4" in [r["id"] for r in LC.hard_failures(LC.evaluate(m, page="mkt"))]
+
+
+def test_mkt_手機Secondary太高_M5轉紅_桌機不適用():
+    mobile = _mkt_measure(viewport={"width": 390, "height": 844}, main_width=358)
+    mobile["mkt"] = {**mobile["mkt"], "secondary": [{"top": 760, "height": 260, "width": 358}] * 3}
+    assert "M5" in [r["id"] for r in LC.hard_failures(LC.evaluate(mobile, page="mkt"))]
+    compact = _mkt_measure(viewport={"width": 390, "height": 844}, main_width=358)
+    compact["mkt"] = {**compact["mkt"], "secondary": [{"top": 760, "height": 150, "width": 358}] * 3}
+    assert "M5" not in [r["id"] for r in LC.hard_failures(LC.evaluate(compact, page="mkt"))]
+    desktop = _mkt_measure()
+    desktop["mkt"] = {**desktop["mkt"], "secondary": [{"top": 760, "height": 260, "width": 230}] * 3}
+    assert "M5" not in [r["id"] for r in LC.hard_failures(LC.evaluate(desktop, page="mkt"))]
+
+
+def test_mkt_圖表牆_兩張可見圖_M6轉紅():
+    m = _mkt_measure(charts=[{"top": 330, "height": 300, "width": 700, "collapsed": False},
+                             {"top": 800, "height": 200, "width": 700, "collapsed": False}])
+    assert "M6" in [r["id"] for r in LC.hard_failures(LC.evaluate(m, page="mkt"))]
+
+
+def test_mkt_圖表放進展開區_V4轉紅_圖不算外露():
+    m = _mkt_measure(charts=[{"top": 330, "height": 300, "width": 700, "collapsed": True}])
+    failed = {r["id"] for r in LC.hard_failures(LC.evaluate(m, page="mkt"))}
+    assert {"V4", "M1", "M6"} <= failed
+
+
+def test_量測腳本帶mkt專屬欄位_且選擇器對得上頁面():
+    js = LC.MEASURE_JS
+    for needle in (".mkt-light--chip", ".mkt-hero", "[data-section=primary]", ".mkt-sec-card", '[data-block="MKT-1"]'):
+        assert needle in js, needle
+    page = (_HERE.parents[1] / "ui_v2" / "mkt" / "page.py").read_text(encoding="utf-8")
+    for cls in ("mkt-light--chip", "mkt-hero", "mkt-sec-card", 'data-section="primary"'):
+        assert cls in page, cls

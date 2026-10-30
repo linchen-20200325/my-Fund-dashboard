@@ -61,12 +61,42 @@ _notes = {"pending": {"leading_index": "ndc_no_release_date", "coincident_index"
                       "fx_twd_per_usd": "fx_obs_date_rule"},
           "masked_keys": [], "cooldowns": []}
 # 2026-10-27 BL-0516 批 1：加上「市場趨勢」區段（L2 唯讀 Data View；合成序列、不打網路），讓 390 寬不橫捲的守衛涵蓋新區段。
+# 2026-10-30 BL-0525 Batch C（T1 遷移）：五個序列全部給合成資料（原本只給 VIX，其餘走真取數，與「不打外部網路」不符），
+# 並補上 BL-0517 三序列（信用利差、期限利差、政策利率）近兩年的日列，讓新視覺層級（Primary＋Secondary＋依據卡）整組都在量測範圍內。
+import datetime as _dt
 import pandas as _pd
 from services.v2_tables import market_view as _mv
-_s = _pd.Series([16.0 + (i % 9) * 0.3 for i in range(len(_pd.bdate_range("2024-10-24", "2026-10-23")))],
-                index=_pd.bdate_range("2024-10-24", "2026-10-23"), dtype=float, name="^VIX")
-_s.attrs.update({"fetched_at": "2026-10-27T06:00:00+00:00", "source": "Yahoo:^VIX", "exchange_tz": "Etc/UTC"})
-_notes["market_view"] = _mv.build_market_view(fetch_vix=lambda _t, _r=None: (_s, None))
+
+
+def _yahoo(name, base, tz, hour, step):
+    idx = _pd.bdate_range("2024-10-24", "2026-10-23") + _pd.Timedelta(hours=hour)
+    s = _pd.Series([base + (i % 9) * step for i in range(len(idx))], index=idx, dtype=float, name=name)
+    s.attrs.update({"fetched_at": "2026-10-27T06:00:00+00:00", "source": "Yahoo:" + name, "exchange_tz": tz})
+    return s
+
+
+def _fred(base):
+    def _fn(series_id, api_key, n):
+        days = _pd.bdate_range("2024-10-24", "2026-10-23")
+        df = _pd.DataFrame({"date": days, "value": [base + (i % 7) * 0.01 for i in range(len(days))],
+                            "realtime_start": _pd.Timestamp("2026-10-27"), "source": "FRED:" + series_id,
+                            "fetched_at": "2026-10-27T06:00:00+00:00"})
+        return df, None
+    return _fn
+
+
+_dgs = {"DGS10": _fred(4.0), "DGS2": _fred(3.5)}
+_notes["market_view"] = _mv.build_market_view(
+    fetch_vix=lambda _t, _r=None: (_yahoo("^VIX", 16.0, "Etc/UTC", 0, 0.3), None),
+    fetch_taiex=lambda _t, _r=None: (_yahoo("^TWII", 22000.0, "Asia/Taipei", 1, 30.0), None),
+    fetch_sp500=lambda _t, _r=None: (_yahoo("^GSPC", 5000.0, "America/New_York", 13, 20.0), None),
+    fetch_fred=lambda sid, k, n: _dgs[sid](sid, k, n), fred_api_key="k")
+_rates = []
+for _key, _base, _unit in (("credit_spread_pct", 3.2, "pp"), ("term_spread_pct", 0.4, "pp"), ("policy_rate_pct", 4.3, "%")):
+    for _d in _pd.bdate_range("2024-10-24", "2026-10-23"):
+        _rates.append(fixtures.observation(_key, value_num=_base + (_d.toordinal() % 11) * 0.01, value_unit=_unit,
+                                           obs_date=_d.date().isoformat(), fetched_at="2026-10-27T06:00:00Z"))
+_dataset = {**_dataset, "rows": list(_dataset["rows"]) + _rates}
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes})
 """,
     "hld": _HEAD + """
@@ -184,8 +214,11 @@ _MEASURE_JS = """([lampSel, innerSel]) => {
   }
   const lamp = document.querySelector(lampSel);
   const lampBox = lamp ? lamp.getBoundingClientRect() : null;
+  // BL-0525 Batch C（T1 遷移）：首屏看得到主圖——第一張圖表的上緣（沒有圖 → null）。
+  const chartEl = document.querySelector('[data-testid=stVegaLiteChart], .vega-embed');
+  const chartTop = chartEl ? chartEl.getBoundingClientRect().top : null;
   return {
-    vw, vh,
+    vw, vh, chartTop,
     doc: [de.scrollWidth, de.clientWidth],
     main: main ? [main.scrollWidth, main.clientWidth] : null,
     offenders: offenders.slice(0, 12), offenderCount: offenders.length,
@@ -255,6 +288,15 @@ def test_390寬_正式模式_渲染無例外_DataHealth燈在首屏(live_page):
     assert m["lamp"] is not None, (name, "找不到 Data Health 燈", _LAMP[_slug(name)])
     top, _bottom, height = m["lamp"]
     assert height > 0 and 0 <= top < m["vh"], (name, "Data Health 燈不在首屏", m["lamp"])
+    if name == "mkt":     # 只有帶 Data View 的主情境；3-D 補的「mkt/…」情境沒有 market_view，走舊版面、沒有主圖
+        # BL-0525 Batch C（T1 遷移，44 之十九其七第 2 條）：燈改一行 chip 仍在首屏，而且首屏要看得到 Primary 主圖
+        # （~~舊斷言只驗燈可見~~：舊版圖排在燈＋三張卡之後，首屏沒有圖——那正是 X-25）。
+        assert m["chartTop"] is not None and 0 <= m["chartTop"] < m["vh"], (name, "首屏看不到主圖", m["chartTop"])
+    elif _slug(name) == "mkt":
+        # 3-D 補的 mkt/未設定、mkt/取數失敗：整頁 Missing／取數失敗、沒有 Data View（notes 無 market_view）→ 舊版面，燈（上面已驗在首屏）
+        # 與狀態卡在；沒有可畫的主圖就不畫（誠實：不為了過測試畫假圖）。有 Data View 的 Primary 取數失敗／Missing placeholder
+        # 由 `test_mkt_market_section_page.py`（TAIEX／VIX 取數失敗、缺金鑰）驗。
+        assert m["chartTop"] is None, (name, "失敗情境不該有圖", m["chartTop"])
 
 
 # ~~本測試發現、尚未修的整頁橫捲：頁名 → 原因（strict：修好後 XPASS 轉紅，逼人拿掉這一條）。~~

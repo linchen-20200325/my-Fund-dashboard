@@ -187,3 +187,65 @@ def test_示範模式不重排(page):
     values = _md(at)
     assert _label_index(values, plain.LABEL_ATTENTION) == -1
     assert not [e for e in at.expander if e.label.startswith((sections.EXP_RESULT_TITLE, sections.ALO_SCENARIO_ENTRY))]
+
+
+# ── BL-0525 Batch C（T6 遷移）：🌍 有 Data View 時的新段序 ──
+# 舊段序「①結論 → ②關鍵數字 → ③需要注意 → ④詳細資料」（上面各測試，沒有 Data View 的情境照舊成立）在 🌍 有 Data View 時改為
+# 「status chip → 一句主判讀 → Primary → Secondary → ②依據卡 → ③需要注意（有才畫）→ ▸尚未取得 → ▸各項資料狀態 → ④詳細資料」
+# （`DEC-2026-10-30-01` D7＝E2；舊斷言的理由——先答案後細節、③ 有才畫——仍成立，只是 ① 結論不再是獨立一段而是頁首 chip）。
+
+
+def _flat_nodes(node):
+    kind = type(node).__name__
+    if kind == "Expander":
+        yield ("expander", str(node.label))
+    children = getattr(node, "children", None)
+    if not children:
+        if kind == "Markdown":
+            yield ("md", node.value)
+        return
+    for child in children.values():
+        yield from _flat_nodes(child)
+
+
+def _pos(nodes, kind, needle):
+    for i, (k, v) in enumerate(nodes):
+        if k == kind and needle in v:
+            return i
+    raise AssertionError((kind, needle))
+
+
+def test_市場總覽_有DataView_新段序_chip先於主圖先於依據卡先於需要注意先於尚未取得先於詳細資料():
+    from streamlit.testing.v1 import AppTest
+
+    script = SCAN._mkt("fixtures.dataset_mkt1_one_key_missing()", settings=SCAN._MKT_SAVED, trend=True)
+    at = AppTest.from_string(script, default_timeout=90)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    nodes = list(_flat_nodes(at.main))
+    order = [
+        _pos(nodes, "md", 'class="mkt-light mkt-light--chip"'),
+        _pos(nodes, "md", 'class="mkt-hero"'),
+        _pos(nodes, "md", 'data-section="primary"'),
+        _pos(nodes, "md", 'data-section="secondary"'),
+        _pos(nodes, "md", plain.LABEL_LAYER2),
+        _pos(nodes, "md", 'data-block="MKT-1"'),
+        _pos(nodes, "md", plain.LABEL_ATTENTION),            # ③ 有資料面例外才畫（此情境 MKT-1 缺一鍵）
+        _pos(nodes, "expander", "▸ 尚未取得："),
+        _pos(nodes, "expander", "▸ 各項資料狀態"),
+        _pos(nodes, "md", plain.LABEL_DETAILS),
+    ]
+    assert order == sorted(order) and len(set(order)) == len(order), order
+    # ① 不再有獨立的「結論」段標籤；沒有資料面例外時 ③ 照舊整段不畫
+    ok = list(_flat_nodes(_run_script(SCAN._mkt("fixtures.dataset_all_ok()", settings=SCAN._MKT_SAVED, trend=True))))
+    assert not any(k == "md" and plain.LABEL_ATTENTION in v for k, v in ok)
+    assert not any(k == "md" and plain.LABEL_LAYER1 in v for k, v in nodes)
+
+
+def _run_script(script):
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_string(script, default_timeout=90)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    return at.main

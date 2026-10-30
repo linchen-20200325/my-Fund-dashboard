@@ -45,9 +45,15 @@ OTHER_TONES = {page_health.KIND_UNCONFIGURED: "中性", page_health.KIND_FETCH: 
                page_health.KIND_STALE: "中性"}
 
 
-def render_page_header(slug: str, *, as_of, tone_hex, settings_page=None) -> None:
+def render_page_header(slug: str, *, as_of, tone_hex, settings_page=None, status_line: bool = True) -> None:
     """四頁頁首（U9）＋導覽。讀本頁剛由 `record_page_health` 記下的那一格（`page_health.recorded`），交給
-    `page_health.header_view` 組字；本函式只負責畫。`tone_hex`：該頁 `theme.tone_hex`。"""
+    `page_health.header_view` 組字；本函式只負責畫。`tone_hex`：該頁 `theme.tone_hex`。
+
+    `status_line=False`（BL-0525 Batch C，🌍 頁 D3：頁首不放頁級日期）：不畫「主要原因／另有／資料截至」文字，只留導覽連結；
+    總表（設定與診斷頁）讀的記錄不受影響（記錄在 `record_page_health`，不在這裡）。預設 True，其餘各頁行為不變。"""
+    if not status_line:
+        render_settings_link(settings_page)
+        return
     view = page_health.header_view(page_health.recorded(st.session_state, slug), as_of=as_of)
     muted = tone_hex("灰")
     rows = []
@@ -64,6 +70,26 @@ def render_page_header(slug: str, *, as_of, tone_hex, settings_page=None) -> Non
         rows.append(f'<div style="color:{muted}">{_esc(view["as_of"])}</div>')
     st.markdown(f'<div class="v2-status-line" role="status">{"".join(rows)}</div>', unsafe_allow_html=True)
     render_settings_link(settings_page)
+
+
+def render_header_reasons(slug: str, *, as_of, tone_hex) -> None:
+    """頁首的「主要原因／另有」兩行，**不畫資料截至日**（BL-0525 Batch C：🌍 頁 D3 只禁頁級日期，沒授權移除這兩行；
+    它們改放進「▸ 各項資料狀態」最前面）。內容與 `render_page_header` 同一支 `page_health.header_view`、同一份記錄；
+    沒有主要原因（含「只有比較值尚未設定」的單行寫法）時什麼都不畫。"""
+    view = page_health.header_view(page_health.recorded(st.session_state, slug), as_of=as_of)
+    rows = []
+    if view["inline"]:
+        if view["main"]:
+            rows.append(f'<div style="color:{tone_hex("中性")}">{_esc(view["main"])}</div>')
+    else:
+        rows.append(f'<div style="color:{tone_hex(HEADER_TONES[view["main_kind"]])}">{_esc(view["main"])}</div>')
+        if view["others"]:
+            parts = page_health.HEADER_SEP.join(
+                f'<span style="color:{tone_hex(OTHER_TONES[kind])}">{_esc(text)}</span>' for kind, text in view["others"])
+            head, _sep, _rest = page_health.TEXT_OTHERS.partition("{parts}")
+            rows.append(f"<div>{_esc(head)}{parts}</div>")
+    if rows:
+        st.markdown(f'<div class="v2-status-reasons" role="status">{"".join(rows)}</div>', unsafe_allow_html=True)
 
 
 def render_attention(items, *, tone_hex, label_class: str) -> None:

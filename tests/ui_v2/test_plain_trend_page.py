@@ -49,3 +49,38 @@ def test_市場趨勢區段_一般畫面沒有工程字樣():
     texts = SCAN.screen_texts(_run())
     assert len(texts) >= 10
     assert _hits(texts, PATTERNS) == []
+
+
+# ── BL-0525 Batch C（T8／T13 遷移）：新視覺層級的 detail 容器與切換後的畫面也納入同一組掃描 ──
+# 新版同一時間只畫一個 Primary 序列，其餘四個序列的來源與限制文字只有切過去才會出現；
+# 還有「利率與信用」三個子序列、合併的「▸ 次要圖：來源與限制」與「▸ 尚未取得」群組。逐一切過去掃。
+
+
+@pytest.mark.parametrize("series", ["taiex", "sp500", "vix", "us10y", "us2y"])
+def test_Primary每個序列切過去_一般畫面含detail展開區都沒有工程字樣(series):
+    at = _run()
+    next(r for r in at.radio if r.key == "mkt_primary_series").set_value(series).run()
+    assert not at.exception, [e.value for e in at.exception]
+    texts = SCAN.screen_texts(at)
+    assert any(market_section.LABELS[series] in t for t in texts), "切換後該序列沒有畫出來 —— 掃描是空掃"
+    assert _hits(texts, PATTERNS) == []
+
+
+@pytest.mark.parametrize("key", ["term_spread_pct", "credit_spread_pct", "policy_rate_pct"])
+def test_利率與信用每個子序列切過去_沒有工程字樣(key):
+    at = _run()
+    next(r for r in at.radio if r.key == "mkt_rates_series").set_value(key).run()
+    assert not at.exception, [e.value for e in at.exception]
+    texts = SCAN.screen_texts(at)
+    assert any("利率與信用" in t for t in texts)
+    assert _hits(texts, PATTERNS) == []
+
+
+def test_新層級的展開區都被掃到_尚未取得_各項資料狀態_次要圖來源與限制():
+    at = _run()
+    labels = [e.label for e in at.expander]
+    for prefix in ("▸ 尚未取得：", "▸ 各項資料狀態", "▸ 次要圖：來源與限制"):
+        assert any(l.startswith(prefix) for l in labels), prefix
+    texts = " ".join(SCAN.screen_texts(at))
+    # screen_texts 沒有跳過這些展開區：群組標題、群組內 Missing 文案、次要圖 detail 的來源行都在掃描母體裡
+    assert "尚未取得：" in texts and "目前沒有正式資料來源" in texts and "來源 FRED (T10Y2Y)" in texts

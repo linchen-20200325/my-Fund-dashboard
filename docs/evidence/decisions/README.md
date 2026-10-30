@@ -31,6 +31,7 @@
 | `2026-10-29_context_compaction_gate.md` | 客戶 2026-10-29 永久規則 Context Compaction Gate 全文（六個觸發條件、壓縮只保留清單、可丟棄清單、GitHub 是長期記憶、Silent Cruise 例外三種、Sonnet 5.5／Medium；`docs/DECISIONS.md` `DEC-2026-10-29-04`；落地為 `PROJECT_RULES.md` 11.1 小節）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的永久規則裁示，經總管於派工單內逐字轉存 | 2026-10-29 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（PR #1102） | 2642 | `abe178790a6cd60ca40451a6c8f51e1102aeaa5333d5fc6ad8df44cc90eb6ed1` |
 | `2026-10-29_presentation_contract_migration.md` | 客戶 2026-10-29 Presentation Contract Migration＋Visual Fidelity Gate 裁示全文（三則訊息：第一則在第六節開頭截斷、第二則為補送的第六～二十四節、第三則為 Gate 裁示與追加方向；`docs/DECISIONS.md` `DEC-2026-10-29-05`、`-06`；落地為 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九與之二十、`docs/v2/67_ai_action_vocabulary.md` 第 5～7 節、`docs/v2/71_presentation_contract_migration.md`）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-29 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `02615e41` 之後） | 31979 | `22a6b1125c291079015b3ab3476a9c953249d8fc9fe20aad2807b0c25055d17f` |
 | `2026-10-29_batch_a_rulings.md` | 客戶 2026-10-29 Batch A 啟動三項裁示全文（BL-0526 採方案 C、B 線預覽站 Cloud Preview URL 與 Visual Fidelity 兩層驗收、Sonnet 5.5／Medium 起始點與升回 Opus＋High 條件、GitHub Durable Memory；`docs/DECISIONS.md` `DEC-2026-10-29-07`）；全文逐字，無遮蔽 | 客戶 2026-10-29 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-29 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `5e055083` 之後） | 7115 | `e2a2402f1944f7ef5746fd843e2ceb2e44b53a9dcb9a2afef202913a17044bf6` |
+| `2026-10-30_batch_c_d1_d7_rulings.md` | 客戶 2026-10-30 Batch C（🌍 市場與趨勢）wireframe 核准裁示全文（D1 Primary＋序列切換、D2 利率與信用 P2、D3 頁首一句話不放頁級日期、D4 EPS×PE 併入尚未取得、D5 結論燈一行 chip、D6 手機 Secondary 緊湊列、D7 依據卡位置 E2；第一眼／第二眼／第三眼 guardrail、避免圖表牆、Batch C 範圍與禁止事項、Cloud Visual Fidelity 處理、Durable Memory、Model／Effort；`docs/DECISIONS.md` `DEC-2026-10-30-01`）；全文逐字，無遮蔽 | 客戶 2026-10-30 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-30 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `7ce28478` 之後） | 6660 | `e58ae6ff444787d5e9f8e19b7080f30d5ad9435ff8a124181e9e35d5d1e2b04a` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 
@@ -278,6 +279,17 @@
 - 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-29_batch_a_rulings.md`。
 - 雜湊為 2026-10-29 實跑。
 
+### `2026-10-30_batch_c_d1_d7_rulings.md` 的兩個雜湊
+
+| 對象 | 大小（bytes） | sha256 |
+|---|---|---|
+| 整檔（檔頭說明＋圍欄） | 6660 | `e58ae6ff444787d5e9f8e19b7080f30d5ad9435ff8a124181e9e35d5d1e2b04a` |
+| 圍欄內文（＝檔內實際位元組；無跳脫碼，故沒有「換回原字」那一列） | 5590 | `7c76499b706535b9e66a426728cb46d0eeb179eec39c618ebabd7e5a2fc9b086` |
+
+- 圍欄內文與總管轉存給執行組的原文檔逐位元組相同（執行組 2026-10-30 以 sha256 對 scratchpad 內的轉存檔與存檔圍欄實跑，兩值相同；轉存檔不入 repo）；唯一格式處理：無（行尾空白：0 行）。
+- 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-30_batch_c_d1_d7_rulings.md`。
+- 雜湊為 2026-10-30 實跑。
+
 ## 撞字登記
 
 全文含交接本第 7 節〈客戶 2026-10-05 接手訊息：禁詞〉詞表的**第 7、8 個詞**，共 3 處，都在治理第 6 項「未來允許的方向」列舉內（圍欄內第 114、116、117 行）。依該節〈禁詞〉體例以 Unicode 跳脫碼書寫（`\u52a0\u78bc`、`\u6e1b\u78bc`），其餘一字未改。第 1～6 個詞以 2026-10-16 碼位組字掃描 0 命中。依客戶 2026-10-15 Phase 1.5（A+ 修正版）裁示，第 5～8 個詞已不是永久禁詞；本批新增行仍以 0 命中為目標，故改用跳脫碼並在此登記（與 `branch_archive/pr838/README.md` 不同：那裡是逐字摘錄照字面保留、只做登記）。
@@ -321,6 +333,8 @@
 `2026-10-29_presentation_contract_migration.md`：第一段、第三段圍欄以詞表第 7、8 個詞碼位組字掃描 0 命中；第二段圍欄含詞表**第 8 個詞** 2 處（第二段圍欄內第 103、382 行），都在客戶列舉「不得藉此 supersede」「本次 Migration 禁止順帶修改」的排除清單內（第七節、第十六節）；第 7 個詞 0 處（2026-10-29 實跑）。**照字面保留、不改跳脫碼**，理由同 `2026-10-27_g44_amendment_rulings.md` 那一條：本檔是客戶就呈現契約射程的邊界裁示，跳脫後讀不出被排除的是哪一項。
 
 `2026-10-29_batch_a_rulings.md`：圍欄內以詞表第 7、8 個詞碼位組字掃描 0 命中（2026-10-29 實跑）；無撞字、無跳脫碼。
+
+`2026-10-30_batch_c_d1_d7_rulings.md`：圍欄內以詞表第 7、8 個詞碼位組字掃描 0 命中（2026-10-30 實跑）；無撞字、無跳脫碼。
 
 已實測：無行尾空白、結尾單一換行、無 session 識別碼、無合併衝突標記。
 

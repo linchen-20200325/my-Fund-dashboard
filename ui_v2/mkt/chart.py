@@ -148,3 +148,59 @@ def spec_strings(spec: dict) -> list:
 
     walk(spec)
     return out
+
+
+# ───────────────────────── 迷你圖（BL-0525 Batch C；D1／D6：Secondary 只做快速環境掃描）─────────────────────────
+
+SPARK_WIDTH = 240
+SPARK_HEIGHT = 56
+_SPARK_PAD = 5
+
+
+def sparkline_svg(points, *, aria_label: str, width: int = SPARK_WIDTH, height: int = SPARK_HEIGHT) -> str:
+    """次要圖卡的迷你折線（行內 SVG；純字串、零 streamlit、零網路）。
+
+    規則與主圖同一套：**缺值斷線**（None／NaN 的點不補值，路徑在那裡斷開）、不畫零、不畫預測線／目標價線／箭頭；
+    沒有座標軸刻度也沒有文字（詳細讀數靠 chips 與主圖切換）；最後一個有值點用圓頭短線標出。
+    `points` 必須是 `slice_period` 在 `status == "ok"` 時交回的點（呼叫端先判；沒有任何有值點 → `ValueError`，不畫空圖假裝有圖）。
+    x 軸依觀測**日期**等比例排開（不是依序號），所以週末／假日的空缺與月頻序列的稀疏都如實呈現。
+    """
+    cleaned = _clean(points)
+    valued = [p for p in cleaned if p["value_num"] is not None]
+    if not valued:
+        raise ValueError("沒有任何有值的點不該畫迷你圖（呼叫端應先看 slice_period 的 status）")
+    days = [date.fromisoformat(p["obs_date"]).toordinal() for p in cleaned]
+    lo_day, hi_day = min(days), max(days)
+    vals = [p["value_num"] for p in valued]
+    lo_val, hi_val = min(vals), max(vals)
+    inner_w, inner_h = width - 2 * _SPARK_PAD, height - 2 * _SPARK_PAD
+
+    def x_of(day: int) -> float:
+        return _SPARK_PAD + (inner_w / 2 if hi_day == lo_day else (day - lo_day) / (hi_day - lo_day) * inner_w)
+
+    def y_of(val: float) -> float:
+        return _SPARK_PAD + (inner_h / 2 if hi_val == lo_val else (hi_val - val) / (hi_val - lo_val) * inner_h)
+
+    segments, current = [], []
+    for p, day in zip(cleaned, days):
+        if p["value_num"] is None:
+            if current:
+                segments.append(current)
+            current = []
+        else:
+            current.append((x_of(day), y_of(p["value_num"])))
+    if current:
+        segments.append(current)
+    # 每個 segment 的第一點用 M（斷線），其餘用 L。
+    path = " ".join(("M" if i == 0 else "L") + f"{x:.1f} {y:.1f}"
+                    for seg in segments for i, (x, y) in enumerate(seg))
+    last_x, last_y = segments[-1][-1]
+    esc = aria_label.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        f'<svg class="mkt-spark" viewBox="0 0 {width} {height}" preserveAspectRatio="none" role="img" aria-label="{esc}">'
+        f'<path d="{path}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" '
+        f'vector-effect="non-scaling-stroke"/>'
+        f'<path d="M{last_x:.1f} {last_y:.1f} L{last_x:.1f} {last_y:.1f}" fill="none" stroke="currentColor" '
+        f'stroke-width="6" stroke-linecap="round" vector-effect="non-scaling-stroke"/>'
+        f'</svg>'
+    )
