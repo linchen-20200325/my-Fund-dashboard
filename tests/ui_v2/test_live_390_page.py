@@ -292,6 +292,11 @@ def test_390寬_正式模式_渲染無例外_DataHealth燈在首屏(live_page):
         # BL-0525 Batch C（T1 遷移，44 之十九其七第 2 條）：燈改一行 chip 仍在首屏，而且首屏要看得到 Primary 主圖
         # （~~舊斷言只驗燈可見~~：舊版圖排在燈＋三張卡之後，首屏沒有圖——那正是 X-25）。
         assert m["chartTop"] is not None and 0 <= m["chartTop"] < m["vh"], (name, "首屏看不到主圖", m["chartTop"])
+    elif _slug(name) == "mkt":
+        # 3-D 補的 mkt/未設定、mkt/取數失敗：整頁 Missing／取數失敗、沒有 Data View（notes 無 market_view）→ 舊版面，燈（上面已驗在首屏）
+        # 與狀態卡在；沒有可畫的主圖就不畫（誠實：不為了過測試畫假圖）。有 Data View 的 Primary 取數失敗／Missing placeholder
+        # 由 `test_mkt_market_section_page.py`（TAIEX／VIX 取數失敗、缺金鑰）驗。
+        assert m["chartTop"] is None, (name, "失敗情境不該有圖", m["chartTop"])
 
 
 # ~~本測試發現、尚未修的整頁橫捲：頁名 → 原因（strict：修好後 XPASS 轉紅，逼人拿掉這一條）。~~
