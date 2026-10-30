@@ -286,9 +286,13 @@ def test_八塊的代號與塊名都畫在畫面上():
 def test_層三層四用expander而且預設收合():
     at = _run("full")
     labels = [e.label for e in at.expander]
-    assert len(labels) == 4, labels
+    # BL-0525 Batch A 測試契約遷移（T4；`DEC-2026-10-29-05` (7)、44 之十九其八；有意識的更正，不是漏刪）：
+    # ~~`len(labels) == 4`（展開區總數鎖死為四）~~ → 四塊各是一枚預設收合的展開區；其餘展開區只准是「▸ 」開頭的 detail。
+    # 舊斷言在寫下當時為真；被權衡掉的是「展開區總數剛好四」。
     for code in ("EXP-4", "EXP-5", "EXP-6", "EXP-7"):
-        assert any(code in label for label in labels), code
+        assert sum(code in label for label in labels) == 1, (code, labels)
+    assert all(label.startswith("▸ ") or any(code in label for code in ("EXP-4", "EXP-5", "EXP-6", "EXP-7"))
+               for label in labels), labels
     model = logic.build_page_model(fixtures.dataset_full())
     for code in ("EXP-4", "EXP-5", "EXP-6", "EXP-7"):
         assert logic.find_block(model, code)["_default_open"] is False

@@ -36,7 +36,20 @@ _notes = {"pending": {"leading_index": "ndc_no_release_date", "coincident_index"
 """
 
 
-def _mkt(dataset_expr: str, *, settings="None", settings_error="None") -> str:
+# BL-0525 Batch A（T8；`DEC-2026-10-29-05` (7)、44 之十九其八）：「市場趨勢」區段（BL-0516 起的五張圖卡與 Missing 卡）原本不在任何
+# 一般畫面掃描的資料裡 —— 去工程化守衛（`test_plain_page.py` 等）因此**看不到**那一區的字，日後圖卡搬進 detail 展開區時也無從把關。
+# 補上一個情境把它納入射程：合成序列（同 `test_live_390_page.py`），不打網路；只加情境、不動既有情境的腳本。
+_MKT_TREND = """
+import pandas as _pd
+from services.v2_tables import market_view as _mv
+_idx = _pd.bdate_range("2024-10-24", "2026-10-23")
+_s = _pd.Series([16.0 + (i % 9) * 0.3 for i in range(len(_idx))], index=_idx, dtype=float, name="^VIX")
+_s.attrs.update({"fetched_at": "2026-10-27T06:00:00+00:00", "source": "Yahoo:^VIX", "exchange_tz": "Etc/UTC"})
+_notes["market_view"] = _mv.build_market_view(fetch_vix=lambda _t, _r=None: (_s, None))
+"""
+
+
+def _mkt(dataset_expr: str, *, settings="None", settings_error="None", trend=False) -> str:
     return _HEAD + f"""
 from ui_v2.mkt import fixtures, page
 SETTINGS = {settings}
@@ -44,7 +57,7 @@ SETTINGS_ERROR = {settings_error}
 if SETTINGS is None:
     SETTINGS = {{"window_days": None, "baseline_date": None, "indicator_keys": None, "pair_consistent": None}}
 _dataset = {dataset_expr}
-""" + _MKT_NOTES + """
+""" + _MKT_NOTES + (_MKT_TREND if trend else "") + """
 page.render(load_live=lambda: {"dataset": _dataset, "notes": _notes}, save_live=lambda *_a: {"status": "saved"})
 """
 
@@ -64,6 +77,10 @@ MKT = {
     "局部失敗": _mkt("fixtures.dataset_mkt1_one_key_missing()", settings=_MKT_SAVED),
     "stale": _mkt("fixtures.dataset_mkt2_only_five_rows()", settings=_MKT_SAVED),
 }
+
+# 「市場趨勢」情境**不放進 `MKT`**：`MKT`／`SCRIPTS` 被好幾支測試逐情境參數化（例：`test_bl0250_batch3d_logic` 逐情境釘住符號差），
+# 多一個鍵會讓那些測試要求新的釘值 —— 那是另一件事。這個情境只給去工程化守衛（`test_plain_trend_page.py`）用。
+MKT_TREND = _mkt("fixtures.dataset_all_ok()", settings=_MKT_SAVED, trend=True)
 
 # ───────────────────────── 持倉體檢 ─────────────────────────
 

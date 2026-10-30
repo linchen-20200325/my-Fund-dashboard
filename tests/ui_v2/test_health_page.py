@@ -17,6 +17,7 @@
 
 import html
 import pathlib
+import re
 import sys
 
 import pytest
@@ -165,13 +166,18 @@ def _visible(at):
 
 
 @pytest.mark.parametrize("page, name", _CASES)
-def test_每頁恰一行資料狀態行_不寫資料齊或正常_附資料截至日(page, name):
+def test_每頁資料狀態行_資料截至日存在且只講一次_不寫資料齊或正常(page, name):
+    # BL-0525 Batch A 測試契約遷移（`DEC-2026-10-29-05` (7)、44 之十九其八；有意識的更正，不是漏刪；T2）：
+    # ~~舊名「test_每頁恰一行資料狀態行_不寫資料齊或正常_附資料截至日」，斷言 `len(lines) == 1`（狀態行必須是恰好一個文字元素）~~。
+    # 舊斷言鎖的是**呈現形式**（單行文字），新契約允許日後改成 status chips（P3），所以形式不鎖；
+    # 改驗它真正保護的資訊：①資料截至日存在、②只講一次（同源訊息不重複外露，P-16 的去重意圖）、③不寫「資料齊」「正常」。
+    # 舊斷言在寫下當時為真；被權衡掉的是「一定是單一文字元素」。語意（◷／◇／⛔ 各自的判定）由本檔其他測試照舊鎖住，未動。
     at, _ = _run(P.SCRIPTS[page][name])
     lines = _status_lines(at)
-    assert len(lines) == 1, (page, name, lines)
-    line = " ".join(lines[0].split())
-    assert "資料齊" not in line and "正常" not in line, line
-    assert page_health.AS_OF_LABEL in line, line
+    assert lines, (page, name)
+    joined = " ".join(" ".join(line.split()) for line in lines)
+    assert "資料齊" not in joined and "正常" not in joined, joined
+    assert joined.count(page_health.AS_OF_LABEL) == 1, (page, name, joined)
 
 
 @pytest.mark.parametrize("page", ["mkt", "hld", "alo"])
@@ -341,9 +347,15 @@ def test_核心卡的來源與新鮮度徽章不在卡上_不再畫在第四段_
     # ~~"〔來源層級〕"~~ → BL-0250 批次 3-A（`DEC-2026-10-19-05` 第 1 點；有意識的更正，不是漏刪）：標的探索三張卡卡片層級的
     # 來源與新鮮度改寫一句「⬜ 不適用（…）」，照樣只在 ④ 那一枚展開區裡。
     word = "延遲 3 日" if page == "mkt" else "⬜ 不適用（這張卡由多檔基金組成"
-    assert not any(word in card for card in cards), page
+    # BL-0525 Batch A 測試契約遷移（`DEC-2026-10-29-05` (7)、44 之十九其二第 4 條／其八；T3；有意識的更正，不是漏刪）：
+    # ~~`assert not any(word in card for card in cards)`（卡片 HTML 裡完全不得出現來源字樣）~~ → 新契約推薦卡內「▸ 來源」展開區
+    # （P2、P9），所以「卡內完全沒有來源」不再是要鎖的東西；要鎖的是⑥主畫面不必全部外露：把卡片裡的 `<details>` 展開區剝掉後
+    # （＝預設可見的那一層），不得有來源字樣。⑤provenance 可追溯：總表明細**或**卡內展開區至少有一處（兩處並存，44 之十九其二第 4 條）。
+    # 舊斷言在寫下當時為真；被權衡掉的是「來源字樣一律不得進卡片 HTML」。現況（來源只在總表明細）照樣通過。
+    visible = [re.sub(r"<details\b.*?</details>", "", card, flags=re.S) for card in cards]
+    assert not any(word in card for card in visible), page
     assert not any(e.label == _RETIRED_PROVENANCE_TITLE for e in at.main.expander)
-    assert word in _detail_text(at, page)
+    assert word in _detail_text(at, page) or any(word in card for card in cards), page
 
 
 @pytest.mark.parametrize("page", _PAGES)

@@ -133,3 +133,72 @@ jobs:
           FRED_API_KEY: "ci-test-key"
           GEMINI_API_KEY: "ci-test-key"
         run: python -m pytest -v -m "slow" --tb=short
+
+  # ════════════════════════════════════════════════════════════
+  # Visual Fidelity safety net — CI deterministic screenshot（BL-0525 Batch A；`DEC-2026-10-29-07`）
+  # ⚠️ CI fixture screenshot ≠ production-like Cloud screenshot：本 job 的截圖只代表「CI 固定 fixtures 渲染出的畫面」，
+  #    是 automated safety net，**不是** Visual Fidelity Gate 的正式確認（正式確認＝B 線預覽站的 production-like Cloud screenshot，
+  #    見 tests/visual_fidelity/vf_config.py 與 docs/v2/71 第七節）。兩者不得互相冒充。
+  # 非阻擋（continue-on-error）：理由同 slow lane —— 瀏覽器截圖可能受字型／渲染環境影響偶發差異，且今天的頁面尚未套用
+  #    Presentation Contract（Batch C～F 才套用），hard 檢查（例外、程式碼區塊外露、水平溢出）以外的契約缺口只寫進報告、不轉紅。
+  #    也就是說：這條 job 紅了**不會擋合併** —— 要看這條 job 的結果才知道。
+  # 不使用任何外部網路取數：情境全是固定 fixtures／替身（同 tests/ui_v2/test_live_390_page.py）。
+  # 守衛：tests/visual_fidelity/test_workflow_logic.py
+  # ════════════════════════════════════════════════════════════
+  visual-fidelity-safety-net:
+    name: "Visual Fidelity safety net (CI fixture screenshots, informational)"
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: fast-checks
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install runtime + dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Capture CI fixture screenshots + layout checks
+        env:
+          VISUAL_FIDELITY_OUT: ${{ github.workspace }}/visual-fidelity-out/ci-fixture
+          FRED_API_KEY: "ci-test-key"
+          GEMINI_API_KEY: "ci-test-key"
+        run: python -m pytest tests/visual_fidelity/test_ci_fixture_screenshots.py -v -m "slow" --tb=short
+
+      - name: Upload CI fixture screenshots (NOT production-like)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-fixture-screenshots-NOT-production-cloud
+          path: visual-fidelity-out/ci-fixture/
+          if-no-files-found: warn
+          retention-days: 14
+
+      # production-like Cloud capture：預設不跑（只在手動 workflow_dispatch 時嘗試）；網路被擋時腳本印出
+      # 「production-like Cloud capture blocked by current environment network policy」並 exit 0，不當成失敗。
+      - name: Cloud capture (manual dispatch only; production-like)
+        if: github.event_name == 'workflow_dispatch'
+        run: python tests/visual_fidelity/cloud_capture.py --out visual-fidelity-out/cloud
+
+      - name: Upload Cloud screenshots (production-like)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-preview-screenshots-production-like
+          path: visual-fidelity-out/cloud/
+          if-no-files-found: warn
+          retention-days: 14
