@@ -2454,6 +2454,7 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/71_presentation_contract_migration.md",   # 2026-10-29 Presentation Contract Migration 盤點與分批計畫（DEC-2026-10-29-05／-06）
     "docs/v2/72_mkt_wireframe_batch_c.md",   # 2026-10-30 BL-0525 Batch C 🌍 市場與趨勢 wireframe 草稿（待客戶拍板；不實作）
     "docs/v2/73_assets_wireframe_batch_d.md",   # 2026-10-30 BL-0525 Batch D 💼 我的資產 wireframe 草稿（層 3／層 4 塊數 Gate；待客戶拍板；不實作）
+    "docs/v2/74_assets_d3_formula_gate.md",   # 2026-10-30 BL-0525-D3 💼 我的資產 整頁結論 D-3 最小 Formula／Rule Gate（待客戶裁示；不實作）
     "docs/v2/CONSTITUTION.md",
     "docs/v2/README_DRAFT_PACK.md",
 )

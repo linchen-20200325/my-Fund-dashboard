@@ -745,3 +745,33 @@
 7. **`SET-8` 總表歸屬、`DEC-2026-10-25-01`、`DEC-2026-10-26-03` 的全文**：本組只讀 `docs/v2/71` 的轉述與 `docs/v2/44` 之二十的引用，未讀 DEC 原文。
 8. **測試清單（第 13.2 節）**只讀了檔名，內容未讀。
 9. 本草稿是文字線框；**沒有可點的預覽**。
+
+---
+
+## 15. D-8 OAuth 回原頁 Decision Gate（2026-10-30 追加；read-only 查證結果；**待客戶裁示，未實作**）
+
+> 追加段，**不改上方任何裁示文字**（第 11 節 D-8 列與 `DEC-2026-10-30-02` 照舊）。追蹤於 `docs/BACKLOG.md` BL-0525 子項 BL-0525-OAUTH；登記不構成動工授權（`CLAUDE.md` §-1）。
+> 出處：客戶 D-8 裁示（逐字見 `docs/evidence/decisions/2026-10-30_batch_d_d1_d12_rulings.md`）：「目前 callback 只能回 "/set" 的問題：先做 read-only 技術查證。」若只是 navigation return-state 能在既有 OAuth contract 內安全解，可提出最小方案；若涉及 scope、redirect URI、callback contract、credential、OAuth architecture，則停在新 Gate；不要在 Batch D 順手改 OAuth。
+
+### 15.1 查證事實（讀碼，分支 `3ea336fc`；唯讀，沒有改任何程式）
+
+1. **PKCE pending store**：`infra/personal_oauth.py` 的模組層 dict `_PENDING`，key 是高熵 state（`register_pending` 以 `secrets.token_urlsafe(32)` 產生），value 是 `(code_verifier, expires_at)`；`register_pending` 登記，`consume_pending` 一次性取出（TTL `PENDING_TTL_SEC` 600 秒；找不到或過期 fail closed）。模組說明自陳：pending store 只存 verifier，不存 token 或使用者身分；token 只存呼叫端注入的 `session_state`（namespace `b_oauth.`）。
+2. **導回會進新的 session**：同一份模組說明自陳 Google 整頁導回 `redirect_uri` 會建立新的 Streamlit session，導回前寫在 `st.session_state` 的值會遺失（pending store 放在 server runtime 的理由）。
+3. **callback 在設定頁處理**：`ui_v2/set/source.py::_handle_oauth_callback`（由 `login_load` 呼叫；`login_live` 由 `ui_v2/app_preview.py::page_set` 注入）。`app_preview.py` 註解寫明多頁預覽只有在導回網址落在 `/set` 時才處理 callback，部署的 `redirect_uri` 要指向設定頁網址。合併頁 `page_ast` 只注入 `picker_live`，不處理 callback。callback 成功只進「待確認登入」，要使用者在設定頁按［確認］（`login_act` 的 `confirm`）才啟用。
+4. **Batch D 現況（零 Gate 退路）**：合併頁頁頂「持倉資料來源」一列在已登入時重用設定頁既有 picker（`set_source.picker_live`＋`set/live.py::picker_view`）；沒有 Active 來源時沿用 `active_gate` 既有字樣「⬜ 尚未選定持倉資料來源」與「前往 ⚙️ 設定」連結（`ui_v2/asset/page.py::_render_source_row`）；登入仍在設定頁。OAuth 模組沒有改動。
+
+### 15.2 方案
+
+| 方案 | 優點 | 缺點 | 風險 |
+|---|---|---|---|
+| **F｜維持現況退路**（合併頁只重用 picker；登入在設定頁） | 零 OAuth 契約變更、可逆；字樣沿用既有 | 從合併頁要登入須先換到設定頁，登入確認後不會自動回到合併頁 | 低：沒有新字樣、沒有新轉址 |
+| **A｜pending 記錄加 `return_slug`，確認後 `switch_page` 回原頁** | 登入確認後自動回到發起頁 | 要改 `_PENDING` 的 value 結構與 `register_pending`／`consume_pending` 的介面，並在確認動作後加換頁 | 動到 callback contract／OAuth architecture，依 D-8 必須停在新 Gate；`return_slug` 若不以頁面白名單驗證，會變成站內任意轉址（推論）；多 process 時 pending 本來就會失效（模組既有的單 process 假設） |
+| **B｜`redirect_uri` 改指向各頁** | 不必回跳 | 各頁都要處理 callback；Google 端要登記多個 redirect URI | 涉及 redirect URI 與 credential 設定，依 D-8 必須停在新 Gate；callback 處理分散到多頁，擴大攻擊面（推論） |
+
+AI 總管推薦：**F（維持現況退路）**。理由：可逆、零契約變更，已滿足 D-8「selector 頁頂獨立一列」與「不要在 Batch D 順手改 OAuth」；A 是本題的最小回原頁方案，但它改的是 OAuth 模組介面，不屬「在既有 OAuth contract 內安全解」，列為後續 Gate（BL-0525-OAUTH），待客戶裁示後才可動。B 不推薦。此推薦可被客戶推翻。
+
+### 15.3 沒有查證的部分
+
+1. 部署設定裡 `redirect_uri` 的實際值沒有讀（只讀到 `app_preview.py` 的註解要求）。
+2. 沒有實跑登入流程、沒有在 Cloud 上驗證導回行為。
+3. A、B 的風險欄中標「推論」者沒有驗證；「A 是最小方案」是讀法，沒有窮舉其他做法。
