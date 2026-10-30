@@ -185,7 +185,11 @@ def test_primitives_只有已套用的頁面呼叫_Batch_C起只有mkt():
         if ("presentation_view" in text or "from ui_v2 import presentation" in text or "from . import presentation" in text
                 or "from .. import presentation" in text or ", presentation," in text):
             users.add(str(path.relative_to(_ROOT)))
-    assert users == {"ui_v2/mkt/page.py", "ui_v2/mkt/overview.py"}, users
+    # → 2026-10-30 Batch D（`DEC-2026-10-30-02`；有意識的更正，不是漏刪，加進來即是簽名承認）：💼 我的資產合併頁
+    #   （`ui_v2/asset/page.py`、`overview.py`）套用；`ui_v2/alo/page.py`、`ui_v2/hld/page.py` 只為了層 3／層 4 的塊在 grouped container 內
+    #   改畫成小標題段落（`presentation_view.flat_block`，`flat=True`；單頁預設仍是原展開區），不套用圖卡／chip／Missing 模型。
+    assert users == {"ui_v2/mkt/page.py", "ui_v2/mkt/overview.py", "ui_v2/asset/page.py", "ui_v2/asset/overview.py",
+                     "ui_v2/alo/page.py", "ui_v2/hld/page.py"}, users
 
 
 def test_圖卡摘要可省略_None不畫摘要句_空字串與多句仍然拒絕():

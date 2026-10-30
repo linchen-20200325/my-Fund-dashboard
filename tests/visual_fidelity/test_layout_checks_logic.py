@@ -270,3 +270,101 @@ def test_量測腳本帶mkt專屬欄位_且選擇器對得上頁面():
     page = (_HERE.parents[1] / "ui_v2" / "mkt" / "page.py").read_text(encoding="utf-8")
     for cls in ("mkt-light--chip", "mkt-hero", "mkt-sec-card", 'data-section="primary"'):
         assert cls in page, cls
+
+
+# ───────────────────────── 💼 我的資產頁（BL-0525 Batch D；A1～A6）─────────────────────────
+
+
+def _ast_measure(**over):
+    base = _measure(viewport={"width": 1280, "height": 800}, main_width=704, charts=[])
+    base["ast"] = {
+        "source": {"top": 100, "height": 40, "width": 700},
+        "summary": {"top": 260, "height": 62, "width": 700},
+        "slots": 4, "summaries": 1,
+        "hero": {"top": 400, "height": 28, "width": 700},
+        "primary": {"top": 430, "height": 600, "width": 700},
+        "primary_chart": {"top": 560, "height": 300, "width": 680},
+        "secondary": [{"top": 1050, "height": 300, "width": 340}, {"top": 1050, "height": 300, "width": 340}],
+        "scrolls": [{"overflowY": "auto", "maxHeight": "240px"}, {"overflowY": "auto", "maxHeight": "240px"}],
+        "nested_details": 0,
+    }
+    base["ast"].update(over)
+    return base
+
+
+def test_ast_合格頁面_A1到A6全部通過_且全部hard():
+    results = LC.evaluate(_ast_measure(), page="ast")
+    ids = [r["id"] for r in results]
+    assert ids[:8] == ["V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8"] and ids[-6:] == ["A1", "A2", "A3", "A4", "A5", "A6"]
+    a_checks = [r for r in results if r["id"].startswith("A")]
+    assert all(r["status"] == "pass" and r["hard"] for r in a_checks), a_checks
+    assert LC.hard_failures(results) == []
+
+
+def test_ast_順序錯誤_缺項_A1轉紅():
+    swapped = _ast_measure(hero={"top": 90, "height": 28, "width": 700})     # 主判讀跑到 selector 之前
+    assert "A1" in [r["id"] for r in LC.hard_failures(LC.evaluate(swapped, page="ast"))]
+    no_source = _ast_measure(source=None)
+    failed = [r for r in LC.hard_failures(LC.evaluate(no_source, page="ast")) if r["id"] == "A1"]
+    assert failed and "持倉資料來源" in failed[0]["detail"]
+
+
+@pytest.mark.parametrize("count", [0, 1, 3])
+def test_ast_Secondary不是兩張_A2轉紅(count):
+    m = _ast_measure(secondary=[{"top": 1050, "height": 300, "width": 340}] * count)
+    assert "A2" in [r["id"] for r in LC.hard_failures(LC.evaluate(m, page="ast"))]
+
+
+def test_ast_summary不是一個容器四格_A3轉紅():
+    for over in ({"slots": 3}, {"slots": 5}, {"summaries": 4, "slots": 4}, {"summaries": 0}):
+        assert "A3" in [r["id"] for r in LC.hard_failures(LC.evaluate(_ast_measure(**over), page="ast"))], over
+
+
+def test_ast_巢狀展開區_A4轉紅():
+    assert "A4" in [r["id"] for r in LC.hard_failures(LC.evaluate(_ast_measure(nested_details=1), page="ast"))]
+
+
+def test_ast_手機summary太高_A5轉紅_桌機不適用():
+    mobile_tall = _ast_measure()
+    mobile_tall["viewport"] = {"width": 390, "height": 844}
+    mobile_tall["ast"]["summary"] = {"top": 260, "height": 300, "width": 358}     # 四張大卡直排
+    assert "A5" in [r["id"] for r in LC.hard_failures(LC.evaluate(mobile_tall, page="ast"))]
+    mobile_ok = _ast_measure()
+    mobile_ok["viewport"] = {"width": 390, "height": 844}
+    mobile_ok["ast"]["summary"] = {"top": 260, "height": 110, "width": 358}
+    assert "A5" not in [r["id"] for r in LC.hard_failures(LC.evaluate(mobile_ok, page="ast"))]
+    desktop = _ast_measure()
+    desktop["ast"]["summary"] = {"top": 260, "height": 300, "width": 700}
+    assert "A5" not in [r["id"] for r in LC.hard_failures(LC.evaluate(desktop, page="ast"))]
+
+
+def test_ast_清單沒有固定高度垂直捲動_A6轉紅():
+    for scrolls in ([{"overflowY": "visible", "maxHeight": "240px"}] * 2,
+                    [{"overflowY": "auto", "maxHeight": "none"}] * 2,
+                    [{"overflowY": "auto", "maxHeight": "240px"}]):
+        m = _ast_measure(scrolls=scrolls)
+        assert "A6" in [r["id"] for r in LC.hard_failures(LC.evaluate(m, page="ast"))], scrolls
+
+
+def test_ast_V7量Primary條圖_不在首屏轉紅():
+    low = _ast_measure(primary_chart={"top": 1500, "height": 300, "width": 680})
+    assert "V7" in [r["id"] for r in LC.hard_failures(LC.evaluate(low, page="ast"))]
+    none = _ast_measure(primary_chart=None)
+    assert "V7" in [r["id"] for r in LC.hard_failures(LC.evaluate(none, page="ast"))]
+
+
+def test_ast_專屬檢查只在page_ast時評估_其他頁不變():
+    m = _ast_measure()
+    assert not [r for r in LC.evaluate(m, page="mkt") if r["id"].startswith("A")]
+    assert not [r for r in LC.evaluate(m) if r["id"].startswith("A")]
+
+
+def test_量測腳本帶ast專屬欄位_且選擇器對得上頁面():
+    js = LC.MEASURE_JS
+    for needle in (".st-key-ast_source", ".ast-summary", ".ast-hero", ".st-key-ast_primary",
+                   ".st-key-ast_sec_share", ".st-key-ast_sec_returns", ".ast-scroll", "details details"):
+        assert needle in js, needle
+    page = (_HERE.parents[1] / "ui_v2" / "asset" / "page.py").read_text(encoding="utf-8")
+    for cls in ('key="ast_source"', 'key="ast_primary"', 'key="ast_sec_share"', 'key="ast_sec_returns"',
+                "ast-summary", "ast-hero", "ast-scroll"):
+        assert cls in page, cls

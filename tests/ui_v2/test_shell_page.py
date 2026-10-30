@@ -38,8 +38,7 @@ _APP = _ROOT / "ui_v2" / "app_preview.py"
 # (slug, url 路徑, 頁名)。預設頁（mkt）的網址是根路徑；其餘為 url_path。頁名逐字取自 `PAGES`（fast lane 守衛另鎖）。
 _PAGES = (
     ("mkt", "", "市場與趨勢"),
-    ("alo", "alo", "資產配置"),
-    ("hld", "hld", "我的持股"),
+    ("ast", "ast", "我的資產"),    # → 2026-10-30 Batch D（`DEC-2026-10-30-02`；有意識的政策變更，不是漏刪）：舊 ("alo","alo","資產配置")、("hld","hld","我的持股") 兩列併成一頁
     ("exp", "exp", "找基金"),
     ("set", "set", "設定"),
 )
@@ -126,7 +125,9 @@ def test_390_底部導覽五主頁_固定在底_可點_不橫捲(browser_page, s
         assert _names(m["bottom"]) == _NAMES
         ys = {round(e["rect"]["y"]) for e in m["bottom"]}
         assert len(ys) == 1, ys
-        widths = [round(e["rect"]["w"]) for e in m["bottom"]]
+        # → 2026-10-30 Batch D（有意識的更正，不是漏刪）：四項時每格 97.5px，舊寫法先 `round` 再加總（4×98＝392）會因進位多出 2px 而誤紅；
+        #   改用未進位的寬度加總（斷言的意思不變：等寬、整列不超出 390 視窗）。舊：`widths = [round(e["rect"]["w"]) …]`。
+        widths = [e["rect"]["w"] for e in m["bottom"]]
         assert max(widths) - min(widths) <= 1 and sum(widths) <= 391, widths
         # 觸控目標 ≥ 44px
         for entry in m["bottom"]:

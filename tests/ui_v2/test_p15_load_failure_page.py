@@ -191,16 +191,19 @@ settings_book = PV.settings_book
 
 
 def _boom_load(monkeypatch, slug, calls=None):
-    source = PV._SOURCES[slug]
+    # → 2026-10-30 Batch D（`DEC-2026-10-30-02`；有意識的更正，不是漏刪）：預覽的 `alo` 併入合併頁 `ast`，合併頁一次載入配置與持股兩側
+    #   （兩側讀同一個 Active Sheet，現實中會一起失敗）；`alo` 這一格因此讓兩個 source 的載入一起拋同一個例外（舊：只換 `alo` 一個）。
+    for name in ((slug, "hld") if slug == "alo" else (slug,)):
+        source = PV._RECORDED_SOURCES[name]
 
-    def boom():
-        if calls is not None:
-            calls.append(slug)
-        raise RuntimeError(_MESSAGE)
+        def boom(_name=name):
+            if calls is not None:
+                calls.append(_name)
+            raise RuntimeError(_MESSAGE)
 
-    boom.__module__ = source.__name__
-    monkeypatch.setattr(source, "load_live", boom)
-    monkeypatch.setattr(source, "mask_error", lambda s: s.replace(_SECRET, _MASK))
+        boom.__module__ = source.__name__
+        monkeypatch.setattr(source, "load_live", boom)
+        monkeypatch.setattr(source, "mask_error", lambda s: s.replace(_SECRET, _MASK))
 
 
 @pytest.mark.parametrize("slug", ("mkt", "exp", "alo"))

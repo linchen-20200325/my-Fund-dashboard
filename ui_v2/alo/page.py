@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import active_gate, health, health_view, plain, readonly, sections, symbols
+from .. import active_gate, health, health_view, plain, presentation_view, readonly, sections, symbols
 from . import fixtures, live, logic, theme
 
 _log = logging.getLogger(__name__)
@@ -358,10 +358,16 @@ def _quiet_head(block: dict, view: dict) -> None:
         _html(f'<div class="alo-empty alo-quiet-line" style="--alo-tone:{_tone(line["_tone"])}">{_esc(line["text"])}</div>')
 
 
-def _render_detail_quiet(view: dict) -> None:
-    """④ 收合區比照規則 5（客戶 Q5 (b)；44 第七節第三小節之十五）：標題「標題　—　一句原因」，打開只有那一行（樣式同收起卡原因行）。"""
+def _render_detail_quiet(view: dict, *, flat: bool = False) -> None:
+    """④ 收合區比照規則 5（客戶 Q5 (b)；44 第七節第三小節之十五）：標題「標題　—　一句原因」，打開只有那一行（樣式同收起卡原因行）。
+    `flat=True`（合併頁 grouped container 內）：不巢狀展開區，標題行照舊、下接那一行原因。"""
     line = view["line"]
-    with st.expander(f"{view['title']}　—　{line['text']}", expanded=False):
+    head = f"{view['title']}　—　{line['text']}"
+    if flat:
+        with presentation_view.flat_block(head, code=view["code"]):   # 塊代號進 data-block（收合區比照時 block ID 也要留著）
+            _html(f'<div class="alo-empty alo-quiet-line" style="--alo-tone:{_tone(line["_tone"])}">{_esc(line["text"])}</div>')
+        return
+    with st.expander(head, expanded=False):
         _html(f'<div class="alo-empty alo-quiet-line" style="--alo-tone:{_tone(line["_tone"])}">{_esc(line["text"])}</div>')
 
 
@@ -435,8 +441,17 @@ def _expander(block: dict, plain_mode: bool = False):
     )
 
 
-def _render_alo4(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
-    with _expander(block, plain_mode):
+def _section(block: dict, plain_mode: bool, flat: bool):
+    """層 3／層 4 的塊外殼：預設是各自收合的展開區（單頁，一字未改）；`flat=True`（BL-0525 Batch D：合併頁的 grouped
+    container 內，`DEC-2026-10-30-02` 不得巢狀 expander）改畫成小標題段落——標題與摘要同一支 `_expander` 的字面。"""
+    if not flat:
+        return _expander(block, plain_mode)
+    head = block["title"] if plain_mode else f"{block['code']}　{block['title']}"
+    return presentation_view.flat_block(f"{head}　—　{block['summary_text']}", code=block["code"])
+
+
+def _render_alo4(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False, flat: bool = False) -> None:
+    with _section(block, plain_mode, flat):
         st.caption(block["answers"])
         # 第一階段唯讀（J-14 精神，2026-10-26）：存檔鈕拿掉後這組輸入已不影響本次畫面結果 → 正式模式不畫（`ui_v2/readonly.py`）。
         # 比重基準單選與類別名稱輸入欄不畫；生效中的比重基準照舊見下方 `basis_line`。
@@ -492,8 +507,8 @@ def _render_alo4(block: dict, scenario: str, ctx=None, *, plain_mode: bool = Fal
                 _lines([block["goto_note"]], "alo-line")
 
 
-def _render_alo5(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
-    with _expander(block, plain_mode):
+def _render_alo5(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False, flat: bool = False) -> None:
+    with _section(block, plain_mode, flat):
         st.caption(block["answers"])
         button = block["buttons"][0]
         st.download_button(
@@ -511,8 +526,8 @@ def _render_alo5(block: dict, scenario: str, ctx=None, *, plain_mode: bool = Fal
 # ───────────────────────── 層 4 ─────────────────────────
 
 
-def _render_alo6(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
-    with _expander(block, plain_mode):
+def _render_alo6(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False, flat: bool = False) -> None:
+    with _section(block, plain_mode, flat):
         st.caption(block["answers"])
         _placeholder(block)
         if block["_rows"]:
@@ -536,8 +551,8 @@ def _render_alo6(block: dict, scenario: str, ctx=None, *, plain_mode: bool = Fal
         _lines(block["detail_lines"])
 
 
-def _render_alo7(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
-    with _expander(block, plain_mode):
+def _render_alo7(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False, flat: bool = False) -> None:
+    with _section(block, plain_mode, flat):
         st.caption(block["answers"])
         _placeholder(block)
         if block["_rows"]:
@@ -597,6 +612,18 @@ def _error_line(exc: BaseException, mask_error) -> str:
     return logic.fetch_failed_text(f"{type_name}：{masked}")
 
 
+def record_live_error(exc: BaseException, mask_error) -> str:
+    """整頁錯誤畫面的「記錄」那一半（BL-0525 Batch D 從 `_render_live_error` 原樣抽出；合併頁的區段錯誤共用）：
+    原文組好、移到進階診斷、記進各頁資料狀態總表、寫 log，回一般畫面那一句狀態（`plain_line`）。"""
+    raw_line = _error_line(exc, mask_error)
+    plain_line, raw = plain.plain_error_line(raw_line, page="alo")
+    plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
+    health_view.record_load_failure("alo", raw_line)   # BL-0250 批次 3-B：各頁資料狀態總表的順位 1
+    # `CLAUDE.md` 第三節第三小節：接住例外至少要 log（P1-⑤ 補；原文已經過 `mask_error`，沒傳時只有型別）。
+    _log.warning("ui_v2 alo 正式頁載入或組模型失敗：%s", raw_line)
+    return plain_line
+
+
 def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> None:
     """正式頁整頁錯誤畫面：頁名、提問句、一行狀態句，其餘塊不畫（體例同 `ui_v2/hld/page.py::_render_live_error`）。
 
@@ -605,12 +632,7 @@ def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> No
     """
     # Phase 3 P0-①（44 第七節第三小節之七其二第 2 條）：一般畫面只寫一句狀態；「<型別>：<遮蔽後訊息>」那一行
     # 照舊組好（不吞、不截斷），只移到設定與診斷頁的進階診斷。
-    raw_line = _error_line(exc, mask_error)
-    plain_line, raw = plain.plain_error_line(raw_line, page="alo")
-    plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
-    health_view.record_load_failure("alo", raw_line)   # BL-0250 批次 3-B：各頁資料狀態總表的順位 1
-    # `CLAUDE.md` 第三節第三小節：接住例外至少要 log（P1-⑤ 補；原文已經過 `mask_error`，沒傳時只有型別）。
-    _log.warning("ui_v2 alo 正式頁載入或組模型失敗：%s", raw_line)
+    plain_line = record_live_error(exc, mask_error)
     _html(f'<div class="alo-title">{_esc(logic.PAGE_TITLE)}</div>')
     _html(f'<div class="alo-sub">{_esc(logic.PAGE_ANSWERS)}</div>')
     _html(f'<div class="alo-errline" role="alert">{_esc(plain_line)}</div>')
@@ -630,6 +652,107 @@ def _both_keys_failed(model: dict, save_errors) -> list:
                     model, block["code"], keys, save_errors, f"{block['code']} {block['title']}"
                 )
     return entries
+
+
+class LiveFailed(Exception):
+    """`prepare_live` 的「去拿」或「組模型」那一步失敗（BL-0525 Batch D 抽出；原本直接畫錯誤畫面）。`exc` 是原例外。"""
+
+    def __init__(self, exc: BaseException):
+        self.exc = exc
+        super().__init__(type(exc).__name__)
+
+
+def prepare_live(*, load_live, save_live=None) -> dict:
+    """正式模式「載入 → 組模型 → 收集資料狀態 → 決定收起／收合」的整段（BL-0525 Batch D 從 `render` 原樣抽出，順序與副作用不變）。
+
+    單頁 `render` 與合併頁（`ui_v2/asset/page.py`）共用。`active_gate.NoActiveSource` 原樣往外拋；
+    「去拿」與「組模型」失敗包成 `LiveFailed`（其餘例外不接，是本檔 bug）。回傳畫面要用的全部狀態。
+    """
+    ctx = None
+    try:
+        live_input = load_live()
+    except active_gate.NoActiveSource:
+        raise   # 由呼叫端畫「⬜ 尚未選定持倉資料來源」（批 3b-4 J-13；單頁與合併頁各自的畫法）
+    except Exception as exc:  # noqa: BLE001 —— 不是吞：呼叫端改畫同一個錯誤畫面，原文進進階診斷並記 log（BL-0362）
+        raise LiveFailed(exc) from exc
+    dataset = live_input["dataset"]
+    if save_live is not None:
+        # 上一次按存檔留下的逐鍵失敗併進 save_errors，交給 logic 決定畫在卡片層還是該鍵原位。
+        dataset = live.dataset_with_save_errors(dataset, st.session_state.get(_SAVE_ERRORS_STATE))
+        ctx = {
+            "save_live": save_live,
+            "settings_error": logic.settings_failure(dataset),
+            # 試算表上的原字串：沒動過的欄位寫回它（見 live.py「存檔」段）。
+            "setting_raw": dict(live_input["notes"].get("setting_raw") or {}),
+        }
+        # 暫存帶回：讀得到設定時以表為準，表上原字串與暫存當時不同的欄位丟掉（讀不到 ⇒ 只保留）。
+        if _PENDING_INPUTS_STATE in st.session_state:
+            st.session_state[_PENDING_INPUTS_STATE] = live.pending_reconcile(
+                st.session_state[_PENDING_INPUTS_STATE], ctx["setting_raw"]
+            )
+    # 總管 2026-10-16 判定（R3，必修）：同鍵兩列而類別或幣別不同時 `logic.aggregated_holdings` raise ValueError ——
+    # 原本沒有人接，正式頁畫出帶堆疊的例外框。比照持倉體檢既有錯誤畫面（`ui_v2/hld/page.py::_render_live_error`）
+    # 接住：頁名、提問句、一行「⛔ 取數失敗：ValueError：<訊息原文>」，其餘塊不畫。只接組模型這一步的 ValueError，
+    # 不新設計畫面。~~不改訊息（訊息只帶保單編號與基金代碼，來自已遮蔽的讀表結果）~~ → 訊息經 `mask_error` 遮蔽
+    # （總管 2026-10-16 判定；有意識的更正，不是漏刪：舊註解的「已遮蔽」說得比實況多 —— 讀表結果裡的鍵沒有經過遮蔽）。
+    try:
+        model = live.apply_live_notes(
+            logic.build_page_model(dataset),
+            wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
+            # 2026-10-26 裁示第 6 節：用到本次工作階段重新取數的匯率列 → `ALO-2` 標來源
+            runtime_source=bool(live_input["notes"].get("runtime_market_indicator")),
+            sheet_failed=bool(live_input["notes"].get("mi_sheet_failed")),
+        )
+        # BL-0250 批次 1：`ALO-6` 佔比與表尾合計改百分比（只換顯示字串；`live.alo6_as_percent`）。
+        model = live.alo6_as_percent(model)
+    except ValueError as exc:
+        raise LiveFailed(exc) from exc
+    # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
+    # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
+    model, raw, _status = plain.plain_model(model, page="alo")
+    # Phase 3 ◆／◇ 小批（44 第七節第三小節之七其三、其四，之八其三 (c-2)）：偏離的黃燈改不著色 ◆、「⬜ 資料未備」改 ◇。
+    # 只換符號、顏色與那一句說明；判定、門檻、算法一個都不動（`ui_v2/symbols.py`）。示範模式不經過這一步。
+    symbols.apply(model)
+    # Phase 3 P0-②（BL-0177）：一枚存檔寫兩鍵、兩鍵都沒存進去 → 卡片層只寫「儲存失敗」，兩鍵的原文各一筆進進階診斷
+    # （logic 照舊只把第一鍵的原文放在卡片層；判定與寫入一行未動）。
+    raw = list(raw) + _both_keys_failed(model, dataset.get("save_errors"))
+    plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
+    # 同源錯誤只在頁首資料狀態行摘要一次（44 第七節第三小節之七其二第 3、4 條；`ui_v2/health.py`）。
+    model, failures = health.dedupe_failures(model)
+    # 客戶 2026-10-19 裁示 G3（`DEC-2026-10-19-04`）：成因全部是「尚未設定」的塊，本頁自己擬的「取數失敗」字樣改寫成
+    # 「尚未設定：<哪一項>」（燈、展開區摘要；`ui_v2/health.py::relabel_unconfigured`）。判定與符號照舊。
+    health.relabel_unconfigured(model, failures)
+    # BL-0250 批次 1（`DEC-2026-10-19-04`；44 第七節第三小節之七其二第 4 條「四頁都報 ◷／◇／⛔／尚未設定」）：
+    # 比照其他三頁把 `stale` 接上（本頁卡上的新鮮度徽章若畫成黃，同一支判讀）；資料未備另讀格內與列尾已畫出的 ◇
+    # （本頁的資料未備多半不帶 `_state`，`has_missing` 讀不到）。只讀既有判定，不新算。
+    cards = logic.codes_in_layer(model, 2)
+    # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
+    # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。本頁沒有核心卡徽章搬移那一步。
+    # 3-B 稽核回修第 3 條：收集與記錄包在錯誤邊界裡（`health_view.collect_page_health`）；第 4 條：總表的核心卡取改層之後、
+    # 在 ② 畫成卡的塊（`ALO-1` 移到 ④；`ALO-3` 在 ② 只是一枚入口）。頁上的資料狀態行照舊以改層前的層 2 為對象（一字不動）。
+    health_cards = sections.health_cards(cards, "alo")
+    collected = health_view.collect_page_health("alo", model, failures, _status["fetch_events"], health_cards)
+    # BL-0250 批次 3-C（U9；44 第七節第三小節之十四）：頁首改畫主要原因＋另有，讀本頁剛記下的那一格（與總表同一份）。
+    # 使用者自己的參數留空（目標比重、情境試算金額、目標修改紀錄）收集時已略過（客戶 2026-10-20 Q1），頁首因此也不計
+    # （客戶 2026-10-21 Q1）。~~`status_line = health.status_line(..., missing=health.has_missing_marker(model))`~~
+    # （有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`、`-02`）。
+    as_of = health.latest_date(dataset.get("nav"), "nav_date")
+    health_view.record_page_health("alo", model, collected, health_cards, as_of=as_of)
+    # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：整張卡主值全部讀不到 → 收起（卡名＋原因行）。在收集與記錄之後判定，
+    # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
+    # `ALO-3` 的「開始試算」入口照留（標題照舊，總管判定；收合區規則 5 不做，見 `sections` 本段說明），收起的是入口裡那張卡。
+    quiet = health_view.quiet_cards("alo", model, collected)
+    # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
+    details = health_view.quiet_details("alo", model, collected)
+    # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`ALO-1` 移到層 3（④「操作」、預設收合）；`ALO-3` 留在 ②、
+    # 預設只畫「開始試算」入口；③ 列 `ALO-2` 已算出的帶外類別。判定一個都不動（`ui_v2/sections.py`）。
+    sections.relayer(model, "alo")
+    attention = sections.attention_items(model, "alo")
+    # 新 B UI 第一階段唯讀（客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6）：寫 `user_setting` 的「存檔」不畫，
+    # 叫人存檔的說明一併改寫（`ui_v2/readonly.py`）。在收集與記錄之後做，判定與總表不受影響。
+    readonly.strip_write_controls(model)
+    return {"model": model, "ctx": ctx, "quiet": quiet, "details": details, "attention": attention,
+            "as_of": as_of, "key": "live"}
 
 
 @health_view.guard_page("alo")   # 3-B 第二輪稽核回修可選 3：畫頁崩潰時總表不留上一筆正常記錄
@@ -672,94 +795,18 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         key = scenario
     else:
         try:
-            live_input = load_live()
+            prep = prepare_live(load_live=load_live, save_live=save_live)
         except active_gate.NoActiveSource:
             # 批 3b-4（J-13）：沒有 Active Sheet ＝ 明確的第三種狀態「⬜ 尚未選定持倉資料來源」＋前往設定；不是錯誤、不是空持倉。
             active_gate.render_no_active(
                 "alo", title=logic.PAGE_TITLE, answers=logic.PAGE_ANSWERS, title_class="alo-title",
                 sub_class="alo-sub", tone_hex=theme.tone_hex, settings_page=settings_page)
             return
-        except Exception as exc:  # noqa: BLE001 —— 不是吞：整頁改畫同一個錯誤畫面，原文進進階診斷並記 log（BL-0362）
-            _render_live_error(exc, mask_error, settings_page)
+        except LiveFailed as failed:   # 不是吞：整頁改畫同一個錯誤畫面，原文進進階診斷並記 log（BL-0362）
+            _render_live_error(failed.exc, mask_error, settings_page)
             return
-        dataset = live_input["dataset"]
-        if save_live is not None:
-            # 上一次按存檔留下的逐鍵失敗併進 save_errors，交給 logic 決定畫在卡片層還是該鍵原位。
-            dataset = live.dataset_with_save_errors(dataset, st.session_state.get(_SAVE_ERRORS_STATE))
-            ctx = {
-                "save_live": save_live,
-                "settings_error": logic.settings_failure(dataset),
-                # 試算表上的原字串：沒動過的欄位寫回它（見 live.py「存檔」段）。
-                "setting_raw": dict(live_input["notes"].get("setting_raw") or {}),
-            }
-            # 暫存帶回：讀得到設定時以表為準，表上原字串與暫存當時不同的欄位丟掉（讀不到 ⇒ 只保留）。
-            if _PENDING_INPUTS_STATE in st.session_state:
-                st.session_state[_PENDING_INPUTS_STATE] = live.pending_reconcile(
-                    st.session_state[_PENDING_INPUTS_STATE], ctx["setting_raw"]
-                )
-        # 總管 2026-10-16 判定（R3，必修）：同鍵兩列而類別或幣別不同時 `logic.aggregated_holdings` raise ValueError ——
-        # 原本沒有人接，正式頁畫出帶堆疊的例外框。比照持倉體檢既有錯誤畫面（`ui_v2/hld/page.py::_render_live_error`）
-        # 接住：頁名、提問句、一行「⛔ 取數失敗：ValueError：<訊息原文>」，其餘塊不畫。只接組模型這一步的 ValueError，
-        # 不新設計畫面。~~不改訊息（訊息只帶保單編號與基金代碼，來自已遮蔽的讀表結果）~~ → 訊息經 `mask_error` 遮蔽
-        # （總管 2026-10-16 判定；有意識的更正，不是漏刪：舊註解的「已遮蔽」說得比實況多 —— 讀表結果裡的鍵沒有經過遮蔽）。
-        try:
-            model = live.apply_live_notes(
-                logic.build_page_model(dataset),
-                wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
-                # 2026-10-26 裁示第 6 節：用到本次工作階段重新取數的匯率列 → `ALO-2` 標來源
-                runtime_source=bool(live_input["notes"].get("runtime_market_indicator")),
-                sheet_failed=bool(live_input["notes"].get("mi_sheet_failed")),
-            )
-            # BL-0250 批次 1：`ALO-6` 佔比與表尾合計改百分比（只換顯示字串；`live.alo6_as_percent`）。
-            model = live.alo6_as_percent(model)
-        except ValueError as exc:
-            _render_live_error(exc, mask_error, settings_page)
-            return
-        # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
-        # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
-        model, raw, _status = plain.plain_model(model, page="alo")
-        # Phase 3 ◆／◇ 小批（44 第七節第三小節之七其三、其四，之八其三 (c-2)）：偏離的黃燈改不著色 ◆、「⬜ 資料未備」改 ◇。
-        # 只換符號、顏色與那一句說明；判定、門檻、算法一個都不動（`ui_v2/symbols.py`）。示範模式不經過這一步。
-        symbols.apply(model)
-        # Phase 3 P0-②（BL-0177）：一枚存檔寫兩鍵、兩鍵都沒存進去 → 卡片層只寫「儲存失敗」，兩鍵的原文各一筆進進階診斷
-        # （logic 照舊只把第一鍵的原文放在卡片層；判定與寫入一行未動）。
-        raw = list(raw) + _both_keys_failed(model, dataset.get("save_errors"))
-        plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
-        # 同源錯誤只在頁首資料狀態行摘要一次（44 第七節第三小節之七其二第 3、4 條；`ui_v2/health.py`）。
-        model, failures = health.dedupe_failures(model)
-        # 客戶 2026-10-19 裁示 G3（`DEC-2026-10-19-04`）：成因全部是「尚未設定」的塊，本頁自己擬的「取數失敗」字樣改寫成
-        # 「尚未設定：<哪一項>」（燈、展開區摘要；`ui_v2/health.py::relabel_unconfigured`）。判定與符號照舊。
-        health.relabel_unconfigured(model, failures)
-        # BL-0250 批次 1（`DEC-2026-10-19-04`；44 第七節第三小節之七其二第 4 條「四頁都報 ◷／◇／⛔／尚未設定」）：
-        # 比照其他三頁把 `stale` 接上（本頁卡上的新鮮度徽章若畫成黃，同一支判讀）；資料未備另讀格內與列尾已畫出的 ◇
-        # （本頁的資料未備多半不帶 `_state`，`has_missing` 讀不到）。只讀既有判定，不新算。
-        cards = logic.codes_in_layer(model, 2)
-        # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
-        # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。本頁沒有核心卡徽章搬移那一步。
-        # 3-B 稽核回修第 3 條：收集與記錄包在錯誤邊界裡（`health_view.collect_page_health`）；第 4 條：總表的核心卡取改層之後、
-        # 在 ② 畫成卡的塊（`ALO-1` 移到 ④；`ALO-3` 在 ② 只是一枚入口）。頁上的資料狀態行照舊以改層前的層 2 為對象（一字不動）。
-        health_cards = sections.health_cards(cards, "alo")
-        collected = health_view.collect_page_health("alo", model, failures, _status["fetch_events"], health_cards)
-        # BL-0250 批次 3-C（U9；44 第七節第三小節之十四）：頁首改畫主要原因＋另有，讀本頁剛記下的那一格（與總表同一份）。
-        # 使用者自己的參數留空（目標比重、情境試算金額、目標修改紀錄）收集時已略過（客戶 2026-10-20 Q1），頁首因此也不計
-        # （客戶 2026-10-21 Q1）。~~`status_line = health.status_line(..., missing=health.has_missing_marker(model))`~~
-        # （有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`、`-02`）。
-        as_of = health.latest_date(dataset.get("nav"), "nav_date")
-        health_view.record_page_health("alo", model, collected, health_cards, as_of=as_of)
-        # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：整張卡主值全部讀不到 → 收起（卡名＋原因行）。在收集與記錄之後判定，
-        # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
-        # `ALO-3` 的「開始試算」入口照留（標題照舊，總管判定；收合區規則 5 不做，見 `sections` 本段說明），收起的是入口裡那張卡。
-        quiet = health_view.quiet_cards("alo", model, collected)
-        # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
-        details = health_view.quiet_details("alo", model, collected)
-        # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`ALO-1` 移到層 3（④「操作」、預設收合）；`ALO-3` 留在 ②、
-        # 預設只畫「開始試算」入口；③ 列 `ALO-2` 已算出的帶外類別。判定一個都不動（`ui_v2/sections.py`）。
-        sections.relayer(model, "alo")
-        attention = sections.attention_items(model, "alo")
-        # 新 B UI 第一階段唯讀（客戶 2026-10-26 裁示第 7 節；`DEC-2026-10-25-04` J-6）：寫 `user_setting` 的「存檔」不畫，
-        # 叫人存檔的說明一併改寫（`ui_v2/readonly.py`）。在收集與記錄之後做，判定與總表不受影響。
-        readonly.strip_write_controls(model)
-        key = "live"
+        model, ctx, quiet, details = prep["model"], prep["ctx"], prep["quiet"], prep["details"]
+        attention, as_of, key = prep["attention"], prep["as_of"], prep["key"]
     plain_mode = load_live is not None
 
     _html(f'<div class="alo-title">{_esc(model["title"])}</div>')

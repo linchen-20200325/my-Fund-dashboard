@@ -64,7 +64,7 @@
 | 規則 | 現行有效條文 |
 |---|---|
 | GitHub-first Verification Gate | 第 2 節（2026-10-23 重申見第 6 節 6.1 第 6 點，`DEC-2026-10-23-04` G） |
-| Silent Autonomous Cruise | 第 3 節 3.1（`DEC-2026-10-17-04`）；2026-10-27 永久重申與嚴格執行：第 3 節 3.2（`DEC-2026-10-27-45`） |
+| Silent Autonomous Cruise | 第 3 節 3.1（`DEC-2026-10-17-04`）；2026-10-27 永久重申與嚴格執行：第 3 節 3.2（`DEC-2026-10-27-45`）；2026-10-30 收緊（No Progress Narration Gate）：第 3 節 3.3（`DEC-2026-10-30-03`） |
 | Stop／Decision Gate | 第 4 節「現行」段（`DEC-2026-10-16-03`） |
 | Model／Minimum Sufficient Effort | 第 5 節 5.1（`DEC-2026-10-17-05`） |
 | Minimum Sufficient Work | 第 9 節 9.1（`DEC-2026-10-24-04`） |
@@ -246,6 +246,38 @@ PR 正在寫；PR 已開但 CI 還在跑；audit 已派出；agent 還在工作�
 - **`CLAUDE.md` §-1**：相容。本節只規範出聲時機，不授權主動找事做；沒有指派仍停手等指令。
 - **第 4 節 Stop Gate／第 5 節 5.1**：不變。命中時照該節立即回報，不等批次結束（Stop Gate 必須顯式回報，禁止靜默停住，第 6 節 6.1.3）。
 - **第 6 節 6.1 Save／Handoff Gate、第 12 節 12.2**：不變。靜默期間 HANDOFF／BACKLOG 照常同步，只是不為「正在同步」發訊息。
+
+### 3.3 長期規則：No Progress Narration Gate（客戶 2026-10-30 硬規則，`DEC-2026-10-30-03`，永久）
+
+> **出處**：客戶 2026-10-30 裁示，逐字存檔 `docs/evidence/decisions/2026-10-30_no_progress_narration_gate.md`（圍欄內文 sha256 見該檔與 `docs/evidence/decisions/README.md`）。決策者：**客戶**。**2026-10-30 收緊**：本節收緊 3.1／3.2，不取代；3.1、3.2 條文一字未刪。以下條文化客戶要求；字句有出入時以存檔原文為準。
+> **位階**：同 3.1，受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄（第 0.1 節），不凌駕 `CLAUDE.md`、`PROCESS.md`、`EXCEPTIONS.md`、子法 1 與凍結 SSOT 的任何一條。本節未改動 `CLAUDE.md` 一個字。
+> **適用對象**：所有未來新對話、總管與所有 agent，不需要客戶再次提醒。
+
+**核心句**：Silent Autonomous Cruise ＝ 不只是「不用客戶回覆」，而是**不需要客戶行動時根本不要發訊息**。
+
+**1. 只在四類情況對客戶發訊息**
+
+1. 🔴 真正需要客戶裁示的 Decision Gate（第 4 節）。
+2. 🔴 真 blocker，而且無法自行繼續。
+3. 🟡 Model／Effort Change Gate，需要客戶知道或切換（第 5 節 5.1）。
+4. 🟢 一個完整 Batch／Phase 已完成，一次性收尾回報。
+
+其餘全部靜默執行。即使工作持續很久，也不得為了讓客戶知道還在做而回報進度。
+
+**2. Internal execution telemetry 一律不對客戶提及**
+
+agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作細節。下列全屬 internal execution telemetry，禁止對客戶輸出：已派出幾組 agent；哪一組正在執行／稽核；正在寫哪個檔案；scratchpad 已寫入；branch 已建立；working tree 有哪些未提交變更；等 CI、等 agent、等稽核、等 commit／push；下一步準備派哪組；任何內部 orchestration／agent routing／scratchpad／worktree 的旁白。也不輸出「正在處理」「已派出」「還在跑」「等結果」「完成後再……」「目前沒有要你回覆」「只是狀態通知」。例外：該細節造成真 blocker，或產生需要客戶裁示的衝突時才可提及。
+
+**3. 完成回報一次講完**
+
+允許的完成回報必須一次包含：做了什麼；GitHub 最終狀態；CI／QA 結果；是否有未解決風險；是否需要客戶回覆；下一個唯一接手點。不得把同一 Batch 拆成多則狀態訊息。
+
+**4. 與既有規則的關係（文件組判讀，可被客戶推翻；未經第二組驗證）**
+
+- **收緊 3.1／3.2，不取代**：3.2 第 1 點四種情況與本節第 1 點四類內容對得上（完整 batch／Decision Gate 與 blocker／Model／Effort）；本節新增的是把「不得出現的內容」逐項點名為 internal execution telemetry，並把完成回報定為一次講完。3.2 第 3 點的格式、3.1 第 2 點固定一行「靜默巡航中。」照舊有效。
+- **揭露義務不因靜默而消失**：同 3.2 第 4 節，未驗證與限制寫進 PR description、tests／audit evidence 與 `docs/HANDOFF.md`，不是省略。
+- **`CLAUDE.md` §-1**：相容。沒有指派仍停手等指令。
+- `docs/HANDOFF.md` 只指向本節，不複製整段。
 
 ## 第 4 節｜Stop／Decision Gate
 

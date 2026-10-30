@@ -30,7 +30,11 @@ import pytest
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
 _PREVIEW = _ROOT / "ui_v2" / "app_preview.py"
 # ~~_LIVE_PAGES = ("mkt", "hld", "alo", "set")~~ → 2026-10-13 加 exp（狀態更新，不是漏刪）。
-_LIVE_PAGES = ("mkt", "hld", "exp", "alo", "set")
+_LIVE_PAGES = ("mkt", "hld", "exp", "alo", "set")   # live 單頁入口仍是五個（`ui_v2/app_<頁>_live.py`）
+# → 2026-10-30 Batch D（`DEC-2026-10-30-02`；有意識的政策變更，不是漏刪）：預覽導覽把 `alo`、`hld` 併成一頁 `ast`，
+#   「預覽的 `page.render` 注入與 live 入口逐一相同」只剩這三頁；`alo`／`hld` 兩側改由 `page_ast` 比對（見下方
+#   `test_b_合併頁注入與兩個live入口同名同物件`）。舊守衛的比較一條都沒放寬：只是不再有 `page_alo`／`page_hld` 可比。
+_PREVIEW_INJECTED = ("mkt", "exp", "set")
 _PREVIEW_MODULE = "ui_v2.app_preview"
 
 
@@ -159,12 +163,12 @@ def _entry_injections(path: pathlib.Path, page: str) -> list[dict]:
 # 只給這四頁；單頁的 live 入口沒有 `st.navigation`、不傳。抽取器把它記成「非 source 屬性」的那一個字串。
 _SETTINGS_PAGE_KW = "settings_page"
 _SETTINGS_PAGE_VALUE = "<非source屬性：_settings_page()>"
-_SETTINGS_PAGE_PAGES = ("mkt", "hld", "exp", "alo")
+_SETTINGS_PAGE_PAGES = ("mkt", "exp")   # → Batch D：`hld`、`alo` 併入 `ast`（settings_page 另由合併頁測試守）
 _PAGES_KW = "pages"
 _PAGES_VALUE = "<非source屬性：_page_links()>"
 
 
-@pytest.mark.parametrize("page", _LIVE_PAGES)
+@pytest.mark.parametrize("page", _PREVIEW_INJECTED)
 def test_b_四頁注入與live入口逐一相同(page):
     """~~`preview == live`（逐一相同）~~ → 2026-10-17 P0-②（有意識的更正，不是漏刪）：預覽在四頁多傳一個
     `settings_page=_settings_page()`；**拿掉那一個之後**其餘仍與 live 入口逐一相同（關鍵字、source 屬性名一個不差）。
@@ -188,7 +192,7 @@ def test_b_四頁注入與live入口逐一相同(page):
 
 
 def test_b_設定與診斷頁本身不傳settings_page_四頁都傳():
-    for page in _LIVE_PAGES:
+    for page in _PREVIEW_INJECTED:
         preview = _entry_injections(_PREVIEW, page)[0]
         assert (_SETTINGS_PAGE_KW in preview) is (page in _SETTINGS_PAGE_PAGES), (page, preview)
 
@@ -203,6 +207,48 @@ def test_b_settings_page只建一個st_Page_取自PAGES_不碰任何source():
     assert not any(name.endswith("_source") or name.endswith("_page") and name != "_settings_page"
                    for name in names), names
     assert "PAGES" in names
+
+
+def _page_ast_render_kwargs() -> dict:
+    """`page_ast` 裡 `asset_page.render(...)` 的關鍵字 → AST 節點。"""
+    fn = _function(_tree(_PREVIEW), "page_ast")
+    calls = [c for c in ast.walk(fn) if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+             and c.func.attr == "render" and isinstance(c.func.value, ast.Name) and c.func.value.id == "asset_page"]
+    assert len(calls) == 1, calls
+    assert not calls[0].args and all(k.arg for k in calls[0].keywords), ast.unparse(calls[0])
+    return {k.arg: k.value for k in calls[0].keywords}
+
+
+def _dict_of_source_attrs(node: ast.AST, source_alias: str) -> dict:
+    assert isinstance(node, ast.Dict), ast.unparse(node)
+    out = {}
+    for key, value in zip(node.keys, node.values):
+        assert isinstance(key, ast.Constant) and isinstance(key.value, str), ast.unparse(node)
+        assert (isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                and value.value.id == source_alias), ast.unparse(value)
+        out[key.value] = value.attr
+    return out
+
+
+@pytest.mark.parametrize("page, kw", [("alo", "alo_live"), ("hld", "hld_live")])
+def test_b_合併頁注入與兩個live入口同名同物件(page, kw):
+    """💼 我的資產（BL-0525 Batch D）：`page_ast` 傳給 `asset_page.render` 的 `alo_live`／`hld_live`，與各自單頁 live 入口
+    （`app_alo_live.py`、`app_hld_live.py`）傳給 `page.render` 的 `load_live`／`save_live`／`mask_error` **同名同物件**
+    （同一個 `source` 屬性）；取代 Batch D 前「預覽 `page.render` 注入與 live 入口逐一相同」對 `alo`、`hld` 的比對，一條都沒放寬。"""
+    live = _entry_injections(_ROOT / "ui_v2" / f"app_{page}_live.py", page)[0]
+    got = _dict_of_source_attrs(_page_ast_render_kwargs()[kw], f"{page}_source")
+    want = {"load": live["load_live"], "save": live["save_live"], "mask": live["mask_error"]}
+    assert got == want, (page, got, want)
+    assert set(live) == {"load_live", "save_live", "mask_error"}, live      # live 入口多傳別的 → 先紅、回頭對合併頁
+
+
+def test_b_合併頁的selector與換頁連結取自既有物件():
+    kwargs = _page_ast_render_kwargs()
+    assert set(kwargs) == {"alo_live", "hld_live", "picker_live", "settings_page"}, set(kwargs)
+    assert ast.unparse(kwargs["picker_live"]) == "set_source.picker_live"       # 設定頁既有 picker，不碰 OAuth
+    assert ast.unparse(kwargs["settings_page"]) == "_settings_page()"
+    set_live = _entry_injections(_ROOT / "ui_v2" / "app_set_live.py", "set")[0]
+    assert set_live["picker_live"] == "picker_live"
 
 
 def test_b_標的探索的示範入口照舊不傳任何參數_預覽改走正式入口():
@@ -381,6 +427,18 @@ def _spec_page_names() -> list[str]:
     return [new for _old, new in _spec_rows()]
 
 
+_IA_ROW = re.compile(r"^\| (\d|最後) \| ([^|]+?) \|")
+
+
+def _ia_page_names() -> list[str]:
+    """`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之二十「其一｜頁序與頁名」那張表的「正式頁名」欄，依表內順序。"""
+    text = (_ROOT / "docs" / "v2" / "44_fund_ui_ssot.md").read_text(encoding="utf-8")
+    section = text.split("**其一｜頁序與頁名", 1)[1].split("1. ⚖️ 資產配置不再是獨立頂層頁", 1)[0]
+    rows = [m.group(2) for ln in section.split("\n") if (m := _IA_ROW.match(ln))]
+    assert len(rows) == 4, rows   # 空掃防呆：之二十其一的表有四列
+    return rows
+
+
 def test_頁序與頁名逐字對44的五頁總表():
     # ~~assert spec == ["市場總覽", "持倉體檢", "標的探索", "資產配置", "設定與診斷"]  # 量測日 2026-10-12~~
     # → 2026-10-27 對齊批（BL-0478；決策者：客戶（`DEC-2026-10-27-02`））：正式頁序與頁名（44 之十七其二）。
@@ -391,17 +449,21 @@ def test_頁序與頁名逐字對44的五頁總表():
         ("標的探索", "🔍 找基金"),
         ("設定與診斷", "⚙️ 設定"),
     ]  # 量測日 2026-10-27
-    spec = _spec_page_names()
+    assert _spec_page_names() == ["🌍 市場與趨勢", "⚖️ 資產配置", "💼 我的持股", "🔍 找基金", "⚙️ 設定"]   # 44 那張表的字面本輪不動
+    spec = _ia_page_names()   # → Batch D：預覽的頁清單改讀 44 之二十其一的正式頁序（內容頁 🌍、💼、🔍，最後 ⚙️）
     tree = _tree(_PREVIEW)  # PAGES 含函式名，不能整個 literal_eval，逐格讀
     node = next(n for n in tree.body if isinstance(n, ast.Assign)
                 and any(isinstance(t, ast.Name) and t.id == "PAGES" for t in n.targets))
     rows = [(ast.literal_eval(e.elts[0]), ast.literal_eval(e.elts[1]), e.elts[2].id) for e in node.value.elts]
     assert [title for _slug, title, _fn in rows] == spec
     # url_path 不改（深連結、OAuth 落點 `/set`，BL-0465）；只換順序與頁名。
+    # → 2026-10-30 Batch D（`DEC-2026-10-29-06`、`DEC-2026-10-30-02`；有意識的政策變更，不是漏刪；決策者：客戶）：⚖️ 資產配置與
+    #   💼 我的持股併為一頁「💼 我的資產」（`ast`）；44 之二十其一的正式頁序（內容頁 🌍、💼、🔍，最後 ⚙️）改由下一條守衛逐字比對。
+    #   上面那段 44 五頁總表的比對仍然成立（那一張表的字面本輪沒動，同 44 之二十其一第 3 條）；舊 rows 五列在寫下當時為真：
+    #   ("alo", "⚖️ 資產配置", "page_alo")、("hld", "💼 我的持股", "page_hld")。
     assert rows == [
         ("mkt", "🌍 市場與趨勢", "page_mkt"),
-        ("alo", "⚖️ 資產配置", "page_alo"),
-        ("hld", "💼 我的持股", "page_hld"),
+        ("ast", "💼 我的資產", "page_ast"),
         ("exp", "🔍 找基金", "page_exp"),
         ("set", "⚙️ 設定", "page_set"),
     ]
@@ -504,7 +566,7 @@ def test_正控_沒有逐一pop清單就紅(body):
 
 def test_每一頁函式第一句都是_on_page且slug對得上():
     tree = _tree(_PREVIEW)
-    for slug in ("mkt", "hld", "exp", "alo", "set"):
+    for slug in ("mkt", "ast", "exp", "set"):   # → Batch D：`alo`、`hld` 併成 `ast`（`page_alo`／`page_hld` 已刪）
         first = _function(tree, f"page_{slug}").body[0]
         assert ast.unparse(first) == f"_on_page({slug!r})", (slug, ast.unparse(first))
 

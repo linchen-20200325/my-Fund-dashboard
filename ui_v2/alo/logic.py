@@ -1109,6 +1109,8 @@ def _build_alo0(alo2) -> dict:
         "_reads": ("ALO-2",),
         "_tone": light["_tone"],
         "_max_bucket": light["_max_bucket"],
+        # BL-0525 Batch D：並列最大絕對差距的全部類別（`conclusion_light` 已算出、已依名單順序；一句主判讀只讀這個鍵，不重算）。
+        "_leaders": tuple(light.get("_leaders", ())),
         "glyph": glyph,
         "state_word": state_word,
         "text": light["text"],

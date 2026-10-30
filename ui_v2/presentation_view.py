@@ -60,3 +60,31 @@ def render_missing_placeholder(model: dict, *, nested: bool = False) -> None:
     with st.container(border=True):
         st.markdown(presentation.missing_card_html(model), unsafe_allow_html=True)
         render_detail(model["detail"], nested=nested)
+
+
+# ───────────────────────── BL-0525 Batch D：grouped container 內的小標題段落 ─────────────────────────
+
+
+class _FlatBlock:
+    """`flat_block` 的 context manager：先畫小標題，再把內容畫在同一個 `st.container` 內。"""
+
+    def __init__(self, title: str, code=None):
+        self._title, self._code = title, code
+        self._container = None
+
+    def __enter__(self):
+        attr = f' data-block="{presentation._esc(self._code)}"' if self._code else ""
+        st.markdown(f'<div class="ast-block-head"{attr}>{presentation._esc(self._title)}</div>', unsafe_allow_html=True)
+        self._container = st.container()
+        return self._container.__enter__()
+
+    def __exit__(self, *exc):
+        return self._container.__exit__(*exc)
+
+
+def flat_block(title: str, *, code=None):
+    """容器內各塊的小標題段落（`DEC-2026-10-30-02`：同一個 presentation container 內多個 block 以小標題分組、**不得巢狀展開區**）。
+    用法同 `st.expander`：`with flat_block("標題"): ...`。`code`（塊代號）只放進 `data-block` 屬性，畫面不可見。"""
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("小標題不得為空")
+    return _FlatBlock(title.strip(), code)

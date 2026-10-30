@@ -224,8 +224,35 @@ def mark_hld1_rows(model: dict) -> int:
     return count
 
 
+class HoldingCountsInconsistent(ValueError):
+    """持倉體檢計數不成立（n < m ＋ j）。是 `ValueError` 的子類別，所以單頁 `render` 原有的行為不變（照舊往上拋、由 `guard_page` 接）；
+    合併頁（`ui_v2/asset/page.py::_prepare`）只接這一種，其餘 `ValueError` 是本檔案自己的 bug、照舊往上浮出，不畫成取數失敗。"""
+
+
 def hld_counts(model: dict):
-    """持倉體檢 ① 的三個計數那一行；不該列時回 None。
+    """持倉體檢 ① 的三個計數那一行；不該列時回 None。字串由 `hld_count_values` 的 (n, m, j) 組成（BL-0525 Batch D 抽出，算法不變）。"""
+    values = hld_count_values(model)
+    if values is None:
+        return None
+    n, m, j = values
+    return HLD_COUNTS_TEXT.format(n=n, attention=SYMBOL_ATTENTION, m=m, undecidable=SYMBOL_UNDECIDABLE, j=j)
+
+
+def hld_holding_count(model: dict):
+    """持倉體檢 `HLD-2` 實際列出的持有檔數 n（不重複基金代碼；BL-0525 Batch D 稽核回修從 `hld_count_values` 抽出，算法不變）。
+
+    n 與門檻（m、j）無關：門檻未設、燈紅時 n 仍然讀得到（`HLD-2` 照列各檔）；**沒有任何一檔被列出**（沒有持倉、讀不到持倉清單）→ None，
+    不寫 0、不補數。合併頁一句主判讀只讀這個數；`hld_count_values` 的「該不該列三個計數」判定不受影響。
+    """
+    hld2 = _find(model, "HLD-2")
+    # n、m、j 同一個單位：不重複基金代碼數（總管 2026-10-18 裁定）。`fund_groups` 是逐筆持倉（保單 × 基金代碼）分組，
+    # 同一檔分在兩張保單時有兩組 ⇒ 只數不重複的 `_fund_code`；HLD-2 顯示的內容一格不動。
+    n = len({group["_fund_code"] for group in hld2["fund_groups"]})
+    return n or None
+
+
+def hld_count_values(model: dict):
+    """持倉體檢 ① 的三個計數 `(n, m, j)`；不該列時回 None。
 
     只在「有持倉、門檻已設、燈不是紅」時列：沒有持倉或門檻未設時燈的那一句就是答案（59 第 3.3、3.4 節），
     紅燈時這一頁的數字先不要照著讀（`HLD-0` 紅燈文案），列計數會把讀不到的說成讀到了。
@@ -234,15 +261,13 @@ def hld_counts(model: dict):
     light, hld1, hld2 = _find(model, "HLD-0"), _find(model, "HLD-1"), _find(model, "HLD-2")
     if light["_tone"] == "紅" or light["text"] in (HLD_TEXT_NO_HOLDING, HLD_TEXT_NO_RULES):
         return None
-    # n、m、j 同一個單位：不重複基金代碼數（總管 2026-10-18 裁定）。`fund_groups` 是逐筆持倉（保單 × 基金代碼）分組，
-    # 同一檔分在兩張保單時有兩組 ⇒ 只數不重複的 `_fund_code`；HLD-2 顯示的內容一格不動。
-    n = len({group["_fund_code"] for group in hld2["fund_groups"]})
-    if n == 0:
+    n = hld_holding_count(model)
+    if n is None:
         return None
     m, j = light["_deviation_count"], hld1["_unevaluated_count"]
     if n < m + j:
-        raise ValueError(f"持倉體檢計數不成立：持有 {n} 檔 < 需要注意 {m} 檔 ＋ 無法判定 {j} 檔")
-    return HLD_COUNTS_TEXT.format(n=n, attention=SYMBOL_ATTENTION, m=m, undecidable=SYMBOL_UNDECIDABLE, j=j)
+        raise HoldingCountsInconsistent(f"持倉體檢計數不成立：持有 {n} 檔 < 需要注意 {m} 檔 ＋ 無法判定 {j} 檔")
+    return n, m, j
 
 
 _FAMILY_FETCH_FAILED = f"{SYMBOL_ERROR} 取數失敗"
