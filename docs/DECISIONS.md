@@ -1833,6 +1833,20 @@
 | supersedes／superseded by | supersedes（逐筆核對後只列真正被取代的部分）：(1) `docs/v2/73` 第 10.2 節與第 11 節的文件組推薦中被客戶推翻者：D-3 推薦 L-a（被 L-c 方向＋Formula Gate 取代）、D-5 附帶的「第一屏不放四項 placeholder、改進『▸ 尚未取得』摘要列」（被 D-5B 取代）、D-10 推薦 C1（被 C2 取代）、D-11 擬容器名含「證據」（被「我的條件／持股明細／配置明細」取代）；D-1（R-C）、D-2（S1）、D-4、D-6、D-7、D-8（頁頂獨立一列）、D-9、D-12 與推薦相同，推薦成為裁示。(2) `docs/v2/44_fund_ui_ssot.md` 之二十其二第 5 條的「前置 Gate：處置留給線框送客戶裁示、客戶裁示之前不得宣稱合併頁塊數合規」——已由客戶以 R-C／S1 裁結（「層 3、層 4 各 3 塊」按 presentation container 計）；該條「層 3＝5、層 4＝5 的 block 數是實數」不被取代，block ID 數仍是 5 與 5。(3) 之二十其二第 4 條「畫面上由哪一枚當頁面結論燈、另一枚怎麼呈現，由線框送客戶拍板」——客戶裁示為 L-c 方向、待最小 Formula Gate；**在 Gate 落盤前該條的「不發明兩枚燈的合讀規則」仍然有效**。(4) `DEC-2026-10-29-06` 中「合併頁塊數的計法」的執行組讀法（`DEC-2026-10-29-06` provenance 欄已自陳為執行組單組寫成、可被客戶推翻）——被 R-C 取代。**不 supersede**：之十八其二第 1 條整頁摘要卡 ≤5／核心圖 ≤4／一頁至多 16 塊的上限；之十九其一之一的 Visual Budget；之二十其三第 3 條 Sheet 狀態語意與「💼 頁內只有這一個 Sheet 選擇入口」；OAuth scope／callback／credential／token；canonical identity；NAV；Risk Cap；`HLD-2` 不做跨幣別合計；`FX_OBS_DATE_RULE_VERIFIED`。superseded by：無。 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理（分段與用詞可能略有不同），以原文為準；supersedes 欄的逐筆範圍判斷由執行組核對 `docs/v2/73` 與 44 原文後寫成，可被客戶推翻；單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-30-03｜客戶裁示：No Progress Narration Gate（禁止對客戶輸出過程直播；Silent Autonomous Cruise＝不需要客戶行動時根本不要發訊息）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-30 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-30_no_progress_narration_gate.md`） |
+| 決策內容摘要 | **客戶裁示**（以逐字檔為準）：新增硬規則 **No Progress Narration Gate**。除下列四類外，完全不要傳訊息給客戶：(1) 真正需要客戶裁示的 Decision Gate；(2) 真 blocker 且無法自行繼續；(3) Model／Effort Change Gate（需要客戶知道或切換）；(4) 一個完整 Batch／Phase 已完成，一次性收尾回報。其餘全部靜默執行。agent、sub-agent、scratchpad、worktree、內部稽核流程、branch／working tree 狀態、等 CI／等 agent／等稽核／等 commit／push、下一步準備派哪組等，一律屬 internal execution telemetry，不得對客戶提及（除非造成真 blocker 或產生需要客戶裁示的衝突）。即使工作持續很久，也不得為了讓客戶知道還在做而回報進度；不輸出「正在處理」「已派出」「還在跑」「等結果」「目前沒有要你回覆」「只是狀態通知」。完成回報必須一次講完：做了什麼、GitHub 最終狀態、CI／QA 結果、是否有未解決風險、是否需要客戶回覆、下一個唯一接手點；不得把同一 Batch 拆成 5～10 則狀態訊息。客戶要求寫入 GitHub 長期治理規則（`PROJECT_RULES.md`，必要時本檔），`docs/HANDOFF.md` 只指向規則、不複製整段。核心句：Silent Autonomous Cruise ＝ 不只是「不用客戶回覆」，而是「不需要客戶行動時根本不要發訊息」 |
+| 理由／背景 | 客戶原話：「你目前又開始輸出大量過程直播，這違反既有規則。」「如果不需要客戶採取行動，就不要發訊息。」「不要把同一 Batch 拆成 5～10 則狀態訊息。」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-30_no_progress_narration_gate.md`（圍欄內文 sha256 `0f94d50913abba4a205e9d0026628de9e8f85227341e943cfb266bed20a65392`）；落地 `PROJECT_RULES.md` 第 3 節 3.3 |
+| 影響範圍 | 只動文件（`PROJECT_RULES.md` 新增 3.3 並更新快速索引一列、本檔、evidence 存檔與 README）；不改任何 `.py`、資料語意、UI。規範的是對客戶出聲的時機與完成回報的形式，不改 Stop／Decision Gate、Save／Handoff Gate、揭露義務的內容 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | **收緊，不取代**：`DEC-2026-10-17-04`（`PROJECT_RULES.md` 3.1）與 `DEC-2026-10-27-45`（3.2）的四種出聲情形、固定一行「靜默巡航中。」、完整批次回報格式照舊有效；本筆把「哪些內容絕對不得對客戶出現」逐項點名（internal execution telemetry），並把完成回報定為「一次講完、不拆多則」。與 3.2 第 3 點九項格式的關係（本筆六項內容與其對得上，格式以 3.2 第 3 點為準、本筆不另立）是文件組判讀，可被客戶推翻。無被取代的舊條文 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；與 3.1／3.2 的關係判讀由執行組單組寫成，可被客戶推翻；未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1929,6 +1943,7 @@
 - 第四節 `DEC-2026-10-29-07`：原文已落盤於 `docs/evidence/decisions/2026-10-29_batch_a_rulings.md`（總管逐字轉存；執行組未見客戶對話本身，只核對轉存檔與圍欄逐位元組相同）；supersedes 欄對 `DEC-2026-10-27-25` 的範圍判斷是執行組單組寫成，可被客戶推翻。
 - 第四節 `DEC-2026-10-30-01`：原文已落盤於 `docs/evidence/decisions/2026-10-30_batch_c_d1_d7_rulings.md`（總管逐字轉存；執行組未見客戶對話本身，只核對轉存檔與圍欄逐位元組相同）；supersedes 欄對藍圖第 5 節／44 之十八其二第 3 條「僅限 🌍 頁呈現」的範圍判斷，以及「BL-0517 三序列資料通道不屬本裁示」的區分，是執行組單組寫成，可被客戶推翻。
 - 第四節 `DEC-2026-10-30-02`：原文已落盤於 `docs/evidence/decisions/2026-10-30_batch_d_d1_d12_rulings.md`（總管逐字轉存；執行組未見客戶對話本身，只核對轉存檔與圍欄逐位元組相同）；「決策內容摘要」的分段、supersedes 欄對 `docs/v2/73` 推薦與 44 之二十其二第 4、5 條的逐筆範圍判斷，是執行組單組寫成，可被客戶推翻；未經第二組驗證。
+- 第四節 `DEC-2026-10-30-03`：原文已落盤於 `docs/evidence/decisions/2026-10-30_no_progress_narration_gate.md`（總管逐字轉存；執行組未見客戶對話本身，只核對轉存檔與圍欄逐位元組相同）；「決策內容摘要」的分段與 supersedes 欄對 3.1／3.2 的收緊判讀是執行組單組寫成，可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-10-16-01`、`-02` 兩筆的客戶原話 repo 內沒有；內容依總管派工單與交接本轉述，本組未見原文。
 - 第四節 `DEC-2026-10-16-03`～`-13`：原文已落盤於 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔逐位元組相同）。各筆中標「總管讀法」「總管整理」者不是客戶裁示；「supersedes」欄的例示由文件實作組判讀，不宣稱窮舉，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-14`：原文已落盤於 `docs/evidence/decisions/2026-10-16_proposal8_approval.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔圍欄還原後逐位元組相同）。該筆中標「總管判定」「總管設計基準」者不是客戶裁示；「supersedes」欄的條文清單以 57 為準，由文件實作組整理，未經第二組驗證。
