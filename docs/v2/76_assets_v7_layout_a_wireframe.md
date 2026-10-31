@@ -315,3 +315,36 @@ y(現況→A)      ┌───────────────────�
 - **桌機**：全情境圖上緣 < 800（最大 772）。
 - **未測**：Cloud 實站截圖（B 線；本環境連不到，`vf_config.CLOUD_BLOCKED_NOTE`）；真實資料的略過列／失敗字句長度可能比 fixtures 長；V7 在 CI 的實跑結果見 HANDOFF（本節只記本組在本環境實跑的數字）。
 - **產出者**：實作組單組；未經獨立稽核。
+
+## 12. 獨立稽核紀錄（2026-10-31；已合併的 Layout A，#1113／`5c73f529`）
+
+> 就地追加，狀態更新，不是漏刪：第 11 節末行「產出者：實作組單組；未經獨立稽核。」一字未改，該句所指的獨立稽核已由本節補上。以下 FACT 與 INFERENCE 分開標示。
+
+**稽核性質（FACT）**：唯讀；一組獨立稽核（稽核組事前未得知結論）；基準 `01f42aa2` → `5c73f529`。環境：scratchpad 另建 venv（`requirements.txt` ＋ pytest ＋ playwright；streamlit 1.59.2；Chrome for Testing 153，`--no-sandbox`），pytest 帶完整 conftest。
+
+**結論（FACT）**：blocker 無。九項逐項結果：
+
+1. HLD-0／ALO-0 domain 判定未改：ALO 16 ＋ HLD 17 情境共 111 個 block 完整 dict，去掉 `_page_class`、`_attached_n` 後 old／new 位元組相同。PASS。
+2. `_page_class`／`_state`／`_tone`／reason／provenance 未受影響。PASS。
+3. data-block anchor：77 組合中兩側正常的 72 個，HLD-0／ALO-0 各恰 1；另一側失敗或無 Active 的 5 個為 0，與 old 分布相同。PASS。
+4. Missing／omitted rows／error reason：old 頁所有可見文字片段 0 遺失（排除被取代的燈標題與說明句與 CSS）；兩側皆有略過列時，容器兩行各印一次。PASS。
+5. H6 仍「只評估一部分」且 ⛔ 外露（整頁 ⛔ 數 old 10／new 10）。PASS。
+6. Sheets 鈕：key `HLD-0_btn_0`、在持股明細第一位置、不在 P3 HTML 容器。PASS。
+7. 單獨 HLD／ALO 頁（33 情境）輸出逐字相同；`alo/page.py`、`hld/page.py` 不在 diff。PASS。
+8. V7／Visual Budget：非 docs diff 只有 `tests/ui_v2`、`ui_v2`、`tests/test_doc_counters.py`；`tests/visual_fidelity`、`.github` 無差異。PASS。
+9. 文件列的 9 個情境 390px 圖上緣與第 11 節逐一相同（750／744／778／802／794／823／708／867／926）；V7 只在兩個已接受的極端組合失敗，A 後沒有任何「A 前綠、A 後紅」的新增失敗（92 個 390px 情境掃描，V7 紅燈 176 → 114）。PASS。
+
+**測試（FACT）**：指定 5 檔（`test_asset_layout_a_page`、`test_p3_page_status_logic`、`test_p3_page_status_page`、`test_d3_blockers_page`、`test_ast_page`）170 passed、0 skipped。全 `tests/ui_v2` ＋ `tests/test_doc_counters.py` ＋ `test_policy_supplement_repository`：5 failed／6034 passed／82 skipped；5 項失敗與文件稱的既有失敗數一致（`test_hld_logic` ×2、`test_hld_read_failure_logic` ×2、`test_rulings_2026_10_18b_logic` ×1），在基準 `01f42aa2` 同環境同樣 5 failed。稽核組未查根因；INFERENCE：md5／逐格釘住類，可能與依賴版本有關，未驗。
+
+**非 blocker 發現（只登記，不開工）**：
+
+- (a) 擴大掃描另有第 6.3／11 節未列的 390px V7 紅燈（如 `hld=emptyfail` 單獨 881、`alo=nofx` ＋ `skipped_rows` 901、`alo=mvbasis` ＋ `skipped_rows` 849、`hld=empty` ＋ `skipped_rows` 850），皆「P3 無 A」時就紅、A 只縮小差距，屬同類 degraded 資料，與第 6.3 節「不保證」描述相符；另一批無 Primary 圖的情境 V7 在 old 即紅，不屬 A。
+- (b) V3 水平溢出（`stMain` 410／390）在 390px `alo=nofx`／`alo=mvbasis` 類情境 old 即存在，非 #1113 造成，不影響 CI 情境，第 11 節未記載。
+- (c) `_attached_n` 是 ALO-0 專用 marker，字面上超出「P3 只新增 `_page_class`」一個鍵；稽核組認為不改判定（INFERENCE）。
+- (d) #1113 同時含 P3 與 Layout A，相對 `01f42aa2` 看到的 `_page_class` 新增屬 P3 部分。
+
+**沒驗到**：Cloud 實站畫面；真實資料下略過列／失敗字句長度；repo 自己的 visual-fidelity pytest（其瀏覽器啟動器不傳 `--no-sandbox`，稽核組用同一份 MEASURE_JS／LC.evaluate 自行量測，不等於 CI job 實跑）；「P3 無 A」基準是稽核組在 scratchpad 手改的副本，非 git commit；情境是 fixtures，非窮舉；CI slow lane 結論未查。
+
+**處置**：不開回修 PR、不重開 Decision Gate（兩個已接受的極端組合與 `DEC-2026-10-31-01`／`-02` 維持）；上列非 blocker 僅登記，登記不構成動工授權。
+
+**聲明**：稽核組單組產出；總管只抽驗了 diff 檔案清單、`tests/visual_fidelity` 與 `.github` 無差異、alo／hld logic 的刪除行僅為回傳字典補 `_page_class` 之類改寫，其餘稽核數字未經總管逐一複驗。
