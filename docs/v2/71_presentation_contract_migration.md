@@ -532,3 +532,5 @@
 3. **單組判斷、未經第二組驗證**（`CLAUDE.md` §-2 規則 6）：各表的 A／B／C 分類、衝突矩陣判定、第五節第三小節子法 1 相容判斷、第六節對各 DEC 的 supersede 範圍、第八節落點選擇、第九節分批。屬治理規則等級，合併前要有至少 1 組真正獨立稽核（`PROJECT_RULES.md` 第 8 節）。
 4. 盤點母體是三組選定的檔案與 DEC，不是窮舉：44 其餘各塊的空狀態欄未逐塊讀；`docs/DECISIONS.md` 第五節歷史索引、交接本、`docs/evidence/**` 未逐條讀；`docs/v2/59`／`61`／`65` 只讀檔頭與命中處。
 5. 版面結論（「第一屏看不到圖」）是讀程式碼得出的結構，沒有截圖驗證實際首屏。
+
+**V7 Layout A 實作指標（2026-10-31；`DEC-2026-10-31-01`、`-02`）**：客戶核准 `docs/v2/76` 線框並授權實作 A。`ui_v2/asset/page.py` 在合併頁不再畫 `ALO-0`／`HLD-0` 兩枚燈元件（presentation de-duplication；兩個 domain block 的 `_page_class`／`_state`／`_tone`／字樣／`lines`／`detail_lines`／`buttons`、Digest mapping、單獨 HLD／ALO 頁全部不動）；說明行與 Sheets 鈕留在原區段，`data-block` 錨點各留一個；合併頁 `ALO-0` 說明句「本燈只讀…」改「此配置判讀只讀…」（客戶裁示，只限合併頁）。實作後 390px `full` 情境 Primary 圖上緣 883 → 750（V7 過）；兩個稽核指出的極端組合仍 > 844（867、926），客戶已接受「重要頁級狀態／Missing／Error reason ＞ 強迫 Primary 完整露出」，實測表見 `docs/v2/76` 第 11 節。守衛 `tests/ui_v2/test_asset_layout_a_page.py`。待獨立稽核。

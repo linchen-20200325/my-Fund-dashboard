@@ -1889,6 +1889,20 @@
 | supersedes／superseded by | supersedes（逐筆核對後只列真正被取代的部分）：(1) `docs/HANDOFF.md` last checkpoint 與 `docs/v2/74` 執行組讀法 (a) 所列「待客戶：H6 是否改排取數失敗級」——客戶裁示維持只評估一部分級；(2) 同處「待客戶確認：區段標籤『持股：』『配置：』與合成行字樣（74 F-5）」——客戶已核准；(3) 同處「區段內與容器字樣重複是否收掉」（`docs/v2/74` 執行組讀法 (e)）及 HANDOFF「V7 手機紅燈需決定：容器取代區段內兩枚燈／容器移到 Primary 之後／放寬 V7」——客戶採「容器取代區段內兩枚燈」（A），不採移到 Primary 之後（B）、不採放寬 V7（C）；(4) `DEC-2026-10-30-04` 影響範圍與 `ui_v2/asset/page.py` 檔頭所寫「`HLD-0`／`ALO-0` 各自維持既有燈、仍各放在其所屬區段」的**暫行畫法**（`001c30ca`）——僅限 💼 合併頁的 presentation，兩個 domain block 本身與單頁畫面不變。**不 supersede**：`DEC-2026-10-30-04` 的 P3、β 階梯、六項不得、F-13／F-2／F-14／F-18／F-19 裁示；Visual Budget；V7 驗收標準；OAuth 裁示 F。superseded by：無。 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；supersedes 欄的逐筆範圍判斷與「暫行畫法」判讀是執行組單組寫成，可被客戶推翻；單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-31-02｜客戶裁示：核准 V7 Layout A 文字線框（`docs/v2/76`）並開工實作 A；ALO-0 說明句在合併頁改「此配置判讀」；前往 Sheets 鈕位置；Mobile 補充裁示
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-31 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-31_v7_layout_a_wireframe_approval.md`） |
+| 決策內容摘要 | **客戶裁示**（以逐字檔為準）：**(1) 核准** `docs/v2/76_assets_v7_layout_a_wireframe.md`，可以開始實作 A（`DEC-2026-10-31-01` 的 presentation de-duplication）。**(2) 燈標題**：「體檢結論燈」「差距結論燈」在合併頁消失，接受，不需要搬標題；但必須繼續保留 Domain Block Identity、`data-block` anchor、`_page_class`、`_state`、`_tone`、reason／missing reason、provenance、Decision Digest mapping、deterministic semantics；單獨 HLD／ALO 頁不變。**(3) ALO-0 說明句字樣校正**：原「本燈只讀 目標對照卡 算出的差距，不指出方向。」在合併頁改為「此配置判讀只讀 目標對照卡 算出的差距，不指出方向。」；理由：A 之後該位置沒有獨立「燈」元件，「本燈」會造成 presentation 語意錯位；只是 UI copy 校正：不改公式、rule result、方向性限制，不新增投資狀態或 domain vocabulary，核心安全語意（只讀既有差距、不指出方向）不變；不得藉此順改其他文案。**(4) 前往 Sheets 鈕**：保留在「持股明細」第一個位置；key 不變；不塞入 P3 HTML 容器；不因 A 增加頁頂高度；出現條件不變。**(5) Mobile Visual Fidelity 補充**：A 不要求所有 Missing／Error／partial 組合在 390px 第一屏完整看到 Primary 第一列；優先序「重要頁級狀態／Missing／Error reason ＞ 強迫 Primary 完整露出」；不得隱藏 Missing／omitted rows／error reason 換圖表高度、不得縮字到難讀、不得放寬 V7、不得修改 Mobile Visual Budget、不新增自動折疊重要錯誤資訊、不為少見 degraded-data 組合另開本批 layout 重構；實作後仍須實測並記錄 full、blank_target、hld_partial、alo=nofx、hld=fetchfail、skipped_rows 與稽核指出的兩個極端組合，分 V7 hard pass/fail、Primary 實際可見高度、為何 degraded 情境允許狀態資訊優先三欄，不得把未測寫成通過。**(6) 實作邊界**：只做 presentation de-duplication；禁止順手改 P3 precedence、H6 分類、HLD-0／ALO-0 domain semantics、Risk Cap、Decision Digest semantics、formula／threshold、OneBrain、其他頁、Visual Budget／V7 contract；實作後依既定 11 項驗收全跑並補「附行不得因合成／de-duplication 被吞掉」守衛；完成獨立稽核、CI、Visual Fidelity 後，安全則依 Auto-Ship 收尾；Model／Effort 維持 Claude Sonnet 5.5 + Medium。 |
+| 理由／背景 | 客戶原話：「A 實作後該位置沒有獨立『燈』元件，『本燈』會造成 presentation 語意錯位。」「優先序為：重要頁級狀態／Missing／Error reason ＞ 強迫 Primary 完整露出。」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-31_v7_layout_a_wireframe_approval.md`（圍欄內文 sha256 `16a159737b75445c2dce9a5f353599c40972e7760e85c57358fd5cc8c7becad9`）；線框與實作後實測 `docs/v2/76_assets_v7_layout_a_wireframe.md`；實作 `ui_v2/asset/page.py`；守衛 `tests/ui_v2/test_asset_layout_a_page.py`、`tests/ui_v2/test_ast_page.py`、`tests/ui_v2/test_d3_blockers_page.py`；`docs/HANDOFF.md`（唯一接手點） |
+| 影響範圍 | 只動 `ui_v2/asset/page.py` 的 presentation：合併頁不再畫 `ALO-0`／`HLD-0` 兩枚燈元件，兩區的「回答什麼」說明行與非附行的 `detail_lines` 改放 Primary 圖下方／持股明細開頭並各保留一個 `data-block` 錨點；ALO-0 說明句只在合併頁轉換字樣（轉換在 `ui_v2/asset/page.py::alo0_entry_lines`，不動 `ui_v2/alo/logic.py` 常數與單獨 ALO／HLD 頁）。不改 `HLD-0`／`ALO-0` 的 logic、`page_status.py`、`status_class.py`、資料語意、identity／NAV、Risk Cap、Decision Digest semantics、Visual Budget／V7 contract。 |
+| 是否可逆 | 可逆（UI 版型與字樣可再改；domain block 與其資料語意不變） |
+| supersedes／superseded by | 補充（不取代）`DEC-2026-10-31-01`：該筆「文字線框 Gate」已由客戶核准。其「待客戶確認」的兩個燈標題字樣與說明行措辭（`docs/v2/76` 第 7 節待確認 1、2）由本筆結案：標題消失＝接受；說明行措辭＝改「此配置判讀」。 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。

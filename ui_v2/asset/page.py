@@ -15,7 +15,10 @@
 → 2026-10-31 狀態更新（有意識的更正，不是漏刪；客戶 2026-10-30 裁示 P3／β，`DEC-2026-10-30-04`）：**3（頁級狀態）已實作，待獨立稽核**——
 頁頂一個狀態容器（`_render_page_status`，Visual Budget 計 1 個），頭條依 β 階梯、另一區固定照印為第二行；純函式 `ui_v2/asset/page_status.py::aggregate`
 只讀 `HLD-0`／`ALO-0` 的分類鍵 `_page_class`，**不回寫、不改任何 rule result**；頭條不是 rule result、不進 Digest、不是 Risk Cap 的輸入或輸出。
-`HLD-0` 與 `ALO-0` 各自維持既有燈、字樣、判定，仍各放在其所屬區段（持股明細／Primary）既有位置（容器是**另外**的一個頁級彙整，不取代兩枚燈）。
+~~`HLD-0` 與 `ALO-0` 各自維持既有燈、字樣、判定，仍各放在其所屬區段（持股明細／Primary）既有位置（容器是**另外**的一個頁級彙整，不取代兩枚燈）。~~
+→ 2026-10-31 狀態更新（有意識的更正，不是漏刪；客戶 `DEC-2026-10-31-01`／`-02`，V7 Layout A）：**頁級 P3 容器取代合併頁內兩枚燈的重複 presentation**——合併頁不再畫
+`ALO-0`／`HLD-0` 的燈元件（presentation de-duplication）；兩個 domain block 的身分、`_page_class`／`_state`／`_tone`、字樣與判定不動，各留一個 `data-block` 錨點與
+原區段的說明行／前往 Sheets 鈕（Primary 圖下方、持股明細開頭）。單獨 HLD／ALO 頁照舊畫燈。
 
 ⛔ 不改 OAuth（`infra/personal_oauth.py`、`services/v2_tables/personal_session.py`、`ui_v2/set/source.py` 的 callback 流程一律不動）：
 頁頂的「持倉資料來源」只重用設定頁既有的 picker（`picker_live`＝`ui_v2/set/source.py::picker_live`，由預覽入口傳進來）與其讀模型
@@ -68,6 +71,7 @@ def _css() -> str:
     .ast-pstatus-second {{ font-size: .8rem; font-weight: 500; color: {theme.TEXT_PRIMARY}; margin-top: .2rem;
       padding-top: .2rem; border-top: 1px dashed {theme.BORDER}; }}
     .ast-pstatus .ast-note {{ font-size: .72rem; margin: .05rem 0; }}
+    .ast-entry {{ margin: .1rem 0; }}
     .ast-hero {{ font-size: 1rem; font-weight: 600; color: {theme.TEXT_PRIMARY}; margin: .5rem 0 .6rem; overflow-wrap: anywhere; }}
     .ast-card-title {{ font-weight: 700; color: {theme.TEAL_DARK}; margin: 0 0 .25rem; }}
     .ast-bars {{ margin: .3rem 0; }}
@@ -282,6 +286,33 @@ def _render_page_status(hld: dict, alo: dict) -> None:
         unsafe_allow_html=True)
 
 
+ALO0_READS_PLAIN = "本燈只讀 目標對照卡 算出的差距，不指出方向。"        # 單獨 ALO 頁（與 `ui_v2/alo/logic.py` 常數經 `plain` 轉換後）的原字樣；單頁不動
+ALO0_READS_MERGED = "此配置判讀只讀 目標對照卡 算出的差距，不指出方向。"  # 合併頁專屬字樣（客戶 2026-10-31 線框裁示：該位置已沒有獨立「燈」元件）
+
+
+def alo0_entry_lines(block: dict) -> list:
+    """`ALO-0` 在合併頁 Primary 圖下方留的說明行（只讀 block，不回寫）：「回答什麼」那句＋ `detail_lines` 中非附行的部分。
+    附行（前 `_attached_n` 行）已由頁級容器「配置：」那一行照印，這裡不重複。只有合併頁專屬字串轉換——說明句「本燈只讀…」改為
+    「此配置判讀只讀…」；單獨 ALO 頁的 `_render_alo0` 與其常數、測試一個字都不動。其餘字樣一律原樣。"""
+    attached = block.get("_attached_n", 0)
+    tail = block["detail_lines"][attached:]
+    if ALO0_READS_PLAIN not in tail:   # Fail Loud：上游說明句改了字，不得靜默退回「本燈」（客戶只核准這一句的改字；其餘不順改）
+        raise ValueError(f"ALO-0 非附行說明句不含預期原字樣 {ALO0_READS_PLAIN!r}：{tail!r}（上游字樣已變，請更新 ALO0_READS_PLAIN 並回報）")
+    rest = [ALO0_READS_MERGED if line == ALO0_READS_PLAIN else line for line in tail]
+    return [block["answers"], *rest]
+
+
+def hld0_entry_lines(block: dict) -> list:
+    """`HLD-0` 在合併頁持股明細留的說明行：「回答什麼」那句＋全部 `detail_lines`。`lines` 不重畫（頁級容器持股行已照印）。"""
+    return [block["answers"], *block["detail_lines"]]
+
+
+def _render_block_entry(block: dict, lines: list, css: str, rest_css: str = None) -> None:
+    """Domain Block Identity ≠ Presentation Instance（客戶 2026-10-31）：燈元件不再畫，但 `data-block` 錨點恰留一個在這個說明容器上。"""
+    inner = "".join(f'<div class="{css if index == 0 else (rest_css or css)}">{_esc(line)}</div>' for index, line in enumerate(lines))
+    st.markdown(f'<div class="ast-entry" data-block="{_esc(block["code"])}">{inner}</div>', unsafe_allow_html=True)
+
+
 def _render_primary(alo: dict, settings_page) -> None:
     with st.container(border=True, key="ast_primary"):
         st.markdown(f'<div class="ast-card-title" data-section="primary">{_esc(OV.PRIMARY_TITLE)}</div>', unsafe_allow_html=True)
@@ -290,16 +321,18 @@ def _render_primary(alo: dict, settings_page) -> None:
             return
         model, ctx, quiet = alo["model"], alo["ctx"], alo["quiet"]
         alo2, alo1, alo4 = (alo_logic.find_block(model, c) for c in ("ALO-2", "ALO-1", "ALO-4"))
-        alo_page._render_alo0(alo_logic.find_block(model, "ALO-0"), plain_mode=True)   # D-3 暫行：ALO-0 維持既有燈，放在配置區段開頭
+        alo0 = alo_logic.find_block(model, "ALO-0")   # A（DEC-2026-10-31-01）：燈元件在合併頁不畫（狀態由頁級容器承擔）；說明行移到圖下方
         alo_page._lines(model["top_lines"], "alo-topline")   # 單頁頁面頂端那一行灰字（例：「目標合計 90%」）；合併頁放在現況 vs 目標之上
         if quiet.get("ALO-2") is not None:
             alo_page._render_alo2(alo2, LAYER_KEY, ctx, plain_mode=True, quiet=quiet["ALO-2"])
+            _render_block_entry(alo0, alo0_entry_lines(alo0), "alo-note")
         else:
             st.markdown(presentation.chips_html(OV.primary_chips(alo1, alo4, alo["as_of"])), unsafe_allow_html=True)
             alo_page._placeholder(alo2)
             rows = OV.primary_rows(alo2)
             if rows:
                 st.markdown(primary_bars_html(rows, alo2["column_labels"]), unsafe_allow_html=True)
+            _render_block_entry(alo0, alo0_entry_lines(alo0), "alo-note")
             with st.expander(OV.PRIMARY_DETAIL_TITLE, expanded=False):
                 alo_page._render_alo2(alo2, LAYER_KEY, ctx, plain_mode=True)
         alo3 = alo_logic.find_block(model, sections.ALO_SCENARIO_CODE)
@@ -368,7 +401,9 @@ def _render_holdings(hld: dict) -> None:
         _side_notice(hld)
         return
     model, quiet = hld["model"], hld["quiet"]
-    hld_page._render_lamp(hld_logic.find_block(model, "HLD-0"), plain_mode=True)   # D-3 暫行：HLD-0 維持既有燈，放在持股區段開頭
+    hld0 = hld_logic.find_block(model, "HLD-0")   # A（DEC-2026-10-31-01）：燈元件在合併頁不畫；按鈕（key 不變）與說明行留在持股明細開頭
+    hld_page._buttons(hld0, hld0["code"])
+    _render_block_entry(hld0, hld0_entry_lines(hld0), "hld-note", "hld-line")   # 字級同燈下原畫法：answers=hld-note、detail=hld-line
     if hld["counts_line"]:
         st.markdown(f'<div class="hld-lamp-text">{_esc(hld["counts_line"])}</div>', unsafe_allow_html=True)
     with st.container(key="ast_pair_hold"):

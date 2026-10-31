@@ -36,6 +36,7 @@
 | `2026-10-30_no_progress_narration_gate.md` | 客戶 2026-10-30 No Progress Narration Gate 正式裁示全文（禁止對客戶輸出過程直播／internal execution telemetry；只在真 Decision Gate、真 blocker、Model／Effort Change Gate、完整 Batch／Phase 完成四類發訊息；完成回報一次講完；Silent Autonomous Cruise＝不需要客戶行動時根本不要發訊息；`docs/DECISIONS.md` `DEC-2026-10-30-03`）；全文逐字，無遮蔽 | 客戶 2026-10-30 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-30 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `b816df1c` 之後） | 3478 | `f3c83417ed5dc6299cfc88eb7a98c0f846cfb2ed29b139a7d5280d1327259df9` |
 | `2026-10-30_d3_oauth_gate_rulings.md` | 客戶 2026-10-30 D-3 Formula／Rule Gate 與 OAuth 回原頁 Gate 正式裁示全文（D-3 採 P3、precedence 採 β「取數失敗 > 無持倉 > ◆ > ◇ > ⬜ > 持股只評估一部分（H7） > 無偏離／帶內」，aggregation 僅用於 page-level presentation status 及六項不得；F-13、F-2、F-14 必修；F-18／BL-0411 先修再允許 P3 production；F-19 算「沒評估到」；P3 實作驗收組合矩陣八項；OAuth 回原頁採 F、不做 A／B、暫不做 G；Model／Effort；`docs/DECISIONS.md` `DEC-2026-10-30-04`、`-05`）；全文逐字，無遮蔽 | 客戶 2026-10-30 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-30 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（main `9e508046` 之後） | 4686 | `623f1f193225beb0ac24d0b2be621c88ad184eb194ffeccf3daf904ed9a9fec9` |
 | `2026-10-31_v7_layout_a_rulings.md` | 客戶 2026-10-31 V7 正式裁示全文（💼 我的資產 Layout 採 A：頁級 P3 狀態容器保留第一眼位置並取代 `HLD-0`／`ALO-0` 兩枚燈的重複 presentation，目的與不採 B／C；A 只是 presentation de-duplication、不刪 domain blocks，必須保留清單與原則「Domain Block Identity ≠ Presentation Instance」；區段內資訊保全；H6 逐檔取數失敗維持「持股只評估一部分」級；F-5 字樣「持股：」「配置：」「持股與配置：」核准；文字線框 Gate；驗收十一項；Model／Effort；`docs/DECISIONS.md` `DEC-2026-10-31-01`）；全文逐字，無遮蔽 | 客戶 2026-10-31 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-31 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（`001c30ca` 之後） | 4914 | `43c149cfdb5ed58f91fa9a7f13c5e799f62260a3061cb1baeeacb3f0fe1bceb5` |
+| `2026-10-31_v7_layout_a_wireframe_approval.md` | 客戶 2026-10-31 對 `docs/v2/76` V7 Layout A 線框的核准裁示全文（核准實作 A；HLD-0／ALO-0 燈標題在合併頁消失、必須保留 Domain Block Identity 與 `data-block` 等；ALO-0 說明句「本燈」改「此配置判讀」且只限 UI copy 校正；前往 Sheets 鈕位置；Mobile Visual Fidelity 補充裁示：重要頁級狀態／Missing／Error reason 優先於強迫 Primary 完整露出，不放寬 V7；實作邊界；`docs/DECISIONS.md` `DEC-2026-10-31-02`）；全文逐字，無遮蔽 | 客戶 2026-10-31 對話中的正式裁示，經總管於派工單內逐字轉存 | 2026-10-31 | 分支 `claude/fund-dashboard-handoff-verify-n6ny72`（`c957af4a` 之後） | 3787 | `a6070b95d35fd2cc73f39d45f7af6bc79a9716fc9c889b3edf6a4f01443b934b` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 
@@ -338,6 +339,17 @@
 - 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-31_v7_layout_a_rulings.md`。
 - 雜湊為 2026-10-31 實跑。
 
+### `2026-10-31_v7_layout_a_wireframe_approval.md` 的兩個雜湊
+
+| 對象 | 大小（bytes） | sha256 |
+|---|---|---|
+| 整檔（檔頭說明＋圍欄） | 3787 | `a6070b95d35fd2cc73f39d45f7af6bc79a9716fc9c889b3edf6a4f01443b934b` |
+| 圍欄內文（＝檔內實際位元組；無跳脫碼，故沒有「換回原字」那一列） | 2731 | `16a159737b75445c2dce9a5f353599c40972e7760e85c57358fd5cc8c7becad9` |
+
+- 圍欄內文與總管轉存給執行組的原文逐字相同（執行組 2026-10-31 照派工單抄入；轉存檔不入 repo，本組未另行以 sha256 對轉存檔比對）；唯一格式處理：無（行尾空白：0 行）。
+- 驗證：把下方〈驗證〉指令裡的檔名換成本檔再跑；第一行應等於本表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-31_v7_layout_a_wireframe_approval.md`。
+- 雜湊為 2026-10-31 實跑。
+
 ## 撞字登記
 
 全文含交接本第 7 節〈客戶 2026-10-05 接手訊息：禁詞〉詞表的**第 7、8 個詞**，共 3 處，都在治理第 6 項「未來允許的方向」列舉內（圍欄內第 114、116、117 行）。依該節〈禁詞〉體例以 Unicode 跳脫碼書寫（`\u52a0\u78bc`、`\u6e1b\u78bc`），其餘一字未改。第 1～6 個詞以 2026-10-16 碼位組字掃描 0 命中。依客戶 2026-10-15 Phase 1.5（A+ 修正版）裁示，第 5～8 個詞已不是永久禁詞；本批新增行仍以 0 命中為目標，故改用跳脫碼並在此登記（與 `branch_archive/pr838/README.md` 不同：那裡是逐字摘錄照字面保留、只做登記）。
@@ -391,6 +403,8 @@
 `2026-10-30_d3_oauth_gate_rulings.md`：圍欄內以詞表八個詞碼位組字掃描 0 命中（2026-10-30 實跑）；無撞字、無跳脫碼。
 
 `2026-10-31_v7_layout_a_rulings.md`：無撞字、無跳脫碼；本組未取得詞表八個詞的碼位組，**未跑**詞表碼位組字掃描（待稽核組補跑），僅跑 `tests/test_public_repo_name_redaction.py` 與 `tests/test_amendment_8_integrity.py`。
+
+`2026-10-31_v7_layout_a_wireframe_approval.md`：無撞字、無跳脫碼；本組未取得詞表八個詞的碼位組，**未跑**詞表碼位組字掃描（待稽核組補跑），僅跑 `tests/test_public_repo_name_redaction.py` 與 `tests/test_amendment_8_integrity.py`。
 
 已實測：無行尾空白、結尾單一換行、無 session 識別碼、無合併衝突標記。
 

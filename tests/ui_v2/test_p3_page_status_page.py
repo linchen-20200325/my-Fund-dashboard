@@ -2,7 +2,7 @@
 """P3 頁級狀態容器在合併頁 `💼 我的資產` 上的畫面守衛（slow lane；需要 streamlit；AppTest，固定 fixtures、不打網路）。
 
 客戶 2026-10-30 裁示 P3／β（`DEC-2026-10-30-04`）。純函式 aggregation 的組合矩陣見 `test_p3_page_status_logic.py`；本檔守：
-容器只有一個（Visual Budget 計 1 個）、頭條與第二行、Q5／Q6 合成、PE 另一區照畫、沒有 Active 時不畫、兩枚燈各自區段的字樣不變。
+容器只有一個（Visual Budget 計 1 個）、頭條與第二行、Q5／Q6 合成、PE 另一區照畫、沒有 Active 時不畫、兩區說明容器與 data-block 錨點（V7 Layout A 後不再畫燈元件）各自區段的字樣不變。
 """
 
 from __future__ import annotations
@@ -100,7 +100,7 @@ def test_兩區同為尚未建立任何持倉_合成一行_前往Sheets鈕整頁
     at = _run(F.script("full", hld="empty", alo="noholding"))
     kind, _block, rows = _status(at)
     assert kind == "merged_no_holding" and len(rows) == 1 and "持股與配置：尚未建立任何持倉" in rows[0][2]
-    # 容器本身不畫鈕；持股區段 `HLD-0` 燈的那一枚（既有）是唯一與頁級狀態對應的前往 Sheets 鈕。
+    # 容器本身不畫鈕；持股區段 `HLD-0` 說明容器前的那一枚（既有；A 後燈元件已取消、鈕位置保留）是唯一與頁級狀態對應的前往 Sheets 鈕。
     # （`ALO-4` 卡自己另有一枚，屬該卡既有的空狀態，不是頁級狀態的鈕。）
     keys = [b.key for b in at.button]
     assert keys.count("HLD-0_btn_0") == 1 and not [k for k in keys if k and k.startswith("ast_status")]
@@ -118,9 +118,11 @@ def test_沒有ActiveSheet_整頁改畫尚未選定_不畫頁級狀態容器():
     assert _status(at) is None
 
 
-def test_容器只有一個_兩枚燈各自區段的字樣與判定不變():
+# ~~`test_容器只有一個_兩枚燈各自區段的字樣與判定不變`~~ → V7 Layout A 實作批（2026-10-31；`DEC-2026-10-31-02`；有意識的更正，不是漏刪）：
+# 合併頁已不畫兩枚燈元件，改名為「兩區說明容器與 data-block 錨點仍在」；斷言內容（容器唯一、錨點在、字樣不變）一項未放寬。
+def test_容器只有一個_兩區說明容器與data_block錨點仍在各自區段_字樣與判定不變():
     at = _run(F.script("full", hld="noexceed", alo="inband"))
     md = _md(at)
     assert md.count('data-section="page-status"') == 1
-    assert 'data-block="HLD-0"' in md and 'data-block="ALO-0"' in md          # 兩枚燈仍在各自區段
+    assert 'data-block="HLD-0"' in md and 'data-block="ALO-0"' in md          # 兩個 domain block 的 data-block 錨點仍在各自區段（燈元件已由 A 取消，錨點留在說明容器）
     assert "各類別皆在容許帶內" in md and "無偏離項" in md
