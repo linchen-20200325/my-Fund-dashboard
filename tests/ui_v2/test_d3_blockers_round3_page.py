@@ -162,3 +162,15 @@ hld_page.render(load_live=_hld_load, mask_error=str, save_live=lambda *_a: {"sta
     labels = [e.label for e in at.expander]
     assert "單檔展開　—　◇ 資料未備：持倉" in labels
     assert "最大回撤與本金類配息佔比　—　◇ 資料未備：持倉" in labels
+
+
+def test_SF1_單頁我的持股_有持倉而有略過的列_單檔展開與最大回撤標題不寫N檔():
+    at = _run(F._HEAD + F._SKIPPED_ROWS + """
+from ui_v2.hld import page as hld_page
+hld_page.render(load_live=_hld_load, mask_error=str, save_live=lambda *_a: {"status": "saved"})
+""")
+    labels = [e.label for e in at.expander]
+    assert "單檔展開　—　◇ 資料未備：持倉 · 同時最多展開一檔" in labels
+    assert "最大回撤與本金類配息佔比　—　◇ 資料未備：持倉 · 有值取不到或不適用" in labels
+    assert not any(re.match(r"(單檔展開|最大回撤與本金類配息佔比)　—　\d+ 檔", label) for label in labels)
+    assert _md(at).count("◇ 資料未備：PX-TEST-001 第 7 列（ZZ9999） 未列入：缺持倉補充") >= 3   # 燈下、單檔展開、最大回撤表

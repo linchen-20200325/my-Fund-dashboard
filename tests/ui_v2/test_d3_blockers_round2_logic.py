@@ -350,7 +350,9 @@ def test_追溯_第二輪各修法不動ALO2至ALO7與HLD2至HLD8的每一格_�
     a3, b3 = HL.find_block(h_a, "HLD-3"), HL.find_block(h_b, "HLD-3")
     assert b3["_state"] == a3["_state"] == HL.STATE_OK                                # S3 不改塊態
     h_c = HL.build_page_model(R1._with(_noexceed(), skipped_holdings=_SKIPPED), demo_hint=False)
-    for code in [b["code"] for b in h_a["blocks"] if b["code"] not in ("HLD-0", "HLD-1")]:
+    # ~~`not in ("HLD-0", "HLD-1")`~~ → D-3 第三輪補（`HLD-5`／`HLD-8` 件數改「⬜ 資料未備：持倉」；有意識的更正，不是漏刪；
+    # 見 `test_d3_blockers_round3_logic.py::test_SF1_HLD5與HLD8_*`）。
+    for code in [b["code"] for b in h_a["blocks"] if b["code"] not in ("HLD-0", "HLD-1", "HLD-5", "HLD-8")]:
         assert R1._strip(HL.find_block(h_c, code)) == HL.find_block(h_a, code), code
 
 

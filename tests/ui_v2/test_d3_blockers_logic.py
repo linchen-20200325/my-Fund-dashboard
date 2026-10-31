@@ -390,8 +390,14 @@ def test_追溯_略過紀錄只加在燈與記號上_ALO2與HLD1至3的每一格
     # ~~`!= "HLD-0"`（只有燈改）~~ → D-3 第二輪（獨立稽核 S1，`DEC-2026-10-30-04` F-18；有意識的更正，不是漏刪）：零偏離時 `HLD-1` 的
     # 「無偏離項」＋「目前這一組門檻下，沒有任何一檔超出。」同屬覆蓋完整集合的宣稱，改既有 `⬜ 資料未備` 與略過的列（只動字與佔位；
     # `_state`、`_rows` 照舊，見下一條）。其餘各塊照舊每一格不變。
-    for code in [b["code"] for b in hld_a["blocks"] if b["code"] not in ("HLD-0", "HLD-1")]:
+    # ~~`not in ("HLD-0", "HLD-1")`~~ → D-3 第三輪補（總管派工，`DEC-2026-10-30-04` F-18；有意識的更正，不是漏刪）：`HLD-5`／`HLD-8`
+    # 摘要開頭的「N 檔」只數被接受的持倉 → 改既有「⬜ 資料未備：持倉」、說明區最後接略過的列（只動字與資料類記號）；列與主值照舊，見下面。
+    for code in [b["code"] for b in hld_a["blocks"] if b["code"] not in ("HLD-0", "HLD-1", "HLD-5", "HLD-8")]:
         assert _strip(HL.find_block(hld_b, code)) == HL.find_block(hld_a, code), code
+    for code, rows_key in (("HLD-5", "_rows"), ("HLD-8", "_rows")):
+        a, b = HL.find_block(hld_a, code), HL.find_block(hld_b, code)
+        assert (b["_state"], b.get(rows_key)) == (a["_state"], a.get(rows_key)), code
+        assert b["detail_lines"][:len(a["detail_lines"])] == a["detail_lines"] and b["detail_lines"][-1] == _SKIPPED_LINE, code
     assert HL.find_block(hld_b, "HLD-2")["_omitted_rows"] == tuple(_SKIPPED)
     a1, b1 = HL.find_block(hld_a, "HLD-1"), HL.find_block(hld_b, "HLD-1")
     assert (b1["_state"], b1["_rows"]) == (a1["_state"], a1["_rows"]) == (HL.STATE_OK, [])

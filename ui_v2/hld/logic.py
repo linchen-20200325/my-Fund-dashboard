@@ -2992,6 +2992,8 @@ _NO_HOLDING_SUMMARIES = (TEXT_NO_HOLDING, f"{ND_TEXT}：{TEXT_NO_HOLDING}")
 _NO_HOLDING_LINES = (TEXT_NO_HOLDING, HLD5_NO_HOLDING_LINE)
 # 持倉列全數被略過時各展開區的摘要：既有字型「⬜ 資料未備：‹資料類›」，資料類取 `page_health.DATA_CLASSES["holding"]`（＝「持倉」）。
 OMITTED_SUMMARY = f"{ND_TEXT}：{page_health.DATA_CLASSES['holding']}"
+# `HLD-5`／`HLD-8` 有持倉時摘要開頭的件數（`f"{len(...)} 檔{_hint()} · …"`）。示範字尾 `HINT` 標的是那個件數，件數拿掉時一併拿掉。
+_COUNT_HEAD = re.compile(rf"^\d+ 檔(?:{re.escape(HINT)})?")
 
 
 def _present_omitted_rows(blocks, omitted_rows, *, has_holdings, holding_unknown) -> None:
@@ -3003,7 +3005,9 @@ def _present_omitted_rows(blocks, omitted_rows, *, has_holdings, holding_unknown
       同一組字）。塊的 `_state`、主值、按鈕一個都不動（這幾塊原本就是 `資料未備`）。
     - **S1**：有持倉、`HLD-1` 已評估的檔零偏離（「無偏離項」＋「目前這一組門檻下，沒有任何一檔超出。」那一支）→ 兩句都在宣稱
       覆蓋完整集合，同 `HLD-0`：摘要與主值位置改既有 `⬜ 資料未備`（佔位），那一句改成略過的持倉列各一行；`_state`、`_rows` 不動，
-      另記資料類「持倉」（畫成 ◇ 的節點要有資料類，`ui_v2/health.py::collect_page_items`）。有偏離列、或零列而有別的原因的各支不動
+      另記資料類「持倉」（畫成 ◇ 的節點要有資料類，`ui_v2/health.py::collect_page_items`）。
+    - **第三輪補**：有持倉時 `HLD-5`／`HLD-8` 摘要開頭的「N 檔」改 `OMITTED_SUMMARY`，其餘字照留，說明區最後接略過的列。
+    其餘：有偏離列、或零列而有別的原因的各支不動
       （那幾支沒有覆蓋完整集合的句子；略過的列由 `HLD-0` 那幾行承擔）。
     沒有略過的列 → 什麼都不做（模型逐鍵與動手前相同）。"""
     if not omitted_rows:
@@ -3032,6 +3036,15 @@ def _present_omitted_rows(blocks, omitted_rows, *, has_holdings, holding_unknown
                 block["summary_text"] = OMITTED_SUMMARY
             if any(line in _NO_HOLDING_LINES for line in block.get("detail_lines") or ()):
                 block["detail_lines"] = replace(block["detail_lines"], _NO_HOLDING_LINES)
+        elif (has_holdings and block["code"] in ("HLD-5", "HLD-8") and isinstance(block.get("summary_text"), str)
+              and _COUNT_HEAD.match(block["summary_text"])):
+            # D-3 第三輪補（總管派工；同 `ui_v2/alo/logic.py::_build_alo6` 的處理；`DEC-2026-10-30-04` F-18「持有 N 檔……都不能
+            # 假裝覆蓋完整集合」）：~~「N 檔 · 同時最多展開一檔」／「N 檔 · 兩個值皆出數」~~ 的「N 檔」只數被接受的持倉 —— 件數那一段改
+            # 既有字型 `OMITTED_SUMMARY`（「⬜ 資料未備：持倉」，正式模式 ◇），其餘照留（「 · …」；示範字尾標的是件數，隨件數拿掉）；略過的列各一行接在說明區最後。
+            # 列、主值、`_state`、按鈕一個都不動。有意識的更正，不是漏刪；決策者：AI 總管。
+            block["summary_text"] = _COUNT_HEAD.sub(OMITTED_SUMMARY, block["summary_text"], count=1)
+            block["detail_lines"] = list(block.get("detail_lines") or ()) + lines
+            page_health.tag_missing(block, page_health.DATA_CLASSES["holding"])
         elif (block["code"] == "HLD-1" and block["_state"] == STATE_OK and not block["_rows"]
               and block.get("summary_text") == TEXT_NO_DEVIATION and TEXT_NO_DEVIATION_LINE in block["detail_lines"]):
             block["summary_text"] = ND_TEXT

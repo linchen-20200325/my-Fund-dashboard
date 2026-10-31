@@ -233,3 +233,35 @@ def test_附註_範本行殘留照舊raise():
     hld0["lines"] = list(hld0["lines"]) + ["配息與本金卡：兩句同時成立時哪一句出現，規格沒有寫"]   # 卡名開頭但不是上游原文
     with pytest.raises(ValueError, match="開發過程字句"):
         hld_live._strip_dev_lines(model)
+
+
+# ───────────────────────── 第三輪補：HLD-5／HLD-8 的「N 檔」（總管派工，同 ALO-6）─────────────────────────
+
+
+@pytest.mark.parametrize("formal", [False, True])
+@pytest.mark.parametrize("code,rest", [("HLD-5", " · 同時最多展開一檔"), ("HLD-8", " · 有值取不到或不適用")])
+def test_SF1_HLD5與HLD8_有持倉而有略過的列_件數改資料未備持倉_其餘照留(formal, code, rest):
+    ds = R1._with(HF.scenario("full")["dataset"], skipped_holdings=_SKIPPED)
+    model = R1._hld_formal(ds) if formal else HL.build_page_model(ds, demo_hint=False)
+    block = HL.find_block(model, code)
+    assert block["summary_text"] == ("◇ 資料未備：持倉" if formal else _OMITTED_SUMMARY) + rest
+    assert not re.match(r"\d+ 檔", block["summary_text"])
+    assert block["detail_lines"][-1] == (_SKIPPED_FORMAL if formal else _SKIPPED_LINE)
+    assert _HOLDING in block[page_health.MISSING_KEYS_KEY]
+
+
+@pytest.mark.parametrize("code", ["HLD-5", "HLD-8"])
+def test_SF1_HLD5與HLD8_列與狀態不動_示範字尾隨件數拿掉(code):
+    base = HF.scenario("full")["dataset"]
+    a = HL.find_block(HL.build_page_model(base), code)                                # 示範模式（帶字尾）
+    b = HL.find_block(HL.build_page_model(R1._with(base, skipped_holdings=_SKIPPED)), code)
+    assert re.match(rf"\d+ 檔{re.escape(HL.HINT)} · ", a["summary_text"])            # 前提
+    assert b["summary_text"] == _OMITTED_SUMMARY + a["summary_text"].split(HL.HINT, 1)[1]
+    assert (b["_state"], b["_rows"], b.get("buttons")) == (a["_state"], a["_rows"], a.get("buttons"))
+
+
+@pytest.mark.parametrize("code", ["HLD-5", "HLD-8"])
+def test_SF1_HLD5與HLD8_沒有略過的列_照舊N檔(code):
+    block = HL.find_block(HL.build_page_model(HF.scenario("full")["dataset"], demo_hint=False), code)
+    assert re.match(r"\d+ 檔 · ", block["summary_text"])
+    assert not any("未列入" in line for line in block["detail_lines"])
