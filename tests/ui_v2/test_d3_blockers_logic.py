@@ -201,11 +201,13 @@ def test_F2_H7_燈照舊無偏離項但同時帶上HLD3卡上既有的未評估�
     # 前提：HLD-1 完整評估、零偏離；HLD-3 資料未備
     assert hld1["_state"] == HL.STATE_OK and hld1["_rows"] == [] and hld3["_state"] == HL.STATE_MISSING
     assert hld0["text"] == HL.TEXT_NO_DEVIATION                      # 字樣照舊（不是只剩它）
-    assert hld0["lines"] == [f"{HL.BLOCK_TITLES['HLD-3']}：{HL.ND_TEXT}"]
+    # ~~`[f"{HL.BLOCK_TITLES['HLD-3']}：{HL.ND_TEXT}"]`~~ → D-3 第二輪（獨立稽核 S4，`DEC-2026-10-30-04` F-2「必須同時讓使用者看得到
+    # 既有的缺值／未評估原因」；有意識的更正，不是漏刪）：帶上產生處記的資料類（「⬜ 資料未備：配息」，同卡片收起時那一行的既有字型）。
+    assert hld0["lines"] == [f"{HL.BLOCK_TITLES['HLD-3']}：{HL.ND_TEXT}：配息"]
     assert hld0["_partial"] is True
     assert hld0["_state"] == HL.STATE_MISSING and hld0["_tone"] == "灰"   # 原判定、色照舊
     formal = HL.find_block(_hld_formal(_h7()), "HLD-0")
-    assert formal["lines"] == ["配息與本金卡：◇ 資料未備"]                # 正式模式：既有 ◇ 字樣
+    assert formal["lines"] == ["配息與本金卡：◇ 資料未備：配息"]          # 正式模式：既有 ◇ 字樣（~~「配息與本金卡：◇ 資料未備」~~，同上）
 
 
 def test_F2_附行只帶既有字樣_不計數_不出第二套缺值字樣():
@@ -339,8 +341,12 @@ def test_BL0411_HLD資料承載層_有略過的列才帶鍵_沒有時dataset逐�
 def test_BL0411_ALO資料承載層_略過的分頁與列才帶鍵():
     assert alo_live.skipped_for_dataset({"skipped_holdings": [], "skipped_tabs": []}, str) == {}
     got = alo_live.skipped_for_dataset({"skipped_holdings": _SKIPPED, "skipped_tabs": [{"tab": "T9", "error": "標頭格式有誤"}]}, str)
+    # ~~`"skipped_tabs": [{"tab": "T9"}]`~~ → D-3 第二輪（獨立稽核 B1；有意識的更正，不是漏刪）：原因一併轉交（`ALO-0` 燈下要寫出
+    # 是哪一張分頁、為什麼）。
     assert got == {"skipped_holdings": [{"tab": "PX-TEST-001", "row": 7, "fund_code": "ZZ9999", "reasons": ["缺持倉補充"]}],
-                   "skipped_tabs": [{"tab": "T9"}]}
+                   "skipped_tabs": [{"tab": "T9", "error": "標頭格式有誤"}]}
+    unread = alo_live.skipped_for_dataset({"skipped_tabs": [{"tab": "T9", "error": None, "unread": True}]}, str)
+    assert unread == {"skipped_tabs": [{"tab": "T9"}]}                            # 沒有原因 → 不放 error 鍵（不猜）
     with pytest.raises(ValueError):
         alo_live.skipped_for_dataset({"skipped_holdings": [{**_SKIPPED[0], "reasons": []}]}, str)
 
@@ -373,9 +379,15 @@ def test_追溯_略過紀錄只加在燈與記號上_ALO2與HLD1至3的每一格
     hds = HF._dataset(window=(HF.WINDOW_START, HF.WINDOW_END), rules=(HF._RULES_NOEXCEED[0],))
     hld_a = HL.build_page_model(hds, demo_hint=False)
     hld_b = HL.build_page_model(_with(hds, skipped_holdings=_SKIPPED), demo_hint=False)
-    for code in [b["code"] for b in hld_a["blocks"] if b["code"] != "HLD-0"]:
+    # ~~`!= "HLD-0"`（只有燈改）~~ → D-3 第二輪（獨立稽核 S1，`DEC-2026-10-30-04` F-18；有意識的更正，不是漏刪）：零偏離時 `HLD-1` 的
+    # 「無偏離項」＋「目前這一組門檻下，沒有任何一檔超出。」同屬覆蓋完整集合的宣稱，改既有 `⬜ 資料未備` 與略過的列（只動字與佔位；
+    # `_state`、`_rows` 照舊，見下一條）。其餘各塊照舊每一格不變。
+    for code in [b["code"] for b in hld_a["blocks"] if b["code"] not in ("HLD-0", "HLD-1")]:
         assert _strip(HL.find_block(hld_b, code)) == HL.find_block(hld_a, code), code
     assert HL.find_block(hld_b, "HLD-2")["_omitted_rows"] == tuple(_SKIPPED)
+    a1, b1 = HL.find_block(hld_a, "HLD-1"), HL.find_block(hld_b, "HLD-1")
+    assert (b1["_state"], b1["_rows"]) == (a1["_state"], a1["_rows"]) == (HL.STATE_OK, [])
+    assert b1["_omitted_rows"] == tuple(_SKIPPED)
 
 
 def test_追溯_F13與F2只改燈_其餘各塊與沒改前同一份輸入算出的一樣():

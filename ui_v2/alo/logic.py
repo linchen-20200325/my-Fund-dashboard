@@ -1087,13 +1087,43 @@ def conclusion_light(alo2) -> dict:
     - **F-18（BL-0411）**：`_omitted_rows` 非空時另寫每一列略過的持倉一行（`page_health.omitted_row_lines`，放在燈下
       說明行的最前面），並記 `_omitted_rows`；持倉全數被略過時「尚未建立任何持倉」不成立 → 「配置差距無法判定」。
     兩組略過紀錄都由 `ALO-2` 帶（`_build_alo2` 從 dataset 讀；本燈照舊只讀 `ALO-2`）。沒有上述任何一種情形時，回傳逐鍵與動手前相同。
+
+    D-3 阻擋項修正第二輪（獨立稽核 B1；`DEC-2026-10-30-04` F-18「必須先讓 omitted rows／未納入集合的事實可被辨識」）：
+    - ~~持倉為空時只看 `_omitted_rows`~~ → 有保單分頁被略過（`_skipped_tabs`）而持倉為空時，「尚未建立任何持倉」同樣不成立 →
+      「配置差距無法判定」（有意識的更正，不是漏刪：舊寫法在寫下當時只想到略過的列，漏了略過的分頁）。
+    - 被略過的分頁在燈下寫成一行，字照持倉體檢同一件事的既有寫法：「⛔ 取數失敗：<分頁>：<L2 原因>」（多張以「；」相接；
+      `ui_v2/hld/live.py::assemble_live_load` 組 `errors["holding"]`、`HLD-1` 以 `fetch_failed_text` 印出的那一句），放在略過的列之前，
+      並記 `_skipped_tab_text`（`_build_alo0` 依它記資料類「持倉」）。燈色與燈句的規則不變（`ALO-0` 照舊沒有紅燈，ALO-GAP-無紅燈）。
     """
     omitted_rows = alo2.get("_omitted_rows") or ()
-    light = _conclusion_light(alo2, source_incomplete=bool(omitted_rows) or bool(alo2.get("_skipped_tabs")),
+    skipped_tabs = alo2.get("_skipped_tabs") or ()
+    light = _conclusion_light(alo2, source_incomplete=bool(omitted_rows) or bool(skipped_tabs),
                               omitted=bool(omitted_rows))
+    lines = []
+    tab_message = skipped_tab_message(skipped_tabs)
+    if tab_message:
+        lines.append(fetch_failed_text(tab_message))
+        light = {**light, "_skipped_tab_text": tab_message}
     if omitted_rows:
-        light = {**light, "lines": page_health.omitted_row_lines(omitted_rows), "_omitted_rows": tuple(omitted_rows)}
+        lines += page_health.omitted_row_lines(omitted_rows)
+        light = {**light, "_omitted_rows": tuple(omitted_rows)}
+    if lines:
+        light = {**light, "lines": lines}
     return light
+
+
+def skipped_tab_message(skipped_tabs) -> str:
+    """被略過的保單分頁 → 「<分頁>：<原因>」（沒有原因 → 只寫分頁），多張以「；」相接；沒有 → 空字串。
+    組法逐字同 `ui_v2/hld/live.py::assemble_live_load` 組 `errors["holding"]` 那一段（兩頁同一件事一個寫法）。
+    分頁名不是非空文字 → 當場炸（§1；同該處 `_require_text`）。"""
+    parts = []
+    for entry in skipped_tabs or ():
+        tab = entry.get("tab") if isinstance(entry, dict) else None
+        if not isinstance(tab, str) or not tab.strip():
+            raise ValueError(f"skipped_tabs 的 tab 應為非空文字：{entry!r}")
+        error = entry.get("error")
+        parts.append(f"{tab}：{error}" if isinstance(error, str) and error.strip() else tab)
+    return "；".join(parts)
 
 
 def _conclusion_light(alo2, *, source_incomplete=False, omitted=False) -> dict:
@@ -1101,8 +1131,9 @@ def _conclusion_light(alo2, *, source_incomplete=False, omitted=False) -> dict:
         # ALO-GAP-無紅燈：燈沒有紅；燈為灰，文案照抄 ALO-2 那一格的失敗字串（不說成尚未建立持倉）。
         return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None}
     if alo2["_holdings_empty"]:
-        if omitted:
+        if omitted or source_incomplete:
             # BL-0411／F-18：持倉列全數在載入時被略過 —— 不是「沒有持倉」（DEC-2026-10-30-04）。
+            # 第二輪（稽核 B1）：~~`if omitted:`~~ → 保單分頁被略過（`source_incomplete`）同理（有意識的更正，不是漏刪）。
             return {"_tone": "灰", "text": TEXT_UNDECIDABLE_GAP, "_max_bucket": None, "_incomplete": True}
         return {"_tone": "灰", "text": TEXT_NO_HOLDING, "_max_bucket": None}
     if alo2["_target_unset"]:
@@ -1161,7 +1192,7 @@ def _build_alo0(alo2) -> dict:
         "glyph": glyph,
         "state_word": state_word,
         "text": light["text"],
-        # BL-0411／F-18：略過的持倉列各一行，放在說明行最前面（沒有 → 與動手前相同）。
+        # BL-0411／F-18：略過的持倉列各一行，放在說明行最前面（沒有 → 與動手前相同）；第二輪（稽核 B1）：被略過的分頁那一行排在它們之前。
         "detail_lines": list(light.get("lines") or ()) + [
             DEV_NOTE_ALO0 + TEXT_ALO0_READS,
             HINT_NOTE,
@@ -1174,6 +1205,8 @@ def _build_alo0(alo2) -> dict:
     # BL-0250 批次 3-B（總管第二輪裁定第 1、4 點）：燈照抄 ALO-2 那一格的失敗字串時，資料類一併照抄；燈的 ◇ 是衍生狀態。
     if alo2["_failed"]:
         page_health.copy_fetch_classes(block, alo2["placeholder"])
+    # D-3 第二輪（稽核 B1）：被略過的保單分頁那一句「⛔ 取數失敗：…」屬持倉（同持倉體檢 `errors["holding"]`）。
+    page_health.tag_fetch_class(block, light.get("_skipped_tab_text"), page_health.DATA_CLASSES["holding"])
     return page_health.tag_derived(block, page_health.DERIVED_LAMP)
 
 

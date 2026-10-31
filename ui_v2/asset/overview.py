@@ -15,7 +15,7 @@ BL-0525 Batch D（客戶 2026-10-30 裁示 D-1～D-12，`DEC-2026-10-30-02`；�
 from __future__ import annotations
 
 from .. import presentation as P
-from .. import page_health, sections
+from .. import page_health, sections, symbols
 from ..alo import logic as alo_logic
 
 SLUG = "ast"
@@ -163,8 +163,17 @@ def share_excluded_count(rows: list) -> int:
     return sum(1 for r in rows if r["ratio"] is None)
 
 
-def share_chips(alo4: dict, rows: list) -> list:
-    chips = [P.chip(f"{len(rows)} 檔")]
+def share_omitted_lines(alo2) -> list:
+    """BL-0411／F-18 第二輪（獨立稽核 S2；`DEC-2026-10-30-04`）：保單分頁上沒寫進持倉的列（`ALO-2` 記的 `_omitted_rows`）各一行，
+    字同 `ALO-0` 燈下那幾行（`page_health.omitted_row_lines`，正式模式的 ◇ 同 `ui_v2/symbols.py`）。沒有 → 空 list。只讀既有紀錄，不另算。"""
+    rows = (alo2 or {}).get("_omitted_rows") or ()
+    return [line.replace(symbols.MISSING_OLD, symbols.MISSING_NEW) for line in page_health.omitted_row_lines(rows)]
+
+
+def share_chips(alo4: dict, rows: list, *, omitted_lines=()) -> list:
+    """`omitted_lines`（`share_omitted_lines`）非空時，~~「N 檔」~~ 那一枚改既有 `◇ 資料未備`（`P.missing_chip`）：
+    本卡列出的只是被接受的持倉，「N 檔」會假裝覆蓋完整集合（D-3 第二輪，稽核 S2；同合併頁一句主判讀「持有檔數無法判定」）。"""
+    chips = [P.missing_chip() if omitted_lines else P.chip(f"{len(rows)} 檔")]
     if alo4.get("basis_line"):
         chips.append(P.chip(alo4["basis_line"], "灰" if "未設定" in alo4["basis_line"] else "中性"))
     excluded = share_excluded_count(rows)
@@ -210,8 +219,11 @@ def return_chips(hld4: dict, rows: list) -> list:
 
 
 # 不過濾空白行：`P.detail_model` 的契約是「空行代表上游漏了資訊」→ 當場 `ValueError`（不默默吞掉）；單頁也是原樣畫上游給的行。
-def share_detail(alo6: dict) -> dict:
-    return P.detail_model(why=[alo6["answers"]], limits=list(alo6["footer_lines"]) + list(alo6["detail_lines"]))
+def share_detail(alo6: dict, *, omitted_lines=()) -> dict:
+    """`omitted_lines` 非空時接在 `ALO-6` 表尾（各類別內與總體的佔比合計）之後：那幾個合計只涵蓋被接受的持倉，
+    略過的是哪幾列、為什麼緊接著寫出（D-3 第二輪，稽核 S2）。表尾字一個不改（量的不變式照舊成立）。"""
+    return P.detail_model(why=[alo6["answers"]],
+                          limits=list(alo6["footer_lines"]) + list(omitted_lines) + list(alo6["detail_lines"]))
 
 
 def returns_detail(hld2: dict) -> dict:

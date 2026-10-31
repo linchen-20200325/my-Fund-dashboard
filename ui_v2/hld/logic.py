@@ -469,6 +469,10 @@ TEXT_NO_RULES = "尚未設定門檻"
 TEXT_NO_DEVIATION = "無偏離項"
 TEXT_NO_DEVIATION_LINE = "目前這一組門檻下，沒有任何一檔超出。"
 TEXT_SHEETS_READONLY = "持倉資料在 Sheets 維護，本儀表板唯讀"
+# 紅燈那一支的補述（字面不變，原本內嵌在 `_conclusion_light`；D-3 第二輪起 `conclusion_light` 要認得它，故抽成常數）。
+HLD0_NO_HOLDING_ASIDE = f"（另：{TEXT_NO_HOLDING}。{TEXT_SHEETS_READONLY}）"
+# `HLD-5` 空持倉那一句（字面不變，原本內嵌在 `_build_hld5`；D-3 第二輪起 `_present_omitted_rows` 要認得它，故抽成常數）。
+HLD5_NO_HOLDING_LINE = "尚未建立任何持倉，沒有可以展開的檔。"
 TEXT_GOTO_SHEETS = "前往 Sheets 維護持倉"
 TEXT_BAD_RANGE = "起日不晚於迄日"
 # S6a-2 第 4 項：門檻列不可套用時「套用」的停用原因。**客戶 2026-10-03 核准的字面，逐字**；改字先回客戶。
@@ -1797,26 +1801,57 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
         # 「目前這一組門檻下，沒有任何一檔超出。」同屬覆蓋完整集合的宣稱，一併不寫；其餘補述（門檻未設那一句）照留。
         keep = [line for line in light["lines"] if line != TEXT_NO_DEVIATION_LINE]
         light = {**light, "_state": STATE_MISSING, "text": ND_TEXT, "lines": keep}
-    return {**light, "lines": list(light["lines"]) + page_health.omitted_row_lines(omitted_rows),
+    # D-3 第二輪（獨立稽核 B2）：紅燈那一支的補述 ~~「（另：尚未建立任何持倉。持倉資料在 Sheets 維護，本儀表板唯讀）」~~ 在持倉列全數
+    # 被略過時同樣不成立（不是沒有持倉）—— 不寫；略過的是哪幾列由下面那幾行承擔（有意識的更正，不是漏刪）。
+    lines = [line for line in light["lines"] if line != HLD0_NO_HOLDING_ASIDE]
+    return {**light, "lines": lines + page_health.omitted_row_lines(omitted_rows),
             "_omitted_rows": tuple(omitted_rows)}
 
 
 def _partial_reason_lines(cards) -> list:
     """F-2（客戶 2026-10-30 裁示 `DEC-2026-10-30-04`）：`HLD-1` 已完整評估、零偏離，但 `HLD-2`／`HLD-3` 有未評估或缺值（74 H7）時，
     燈不得只寫「無偏離項」—— 把那兩塊**卡上既有**的未評估字樣帶上來：每一塊一行「<卡名>：<該塊非正常主值的既有字樣，去重後以「、」相接>」
-    （同紅燈那一行「<卡名>：取數失敗。」的體例；字樣是卡上主值原字，例 `⬜ 資料未備`〔正式模式畫成 ◇〕、`⬜ 不適用：…`）。
-    不計數（不寫幾檔、幾項）、不新增第二套缺值字樣；`_state`、偏離筆數、各塊的判定一個都不動。"""
+    （同紅燈那一行「<卡名>：取數失敗。」的體例）。不計數（不寫幾檔、幾項）、不新增第二套缺值字樣；`_state`、偏離筆數、各塊的判定一個都不動。
+
+    D-3 阻擋項修正第二輪（獨立稽核 S3、S4；有意識的更正，不是漏刪）：
+    - ~~只看 `_state` 不是 ok 的塊、只收 `資料未備`／`業務例外` 的主值~~ → 看每一個非 ok 的主值，不論塊態（74 H6：逐檔取數失敗時
+      塊照舊 ok〔總管 S2 原則〕，但那一檔沒有評估到），`系統錯誤` 也收。舊寫法在寫下當時只想到 H7（塊態跟著值走的那一種）。
+    - ~~只帶狀態字（「◇ 資料未備」）~~ → 帶上卡上既有的原因：`資料未備` 接產生處記的資料類（「⬜ 資料未備：配息」，同卡片收起時那一行
+      「◇ 資料未備：‹資料類›」的既有字型）；`系統錯誤` 用卡上逐檔那一句（`fund_fetch_failed_text`「⛔ 取數失敗：<代碼>：<原文>」；
+      不是逐檔的 → `fetch_failed_text`）；`業務例外` 的字本身就含原因（「⬜ 不適用：<原因>」）。原因沒有記 → 只寫狀態字（不猜）。"""
     lines = []
     for card in cards:
-        if card.get("code") not in ("HLD-2", "HLD-3") or card["_state"] == STATE_OK:
+        if card.get("code") not in ("HLD-2", "HLD-3"):
             continue
-        texts = list(dict.fromkeys(
-            mv["text"] for group in card.get("fund_groups") or () for mv in group["main_values"]
-            if mv["_state"] in (STATE_MISSING, STATE_BIZ) and isinstance(mv.get("text"), str) and mv["text"]
-        ))
+        texts = []
+        for group in card.get("fund_groups") or ():
+            for mv in group["main_values"]:
+                text = _partial_reason_text(group, mv)
+                if text and text not in texts:
+                    texts.append(text)
         if texts:
             lines.append(f"{card['title']}：{'、'.join(texts)}")
     return lines
+
+
+def _partial_reason_text(group, mv):
+    """一個非 ok 主值在卡上既有的原因字（見 `_partial_reason_lines`）；ok 或沒有字 → None。"""
+    state = mv["_state"]
+    if state == STATE_OK or not isinstance(mv.get("text"), str) or not mv["text"]:
+        return None
+    if state == STATE_ERROR:
+        reason = mv.get("reason_text")
+        if not reason:
+            return mv["text"]
+        if mv.get("_fund_scoped_error"):
+            return fund_fetch_failed_text(group["_fund_code"], reason)
+        return fetch_failed_text(reason)
+    if state == STATE_MISSING:
+        keys = [k for k in mv.get(page_health.MISSING_KEYS_KEY) or () if isinstance(k, str) and k]
+        return f"{mv['text']}：{'、'.join(keys)}" if keys else mv["text"]
+    if state == STATE_BIZ:
+        return mv["text"]
+    return None
 
 
 def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
@@ -1854,7 +1889,7 @@ def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
         # 📌 2026-10-05「讀取失敗不說空」（燈不說：失敗不等於空，說了就是造假 —— 客戶 2026-09-28 核准，
         #    alo 草稿第 16 題）：持倉表或設定讀不到時，那一句補述不成立，不寫；真的空、真的沒設定照舊寫。
         if not has_holdings and not holding_unknown:
-            lines.append(f"（另：{TEXT_NO_HOLDING}。{TEXT_SHEETS_READONLY}）")
+            lines.append(HLD0_NO_HOLDING_ASIDE)
         if not has_rules and not rules_unknown:
             lines.append(f"（另：{TEXT_NO_RULES}。門檻由你自己輸入，這一頁不提任何候選值）")
         return {
@@ -1938,7 +1973,11 @@ def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
             "buttons": [],
         }
 
-    if all(state == STATE_OK for state in states):
+    # D-3 第二輪（獨立稽核 S3；`DEC-2026-10-30-04` F-2）：~~三塊皆 ok 就回「無偏離項」＋「沒有任何一檔超出」~~ —— 74 H6：
+    # `HLD-3` 有一檔配息取數失敗時，塊照舊 ok（逐檔失敗不讓整塊進 `系統錯誤`，總管 S2 原則），但那一檔沒有評估到，
+    # 同屬「持股只評估一部分」→ 走下面那一支（帶原因、記 `_partial`）。有意識的更正，不是漏刪。
+    partial_lines = _partial_reason_lines(cards)
+    if all(state == STATE_OK for state in states) and not partial_lines:
         return {
             "_tone": "灰",
             "_state": STATE_OK,
@@ -1958,12 +1997,14 @@ def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
     #    「持股只評估一部分時：不得只顯示『無偏離項』。必須同時讓使用者看得到既有的缺值／未評估原因。不要新增第二套 Missing vocabulary。」
     #    ⇒ 燈的字樣、灰、`_state` 照舊，`lines` 帶上 `HLD-2`／`HLD-3` 卡上既有的未評估字樣（`_partial_reason_lines`），
     #    並記 `_partial`（頁級規則讀這個鍵，不比對字面）。~~`"lines": []`~~
+    # 📌 D-3 第二輪（稽核 S3）：三塊皆 ok 而有逐檔未評估（74 H6）也走這裡；`_state` 照舊 `worst_state(states)`（＝ ok），
+    #    燈色、燈句照舊 —— 不另改燈的判定，頁級規則讀 `_partial`。
     return {
         "_tone": "灰",
         "_state": worst_state(states),
         "_partial": True,
         "text": TEXT_NO_DEVIATION,
-        "lines": _partial_reason_lines(cards),
+        "lines": partial_lines,
         "detail_lines": [
             "這一頁的燈色描述的是「要不要多看一眼」，不描述持倉好壞。"
         ],
@@ -2360,7 +2401,7 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
     elif not items:
         state = STATE_MISSING
         summary = TEXT_NO_HOLDING
-        detail_lines = [ND_TEXT, "尚未建立任何持倉，沒有可以展開的檔。"]
+        detail_lines = [ND_TEXT, HLD5_NO_HOLDING_LINE]
     else:
         state = STATE_OK
         summary = f"{len(items)} 檔{_hint()} · 同時最多展開一檔"
@@ -2860,6 +2901,11 @@ def _tag_hld_blocks(dataset, blocks, metrics, rules, *, has_holdings, settings_e
             page_health.tag_missing(by_code[code], cls["nav"])
             # BL-0250 批次 3-C：同時寫明是哪一個欄位的說明行（收集那一步不再靠「◇ 」字首認，44 之十三其八第 22 條）。
             page_health.tag_missing_lines(by_code[code], field)
+    # D-3 第二輪（稽核 S3）：`HLD-0` 帶上 `HLD-2`／`HLD-3` 逐檔的「⛔ 取數失敗：<代碼>：<原文>」時（`_partial_reason_lines`），
+    # 那一句的資料類照抄那兩塊產生處記的（同燈照抄 ALO-2 失敗字串時一併照抄資料類的體例）；沒有 `_partial` → 不動。
+    if by_code["HLD-0"].get("_partial"):
+        for code in ("HLD-2", "HLD-3"):
+            page_health.copy_fetch_classes(by_code["HLD-0"], by_code[code])
     # ◇：空持倉時各塊說的是持倉；有持倉時，核心卡與 `HLD-8` 的塊態取自各值（衍生），`HLD-1` 零列的資料未備是門檻所指的那幾個值。
     page_health.tag_derived(by_code["HLD-0"], page_health.DERIVED_LAMP)
     page_health.tag_derived(by_code["HLD-7"], HLD7_DERIVED_REASON)
@@ -2939,6 +2985,58 @@ def build_page_model(
     finally:
         _STRICT_FETCH.reset(strict)
         _HINT_SUFFIX.reset(token)
+
+
+# 空持倉時各卡寫的「尚未建立任何持倉」那幾種字（摘要、說明行）。
+_NO_HOLDING_SUMMARIES = (TEXT_NO_HOLDING, f"{ND_TEXT}：{TEXT_NO_HOLDING}")
+_NO_HOLDING_LINES = (TEXT_NO_HOLDING, HLD5_NO_HOLDING_LINE)
+
+
+def _present_omitted_rows(blocks, omitted_rows, *, has_holdings, holding_unknown) -> None:
+    """BL-0411／F-18 第二輪（獨立稽核 B2、S1；客戶 2026-10-30 裁示 `DEC-2026-10-30-04`：「如果部分列目前被略過但 UI 沒揭露：頁燈、
+    持有 N 檔、配置／持股整體判定都不能假裝覆蓋完整集合。必須先讓 omitted rows／未納入集合的事實可被辨識。」）。就地改，只動字：
+
+    - **B2**：持倉列全數被略過（沒有任何一列寫進持倉、持倉表本身讀得到）→ `HLD-0` 以外各塊 ~~「尚未建立任何持倉」~~ 不成立：
+      摘要改既有 `⬜ 資料未備`（`ND_TEXT`），說明行裡那一句改成略過的持倉列各一行（`page_health.omitted_row_lines`，與 `HLD-0`
+      同一組字）。塊的 `_state`、主值、按鈕一個都不動（這幾塊原本就是 `資料未備`）。
+    - **S1**：有持倉、`HLD-1` 已評估的檔零偏離（「無偏離項」＋「目前這一組門檻下，沒有任何一檔超出。」那一支）→ 兩句都在宣稱
+      覆蓋完整集合，同 `HLD-0`：摘要與主值位置改既有 `⬜ 資料未備`（佔位），那一句改成略過的持倉列各一行；`_state`、`_rows` 不動，
+      另記資料類「持倉」（畫成 ◇ 的節點要有資料類，`ui_v2/health.py::collect_page_items`）。有偏離列、或零列而有別的原因的各支不動
+      （那幾支沒有覆蓋完整集合的句子；略過的列由 `HLD-0` 那幾行承擔）。
+    沒有略過的列 → 什麼都不做（模型逐鍵與動手前相同）。"""
+    if not omitted_rows:
+        return
+    lines = page_health.omitted_row_lines(omitted_rows)
+
+    def replace(detail, targets):
+        out, placed = [], False
+        for line in detail:
+            if line in targets:
+                if not placed:
+                    out.extend(lines)
+                    placed = True
+                continue
+            out.append(line)
+        return out
+
+    for block in blocks:
+        if block["code"] == "HLD-0":
+            continue
+        if not has_holdings and not holding_unknown:
+            if block.get("summary_text") in _NO_HOLDING_SUMMARIES:
+                block["summary_text"] = ND_TEXT
+            if any(line in _NO_HOLDING_LINES for line in block.get("detail_lines") or ()):
+                block["detail_lines"] = replace(block["detail_lines"], _NO_HOLDING_LINES)
+        elif (block["code"] == "HLD-1" and block["_state"] == STATE_OK and not block["_rows"]
+              and block.get("summary_text") == TEXT_NO_DEVIATION and TEXT_NO_DEVIATION_LINE in block["detail_lines"]):
+            block["summary_text"] = ND_TEXT
+            # 主值位置：~~「無偏離項」~~（`ui_v2/hld/page.py::_render_hld1` 在沒有列、沒有佔位時印它）→ 既有 `⬜ 資料未備` 佔位
+            # （與「零列而有檔資料未備」那一支同一個寫法）。
+            block["_placeholder"] = _metric(None, text="", ccy="", missing=True, label="偏離筆數")
+            block["detail_lines"] = replace(block["detail_lines"], (TEXT_NO_DEVIATION_LINE,))
+            block["_omitted_rows"] = tuple(omitted_rows)
+            for node in (block, block["_placeholder"]):
+                page_health.tag_missing(node, page_health.DATA_CLASSES["holding"])
 
 
 def _build_page_model(
@@ -3091,6 +3189,9 @@ def _build_page_model(
     # BL-0250 批次 3-B（總管 2026-10-19 第二輪裁定第 1、4 點）：各塊的 ⛔／◇ 屬哪一類資料，在交出訊息與判定狀態的這一層寫明。
     _tag_hld_blocks(dataset, blocks, metrics, rules, has_holdings=has_holdings,
                     settings_error=settings_error, holding_error=holding_error)
+    # D-3 第二輪（獨立稽核 B2／S1；DEC-2026-10-30-04 F-18）：有持倉列被略過時，卡上不寫覆蓋完整集合的句子。
+    _present_omitted_rows(blocks, page_health.omitted_rows(dataset), has_holdings=has_holdings,
+                          holding_unknown=holding_unknown)
 
     return {
         "title": PAGE_TITLE,

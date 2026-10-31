@@ -99,7 +99,9 @@ def test_BL0411_合併頁_主判讀持有檔數無法判定_兩枚燈下都畫�
     at = _run_script(F.script("full", alo="inband", skipped_rows=True))
     md = _md(at)
     assert _hero(at) == "持有檔數無法判定；配置差距無法判定。"
-    assert md.count(_SKIPPED_FORMAL) == 2                         # 配置燈下一次、持股燈下一次（各自原狀態與 reason 照留）
+    # ~~`== 2`（配置燈下一次、持股燈下一次）~~ → D-3 第二輪（獨立稽核 S2，`DEC-2026-10-30-04` F-18；有意識的更正，不是漏刪）：
+    # 「基金占比」表尾的佔比合計之後也接一次（件數與合計不假裝覆蓋完整集合）。各自原狀態與 reason 照留。
+    assert md.count(_SKIPPED_FORMAL) == 3                         # 配置燈下、基金占比表尾、持股燈下
     assert alo_logic.TEXT_ALL_IN_BAND not in md
     assert not re.search(r"持有 \d+ 檔　", md)
 
@@ -117,3 +119,52 @@ def test_雙方完整正常_合併頁照舊皆在帶內_沒有略過字樣():
     at = _run_script(F.script("full", alo="inband"))
     assert _hero(at) == f"持有 3 檔基金；{alo_logic.TEXT_ALL_IN_BAND}。"
     assert "未列入：" not in _md(at)
+
+
+# ───────────────────────── D-3 阻擋項修正第二輪（獨立稽核 B1／S1／S2／S3）─────────────────────────
+
+_TAB_EXTRA = '_alo_dataset = dict(_alo_dataset, skipped_tabs=[{"tab": "PX-TEST-009", "error": "標頭格式有誤"}])\n'
+_TAB_FORMAL = "⛔ PX-TEST-009 取數失敗"
+_NO_HOLDING = "尚未建立任何持倉"
+_FULL_SET_LINE = "目前這一組門檻下，沒有任何一檔超出。"
+
+
+def test_B1_單頁資產配置_持倉為空只略過分頁_不寫尚未建立任何持倉_分頁在燈下():
+    md = _md(_single_alo("noholding", extra=_TAB_EXTRA))
+    assert _NO_HOLDING not in md
+    assert alo_logic.TEXT_UNDECIDABLE_GAP in md and _TAB_FORMAL in md
+    assert "⛔ 主要原因：持倉取數失敗" in md                          # 頁首認得那一句的資料類（不落到「認不出」）
+
+
+def test_B1_單頁資產配置_有持倉略過分頁_分頁在燈下可辨識():
+    md = _md(_single_alo("inband", extra=_TAB_EXTRA))
+    assert alo_logic.TEXT_ALL_IN_BAND not in md and _TAB_FORMAL in md
+
+
+def test_S1_單頁我的持股_零偏離而有略過的列_偏離提示卡不寫無偏離項與那一句():
+    md = _md(_single_hld(partial=True, skipped=True))
+    assert _FULL_SET_LINE not in md
+    assert "無偏離項" not in md                                       # 燈與偏離提示卡都不寫
+    assert md.count(_SKIPPED_FORMAL) >= 2                             # 燈下、偏離提示卡各一次
+
+
+def test_S1_S2_合併頁_零偏離而有略過的列_需要注意不寫覆蓋完整集合_基金占比不寫N檔():
+    at = _run_script(F.script("full", alo="inband", hld_partial=True, skipped_rows=True))
+    md = _md(at)
+    attention = md[md.index("③需要注意"):]
+    assert "無偏離項" not in attention.split("持股明細")[0] and _FULL_SET_LINE not in md
+    share = md[md.index(">基金占比</div>"):md.index(">各檔區間報酬（原幣）</div>")]
+    assert not re.search(r">\d+ 檔<", share)                          # 件數那一枚不畫
+    assert "◇ 資料未備" in share and _SKIPPED_FORMAL in share         # 改既有 ◇ 資料未備，並接上略過的列
+
+
+def test_S3_單頁我的持股_H6逐檔配息取數失敗_燈下帶那一檔_不寫那一句():
+    extra = '_hld_dataset["fund_errors"] = {"nav": {}, "dividend": {"CCCC": "上游逾時（探針）"}}\n'
+    body = F._HLD_PARTIAL.replace('_hld_dataset["pending_tables"] = ["fund_profile", "dividend"]\n', "") + extra + """
+from ui_v2.hld import page as hld_page
+hld_page.render(load_live=_hld_load, mask_error=str, save_live=lambda *_a: {"status": "saved"})
+"""
+    md = _md(_run_script(_SINGLE_HEAD + body))
+    assert "配息與本金卡：⛔ CCCC 取數失敗" in md
+    assert "⛔ 主要原因：配息取數失敗" in md                          # 頁首照舊（燈那一句的資料類照抄卡上的）
+    assert _FULL_SET_LINE not in md.split("偏離提示卡")[0]            # 燈那一區不寫（偏離提示卡那一句照舊：HLD-1 每一檔都評估過）

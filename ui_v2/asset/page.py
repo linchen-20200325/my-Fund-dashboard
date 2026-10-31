@@ -290,11 +290,13 @@ def _secondary_share(alo: dict) -> None:
             alo_page._render_detail_quiet(details["ALO-6"], flat=True)
             return
         rows = OV.share_rows(alo6)
-        st.markdown(presentation.chips_html(OV.share_chips(alo4, rows)), unsafe_allow_html=True)
+        # D-3 第二輪（稽核 S2；DEC-2026-10-30-04 F-18）：有持倉列被略過時，件數與合計不假裝覆蓋完整集合。
+        omitted = OV.share_omitted_lines(alo_logic.find_block(model, "ALO-2"))
+        st.markdown(presentation.chips_html(OV.share_chips(alo4, rows, omitted_lines=omitted)), unsafe_allow_html=True)
         alo_page._placeholder(alo6)
         if rows:
             st.markdown(share_bars_html(rows), unsafe_allow_html=True)
-        presentation_view.render_detail(OV.share_detail(alo6))
+        presentation_view.render_detail(OV.share_detail(alo6, omitted_lines=omitted))
 
 
 def _secondary_returns(hld: dict) -> None:
