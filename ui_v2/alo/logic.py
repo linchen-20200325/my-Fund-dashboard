@@ -21,7 +21,7 @@ import io
 import math
 from datetime import date, datetime, timedelta, timezone
 
-from .. import page_health
+from .. import page_health, status_class
 
 # ───────────────────────── 缺口與矛盾登記（`44` 沒寫或與線框不一致） ─────────────────────────
 #
@@ -365,11 +365,17 @@ TEXT_NO_HOLDING = "尚未建立任何持倉"
 TEXT_NO_TARGET = "尚未設定目標"
 TEXT_NO_TOLERANCE = "尚未設定容許帶"
 TEXT_ALL_IN_BAND = "各類別皆在容許帶內"
+# 「配置差距無法判定」：BL-0525 Batch D 合併頁一句主判讀既有的字（原定義在 `ui_v2/asset/overview.py`，D-10 C2），
+# 自客戶 2026-10-30 裁示（`DEC-2026-10-30-04` F-13／F-14／F-19）起 `ALO-0` 也用它（字面不變，只把定義搬到這裡，overview 改引用）。
+TEXT_UNDECIDABLE_GAP = "配置差距無法判定"
 TEXT_INTRO = "以下依序：目標 → 對照 → 試算"
 TEXT_GOTO_SHEETS = "前往 Sheets 維護持倉"
 TEXT_SHEETS_READONLY = "持倉資料在 Sheets 維護，本儀表板唯讀"
 TEXT_UNSET = "⬜ 未設定"
 TEXT_NOT_READY = "⬜ 資料未備"
+# D-3 第三輪補（總管派工；`DEC-2026-10-30-04` F-18）：有持倉列被略過時，各處「N 檔」的件數那一段改這一句 —— 既有字型
+# 「⬜ 資料未備：‹資料類›」（正式模式 ◇），資料類取 `page_health.DATA_CLASSES["holding"]`；同 `ui_v2/hld/logic.py::OMITTED_SUMMARY`。
+TEXT_OMITTED_COUNT = f"{TEXT_NOT_READY}：{page_health.DATA_CLASSES['holding']}"
 TEXT_NA_NO_TARGET = "⬜ 不適用：尚未設定目標"
 TEXT_NA_NO_BASIS = "⬜ 不適用：尚未選定比重基準"
 TEXT_NA_OVERFLOW = "⬜ 不適用：假設金額超出該類別現值"
@@ -1014,19 +1020,31 @@ def _build_alo2(dataset) -> dict:
             row["_blocks_lamp"] = row["_current_pct"] is None and row["_target_pct"] is not None
             rows.append(row)
         if UNCLASSIFIED in values:
-            tail_lines.append(f"{UNCLASSIFIED} {values[UNCLASSIFIED]['count']} 檔")
+            # D-3 第三輪補（總管派工；同 `ALO-4`；`DEC-2026-10-30-04` F-18）：有持倉列被略過時 ~~「未分類 N 檔」~~ 的件數只數被接受的持倉
+            # （略過的列沒有進來，有沒有類別無從得知）→ 件數那一段改 `TEXT_OMITTED_COUNT`。有意識的更正，不是漏刪；決策者：AI 總管。
+            unclassified_count = (TEXT_OMITTED_COUNT if page_health.omitted_rows(dataset)
+                                  else f"{values[UNCLASSIFIED]['count']} 檔")
+            tail_lines.append(f"{UNCLASSIFIED} {unclassified_count}")
             tail_lines.append("⚠ 44 沒有寫「未分類」的目標比重；本頁目標、差額、內外三格不算。")
         if uncovered:
             # ALO-GAP-全缺合計未涵蓋：全缺（沒有分母）時這一句列出每一個有持倉的類別。
             tail_lines.append("合計未涵蓋 " + "、".join(uncovered))
 
+    # BL-0411／F-18、F-13 條件 (3)（客戶 2026-10-30 裁示 `DEC-2026-10-30-04`）：資料承載層轉交的略過列與略過分頁。
+    # 本塊只記、不改任何一格（列、分母、表尾一個都不動）；`ALO-0` 讀這兩個鍵（燈照舊只讀 `ALO-2`）。沒有 → 不加鍵。
+    source_marks = {}
+    omitted = page_health.omitted_rows(dataset)
+    if omitted:
+        source_marks["_omitted_rows"] = omitted
+    if dataset.get("skipped_tabs"):
+        source_marks["_skipped_tabs"] = tuple(dataset["skipped_tabs"])
     cell_tones = set()
     for row in rows:
         # 缺匯率（任何一個鍵；美元即 TEXT_FX_MISSING_ALO2）那一格灰（ALO-GAP-非美元幣別）。
         if (row["_gap_text"] or "").startswith(TEXT_FX_MISSING_ALO4) or row["target_text"] == TEXT_NOT_READY:
             cell_tones.add("灰")
     tone = placeholder["_tone"] if placeholder else ("灰" if cell_tones else "中性")
-    return {
+    block = {
         "code": "ALO-2",
         "title": BLOCK_TITLES["ALO-2"],
         "answers": ANSWERS["ALO-2"],
@@ -1053,7 +1071,11 @@ def _build_alo2(dataset) -> dict:
         ],
         "buttons": [],
         "badges": [],
+        **source_marks,
     }
+    if omitted and any(TEXT_OMITTED_COUNT in line for line in tail_lines):   # 「未分類」件數那一格的 ◇ 屬持倉（D-3 第三輪補）
+        page_health.tag_missing(block, _CLASS_HOLDING)
+    return block
 
 
 # ───────────────────────── ALO-0 ─────────────────────────
@@ -1063,29 +1085,101 @@ def conclusion_light(alo2) -> dict:
     """`44` ALO-0。**只讀 ALO-2 已經算出來的值**，不自取數。
 
     空狀態三句的先後照 `44` 空狀態欄：持倉表為空 → 目標未設 → 容許帶未設，取到第一句就停。
+
+    客戶 2026-10-30 裁示（`docs/DECISIONS.md` `DEC-2026-10-30-04`；74 第 5 節 F-13／F-14／F-18／F-19）：
+    - **F-13／F-19**：只要任何配置類別沒有成功評估（`ALO-2` 任一列 `_diff` 為 None：目標比重留空、基準值缺、
+      有值卻沒有目標的類別〔「未分類」、類別名不在名單內、名單內卻沒有目標列〕），或持倉集合本身不完整
+      （`ALO-2` 記的 `_skipped_tabs`：保單分頁被略過；`_omitted_rows`：保單分頁上有列沒寫進持倉，BL-0411），
+      ~~「各類別皆在容許帶內」~~ 改寫既有的「配置差距無法判定」（`TEXT_UNDECIDABLE_GAP`）；已評估類別的結果（`ALO-2` 各列、
+      超出容許帶時點名的那一句）照留，不從已評估子集合推論整體正常。並記 `_incomplete`（頁級規則讀這個鍵，不比對字面）。
+    - **F-14**：燈不得有狀態而沒有字。有目標的類別讀不到差距、而第一個被擋下的那一列沒有字（74 A5c：市值基準、沒有分母、
+      該類沒有持倉）→ 同樣寫「配置差距無法判定」，不補成帶內、正常或無偏離。
+    - **F-18（BL-0411）**：`_omitted_rows` 非空時另寫每一列略過的持倉一行（`page_health.omitted_row_lines`，放在燈下
+      說明行的最前面），並記 `_omitted_rows`；持倉全數被略過時「尚未建立任何持倉」不成立 → 「配置差距無法判定」。
+    兩組略過紀錄都由 `ALO-2` 帶（`_build_alo2` 從 dataset 讀；本燈照舊只讀 `ALO-2`）。沒有上述任何一種情形時，回傳逐鍵與動手前相同。
+
+    D-3 阻擋項修正第二輪（獨立稽核 B1；`DEC-2026-10-30-04` F-18「必須先讓 omitted rows／未納入集合的事實可被辨識」）：
+    - ~~持倉為空時只看 `_omitted_rows`~~ → 有保單分頁被略過（`_skipped_tabs`）而持倉為空時，「尚未建立任何持倉」同樣不成立 →
+      「配置差距無法判定」（有意識的更正，不是漏刪：舊寫法在寫下當時只想到略過的列，漏了略過的分頁）。
+    - 被略過的分頁在燈下寫成一行，字照持倉體檢同一件事的既有寫法：「⛔ 取數失敗：<分頁>：<L2 原因>」（多張以「；」相接；
+      `ui_v2/hld/live.py::assemble_live_load` 組 `errors["holding"]`、`HLD-1` 以 `fetch_failed_text` 印出的那一句），放在略過的列之前，
+      並記 `_skipped_tab_text`（`_build_alo0` 依它記資料類「持倉」）。燈色與燈句的規則不變（`ALO-0` 照舊沒有紅燈，ALO-GAP-無紅燈）。
     """
+    omitted_rows = alo2.get("_omitted_rows") or ()
+    skipped_tabs = alo2.get("_skipped_tabs") or ()
+    light = _conclusion_light(alo2, source_incomplete=bool(omitted_rows) or bool(skipped_tabs),
+                              omitted=bool(omitted_rows))
+    lines = []
+    tab_message = skipped_tab_message(skipped_tabs)
+    if tab_message:
+        lines.append(fetch_failed_text(tab_message))
+        light = {**light, "_skipped_tab_text": tab_message}
+    if omitted_rows:
+        lines += page_health.omitted_row_lines(omitted_rows)
+        light = {**light, "_omitted_rows": tuple(omitted_rows)}
+    if lines:
+        light = {**light, "lines": lines}
+    return light
+
+
+def skipped_tab_message(skipped_tabs) -> str:
+    """被略過的保單分頁 → 「<分頁>：<原因>」（沒有原因 → 只寫分頁），多張以「；」相接；沒有 → 空字串。
+    組法逐字同 `ui_v2/hld/live.py::assemble_live_load` 組 `errors["holding"]` 那一段（兩頁同一件事一個寫法）。
+    分頁名不是非空文字 → 當場炸（§1；同該處 `_require_text`）。"""
+    parts = []
+    for entry in skipped_tabs or ():
+        tab = entry.get("tab") if isinstance(entry, dict) else None
+        if not isinstance(tab, str) or not tab.strip():
+            raise ValueError(f"skipped_tabs 的 tab 應為非空文字：{entry!r}")
+        error = entry.get("error")
+        parts.append(f"{tab}：{error}" if isinstance(error, str) and error.strip() else tab)
+    return "；".join(parts)
+
+
+def _conclusion_light(alo2, *, source_incomplete=False, omitted=False) -> dict:
     if alo2["_failed"]:
         # ALO-GAP-無紅燈：燈沒有紅；燈為灰，文案照抄 ALO-2 那一格的失敗字串（不說成尚未建立持倉）。
-        return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None}
+        return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None, "_page_class": status_class.ERROR}
     if alo2["_holdings_empty"]:
-        return {"_tone": "灰", "text": TEXT_NO_HOLDING, "_max_bucket": None}
+        if omitted or source_incomplete:
+            # BL-0411／F-18：持倉列全數在載入時被略過 —— 不是「沒有持倉」（DEC-2026-10-30-04）。
+            # 第二輪（稽核 B1）：~~`if omitted:`~~ → 保單分頁被略過（`source_incomplete`）同理（有意識的更正，不是漏刪）。
+            return {"_tone": "灰", "text": TEXT_UNDECIDABLE_GAP, "_max_bucket": None, "_incomplete": True,
+                    "_page_class": status_class.MISSING}
+        return {"_tone": "灰", "text": TEXT_NO_HOLDING, "_max_bucket": None, "_page_class": status_class.NO_HOLDING}
+    # 頁級分類（獨立稽核 S1；F-18「略過列歸資料未備」）：未設定那幾支在持倉來源有略過的分頁或列時，頁級分類歸資料未備
+    # （字樣、色、旗標一字不動；只有 `_page_class` 不同）。
+    unset_class = status_class.MISSING if source_incomplete else status_class.UNSET
     if alo2["_target_unset"]:
-        return {"_tone": "灰", "text": TEXT_NO_TARGET, "_max_bucket": None}
+        return {"_tone": "灰", "text": TEXT_NO_TARGET, "_max_bucket": None, "_page_class": unset_class}
     if alo2["_tolerance"] is None:
-        return {"_tone": "灰", "text": TEXT_NO_TOLERANCE, "_max_bucket": None}
+        return {"_tone": "灰", "text": TEXT_NO_TOLERANCE, "_max_bucket": None, "_page_class": unset_class}
     if alo2["placeholder"] is not None:
         # ALO-GAP-燈讀不到差距：基準未選。
-        return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None}
+        # 頁級分類讀佔位自己記的 `_empty_kind`（`_placeholder` 的明示欄位，不比對字面）：「算不出來」＝不適用／未設定（A5b），
+        # 「來源缺」「部分缺」＝資料未備（A5a）。
+        kind = alo2["placeholder"].get("_empty_kind")
+        page_class = unset_class if kind == "算不出來" else status_class.MISSING
+        return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None, "_page_class": page_class}
     computed = [r for r in alo2["_rows"] if r["_diff"] is not None]
     blocked = [r for r in alo2["_rows"] if r["_blocks_lamp"]]
+    # F-13／F-19（DEC-2026-10-30-04）：有任何一列沒評估到差距、或持倉集合本身不完整 → 不得推論整體在帶內。
+    incomplete = source_incomplete or len(computed) < len(alo2["_rows"])
+    flag = {"_incomplete": True} if incomplete else {}
     if blocked:
         # ALO-GAP-燈讀不到差距：44 逐字「取絕對值最大者」—— 有一個有目標的類別差距算不出來時，
         # 最大者是哪一個就不知道；本頁不拿其餘類別的差距去點名，也不宣稱皆在帶內。
-        return {"_tone": "灰", "text": blocked[0]["_gap_text"], "_max_bucket": None}
+        # F-14（DEC-2026-10-30-04）：~~`blocked[0]["_gap_text"]`~~ 在 74 A5c 那一條路是 None（燈有狀態沒有字）→ 既有「配置差距無法判定」。
+        return {"_tone": "灰", "text": blocked[0]["_gap_text"] or TEXT_UNDECIDABLE_GAP, "_max_bucket": None,
+                "_page_class": status_class.MISSING, **flag}
     outside = [r for r in computed if exceeds(r["_diff"], alo2["_tolerance"])]
     if not outside:
         # 含全部差 0、以及差距剛好等於容許帶（ALO-GAP-端點）。
-        return {"_tone": "灰", "text": TEXT_ALL_IN_BAND, "_max_bucket": None}
+        if incomplete:
+            # F-13／F-19：~~「各類別皆在容許帶內」~~（44 `ALO-0` 規則欄；44 待依 DEC-2026-10-30-04 增修〔44 凍結，未改〕）。
+            return {"_tone": "灰", "text": TEXT_UNDECIDABLE_GAP, "_max_bucket": None,
+                    "_page_class": status_class.MISSING, **flag}
+        return {"_tone": "灰", "text": TEXT_ALL_IN_BAND, "_max_bucket": None, "_page_class": status_class.NORMAL}
     top = max(abs(r["_diff"]) for r in outside)
     leaders = [r["_bucket"] for r in outside if math.isclose(abs(r["_diff"]), top, abs_tol=1e-9)]
     # ALO-GAP-同差並列：全列，依 alo_bucket_names 的順序；不在名單裡的照 ALO-2 的列序排在後面。
@@ -1094,11 +1188,16 @@ def conclusion_light(alo2) -> dict:
     leaders = sorted(row_order, key=lambda b: (0, names.index(b)) if b in names else (1, row_order.index(b)))
     # ALO-GAP-燈的正負號：印絕對值。
     text = f"{'、'.join(leaders)} 與目標差 {top:.1f} 個百分點"
-    return {"_tone": "黃", "text": text, "_max_bucket": leaders[0], "_leaders": tuple(leaders)}
+    # 已評估類別的結果照留（F-13：「已成功評估的類別結果可以保留」）；不完整時只記 `_incomplete`，字樣不動。
+    return {"_tone": "黃", "text": text, "_max_bucket": leaders[0], "_leaders": tuple(leaders),
+            "_page_class": status_class.ATTENTION, **flag}
 
 
 def _build_alo0(alo2) -> dict:
     light = conclusion_light(alo2)
+    if not isinstance(light["text"], str) or not light["text"]:
+        # F-14（DEC-2026-10-30-04）：任何正式狀態不得有狀態而沒有字 —— 走到這裡是本檔 bug，不畫一枚沒有字的燈。
+        raise AssertionError(f"ALO-0 沒有字：{light!r}")
     glyph, state_word = _LAMP_LOOK_FAILED if alo2["_failed"] else _LAMP_LOOK[light["_tone"]]
     block = {
         "code": "ALO-0",
@@ -1111,19 +1210,29 @@ def _build_alo0(alo2) -> dict:
         "_max_bucket": light["_max_bucket"],
         # BL-0525 Batch D：並列最大絕對差距的全部類別（`conclusion_light` 已算出、已依名單順序；一句主判讀只讀這個鍵，不重算）。
         "_leaders": tuple(light.get("_leaders", ())),
+        # 頁級分類（P3；ui_v2/status_class.py）：由判定分支明示，頁級 aggregation 只讀它，不比對字面或 `_tone`。
+        "_page_class": light["_page_class"],
         "glyph": glyph,
         "state_word": state_word,
         "text": light["text"],
-        "detail_lines": [
+        # BL-0411／F-18：略過的持倉列各一行，放在說明行最前面（沒有 → 與動手前相同）；第二輪（稽核 B1）：被略過的分頁那一行排在它們之前。
+        "detail_lines": list(light.get("lines") or ()) + [
             DEV_NOTE_ALO0 + TEXT_ALO0_READS,
             HINT_NOTE,
         ],
         "buttons": [],
         "badges": [],
+        # 頁級規則（DEC-2026-10-30-04 P3，尚未實作）讀的分類欄位：只在成立時加鍵。
+        **{key: light[key] for key in ("_incomplete", "_omitted_rows") if light.get(key)},
+        # 頁級容器（P3）照印這一枚燈「自己的附行」（略過的分頁、略過的持倉列）＝ `detail_lines` 最前面這幾行（其後是固定說明句，不屬附行）。
+        # 只記**行數**、不另存一份字：一般畫面管線（`plain` 換字）只對 `detail_lines` 本身換字，另存的副本會帶著未換字的原文。只在有附行時加鍵。
+        **({"_attached_n": len(light["lines"])} if light.get("lines") else {}),
     }
     # BL-0250 批次 3-B（總管第二輪裁定第 1、4 點）：燈照抄 ALO-2 那一格的失敗字串時，資料類一併照抄；燈的 ◇ 是衍生狀態。
     if alo2["_failed"]:
         page_health.copy_fetch_classes(block, alo2["placeholder"])
+    # D-3 第二輪（稽核 B1）：被略過的保單分頁那一句「⛔ 取數失敗：…」屬持倉（同持倉體檢 `errors["holding"]`）。
+    page_health.tag_fetch_class(block, light.get("_skipped_tab_text"), page_health.DATA_CLASSES["holding"])
     return page_health.tag_derived(block, page_health.DERIVED_LAMP)
 
 
@@ -1446,7 +1555,14 @@ def _build_alo4(dataset) -> dict:
         missing.append("alo_bucket_names")
     missing.extend(fx_missing_keys)   # ~~missing.append(FX_KEY)~~ → 2026-10-13：缺哪幾個鍵就列哪幾個
     summary = "基準 " + (BASIS_LABELS[basis] if basis else ("取不到" if setting_failed else "未設定"))
-    summary += f"；類別 {len(bucket_names or ())} 個；未指派 {len(unassigned)} 檔"
+    # D-3 第三輪（獨立稽核 should-fix 1；客戶 2026-10-30 裁示 `DEC-2026-10-30-04` F-18）：保單分頁上有持倉列沒寫進持倉時，
+    # ~~「未指派 N 檔」~~ 會讀成整組持倉的未指派數 —— 那幾列根本沒有進來，有沒有指派類別無從得知，也不得算成未指派。
+    # ⇒ 件數那一格改既有 `⬜ 資料未備`（正式模式畫成 ◇，同 `ALO-6` 件數與合併頁件數 chip）；已知未指派的那幾檔照舊逐檔列在
+    # `unassigned_lines`。略過的是哪幾列由 `ALO-0` 燈下與 `ALO-6` 表尾寫出（本塊不重寫一份）。有意識的更正，不是漏刪。
+    omitted = page_health.omitted_rows(dataset)
+    # ~~`TEXT_NOT_READY`~~ → `TEXT_OMITTED_COUNT`（D-3 第三輪補：帶資料類「持倉」，與持股側一致；有意識的更正，不是漏刪）
+    unassigned_count = TEXT_OMITTED_COUNT if omitted else f"{len(unassigned)} 檔"
+    summary += f"；類別 {len(bucket_names or ())} 個；未指派 {unassigned_count}"
     if missing:
         summary += "；缺 " + "、".join(missing)
     if failure is not None:
@@ -1478,6 +1594,8 @@ def _build_alo4(dataset) -> dict:
     }
     if fx_missing:   # BL-0250 批次 3-B（裁定第 1 點）：「缺換算匯率」那一句屬市場指標（畫面字不變）
         page_health.tag_missing(block, _CLASS_FX)
+    if omitted:      # D-3 第三輪：件數那一格的 ◇ 屬持倉（沒寫進持倉的列）
+        page_health.tag_missing(block, _CLASS_HOLDING)
     return block
 
 
@@ -1553,7 +1671,7 @@ def _build_alo6(dataset) -> dict:
             if failure is not None
             else page_health.tag_missing(_placeholder(empty_source_text(["holding"]), "來源缺"), _CLASS_HOLDING)
         )
-        return {
+        empty = {
             "code": "ALO-6",
             "title": BLOCK_TITLES["ALO-6"],
             "answers": ANSWERS["ALO-6"],
@@ -1564,11 +1682,16 @@ def _build_alo6(dataset) -> dict:
             "column_labels": labels,
             "_rows": [],
             "placeholder": node,
-            "footer_lines": [],
+            # D-3 第三輪（稽核 should-fix 1；F-18）：持倉列全數被略過時，略過的是哪幾列接在表尾位置（~~`[]`~~；沒有 → 照舊空）。
+            # 取數失敗那一支不加（整塊照舊只寫系統錯誤；略過的列照舊由 `ALO-0` 燈下寫出）。有意識的更正，不是漏刪。
+            "footer_lines": [] if failure is not None else page_health.omitted_row_lines(page_health.omitted_rows(dataset)),
             "detail_lines": [HINT_NOTE],
             "buttons": [],
             "badges": [],
         }
+        if empty["footer_lines"]:   # 略過列那幾行的 ◇ 屬持倉（D-3 第三輪）
+            page_health.tag_missing(empty, _CLASS_HOLDING)
+        return empty
 
     rows = []
     for holding in holdings:
@@ -1631,17 +1754,26 @@ def _build_alo6(dataset) -> dict:
     excluded = len(rows) - len(included)
     if excluded:
         footer.append(f"被排除 {excluded} 檔")
+    # D-3 第三輪（獨立稽核 should-fix 1；客戶 2026-10-30 裁示 `DEC-2026-10-30-04` F-18「頁燈、持有 N 檔、配置／持股整體判定
+    # 都不能假裝覆蓋完整集合」）：保單分頁上有持倉列沒寫進持倉時，~~摘要「N 檔」~~ 與表尾「總體佔比合計 100.0%」都只涵蓋被接受的持倉
+    # ⇒ 摘要的件數改既有 `⬜ 資料未備`（正式模式畫成 ◇，同合併頁件數 chip `P.missing_chip`），表尾各合計之後接略過的列各一行
+    # （`page_health.omitted_row_lines`，字同 `ALO-0` 燈下）。合計的數字照舊（量的不變式：被接受的那幾檔合計照舊是 100%），
+    # 列、分母、「被排除 N 檔」一個都不動。單頁與合併頁「基金占比」都讀本塊的表尾，不各寫一份。沒有略過的列 → 逐鍵與動手前相同。
+    # 有意識的更正，不是漏刪。
+    omitted = page_health.omitted_rows(dataset)
+    footer += page_health.omitted_row_lines(omitted)
     detail = [HINT_NOTE, DEV_NOTE_ALO6]
     if basis is None:
         detail.insert(0, TEXT_NA_NO_BASIS)
-    return {
+    block = {
         "code": "ALO-6",
         "title": BLOCK_TITLES["ALO-6"],
         "answers": ANSWERS["ALO-6"],
         "_layer": 4,
         "_default_open": False,
         "_tone": "灰" if excluded else "中性",
-        "summary_text": f"{len(rows)} 檔" + (f"；被排除 {excluded} 檔" if excluded else ""),
+        # ~~`TEXT_NOT_READY`~~ → `TEXT_OMITTED_COUNT`（D-3 第三輪補：帶資料類「持倉」，與持股側一致；有意識的更正，不是漏刪）
+        "summary_text": (TEXT_OMITTED_COUNT if omitted else f"{len(rows)} 檔") + (f"；被排除 {excluded} 檔" if excluded else ""),
         "column_labels": labels,
         "_rows": rows,
         "placeholder": None,
@@ -1650,6 +1782,9 @@ def _build_alo6(dataset) -> dict:
         "buttons": [],
         "badges": [],
     }
+    if omitted:      # 件數那一格與略過列那幾行的 ◇ 屬持倉
+        page_health.tag_missing(block, _CLASS_HOLDING)
+    return block
 
 
 # ───────────────────────── ALO-7 ─────────────────────────

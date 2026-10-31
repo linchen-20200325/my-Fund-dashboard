@@ -15,7 +15,7 @@ BL-0525 Batch D（客戶 2026-10-30 裁示 D-1～D-12，`DEC-2026-10-30-02`；�
 from __future__ import annotations
 
 from .. import presentation as P
-from .. import page_health, sections
+from .. import page_health, sections, symbols
 from ..alo import logic as alo_logic
 
 SLUG = "ast"
@@ -45,7 +45,7 @@ def summary_strip() -> dict:
 # ───────────────────────── D-10：一句主判讀（C2 去重版）─────────────────────────
 
 TEXT_UNDECIDABLE_COUNT = "持有檔數無法判定"
-TEXT_UNDECIDABLE_GAP = "配置差距無法判定"
+TEXT_UNDECIDABLE_GAP = alo_logic.TEXT_UNDECIDABLE_GAP   # 「配置差距無法判定」：字面不變，定義自 2026-10-30 起住在 `ui_v2/alo/logic.py`（`ALO-0` 也用它，DEC-2026-10-30-04）
 
 
 def hero_holding_count(n, holding_error: bool):
@@ -60,9 +60,17 @@ def has_unevaluated_category(alo2) -> bool:
     只讀 `ALO-2` 已算出的 `_diff`，不另算；沒有 `ALO-2`（配置那一側沒載入）或沒有任何列 → False（沒有「被漏掉的類別」可說，
     該情形的字樣由 `ALO-0` 自己那一行承擔）。`docs/v2/74` A6m（既有缺陷 F-13）：`ALO-0` 在這幾種情形仍寫「各類別皆在容許帶內」，
     本頁一句主判讀不複述那一句。
-    ⚠️ 只涵蓋 A6m 條件 (1)(2)；條件 (3)（持倉來源有略過的 ALO 分頁）**沒有**涵蓋：`prepare_live` 的回傳不帶 `notes["skipped"]`，
-    已記在 `docs/v2/71`（稽核回修〈沒做或沒驗〉第 4 點）與 `docs/v2/74`（A6m、檔頭 v5 更正），待客戶裁示後再接。"""
+    ~~⚠️ 只涵蓋 A6m 條件 (1)(2)；條件 (3)（持倉來源有略過的 ALO 分頁）**沒有**涵蓋：`prepare_live` 的回傳不帶 `notes["skipped"]`，
+    已記在 `docs/v2/71`（稽核回修〈沒做或沒驗〉第 4 點）與 `docs/v2/74`（A6m、檔頭 v5 更正），待客戶裁示後再接。~~
+    → 2026-10-30（客戶裁示 `DEC-2026-10-30-04` F-13／F-18；狀態更新，不是漏刪）：條件 (3) 與 BL-0411 略過的持倉列改由 `ALO-0` 自己記的
+    `_incomplete` 承擔（資料承載層把略過的分頁與列交進 dataset，`ui_v2/alo/logic.py::conclusion_light`），見 `allocation_incomplete`。"""
     return any(row["_diff"] is None for row in (alo2 or {}).get("_rows") or ())
+
+
+def allocation_incomplete(alo0, alo2) -> bool:
+    """一句主判讀的 `incomplete`：`ALO-2` 有沒評估到的列（`has_unevaluated_category`），或 `ALO-0` 自己記了 `_incomplete`
+    （略過的保單分頁、略過的持倉列，DEC-2026-10-30-04 F-13 條件 (3)／F-18）。只讀既有旗標，不另算。"""
+    return has_unevaluated_category(alo2) or bool((alo0 or {}).get("_incomplete"))
 
 
 def hero_sentence(n, alo0, *, incomplete: bool = False) -> str:
@@ -155,8 +163,17 @@ def share_excluded_count(rows: list) -> int:
     return sum(1 for r in rows if r["ratio"] is None)
 
 
-def share_chips(alo4: dict, rows: list) -> list:
-    chips = [P.chip(f"{len(rows)} 檔")]
+def share_omitted_lines(alo2) -> list:
+    """BL-0411／F-18 第二輪（獨立稽核 S2；`DEC-2026-10-30-04`）：保單分頁上沒寫進持倉的列（`ALO-2` 記的 `_omitted_rows`）各一行，
+    字同 `ALO-0` 燈下那幾行（`page_health.omitted_row_lines`，正式模式的 ◇ 同 `ui_v2/symbols.py`）。沒有 → 空 list。只讀既有紀錄，不另算。"""
+    rows = (alo2 or {}).get("_omitted_rows") or ()
+    return [line.replace(symbols.MISSING_OLD, symbols.MISSING_NEW) for line in page_health.omitted_row_lines(rows)]
+
+
+def share_chips(alo4: dict, rows: list, *, omitted_lines=()) -> list:
+    """`omitted_lines`（`share_omitted_lines`）非空時，~~「N 檔」~~ 那一枚改既有 `◇ 資料未備`（`P.missing_chip`）：
+    本卡列出的只是被接受的持倉，「N 檔」會假裝覆蓋完整集合（D-3 第二輪，稽核 S2；同合併頁一句主判讀「持有檔數無法判定」）。"""
+    chips = [P.missing_chip() if omitted_lines else P.chip(f"{len(rows)} 檔")]
     if alo4.get("basis_line"):
         chips.append(P.chip(alo4["basis_line"], "灰" if "未設定" in alo4["basis_line"] else "中性"))
     excluded = share_excluded_count(rows)
@@ -203,11 +220,20 @@ def return_chips(hld4: dict, rows: list) -> list:
 
 # 不過濾空白行：`P.detail_model` 的契約是「空行代表上游漏了資訊」→ 當場 `ValueError`（不默默吞掉）；單頁也是原樣畫上游給的行。
 def share_detail(alo6: dict) -> dict:
-    return P.detail_model(why=[alo6["answers"]], limits=list(alo6["footer_lines"]) + list(alo6["detail_lines"]))
+    """~~`omitted_lines` 非空時接在 `ALO-6` 表尾之後~~（D-3 第二輪，稽核 S2）→ D-3 第三輪（獨立稽核 should-fix 1；有意識的更正，
+    不是漏刪；決策者：AI 總管）：略過的列改由 `ALO-6` 自己接在表尾（`ui_v2/alo/logic.py::_build_alo6`，單頁與合併頁同一份）——
+    這裡照舊只讀 `footer_lines`，不再另接一份（否則同一句寫兩次）。舊參數拿掉。"""
+    return P.detail_model(why=[alo6["answers"]],
+                          limits=list(alo6["footer_lines"]) + list(alo6["detail_lines"]))
 
 
 def returns_detail(hld2: dict) -> dict:
-    return P.detail_model(why=[hld2["answers"]], limits=list(hld2["detail_lines"]) + [TEXT_RETURNS_NOT_SUMMED])
+    """D-3 第三輪補（總管派工；`DEC-2026-10-30-04` F-18）：`HLD-2` 記的 `_omitted_rows`（保單分頁上沒寫進持倉的列）各一行接在最後
+    （字同 `share_omitted_lines`）——「N 檔有值」那一枚只數被接受的持倉，略過的是哪幾列要看得到。持倉列全數被略過時 `HLD-2` 的說明區
+    已經有那幾行（`ui_v2/hld/logic.py::_present_omitted_rows`），已在的不再接（不重複）。沒有 → 與動手前相同。"""
+    limits = list(hld2["detail_lines"]) + [TEXT_RETURNS_NOT_SUMMED]
+    limits += [line for line in share_omitted_lines(hld2) if line not in limits]
+    return P.detail_model(why=[hld2["answers"]], limits=limits)
 
 
 # ───────────────────────── 層 3／層 4：grouped containers（3a＋4a；D-1／D-2／D-11）─────────────────────────

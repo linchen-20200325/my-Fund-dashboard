@@ -110,8 +110,16 @@ def test_一句主判讀只取既有值(full):
 
 
 def test_沒有合併燈_D3暫停_HLD0與ALO0各一枚各在其區段(full):
+    # ~~原斷言：頁面有 `class="alo-lamp"`、`class="hld-lamp"` 各一枚（兩枚燈元件各在其區段）~~
+    # → V7 Layout A 實作批（2026-10-31；`DEC-2026-10-31-01`、客戶線框核准；有意識的更正，不是漏刪）：合併頁已不畫這兩個燈元件
+    # （presentation de-duplication；頁級 P3 容器取代它們的重複 presentation）。改為：
+    #   (1) 兩個燈元件在合併頁**不重複**（`alo-lamp`／`hld-lamp` 各 0 枚，且「差距結論燈」「體檢結論燈」標題字樣不出現）；
+    #   (2) Domain Block Identity 的 `data-block` 錨點各恰一個，且位置不變（ALO-0 在 Primary 區、HLD-0 在持股明細區）；
+    #   (3) 仍沒有合併燈或任何第二套燈（原斷言的 token 掃描保留）。
+    # 保護沒有放寬：「各恰一個」「各在其區段」「沒有合併燈」三項照舊，且多了「不重複」。
     md = _md(full)
-    assert md.count('class="alo-lamp"') == 1 and md.count('class="hld-lamp"') == 1
+    assert md.count('class="alo-lamp"') == 0 and md.count('class="hld-lamp"') == 0
+    assert "差距結論燈" not in md and "體檢結論燈" not in md
     assert md.count('data-block="ALO-0"') == 1 and md.count('data-block="HLD-0"') == 1
     for token in ("page-light", "combined", "ast-lamp", "ast-light"):
         assert token not in md, token
@@ -364,10 +372,14 @@ def test_F13_有類別沒評估到_主判讀不寫皆在容許帶內():
     #   有類別差距未知時不得宣稱「最大」，見 `test_S5_*`。
 
 
-def test_F13_ALO0本身一字沒改_空白目標的inband燈仍寫皆在容許帶內_主判讀另擋():
+def test_F13_空白目標的inband燈改寫配置差距無法判定_主判讀同樣無法判定():
+    # ~~測試名「ALO0本身一字沒改_空白目標的inband燈仍寫皆在容許帶內_主判讀另擋」~~ → 客戶 2026-10-30 裁示 F-13
+    # （`DEC-2026-10-30-04`；有意識的政策變更，不是漏刪）：任何配置類別沒有成功評估時不得顯示「各類別皆在容許帶內」。
     at = _s(alo="inband", blank_target=True)
     md = _md(at)
-    assert md.count(alo_logic.TEXT_ALL_IN_BAND) == 1                         # ALO-0 那一行（既有缺陷 F-13 由客戶另裁，本批不改）
+    # ~~assert md.count(alo_logic.TEXT_ALL_IN_BAND) == 1~~（舊：ALO-0 那一行既有缺陷 F-13；DEC-2026-10-30-04 已裁必修）
+    assert md.count(alo_logic.TEXT_ALL_IN_BAND) == 0                         # 整頁一處都不出現（燈與主判讀皆不得推論帶內）
+    assert md.count(alo_logic.TEXT_UNDECIDABLE_GAP) >= 2                     # ALO-0 那一行＋一句主判讀
     assert _hero(at) == "持有 3 檔基金；配置差距無法判定。"
     assert _hero(_s(alo="inband")) == f"持有 3 檔基金；{alo_logic.TEXT_ALL_IN_BAND}。"   # 評估完整時照 ALO-0 既有字
 

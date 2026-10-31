@@ -748,7 +748,9 @@
 
 ---
 
-## 15. D-8 OAuth 回原頁 Decision Gate（2026-10-30 追加；read-only 查證結果；**待客戶裁示，未實作**）
+## 15. D-8 OAuth 回原頁 Decision Gate（2026-10-30 追加；read-only 查證結果；~~**待客戶裁示，未實作**~~ → **已裁示 F（DEC-2026-10-30-05）**；狀態更新，不是漏刪）
+
+> **客戶裁示（2026-10-30；決策者：客戶；`docs/DECISIONS.md` `DEC-2026-10-30-05`；逐字 `docs/evidence/decisions/2026-10-30_d3_oauth_gate_rulings.md`；追加，不改本節其餘任何字）**：**採 F：維持現況。**流程接受：登入 → `/set` → 確認 → 使用導覽回「💼 我的資產」；目前只多一次點擊，不值得改 OAuth callback／redirect contract。**不做 A、不做 B；暫不做 G。**若未來實際 Visual Fidelity／使用者操作證明這一步造成明顯摩擦，再考慮 G（「`/set` 確認後提供靜態「回到 💼 我的資產」」）；但 G 屆時仍先出最小 UI 線框，不碰 OAuth。下方 15.2 的推薦（F）成為裁示；A、B 的資安等級稽核要求（15.2 理由 4）因不做而不觸發。BACKLOG：BL-0525-OAUTH 以 F 結案、G 註記為 deferred。
 
 > 追加段，**不改上方任何裁示文字**（第 11 節 D-8 列與 `DEC-2026-10-30-02` 照舊）。追蹤於 `docs/BACKLOG.md` BL-0525 子項 BL-0525-OAUTH；登記不構成動工授權（`CLAUDE.md` §-1）。
 > 出處：客戶 D-8 裁示（逐字見 `docs/evidence/decisions/2026-10-30_batch_d_d1_d12_rulings.md`）：「目前 callback 只能回 "/set" 的問題：先做 read-only 技術查證。」若只是 navigation return-state 能在既有 OAuth contract 內安全解，可提出最小方案；若涉及 scope、redirect URI、callback contract、credential、OAuth architecture，則停在新 Gate；不要在 Batch D 順手改 OAuth。

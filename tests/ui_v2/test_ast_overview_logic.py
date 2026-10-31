@@ -216,10 +216,14 @@ def _inband_with_blank_target():
     return dataset
 
 
-def test_F13_ALO0本身沒被改_目標留空的inband仍寫皆在容許帶內_由主判讀自己擋():
+def test_F13_ALO0目標留空的inband改寫配置差距無法判定_主判讀同樣無法判定():
+    # ~~測試名「ALO0本身沒被改_目標留空的inband仍寫皆在容許帶內_由主判讀自己擋」~~ → 客戶 2026-10-30 裁示 F-13
+    # （`DEC-2026-10-30-04`；有意識的政策變更，不是漏刪）：任何配置類別沒有成功評估時不得顯示「各類別皆在容許帶內」。
     model = alo_logic.build_page_model(_inband_with_blank_target())
     alo0, alo2 = alo_logic.find_block(model, "ALO-0"), alo_logic.find_block(model, "ALO-2")
-    assert alo0["text"] == alo_logic.TEXT_ALL_IN_BAND            # 既有缺陷仍在 ALO-0（docs/v2/74 F-13 由客戶另裁；本批不改 ALO-0）
+    # ~~assert alo0["text"] == alo_logic.TEXT_ALL_IN_BAND~~（舊：既有缺陷仍在 ALO-0；DEC-2026-10-30-04 F-13 已裁必修）
+    assert alo0["text"] == alo_logic.TEXT_UNDECIDABLE_GAP == OV.TEXT_UNDECIDABLE_GAP
+    assert alo0["_incomplete"] is True
     assert OV.has_unevaluated_category(alo2) is True
     assert alo0["_leaders"] == ()                                 # 帶內字樣、沒有點名類別 → 這條路才由 incomplete 擋下
     assert OV.hero_sentence(3, alo0, incomplete=True) == "持有 3 檔基金；配置差距無法判定。"

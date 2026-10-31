@@ -113,7 +113,10 @@ DERIVED_REASON_KEY = "_derived_reason"
 # `_current_keys`（資產配置目標對照卡每一列：基準值缺那一邊的資料類）、`_missing_key`（資產配置各類別的缺值理由屬哪一類）、
 # `_data_key`（標的探索接線結果的每一格：產生處寫的資料類）是同一批的同一種標記。
 MARK_KEYS = ("_fetch_classes", "_fetch_class", "_missing_keys", "_derived", "_derived_reason",
-             "_current_keys", "_missing_key", "_data_key", "_shadowed", "_missing_lines")
+             "_current_keys", "_missing_key", "_data_key", "_shadowed", "_missing_lines",
+             # P3 頁級狀態（`DEC-2026-10-30-04`）：`HLD-0`／`ALO-0` 的分類標記與 `ALO-0` 的附行行數，只給 `ui_v2/asset/page_status.py` 讀，
+             # 不是判定、不改任何字樣；摘要時略過（同上一類）。
+             "_page_class", "_attached_n")
 
 # BL-0250 批次 3-C（44 第七節第三小節之十三其八第 22 條「3-C 搬遷時改成產生處明確標記，不靠字首」；之十四）：
 # 一串說明行（`tail_lines`、`detail_lines` 這類欄位）裡畫成 ◇ 的句子，由產生處在同一個節點上寫明是哪一個欄位
@@ -239,6 +242,47 @@ def tag_derived(node, reason: str):
         node[DERIVED_KEY] = True
         node[DERIVED_REASON_KEY] = reason
     return node
+
+
+# ───────────────────────── 持倉列未列入（BL-0411／F-18）─────────────────────────
+# 客戶 2026-10-30 裁示（`docs/DECISIONS.md` `DEC-2026-10-30-04`，F-18）：「如果部分列目前被略過但 UI 沒揭露：頁燈、持有 N 檔、
+# 配置／持股整體判定都不能假裝覆蓋完整集合。必須先讓 omitted rows／未納入集合的事實可被辨識。」
+# 資料：L2 `services/v2_tables/alo_holdings.py::build_alo_tables` 的 `skipped_holdings`（保單分頁上沒寫進持倉的列與原因），
+# 由兩頁的資料承載層原樣轉交（`ui_v2/hld/live.py::assemble_live_load`、`ui_v2/alo/source.py::load_live`；原因字已遮蔽），
+# 放在 dataset 的 `skipped_holdings`：`[{"tab", "row", "fund_code", "reasons": [str, …]}]`。沒有略過的列時 dataset 不帶這個鍵
+# （模型逐鍵與動手前相同）。原因字逐字沿用 L2 的字（例「缺持倉補充」），本檔不改寫、不歸納、不計數。
+# ⚠️ 下面兩個句型是本批由既有字（`⬜ 資料未備`〔正式模式畫成 ◇〕、「未列入」、「第 N 列」）組成的最小字樣，**待客戶確認字樣**。
+OMITTED_ROW_TEXT = "⬜ 資料未備：{where} 未列入：{reasons}"
+OMITTED_ROW_WHERE = "{tab} 第 {row} 列"
+OMITTED_DATASET_KEY = "skipped_holdings"
+
+
+def omitted_rows(dataset) -> tuple:
+    """dataset 帶的「沒寫進持倉的列」（`OMITTED_DATASET_KEY`）→ tuple（沒有 → 空 tuple）。形狀不對當場炸（不猜、不靜默略過）。"""
+    rows = (dataset or {}).get(OMITTED_DATASET_KEY) or ()
+    if isinstance(rows, (str, bytes, dict)) or not isinstance(rows, (list, tuple)):
+        raise TypeError(f"{OMITTED_DATASET_KEY} 應為 list：{type(rows).__name__}")
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("reasons"), (list, tuple)):
+            raise TypeError(f"{OMITTED_DATASET_KEY} 的每一項要是帶 reasons 的 dict：{row!r}")
+    return tuple(rows)
+
+
+def omitted_row_lines(rows) -> list:
+    """每一列略過的持倉一行：「⬜ 資料未備：<分頁> 第 <列> 列（<基金代號>） 未列入：<L2 原因，以「；」相接>」。
+    分頁或列號沒有 → 寫 `NO_VALUE`（不猜）；基金代號不是非空文字 → 不寫括號（不拿數字去猜原字串，同 L2 U11）。"""
+    lines = []
+    for row in rows:
+        tab = row.get("tab")
+        number = row.get("row")
+        where = OMITTED_ROW_WHERE.format(tab=tab if isinstance(tab, str) and tab else NO_VALUE,
+                                         row=number if number not in (None, "") else NO_VALUE)
+        code = row.get("fund_code")
+        if isinstance(code, str) and code.strip():
+            where = f"{where}（{code.strip()}）"
+        reasons = "；".join(str(r) for r in row["reasons"] if str(r)) or NO_VALUE
+        lines.append(OMITTED_ROW_TEXT.format(where=where, reasons=reasons))
+    return lines
 
 
 # ───────────────────────── 原因項目 ─────────────────────────
