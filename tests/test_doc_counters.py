@@ -2455,6 +2455,7 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/72_mkt_wireframe_batch_c.md",   # 2026-10-30 BL-0525 Batch C 🌍 市場與趨勢 wireframe 草稿（待客戶拍板；不實作）
     "docs/v2/73_assets_wireframe_batch_d.md",   # 2026-10-30 BL-0525 Batch D 💼 我的資產 wireframe 草稿（層 3／層 4 塊數 Gate；待客戶拍板；不實作）
     "docs/v2/74_assets_d3_formula_gate.md",   # 2026-10-30 BL-0525-D3 💼 我的資產 整頁結論 D-3 最小 Formula／Rule Gate（待客戶裁示；不實作）
+    "docs/v2/75_onebrain_ai_architecture.md",   # 2026-10-31 OneBrain AI 未來架構方向（Phase A：Architecture／Governance；不構成 runtime 動工授權；DEC-2026-10-31-03）
     "docs/v2/76_assets_v7_layout_a_wireframe.md",   # 2026-10-31 BL-0525-D3 💼 我的資產 V7 Layout A 最小文字線框（客戶 2026-10-31 採 A；待客戶審批；不實作）
     "docs/v2/77_emergency_resume_checkpoint_2026-10-31.md",   # 2026-10-31 緊急續接檢查點（另一 session 快照）
     "docs/v2/CONSTITUTION.md",
