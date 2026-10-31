@@ -513,6 +513,12 @@
 - **44 衝突**：本輪沒有新增（INFERENCE，單組對讀 44 `ALO-4`／`ALO-6` 規則欄與判準：表尾兩個合計照印、數字照舊為 1；兩塊摘要與 `HLD-5` DIRECT 摘要的字面不在 44 內）。第一、二輪已登記的 (a)～(g) 照舊「44 待依 DEC-2026-10-30-04 增修（44 凍結，未改）」。
 - **沒做或沒驗（不是漏做）**：(i) P3 與八種組合矩陣；(ii) ~~**發現、未修**：有持倉列被略過時，`HLD-5`「單檔展開」摘要「N 檔 · 同時最多展開一檔」與 `HLD-8` 摘要「N 檔 · …」仍以被接受的列計數（同 should-fix 1 的形狀；不在本輪稽核點名範圍，登記於 `docs/HANDOFF.md` (8) ⑦，待總管決定）~~（→ 已修，見下一條「第三輪補」；狀態更新，不是漏刪）；(iii) H6 在 P3 的排位、`OMITTED_ROW_TEXT` 字樣待客戶確認（`docs/HANDOFF.md` (8) ⑤⑥）；(iv) 沒有看過 production Cloud 的真實畫面與真資料。實作組單組，獨立稽核待下一步。
 
+**D-3 P3 頁級狀態實作批（2026-10-31；客戶裁示 `DEC-2026-10-30-04` 採 P3／β；代碼 commit 見 `git log`；待獨立稽核）**：上面各輪寫的「P3 page-level 合併燈仍未實作」「D-3 暫行：沒有 page-level combined light」在寫下當時為真；自本批起 `ui_v2/asset/` 有頁級狀態容器（狀態更新，有意識的更正，不是漏刪）。
+- **做了什麼**：(1) `ui_v2/status_class.py`（七個分類詞與 β 嚴重度階梯）；(2) `HLD-0`／`ALO-0` 的判定分支各自寫入 `_page_class`（logic 明示，頁級規則不比對字面或 `_tone`），`ALO-0` 另記 `_attached_n`；兩鍵加進 `ui_v2/page_health.py::MARK_KEYS`；(3) `ui_v2/asset/page_status.py::aggregate`（純函式：頭條依 β，同級持股先；Q5 合成正常行、Q6 合成無持倉、PE 歸取數失敗；回傳新 dict，不回寫）；(4) `ui_v2/asset/page.py::_render_page_status`（頁頂一個容器，Visual Budget 計 1 個；其餘版面與區段順序不動）；(5) 測試 `tests/ui_v2/test_p3_page_status_logic.py`、`tests/ui_v2/test_p3_page_status_page.py`。
+- **沒動**：canonical data、`HLD-0`／`ALO-0` 的原 rule result 與字樣、Risk Cap、Decision Digest、任何 threshold／formula／weight、其他頁、舊 `ui/`、44（凍結，md5 守衛不變）。
+- **44 衝突**：44 之二十其二第 4 條、之十九其四第 1 條在頁級容器射程內：44 待依 DEC-2026-10-30-04 增修（44 凍結，未改）。
+- **沒做或沒驗（不是漏做）**：(i) 獨立稽核；(ii) H6 逐檔取數失敗是否改排取數失敗級（執行組依 β 排只評估一部分，待客戶裁示）；(iii) 區段標籤與合成行字樣沿用 `docs/v2/74` F-5 推薦，待客戶確認；(iv) 容器不畫「前往 Sheets」鈕、計數行與兩枚燈留在各自區段（頁上因此有一次字樣重複），待客戶確認要不要收；(v) Cloud 正式畫面與真資料未看；(vi) 以 Visual Fidelity 截圖比對容器區域的結果見 `docs/HANDOFF.md` 本批紀錄。
+
 **Batch D 裁示指標（2026-10-30；`DEC-2026-10-30-02`；上表 Phase 5 列是計畫，保留）**：客戶已對 `docs/v2/73_assets_wireframe_batch_d.md` 的 D-1～D-12 正式裁示（逐字 `docs/evidence/decisions/2026-10-30_batch_d_d1_d12_rulings.md`）：層 3／層 4 的「塊」按 presentation container 計（R-C；正式定義「Domain Block Identity ≠ Presentation Container Count」，block ID 不刪、Decision Digest 不減），整頁 S1（3a＋4a）；Primary 為資產配置現況 vs 目標；第一屏保留總資產／總損益／報酬／配息四項 compact summary slots（缺資料誠實 Missing），本批不准入新彙總公式；持倉資料來源 selector 頁頂獨立一列（OAuth 不得順手改）；**D-3 page-level 結論燈暫停，待最小 Formula Gate，Gate 落盤前不得實作**。本檔其餘處的「層 3／層 4 超限處置待客戶裁示」讀作已裁結（上表 Phase 5 列的前置條件已滿足；T7 帳號與 Sheet 位置仍隨 Batch D／F 實作）。Batch D 實作批的狀態見 `docs/HANDOFF.md` 與 `docs/BACKLOG.md` BL-0525。
 
 依 repo dependency 可微調順序；每批完成前走 Visual Fidelity Gate，CI 全綠不等於完成。進入 Batch B 以後的機械式 UI 實作，依客戶第二十四節與第三則末段走 Model／Effort Change Gate（建議 Sonnet 5.5／Medium）。
@@ -526,3 +532,5 @@
 3. **單組判斷、未經第二組驗證**（`CLAUDE.md` §-2 規則 6）：各表的 A／B／C 分類、衝突矩陣判定、第五節第三小節子法 1 相容判斷、第六節對各 DEC 的 supersede 範圍、第八節落點選擇、第九節分批。屬治理規則等級，合併前要有至少 1 組真正獨立稽核（`PROJECT_RULES.md` 第 8 節）。
 4. 盤點母體是三組選定的檔案與 DEC，不是窮舉：44 其餘各塊的空狀態欄未逐塊讀；`docs/DECISIONS.md` 第五節歷史索引、交接本、`docs/evidence/**` 未逐條讀；`docs/v2/59`／`61`／`65` 只讀檔頭與命中處。
 5. 版面結論（「第一屏看不到圖」）是讀程式碼得出的結構，沒有截圖驗證實際首屏。
+
+**V7 Layout A 實作指標（2026-10-31；`DEC-2026-10-31-01`、`-02`）**：客戶核准 `docs/v2/76` 線框並授權實作 A。`ui_v2/asset/page.py` 在合併頁不再畫 `ALO-0`／`HLD-0` 兩枚燈元件（presentation de-duplication；兩個 domain block 的 `_page_class`／`_state`／`_tone`／字樣／`lines`／`detail_lines`／`buttons`、Digest mapping、單獨 HLD／ALO 頁全部不動）；說明行與 Sheets 鈕留在原區段，`data-block` 錨點各留一個；合併頁 `ALO-0` 說明句「本燈只讀…」改「此配置判讀只讀…」（客戶裁示，只限合併頁）。實作後 390px `full` 情境 Primary 圖上緣 883 → 750（V7 過）；兩個稽核指出的極端組合仍 > 844（867、926），客戶已接受「重要頁級狀態／Missing／Error reason ＞ 強迫 Primary 完整露出」，實測表見 `docs/v2/76` 第 11 節。守衛 `tests/ui_v2/test_asset_layout_a_page.py`。待獨立稽核。

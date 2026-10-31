@@ -21,7 +21,7 @@ import io
 import math
 from datetime import date, datetime, timedelta, timezone
 
-from .. import page_health
+from .. import page_health, status_class
 
 # ───────────────────────── 缺口與矛盾登記（`44` 沒寫或與線框不一致） ─────────────────────────
 #
@@ -1139,20 +1139,28 @@ def skipped_tab_message(skipped_tabs) -> str:
 def _conclusion_light(alo2, *, source_incomplete=False, omitted=False) -> dict:
     if alo2["_failed"]:
         # ALO-GAP-無紅燈：燈沒有紅；燈為灰，文案照抄 ALO-2 那一格的失敗字串（不說成尚未建立持倉）。
-        return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None}
+        return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None, "_page_class": status_class.ERROR}
     if alo2["_holdings_empty"]:
         if omitted or source_incomplete:
             # BL-0411／F-18：持倉列全數在載入時被略過 —— 不是「沒有持倉」（DEC-2026-10-30-04）。
             # 第二輪（稽核 B1）：~~`if omitted:`~~ → 保單分頁被略過（`source_incomplete`）同理（有意識的更正，不是漏刪）。
-            return {"_tone": "灰", "text": TEXT_UNDECIDABLE_GAP, "_max_bucket": None, "_incomplete": True}
-        return {"_tone": "灰", "text": TEXT_NO_HOLDING, "_max_bucket": None}
+            return {"_tone": "灰", "text": TEXT_UNDECIDABLE_GAP, "_max_bucket": None, "_incomplete": True,
+                    "_page_class": status_class.MISSING}
+        return {"_tone": "灰", "text": TEXT_NO_HOLDING, "_max_bucket": None, "_page_class": status_class.NO_HOLDING}
+    # 頁級分類（獨立稽核 S1；F-18「略過列歸資料未備」）：未設定那幾支在持倉來源有略過的分頁或列時，頁級分類歸資料未備
+    # （字樣、色、旗標一字不動；只有 `_page_class` 不同）。
+    unset_class = status_class.MISSING if source_incomplete else status_class.UNSET
     if alo2["_target_unset"]:
-        return {"_tone": "灰", "text": TEXT_NO_TARGET, "_max_bucket": None}
+        return {"_tone": "灰", "text": TEXT_NO_TARGET, "_max_bucket": None, "_page_class": unset_class}
     if alo2["_tolerance"] is None:
-        return {"_tone": "灰", "text": TEXT_NO_TOLERANCE, "_max_bucket": None}
+        return {"_tone": "灰", "text": TEXT_NO_TOLERANCE, "_max_bucket": None, "_page_class": unset_class}
     if alo2["placeholder"] is not None:
         # ALO-GAP-燈讀不到差距：基準未選。
-        return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None}
+        # 頁級分類讀佔位自己記的 `_empty_kind`（`_placeholder` 的明示欄位，不比對字面）：「算不出來」＝不適用／未設定（A5b），
+        # 「來源缺」「部分缺」＝資料未備（A5a）。
+        kind = alo2["placeholder"].get("_empty_kind")
+        page_class = unset_class if kind == "算不出來" else status_class.MISSING
+        return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None, "_page_class": page_class}
     computed = [r for r in alo2["_rows"] if r["_diff"] is not None]
     blocked = [r for r in alo2["_rows"] if r["_blocks_lamp"]]
     # F-13／F-19（DEC-2026-10-30-04）：有任何一列沒評估到差距、或持倉集合本身不完整 → 不得推論整體在帶內。
@@ -1162,14 +1170,16 @@ def _conclusion_light(alo2, *, source_incomplete=False, omitted=False) -> dict:
         # ALO-GAP-燈讀不到差距：44 逐字「取絕對值最大者」—— 有一個有目標的類別差距算不出來時，
         # 最大者是哪一個就不知道；本頁不拿其餘類別的差距去點名，也不宣稱皆在帶內。
         # F-14（DEC-2026-10-30-04）：~~`blocked[0]["_gap_text"]`~~ 在 74 A5c 那一條路是 None（燈有狀態沒有字）→ 既有「配置差距無法判定」。
-        return {"_tone": "灰", "text": blocked[0]["_gap_text"] or TEXT_UNDECIDABLE_GAP, "_max_bucket": None, **flag}
+        return {"_tone": "灰", "text": blocked[0]["_gap_text"] or TEXT_UNDECIDABLE_GAP, "_max_bucket": None,
+                "_page_class": status_class.MISSING, **flag}
     outside = [r for r in computed if exceeds(r["_diff"], alo2["_tolerance"])]
     if not outside:
         # 含全部差 0、以及差距剛好等於容許帶（ALO-GAP-端點）。
         if incomplete:
             # F-13／F-19：~~「各類別皆在容許帶內」~~（44 `ALO-0` 規則欄；44 待依 DEC-2026-10-30-04 增修〔44 凍結，未改〕）。
-            return {"_tone": "灰", "text": TEXT_UNDECIDABLE_GAP, "_max_bucket": None, **flag}
-        return {"_tone": "灰", "text": TEXT_ALL_IN_BAND, "_max_bucket": None}
+            return {"_tone": "灰", "text": TEXT_UNDECIDABLE_GAP, "_max_bucket": None,
+                    "_page_class": status_class.MISSING, **flag}
+        return {"_tone": "灰", "text": TEXT_ALL_IN_BAND, "_max_bucket": None, "_page_class": status_class.NORMAL}
     top = max(abs(r["_diff"]) for r in outside)
     leaders = [r["_bucket"] for r in outside if math.isclose(abs(r["_diff"]), top, abs_tol=1e-9)]
     # ALO-GAP-同差並列：全列，依 alo_bucket_names 的順序；不在名單裡的照 ALO-2 的列序排在後面。
@@ -1179,7 +1189,8 @@ def _conclusion_light(alo2, *, source_incomplete=False, omitted=False) -> dict:
     # ALO-GAP-燈的正負號：印絕對值。
     text = f"{'、'.join(leaders)} 與目標差 {top:.1f} 個百分點"
     # 已評估類別的結果照留（F-13：「已成功評估的類別結果可以保留」）；不完整時只記 `_incomplete`，字樣不動。
-    return {"_tone": "黃", "text": text, "_max_bucket": leaders[0], "_leaders": tuple(leaders), **flag}
+    return {"_tone": "黃", "text": text, "_max_bucket": leaders[0], "_leaders": tuple(leaders),
+            "_page_class": status_class.ATTENTION, **flag}
 
 
 def _build_alo0(alo2) -> dict:
@@ -1199,6 +1210,8 @@ def _build_alo0(alo2) -> dict:
         "_max_bucket": light["_max_bucket"],
         # BL-0525 Batch D：並列最大絕對差距的全部類別（`conclusion_light` 已算出、已依名單順序；一句主判讀只讀這個鍵，不重算）。
         "_leaders": tuple(light.get("_leaders", ())),
+        # 頁級分類（P3；ui_v2/status_class.py）：由判定分支明示，頁級 aggregation 只讀它，不比對字面或 `_tone`。
+        "_page_class": light["_page_class"],
         "glyph": glyph,
         "state_word": state_word,
         "text": light["text"],
@@ -1211,6 +1224,9 @@ def _build_alo0(alo2) -> dict:
         "badges": [],
         # 頁級規則（DEC-2026-10-30-04 P3，尚未實作）讀的分類欄位：只在成立時加鍵。
         **{key: light[key] for key in ("_incomplete", "_omitted_rows") if light.get(key)},
+        # 頁級容器（P3）照印這一枚燈「自己的附行」（略過的分頁、略過的持倉列）＝ `detail_lines` 最前面這幾行（其後是固定說明句，不屬附行）。
+        # 只記**行數**、不另存一份字：一般畫面管線（`plain` 換字）只對 `detail_lines` 本身換字，另存的副本會帶著未換字的原文。只在有附行時加鍵。
+        **({"_attached_n": len(light["lines"])} if light.get("lines") else {}),
     }
     # BL-0250 批次 3-B（總管第二輪裁定第 1、4 點）：燈照抄 ALO-2 那一格的失敗字串時，資料類一併照抄；燈的 ◇ 是衍生狀態。
     if alo2["_failed"]:

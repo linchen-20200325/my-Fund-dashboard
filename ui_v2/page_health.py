@@ -113,7 +113,10 @@ DERIVED_REASON_KEY = "_derived_reason"
 # `_current_keys`（資產配置目標對照卡每一列：基準值缺那一邊的資料類）、`_missing_key`（資產配置各類別的缺值理由屬哪一類）、
 # `_data_key`（標的探索接線結果的每一格：產生處寫的資料類）是同一批的同一種標記。
 MARK_KEYS = ("_fetch_classes", "_fetch_class", "_missing_keys", "_derived", "_derived_reason",
-             "_current_keys", "_missing_key", "_data_key", "_shadowed", "_missing_lines")
+             "_current_keys", "_missing_key", "_data_key", "_shadowed", "_missing_lines",
+             # P3 頁級狀態（`DEC-2026-10-30-04`）：`HLD-0`／`ALO-0` 的分類標記與 `ALO-0` 的附行行數，只給 `ui_v2/asset/page_status.py` 讀，
+             # 不是判定、不改任何字樣；摘要時略過（同上一類）。
+             "_page_class", "_attached_n")
 
 # BL-0250 批次 3-C（44 第七節第三小節之十三其八第 22 條「3-C 搬遷時改成產生處明確標記，不靠字首」；之十四）：
 # 一串說明行（`tail_lines`、`detail_lines` 這類欄位）裡畫成 ◇ 的句子，由產生處在同一個節點上寫明是哪一個欄位

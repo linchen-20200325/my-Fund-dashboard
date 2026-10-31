@@ -1875,6 +1875,34 @@
 | supersedes／superseded by | supersedes：`docs/v2/73` 第 15 節標題與 BL-0525-OAUTH「待客戶裁示，未實作」的狀態（推薦 F 成為裁示）。無被取代的條文 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-31-01｜客戶裁示：V7 採 A（頁級 P3 容器取代區段內兩枚燈的重複 presentation）；H6 維持「持股只評估一部分」；F-5 字樣核准；先出 A 的最小文字線框
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-31 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-31_v7_layout_a_rulings.md`） |
+| 決策內容摘要 | **客戶裁示**（以逐字檔為準）：**(1) V7 採 A**——頁級 P3 狀態容器保留在第一眼位置，並取代頁面中 `HLD-0`／`ALO-0` 兩枚燈的重複 presentation；目的：維持「整頁先看到結論」、讓 390px Primary Visual 回到首屏、消除同一事實在頁面重複顯示、不修改既有 Visual Budget／V7 驗收標準。不採 B（不要把頁級狀態移到 Primary 後面）；不採 C（不得為解決本次 layout 問題放寬 V7 或修改既有 Mobile Visual Budget）。**A 的邊界**：只是 presentation de-duplication，不是刪除 `HLD-0`／`ALO-0` domain blocks；必須保留 Domain Block Identity、原始 rule result、`_page_class`、`_state`、`_tone`、reason／missing reason、provenance、Decision Digest mapping、原始 deterministic semantics；正式原則「Domain Block Identity ≠ Presentation Instance」；單獨 HLD／ALO view 與其他正式 consumer 的行為不得被破壞。**區段內資訊保全**：移除區段內重複燈時不得順便移除只有原位置才有的功能（前往 Sheets 按鈕、Missing／omitted rows 附行、error reason、provenance／detail、其他必要入口）；不能合理搬入容器者，在原區段保留「功能／證據入口」、不再重複完整狀態句；不新增第二套狀態詞或新 domain vocabulary。**(2) H6** 逐檔取數失敗維持「持股只評估一部分」級，不升成整區「取數失敗」（partial failure ≠ whole-area failure）；仍須清楚外露既有「⛔ ‹基金／資料類› 取數失敗」，不能隱藏 ⛔ reason、不能寫成無偏離／正常；只有 HLD 整區無法形成有效結果時才進 β 最上層「取數失敗」。**(3) F-5 字樣**正式核准沿用「持股：」「配置：」「持股與配置：」，不另造新詞。**(4) 文字線框 Gate**：先出 A 的最小文字線框（桌機與 390px，並說明 `HLD-0`／`ALO-0` 原位置改成什麼、Sheets CTA 放哪、Missing／error 附行放哪、哪些只是 presentation 搬移、哪些完全不動），通過後才實作。**驗收**十一項（P3 7×6 真實模型矩陣、7×7 aggregation matrix、客戶指定 10 情境、H6 partial failure 專測、HLD／ALO 原 block semantics 不變守衛、Sheets CTA 不遺失、omitted rows／Missing reason 不遺失、desktop Visual Fidelity、390px V7、relevant regression tests、CI）；不得為通過 V7 縮到不可讀、隱藏核心資訊或修改 V7 threshold。**Model／Effort** 維持 Claude Sonnet 5.5＋Medium；實作中若發現必須改 domain semantics、formula／precedence、Risk Cap、Decision Digest semantics 或 Visual Budget contract，立即停在新 Decision Gate、不自行擴 scope。 |
+| 理由／背景 | 客戶原話：「H6 是部分資料失敗，不等於整個持股區無法取得。」「«Domain Block Identity ≠ Presentation Instance.»」「不得為了解決本次 layout 問題而放寬 V7 或修改既有 Mobile Visual Budget。」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-31_v7_layout_a_rulings.md`（圍欄內文 sha256 `2a62a84a1446ee0882ac87ed6e865f3ffb2fb08ffc56858cc0d0a77f0ff0d5c3`）；線框 `docs/v2/76_assets_v7_layout_a_wireframe.md`（待客戶審批）；`docs/v2/74_assets_d3_formula_gate.md`（檔頭追加客戶裁示記錄）；`docs/BACKLOG.md` BL-0525（子項 BL-0525-D3 列尾）；`docs/HANDOFF.md`（唯一接手點） |
+| 影響範圍 | 本批只動文件；不改任何 `ui_v2/`、`.py` 行為（`tests/test_doc_counters.py` 只登記新文件路徑一行）、資料語意、identity／NAV、Risk Cap、Decision Digest semantics、來源與 provenance。實作（改 `ui_v2/asset/page.py` 的呈現）在線框通過後才動，並限於 presentation：不得改 `HLD-0`／`ALO-0` 的 logic、不得改單頁 `ui_v2/hld/page.py`／`ui_v2/alo/page.py` 的畫法。已知實作時必須隨之改寫的既有斷言與工具：`tests/ui_v2/test_ast_page.py` 內斷言頁面有兩枚燈元件的那一則（見 `docs/v2/76` 第 8 節）。 |
+| 是否可逆 | 可逆（客戶可另行裁示；UI 版型可再改，domain block 與其資料語意不變） |
+| supersedes／superseded by | supersedes（逐筆核對後只列真正被取代的部分）：(1) `docs/HANDOFF.md` last checkpoint 與 `docs/v2/74` 執行組讀法 (a) 所列「待客戶：H6 是否改排取數失敗級」——客戶裁示維持只評估一部分級；(2) 同處「待客戶確認：區段標籤『持股：』『配置：』與合成行字樣（74 F-5）」——客戶已核准；(3) 同處「區段內與容器字樣重複是否收掉」（`docs/v2/74` 執行組讀法 (e)）及 HANDOFF「V7 手機紅燈需決定：容器取代區段內兩枚燈／容器移到 Primary 之後／放寬 V7」——客戶採「容器取代區段內兩枚燈」（A），不採移到 Primary 之後（B）、不採放寬 V7（C）；(4) `DEC-2026-10-30-04` 影響範圍與 `ui_v2/asset/page.py` 檔頭所寫「`HLD-0`／`ALO-0` 各自維持既有燈、仍各放在其所屬區段」的**暫行畫法**（`001c30ca`）——僅限 💼 合併頁的 presentation，兩個 domain block 本身與單頁畫面不變。**不 supersede**：`DEC-2026-10-30-04` 的 P3、β 階梯、六項不得、F-13／F-2／F-14／F-18／F-19 裁示；Visual Budget；V7 驗收標準；OAuth 裁示 F。superseded by：無。 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；supersedes 欄的逐筆範圍判斷與「暫行畫法」判讀是執行組單組寫成，可被客戶推翻；單組寫成，未經第二組獨立驗證。 |
+
+### DEC-2026-10-31-02｜客戶裁示：核准 V7 Layout A 文字線框（`docs/v2/76`）並開工實作 A；ALO-0 說明句在合併頁改「此配置判讀」；前往 Sheets 鈕位置；Mobile 補充裁示
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-31 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-31_v7_layout_a_wireframe_approval.md`） |
+| 決策內容摘要 | **客戶裁示**（以逐字檔為準）：**(1) 核准** `docs/v2/76_assets_v7_layout_a_wireframe.md`，可以開始實作 A（`DEC-2026-10-31-01` 的 presentation de-duplication）。**(2) 燈標題**：「體檢結論燈」「差距結論燈」在合併頁消失，接受，不需要搬標題；但必須繼續保留 Domain Block Identity、`data-block` anchor、`_page_class`、`_state`、`_tone`、reason／missing reason、provenance、Decision Digest mapping、deterministic semantics；單獨 HLD／ALO 頁不變。**(3) ALO-0 說明句字樣校正**：原「本燈只讀 目標對照卡 算出的差距，不指出方向。」在合併頁改為「此配置判讀只讀 目標對照卡 算出的差距，不指出方向。」；理由：A 之後該位置沒有獨立「燈」元件，「本燈」會造成 presentation 語意錯位；只是 UI copy 校正：不改公式、rule result、方向性限制，不新增投資狀態或 domain vocabulary，核心安全語意（只讀既有差距、不指出方向）不變；不得藉此順改其他文案。**(4) 前往 Sheets 鈕**：保留在「持股明細」第一個位置；key 不變；不塞入 P3 HTML 容器；不因 A 增加頁頂高度；出現條件不變。**(5) Mobile Visual Fidelity 補充**：A 不要求所有 Missing／Error／partial 組合在 390px 第一屏完整看到 Primary 第一列；優先序「重要頁級狀態／Missing／Error reason ＞ 強迫 Primary 完整露出」；不得隱藏 Missing／omitted rows／error reason 換圖表高度、不得縮字到難讀、不得放寬 V7、不得修改 Mobile Visual Budget、不新增自動折疊重要錯誤資訊、不為少見 degraded-data 組合另開本批 layout 重構；實作後仍須實測並記錄 full、blank_target、hld_partial、alo=nofx、hld=fetchfail、skipped_rows 與稽核指出的兩個極端組合，分 V7 hard pass/fail、Primary 實際可見高度、為何 degraded 情境允許狀態資訊優先三欄，不得把未測寫成通過。**(6) 實作邊界**：只做 presentation de-duplication；禁止順手改 P3 precedence、H6 分類、HLD-0／ALO-0 domain semantics、Risk Cap、Decision Digest semantics、formula／threshold、OneBrain、其他頁、Visual Budget／V7 contract；實作後依既定 11 項驗收全跑並補「附行不得因合成／de-duplication 被吞掉」守衛；完成獨立稽核、CI、Visual Fidelity 後，安全則依 Auto-Ship 收尾；Model／Effort 維持 Claude Sonnet 5.5 + Medium。 |
+| 理由／背景 | 客戶原話：「A 實作後該位置沒有獨立『燈』元件，『本燈』會造成 presentation 語意錯位。」「優先序為：重要頁級狀態／Missing／Error reason ＞ 強迫 Primary 完整露出。」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-31_v7_layout_a_wireframe_approval.md`（圍欄內文 sha256 `16a159737b75445c2dce9a5f353599c40972e7760e85c57358fd5cc8c7becad9`）；線框與實作後實測 `docs/v2/76_assets_v7_layout_a_wireframe.md`；實作 `ui_v2/asset/page.py`；守衛 `tests/ui_v2/test_asset_layout_a_page.py`、`tests/ui_v2/test_ast_page.py`、`tests/ui_v2/test_d3_blockers_page.py`；`docs/HANDOFF.md`（唯一接手點） |
+| 影響範圍 | 只動 `ui_v2/asset/page.py` 的 presentation：合併頁不再畫 `ALO-0`／`HLD-0` 兩枚燈元件，兩區的「回答什麼」說明行與非附行的 `detail_lines` 改放 Primary 圖下方／持股明細開頭並各保留一個 `data-block` 錨點；ALO-0 說明句只在合併頁轉換字樣（轉換在 `ui_v2/asset/page.py::alo0_entry_lines`，不動 `ui_v2/alo/logic.py` 常數與單獨 ALO／HLD 頁）。不改 `HLD-0`／`ALO-0` 的 logic、`page_status.py`、`status_class.py`、資料語意、identity／NAV、Risk Cap、Decision Digest semantics、Visual Budget／V7 contract。 |
+| 是否可逆 | 可逆（UI 版型與字樣可再改；domain block 與其資料語意不變） |
+| supersedes／superseded by | 補充（不取代）`DEC-2026-10-31-01`：該筆「文字線框 Gate」已由客戶核准。其「待客戶確認」的兩個燈標題字樣與說明行措辭（`docs/v2/76` 第 7 節待確認 1、2）由本筆結案：標題消失＝接受；說明行措辭＝改「此配置判讀」。 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -1974,6 +2002,7 @@
 - 第四節 `DEC-2026-10-30-03`：原文已落盤於 `docs/evidence/decisions/2026-10-30_no_progress_narration_gate.md`（總管逐字轉存；執行組未見客戶對話本身，只核對轉存檔與圍欄逐位元組相同）；「決策內容摘要」的分段與 supersedes 欄對 3.1／3.2 的收緊判讀是執行組單組寫成，可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-10-30-04`：原文已落盤於 `docs/evidence/decisions/2026-10-30_d3_oauth_gate_rulings.md`（總管逐字轉存；執行組未見客戶對話本身，只核對轉存檔與圍欄逐位元組相同）；「決策內容摘要」的分段、supersedes 欄的逐筆範圍判斷與 (a)～(c) 讀法（F-4 一併採推薦、F-2 (ii) 是否仍須草稿先行未判定、F-13／F-14 與 `DEC-2026-10-30-02`「一字不改」整理句的關係）是執行組單組寫成，可被客戶推翻；未經第二組驗證。2026-10-31 依一組獨立稽核（對 `c6804cfd`）回修：supersedes 欄補 (4)（44 之二十其二第 4 條在 P3／F-13／F-14／F-2／F-18 射程內被 supersede、44 凍結未改）與 (5)（`DEC-2026-10-30-02` (3) 的有效期結束）；影響範圍欄把實作先後改標總管讀法、F-5 處置自摘要欄移入並標總管處置；`DEC-2026-10-30-02` 相應兩處加註；回修文字為文件組單組寫成，回修後未再經第二組稽核。
 - 第四節 `DEC-2026-10-30-05`：原文同上檔；「決策內容摘要」由執行組單組整理，以原文為準；未經第二組驗證。
+- 第四節 `DEC-2026-10-31-01`：原文已落盤於 `docs/evidence/decisions/2026-10-31_v7_layout_a_rulings.md`（總管逐字轉存；執行組未見客戶對話本身，只依派工單抄入，未另對轉存檔做位元組比對）；「決策內容摘要」的分段、supersedes 欄的逐筆範圍判斷（尤其 (4) 把 `001c30ca` 的區段內燈畫法判為「暫行畫法」）是執行組單組寫成，可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-10-16-01`、`-02` 兩筆的客戶原話 repo 內沒有；內容依總管派工單與交接本轉述，本組未見原文。
 - 第四節 `DEC-2026-10-16-03`～`-13`：原文已落盤於 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔逐位元組相同）。各筆中標「總管讀法」「總管整理」者不是客戶裁示；「supersedes」欄的例示由文件實作組判讀，不宣稱窮舉，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-14`：原文已落盤於 `docs/evidence/decisions/2026-10-16_proposal8_approval.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔圍欄還原後逐位元組相同）。該筆中標「總管判定」「總管設計基準」者不是客戶裁示；「supersedes」欄的條文清單以 57 為準，由文件實作組整理，未經第二組驗證。

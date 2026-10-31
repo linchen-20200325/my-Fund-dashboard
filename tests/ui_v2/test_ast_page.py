@@ -110,8 +110,16 @@ def test_一句主判讀只取既有值(full):
 
 
 def test_沒有合併燈_D3暫停_HLD0與ALO0各一枚各在其區段(full):
+    # ~~原斷言：頁面有 `class="alo-lamp"`、`class="hld-lamp"` 各一枚（兩枚燈元件各在其區段）~~
+    # → V7 Layout A 實作批（2026-10-31；`DEC-2026-10-31-01`、客戶線框核准；有意識的更正，不是漏刪）：合併頁已不畫這兩個燈元件
+    # （presentation de-duplication；頁級 P3 容器取代它們的重複 presentation）。改為：
+    #   (1) 兩個燈元件在合併頁**不重複**（`alo-lamp`／`hld-lamp` 各 0 枚，且「差距結論燈」「體檢結論燈」標題字樣不出現）；
+    #   (2) Domain Block Identity 的 `data-block` 錨點各恰一個，且位置不變（ALO-0 在 Primary 區、HLD-0 在持股明細區）；
+    #   (3) 仍沒有合併燈或任何第二套燈（原斷言的 token 掃描保留）。
+    # 保護沒有放寬：「各恰一個」「各在其區段」「沒有合併燈」三項照舊，且多了「不重複」。
     md = _md(full)
-    assert md.count('class="alo-lamp"') == 1 and md.count('class="hld-lamp"') == 1
+    assert md.count('class="alo-lamp"') == 0 and md.count('class="hld-lamp"') == 0
+    assert "差距結論燈" not in md and "體檢結論燈" not in md
     assert md.count('data-block="ALO-0"') == 1 and md.count('data-block="HLD-0"') == 1
     for token in ("page-light", "combined", "ast-lamp", "ast-light"):
         assert token not in md, token
