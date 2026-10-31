@@ -245,6 +245,11 @@ def hld_holding_count(model: dict):
     不寫 0、不補數。合併頁一句主判讀只讀這個數；`hld_count_values` 的「該不該列三個計數」判定不受影響。
     """
     hld2 = _find(model, "HLD-2")
+    # BL-0411／F-18（客戶 2026-10-30 裁示 `DEC-2026-10-30-04`）：保單分頁上有持倉列沒寫進持倉（`HLD-2` 記的 `_omitted_rows`）時，
+    # `HLD-2` 列出的檔數只是被接受的那幾列，「持有 n 檔」會假裝覆蓋完整集合 → None（同「沒有任何一檔被列出」：不寫數、不補數）。
+    # 單頁三個計數那一行因此不畫、合併頁一句主判讀寫「持有檔數無法判定」；略過的是哪幾列、為什麼，由 `HLD-0` 那幾行承擔。
+    if hld2.get("_omitted_rows"):
+        return None
     # n、m、j 同一個單位：不重複基金代碼數（總管 2026-10-18 裁定）。`fund_groups` 是逐筆持倉（保單 × 基金代碼）分組，
     # 同一檔分在兩張保單時有兩組 ⇒ 只數不重複的 `_fund_code`；HLD-2 顯示的內容一格不動。
     n = len({group["_fund_code"] for group in hld2["fund_groups"]})

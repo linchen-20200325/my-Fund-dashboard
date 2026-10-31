@@ -364,10 +364,14 @@ def test_F13_有類別沒評估到_主判讀不寫皆在容許帶內():
     #   有類別差距未知時不得宣稱「最大」，見 `test_S5_*`。
 
 
-def test_F13_ALO0本身一字沒改_空白目標的inband燈仍寫皆在容許帶內_主判讀另擋():
+def test_F13_空白目標的inband燈改寫配置差距無法判定_主判讀同樣無法判定():
+    # ~~測試名「ALO0本身一字沒改_空白目標的inband燈仍寫皆在容許帶內_主判讀另擋」~~ → 客戶 2026-10-30 裁示 F-13
+    # （`DEC-2026-10-30-04`；有意識的政策變更，不是漏刪）：任何配置類別沒有成功評估時不得顯示「各類別皆在容許帶內」。
     at = _s(alo="inband", blank_target=True)
     md = _md(at)
-    assert md.count(alo_logic.TEXT_ALL_IN_BAND) == 1                         # ALO-0 那一行（既有缺陷 F-13 由客戶另裁，本批不改）
+    # ~~assert md.count(alo_logic.TEXT_ALL_IN_BAND) == 1~~（舊：ALO-0 那一行既有缺陷 F-13；DEC-2026-10-30-04 已裁必修）
+    assert md.count(alo_logic.TEXT_ALL_IN_BAND) == 0                         # 整頁一處都不出現（燈與主判讀皆不得推論帶內）
+    assert md.count(alo_logic.TEXT_UNDECIDABLE_GAP) >= 2                     # ALO-0 那一行＋一句主判讀
     assert _hero(at) == "持有 3 檔基金；配置差距無法判定。"
     assert _hero(_s(alo="inband")) == f"持有 3 檔基金；{alo_logic.TEXT_ALL_IN_BAND}。"   # 評估完整時照 ALO-0 既有字
 

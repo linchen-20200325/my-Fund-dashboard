@@ -290,11 +290,13 @@ def _secondary_share(alo: dict) -> None:
             alo_page._render_detail_quiet(details["ALO-6"], flat=True)
             return
         rows = OV.share_rows(alo6)
-        st.markdown(presentation.chips_html(OV.share_chips(alo4, rows)), unsafe_allow_html=True)
+        # D-3 第二輪（稽核 S2；DEC-2026-10-30-04 F-18）：有持倉列被略過時，件數與合計不假裝覆蓋完整集合。
+        omitted = OV.share_omitted_lines(alo_logic.find_block(model, "ALO-2"))
+        st.markdown(presentation.chips_html(OV.share_chips(alo4, rows, omitted_lines=omitted)), unsafe_allow_html=True)
         alo_page._placeholder(alo6)
         if rows:
             st.markdown(share_bars_html(rows), unsafe_allow_html=True)
-        presentation_view.render_detail(OV.share_detail(alo6))
+        presentation_view.render_detail(OV.share_detail(alo6))   # 略過的列已在 ALO-6 表尾（D-3 第三輪，不另接）
 
 
 def _secondary_returns(hld: dict) -> None:
@@ -490,7 +492,7 @@ def _render(alo_live, hld_live, picker_live, settings_page) -> None:
     _render_summary()
     n = hld["holding_n"] if hld["state"] == "ok" else None
     alo0 = alo_logic.find_block(alo["model"], "ALO-0") if alo["state"] == "ok" else None
-    incomplete = alo["state"] == "ok" and OV.has_unevaluated_category(alo_logic.find_block(alo["model"], "ALO-2"))
+    incomplete = alo["state"] == "ok" and OV.allocation_incomplete(alo0, alo_logic.find_block(alo["model"], "ALO-2"))
     st.markdown(f'<div class="ast-hero" data-section="hero">{_esc(OV.hero_sentence(n, alo0, incomplete=incomplete))}</div>',
                 unsafe_allow_html=True)
 
