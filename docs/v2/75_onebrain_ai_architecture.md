@@ -146,7 +146,7 @@ Provider interface 至少需要抽象：
 
 1. Claude API 可用且 policy 允許 → Claude；
 2. Claude timeout / rate limit / unavailable / budget cap / 明確禁止 → 才依**已核准** fallback policy；
-3. 所有 provider 不可用 → 客觀資料頁仍可工作，AI 狀態明確顯示「AI 分析暫不可用／無法判定」。
+3. 當 provider 全部不可用 → 客觀資料頁仍可工作，AI 狀態明確顯示「AI 分析暫不可用／無法判定」。
 
 禁止：
 

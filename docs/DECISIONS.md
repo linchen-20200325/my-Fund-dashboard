@@ -1903,6 +1903,20 @@
 | supersedes／superseded by | 補充（不取代）`DEC-2026-10-31-01`：該筆「文字線框 Gate」已由客戶核准。其「待客戶確認」的兩個燈標題字樣與說明行措辭（`docs/v2/76` 第 7 節待確認 1、2）由本筆結案：標題消失＝接受；說明行措辭＝改「此配置判讀」。 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。 |
 
+### DEC-2026-10-31-03｜客戶裁示：OneBrain AI 未來導入方向（Architecture／Governance；不是 runtime 動工授權）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-31 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-10-31_onebrain_ai_architecture_direction.md`） |
+| 決策內容摘要 | **客戶裁示**（以逐字檔為準）：OneBrain 定位為 AI 推理／協調層（AI Reasoning & Orchestration Layer），核心原則「Data is evidence. Rules are constraints. OneBrain is reasoning.」；Provider 解耦，Claude API 為未來 Primary Provider 的 policy 方向（非 domain rule）；能確定性計算的不使用 LLM；未來須有 analysis fingerprint／cache、可追溯 trace、成本上限、集中且版本化的 prompt／policy、schema-based output；不得繞過 Risk Cap 等 deterministic safety logic；Provider 全失敗時客觀資料與 deterministic 結果照常；API key 不進 Git／log；跨 repo 只保持概念相容，不建第四個共用 repo。未來順序：Architecture/Governance → Provider abstraction + fake provider → Claude shadow → controlled low-risk integration → evaluation → production enablement（須另行裁示）。 |
+| 理由／背景 | 先把架構邊界與治理寫成正式方向，避免日後各自長出第二套 AI 憲法或把 AI 當資料來源。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-31_onebrain_ai_architecture_direction.md`；完整架構 `docs/v2/75_onebrain_ai_architecture.md`（AI 行動語意、Decision Digest、One AI Brain 既有條文仍以 `docs/v2/67_ai_action_vocabulary.md` 為準，75 只補 Provider、routing、cache、trace、budget、prompt governance、structured output、secrets 與 rollout 邊界）。 |
+| 影響範圍 | **只動文件**；不改任何 `.py`、不改目前 `infra/llm.py` runtime chain、不接正式 Claude API、不裝 SDK、不改 UI／公式／Risk Cap／資料層。OneBrain 僅為未來架構，沒有任何 runtime 工作被授權；任一後續階段（fake provider、shadow、整合、production）都須另行裁示。 |
+| 是否可逆 | 可逆（文件方向可再裁示） |
+| supersedes／superseded by | 補充（不取代）`docs/v2/67`；不 supersede 任何既有 `DEC-`。 |
+| provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；單組寫成，未經第二組獨立驗證。本筆是 #1112 對現 main（`2289abc2`）的 canonical index sync，編號 `-03` 由此順接 `-02`；沒有重新開啟 OneBrain 方向 Gate。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
