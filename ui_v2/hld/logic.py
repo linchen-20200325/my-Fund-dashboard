@@ -17,7 +17,7 @@ import math
 import re
 from datetime import date
 
-from .. import page_health
+from .. import page_health, status_class
 
 # 「這個參數沒有被傳」與「這個參數被傳成 None」是兩件事。
 _UNSET = object()
@@ -1800,7 +1800,10 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
         # 有列被略過時不得假裝覆蓋完整集合 → 改既有 `⬜ 資料未備`；44 待依 DEC-2026-10-30-04 增修〔44 凍結，未改〕）。
         # 「目前這一組門檻下，沒有任何一檔超出。」同屬覆蓋完整集合的宣稱，一併不寫；其餘補述（門檻未設那一句）照留。
         keep = [line for line in light["lines"] if line != TEXT_NO_DEVIATION_LINE]
-        light = {**light, "_state": STATE_MISSING, "text": ND_TEXT, "lines": keep}
+        light = {**light, "_state": STATE_MISSING, "text": ND_TEXT, "lines": keep, "_page_class": status_class.MISSING}
+    if light["_page_class"] == status_class.UNSET:
+        # 頁級分類（獨立稽核 S1；F-18「略過列歸資料未備」）：門檻未設／不適用那幾支在有持倉列被略過時歸資料未備；字樣、`_state`、`_tone` 不動。
+        light = {**light, "_page_class": status_class.MISSING}
     # D-3 第二輪（獨立稽核 B2）：紅燈那一支的補述 ~~「（另：尚未建立任何持倉。持倉資料在 Sheets 維護，本儀表板唯讀）」~~ 在持倉列全數
     # 被略過時同樣不成立（不是沒有持倉）—— 不寫；略過的是哪幾列由下面那幾行承擔（有意識的更正，不是漏刪）。
     lines = [line for line in light["lines"] if line != HLD0_NO_HOLDING_ASIDE]
@@ -1893,6 +1896,7 @@ def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
         if not has_rules and not rules_unknown:
             lines.append(f"（另：{TEXT_NO_RULES}。門檻由你自己輸入，這一頁不提任何候選值）")
         return {
+            "_page_class": status_class.ERROR,
             "_tone": "紅",
             "_state": STATE_ERROR,
             "text": "有一塊取數失敗，這一頁的數字先不要照著讀",
@@ -1909,6 +1913,7 @@ def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
         if not has_rules:
             lines.append(HLD0_NO_RULES_ASIDE)
         return {
+            "_page_class": status_class.NO_HOLDING,
             "_tone": "灰",
             "_state": STATE_MISSING,
             "text": TEXT_NO_HOLDING,
@@ -1919,6 +1924,7 @@ def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
 
     if not has_rules:
         return {
+            "_page_class": status_class.UNSET,
             "_tone": "灰",
             "_state": STATE_BIZ,
             "text": TEXT_NO_RULES,
@@ -1951,6 +1957,7 @@ def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
         #    ~~`hld1_state == STATE_MISSING`、`"text": ND_TEXT`~~（有意識的更正，不是漏刪）。
         hld1 = next(c for c in cards if c.get("code") == "HLD-1")
         return {
+            "_page_class": status_class.MISSING if hld1_state == STATE_MISSING else status_class.UNSET,
             "_tone": "灰",
             "_state": hld1_state,
             "text": hld1["_placeholder"]["text"],
@@ -1962,6 +1969,7 @@ def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
     if deviation_count > 0:
         hld1 = next((c for c in cards if c.get("code") == "HLD-1"), {"detail_lines": []})
         return {
+            "_page_class": status_class.ATTENTION,
             "_tone": "黃",
             "_state": STATE_OK,
             "text": f"有 {deviation_count} 檔超出你設定的門檻{_hint()}",
@@ -1979,6 +1987,7 @@ def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
     partial_lines = _partial_reason_lines(cards)
     if all(state == STATE_OK for state in states) and not partial_lines:
         return {
+            "_page_class": status_class.NORMAL,
             "_tone": "灰",
             "_state": STATE_OK,
             "text": TEXT_NO_DEVIATION,
@@ -2000,6 +2009,7 @@ def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
     # 📌 D-3 第二輪（稽核 S3）：三塊皆 ok 而有逐檔未評估（74 H6）也走這裡；`_state` 照舊 `worst_state(states)`（＝ ok），
     #    燈色、燈句照舊 —— 不另改燈的判定，頁級規則讀 `_partial`。
     return {
+        "_page_class": status_class.PARTIAL,
         "_tone": "灰",
         "_state": worst_state(states),
         "_partial": True,
@@ -2028,6 +2038,8 @@ def _build_hld0(cards, *, has_holdings, has_rules, deviation_count,
     flags = {key: light[key] for key in ("_partial", "_omitted_rows") if light.get(key)}
     return {
         **flags,
+        # 頁級分類（P3；ui_v2/status_class.py）：由判定分支明示，頁級 aggregation 只讀它，不比對字面或 `_tone`。
+        "_page_class": light["_page_class"],
         "code": "HLD-0",
         "title": BLOCK_TITLES["HLD-0"],
         "_layer": 1,

@@ -11,8 +11,11 @@
 4 一句主判讀（C2，D-10）→ 5 Primary（資產配置 現況 vs 目標，內含 `ALO-0` 一行與 `ALO-3` 入口）→ 6 Secondary ×2（基金占比、各檔區間報酬）→
 7 需要注意 → 8 持股明細（`HLD-0` 一行＋`HLD-2`／`HLD-3`）→ 9 層 3 grouped containers（3a）→ 10 層 4 grouped containers（4a）→ 11 ▸ 尚未取得 → 頁尾。
 
-**3（page-level combined status）暫停**（客戶 D-3：待最小 Formula Gate 落盤）：本頁**沒有**任何合併燈、合讀規則、排序或聚合；
-`HLD-0` 與 `ALO-0` 各自維持既有燈、字樣、判定，各放在其所屬區段（持股明細／Primary）既有位置。
+~~**3（page-level combined status）暫停**（客戶 D-3：待最小 Formula Gate 落盤）：本頁**沒有**任何合併燈、合讀規則、排序或聚合；~~
+→ 2026-10-31 狀態更新（有意識的更正，不是漏刪；客戶 2026-10-30 裁示 P3／β，`DEC-2026-10-30-04`）：**3（頁級狀態）已實作，待獨立稽核**——
+頁頂一個狀態容器（`_render_page_status`，Visual Budget 計 1 個），頭條依 β 階梯、另一區固定照印為第二行；純函式 `ui_v2/asset/page_status.py::aggregate`
+只讀 `HLD-0`／`ALO-0` 的分類鍵 `_page_class`，**不回寫、不改任何 rule result**；頭條不是 rule result、不進 Digest、不是 Risk Cap 的輸入或輸出。
+`HLD-0` 與 `ALO-0` 各自維持既有燈、字樣、判定，仍各放在其所屬區段（持股明細／Primary）既有位置（容器是**另外**的一個頁級彙整，不取代兩枚燈）。
 
 ⛔ 不改 OAuth（`infra/personal_oauth.py`、`services/v2_tables/personal_session.py`、`ui_v2/set/source.py` 的 callback 流程一律不動）：
 頁頂的「持倉資料來源」只重用設定頁既有的 picker（`picker_live`＝`ui_v2/set/source.py::picker_live`，由預覽入口傳進來）與其讀模型
@@ -34,6 +37,7 @@ from ..hld import logic as hld_logic
 from ..hld import page as hld_page
 from ..set import live as set_live
 from . import overview as OV
+from . import page_status as PS
 from . import theme
 
 PICKER_WIDGET_KEY = "set_picker_select"    # 與 `ui_v2/set/source.py::_KEY_PICKER_WIDGET` 同值（widget id 另含頁雜湊，不與設定頁互帶值）
@@ -58,6 +62,12 @@ def _css() -> str:
     .ast-slot-label {{ font-size: .74rem; color: {theme.TEXT_MUTED}; }}
     .ast-slot-value {{ font-size: .95rem; font-weight: 600; overflow-wrap: anywhere; }}
     @media (max-width: 560px) {{ .ast-summary {{ grid-template-columns: repeat(2, minmax(0, 1fr)); padding: .4rem .6rem; }} }}
+    .ast-pstatus {{ border: 1px solid {theme.BORDER}; border-left: 6px solid {theme.EDGE}; background: {theme.SURFACE};
+      border-radius: 6px; padding: .25rem .6rem; margin: .25rem 0; overflow-wrap: anywhere; line-height: 1.3; }}
+    .ast-pstatus-head {{ font-size: .88rem; font-weight: 700; color: {theme.TEXT_PRIMARY}; }}
+    .ast-pstatus-second {{ font-size: .8rem; font-weight: 500; color: {theme.TEXT_PRIMARY}; margin-top: .2rem;
+      padding-top: .2rem; border-top: 1px dashed {theme.BORDER}; }}
+    .ast-pstatus .ast-note {{ font-size: .72rem; margin: .05rem 0; }}
     .ast-hero {{ font-size: 1rem; font-weight: 600; color: {theme.TEXT_PRIMARY}; margin: .5rem 0 .6rem; overflow-wrap: anywhere; }}
     .ast-card-title {{ font-weight: 700; color: {theme.TEAL_DARK}; margin: 0 0 .25rem; }}
     .ast-bars {{ margin: .3rem 0; }}
@@ -251,6 +261,25 @@ def _render_summary() -> None:
         for s in strip["slots"])
     st.markdown(f'<div class="ast-summary" data-section="summary">{slots}</div>', unsafe_allow_html=True)
     presentation_view.render_detail(strip["detail"])
+
+
+def _render_page_status(hld: dict, alo: dict) -> None:
+    """頁級狀態容器（P3；`DEC-2026-10-30-04`；字樣與合成行邊界待客戶確認，74 F-5）。一個整體符號＝頭條那一行自己的符號與狀態字；
+    另一區固定照印為第二行，含它自己的附行。每一行都有符號＋狀態字＋字樣（不靠顏色單獨辨識）。
+    前往 Sheets 鈕不在容器內畫：它仍由 `HLD-0` 所屬的持股明細區段畫一次（本頁只有那一處）。"""
+    status = PS.aggregate(hld, alo)
+    head = status["container"]
+    rows_html = []
+    for index, row in enumerate(status["rows"]):
+        label = PS.row_label(row)
+        lines = "".join(f'<div class="ast-note">{_esc(line)}</div>' for line in row["lines"])
+        klass = "ast-pstatus-head" if index == 0 else "ast-pstatus-second"
+        rows_html.append(f'<div class="{klass}" data-row="{_esc(row["class"])}" data-area="{_esc(row["area"] or "合併")}">'
+                         f'<div>{_esc(label)}</div>{lines}</div>')
+    st.markdown(
+        f'<div class="ast-pstatus" data-section="page-status" data-kind="{_esc(status["kind"])}" '
+        f'style="border-left-color:{theme.tone_hex(head["tone"])}">{"".join(rows_html)}</div>',
+        unsafe_allow_html=True)
 
 
 def _render_primary(alo: dict, settings_page) -> None:
@@ -489,6 +518,7 @@ def _render(alo_live, hld_live, picker_live, settings_page) -> None:
 
     _render_header_state(alo, hld, settings_page)
 
+    _render_page_status(hld, alo)   # 頁級狀態（P3）：頭條＋另一行；兩枚燈各自的字樣與判定不動、仍在各自區段
     _render_summary()
     n = hld["holding_n"] if hld["state"] == "ok" else None
     alo0 = alo_logic.find_block(alo["model"], "ALO-0") if alo["state"] == "ok" else None
