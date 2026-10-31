@@ -478,6 +478,33 @@ def runtime_fx_conflict_text(conflicts):
     return TEXT_RUNTIME_FX_CONFLICT.format(n=n) if n else None
 
 
+def skipped_for_dataset(tables, mask) -> dict:
+    """L2 `load_alo_tables_active` 的回傳 → dataset 要加的鍵（BL-0411／F-18、F-13 條件 (3)；DEC-2026-10-30-04）。
+
+    - `skipped_holdings`（`page_health.OMITTED_DATASET_KEY`）：每一列只留分頁、列號、基金代號（原值）、原因（L2 原字，逐句經 `mask`）；
+    - `skipped_tabs`：每一個被略過的分頁只留分頁名（經 `mask`）—— 本頁只用「有沒有」（`ALO-0` 不從不完整的持倉推論帶內）。
+    沒有的那一組不放鍵。形狀不對當場炸（§1）。"""
+    out = {}
+    rows = []
+    for item in tables.get("skipped_holdings") or ():
+        reasons = item["reasons"]
+        if isinstance(reasons, (str, bytes)) or not isinstance(reasons, (list, tuple)) or not reasons:
+            raise ValueError(f"skipped_holdings 的 reasons 應為非空 list：{item!r}")
+        rows.append({
+            "tab": mask(item["tab"]) if isinstance(item.get("tab"), str) else item.get("tab"),
+            "row": item.get("row"),
+            "fund_code": mask(item["fund_code"]) if isinstance(item.get("fund_code"), str) else item.get("fund_code"),
+            "reasons": [mask(str(r)) for r in reasons],
+        })
+    if rows:
+        out["skipped_holdings"] = rows
+    tabs = [{"tab": mask(t["tab"]) if isinstance(t.get("tab"), str) else t.get("tab")}
+            for t in tables.get("skipped_tabs") or ()]
+    if tabs:
+        out["skipped_tabs"] = tabs
+    return out
+
+
 def apply_live_notes(model: dict, *, wired_keys=(), runtime_source=False, sheet_failed=False) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的三件事：
 

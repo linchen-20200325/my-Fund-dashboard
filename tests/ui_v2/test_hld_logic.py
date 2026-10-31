@@ -3550,9 +3550,12 @@ def test_結論燈兩句_閘門3_HLD1每檔都評估過而零偏離_他塊不全
     assert (hld1["_state"], hld1["_rows"], hld1["tail_lines"]) == (logic.STATE_OK, [], [])
     assert logic.find_block(model, "HLD-3")["_state"] == logic.STATE_MISSING
     assert (hld0["_tone"], hld0["text"]) == ("灰", logic.TEXT_NO_DEVIATION)
-    assert hld0["lines"] == []
+    # ~~assert hld0["lines"] == []~~ → 客戶 2026-10-30 裁示 F-2（`DEC-2026-10-30-04`；有意識的政策變更，不是漏刪）：
+    # 持股只評估一部分時不得只顯示「無偏離項」，須同時看得到既有的缺值／未評估原因 —— 帶上 HLD-3 卡上既有的主值字樣。
+    assert hld0["lines"] == [f"{logic.BLOCK_TITLES['HLD-3']}：{logic.ND_TEXT}"]
+    assert hld0["_partial"] is True
     assert _REMOVED_NA_LINE not in _strings(model)
-    # 說明區那一句（既有字句）照留，不加任何新字句。
+    # 說明區那一句（既有字句）照留，~~不加任何新字句~~（F-2 起 `lines` 多一行既有字樣，見上；說明區不變）。
     assert hld0["detail_lines"] == ["這一頁的燈色描述的是「要不要多看一眼」，不描述持倉好壞。"]
 
 

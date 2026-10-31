@@ -365,6 +365,9 @@ TEXT_NO_HOLDING = "尚未建立任何持倉"
 TEXT_NO_TARGET = "尚未設定目標"
 TEXT_NO_TOLERANCE = "尚未設定容許帶"
 TEXT_ALL_IN_BAND = "各類別皆在容許帶內"
+# 「配置差距無法判定」：BL-0525 Batch D 合併頁一句主判讀既有的字（原定義在 `ui_v2/asset/overview.py`，D-10 C2），
+# 自客戶 2026-10-30 裁示（`DEC-2026-10-30-04` F-13／F-14／F-19）起 `ALO-0` 也用它（字面不變，只把定義搬到這裡，overview 改引用）。
+TEXT_UNDECIDABLE_GAP = "配置差距無法判定"
 TEXT_INTRO = "以下依序：目標 → 對照 → 試算"
 TEXT_GOTO_SHEETS = "前往 Sheets 維護持倉"
 TEXT_SHEETS_READONLY = "持倉資料在 Sheets 維護，本儀表板唯讀"
@@ -1020,6 +1023,14 @@ def _build_alo2(dataset) -> dict:
             # ALO-GAP-全缺合計未涵蓋：全缺（沒有分母）時這一句列出每一個有持倉的類別。
             tail_lines.append("合計未涵蓋 " + "、".join(uncovered))
 
+    # BL-0411／F-18、F-13 條件 (3)（客戶 2026-10-30 裁示 `DEC-2026-10-30-04`）：資料承載層轉交的略過列與略過分頁。
+    # 本塊只記、不改任何一格（列、分母、表尾一個都不動）；`ALO-0` 讀這兩個鍵（燈照舊只讀 `ALO-2`）。沒有 → 不加鍵。
+    source_marks = {}
+    omitted = page_health.omitted_rows(dataset)
+    if omitted:
+        source_marks["_omitted_rows"] = omitted
+    if dataset.get("skipped_tabs"):
+        source_marks["_skipped_tabs"] = tuple(dataset["skipped_tabs"])
     cell_tones = set()
     for row in rows:
         # 缺匯率（任何一個鍵；美元即 TEXT_FX_MISSING_ALO2）那一格灰（ALO-GAP-非美元幣別）。
@@ -1053,6 +1064,7 @@ def _build_alo2(dataset) -> dict:
         ],
         "buttons": [],
         "badges": [],
+        **source_marks,
     }
 
 
@@ -1063,11 +1075,35 @@ def conclusion_light(alo2) -> dict:
     """`44` ALO-0。**只讀 ALO-2 已經算出來的值**，不自取數。
 
     空狀態三句的先後照 `44` 空狀態欄：持倉表為空 → 目標未設 → 容許帶未設，取到第一句就停。
+
+    客戶 2026-10-30 裁示（`docs/DECISIONS.md` `DEC-2026-10-30-04`；74 第 5 節 F-13／F-14／F-18／F-19）：
+    - **F-13／F-19**：只要任何配置類別沒有成功評估（`ALO-2` 任一列 `_diff` 為 None：目標比重留空、基準值缺、
+      有值卻沒有目標的類別〔「未分類」、類別名不在名單內、名單內卻沒有目標列〕），或持倉集合本身不完整
+      （`ALO-2` 記的 `_skipped_tabs`：保單分頁被略過；`_omitted_rows`：保單分頁上有列沒寫進持倉，BL-0411），
+      ~~「各類別皆在容許帶內」~~ 改寫既有的「配置差距無法判定」（`TEXT_UNDECIDABLE_GAP`）；已評估類別的結果（`ALO-2` 各列、
+      超出容許帶時點名的那一句）照留，不從已評估子集合推論整體正常。並記 `_incomplete`（頁級規則讀這個鍵，不比對字面）。
+    - **F-14**：燈不得有狀態而沒有字。有目標的類別讀不到差距、而第一個被擋下的那一列沒有字（74 A5c：市值基準、沒有分母、
+      該類沒有持倉）→ 同樣寫「配置差距無法判定」，不補成帶內、正常或無偏離。
+    - **F-18（BL-0411）**：`_omitted_rows` 非空時另寫每一列略過的持倉一行（`page_health.omitted_row_lines`，放在燈下
+      說明行的最前面），並記 `_omitted_rows`；持倉全數被略過時「尚未建立任何持倉」不成立 → 「配置差距無法判定」。
+    兩組略過紀錄都由 `ALO-2` 帶（`_build_alo2` 從 dataset 讀；本燈照舊只讀 `ALO-2`）。沒有上述任何一種情形時，回傳逐鍵與動手前相同。
     """
+    omitted_rows = alo2.get("_omitted_rows") or ()
+    light = _conclusion_light(alo2, source_incomplete=bool(omitted_rows) or bool(alo2.get("_skipped_tabs")),
+                              omitted=bool(omitted_rows))
+    if omitted_rows:
+        light = {**light, "lines": page_health.omitted_row_lines(omitted_rows), "_omitted_rows": tuple(omitted_rows)}
+    return light
+
+
+def _conclusion_light(alo2, *, source_incomplete=False, omitted=False) -> dict:
     if alo2["_failed"]:
         # ALO-GAP-無紅燈：燈沒有紅；燈為灰，文案照抄 ALO-2 那一格的失敗字串（不說成尚未建立持倉）。
         return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None}
     if alo2["_holdings_empty"]:
+        if omitted:
+            # BL-0411／F-18：持倉列全數在載入時被略過 —— 不是「沒有持倉」（DEC-2026-10-30-04）。
+            return {"_tone": "灰", "text": TEXT_UNDECIDABLE_GAP, "_max_bucket": None, "_incomplete": True}
         return {"_tone": "灰", "text": TEXT_NO_HOLDING, "_max_bucket": None}
     if alo2["_target_unset"]:
         return {"_tone": "灰", "text": TEXT_NO_TARGET, "_max_bucket": None}
@@ -1078,13 +1114,20 @@ def conclusion_light(alo2) -> dict:
         return {"_tone": "灰", "text": alo2["placeholder"]["text"], "_max_bucket": None}
     computed = [r for r in alo2["_rows"] if r["_diff"] is not None]
     blocked = [r for r in alo2["_rows"] if r["_blocks_lamp"]]
+    # F-13／F-19（DEC-2026-10-30-04）：有任何一列沒評估到差距、或持倉集合本身不完整 → 不得推論整體在帶內。
+    incomplete = source_incomplete or len(computed) < len(alo2["_rows"])
+    flag = {"_incomplete": True} if incomplete else {}
     if blocked:
         # ALO-GAP-燈讀不到差距：44 逐字「取絕對值最大者」—— 有一個有目標的類別差距算不出來時，
         # 最大者是哪一個就不知道；本頁不拿其餘類別的差距去點名，也不宣稱皆在帶內。
-        return {"_tone": "灰", "text": blocked[0]["_gap_text"], "_max_bucket": None}
+        # F-14（DEC-2026-10-30-04）：~~`blocked[0]["_gap_text"]`~~ 在 74 A5c 那一條路是 None（燈有狀態沒有字）→ 既有「配置差距無法判定」。
+        return {"_tone": "灰", "text": blocked[0]["_gap_text"] or TEXT_UNDECIDABLE_GAP, "_max_bucket": None, **flag}
     outside = [r for r in computed if exceeds(r["_diff"], alo2["_tolerance"])]
     if not outside:
         # 含全部差 0、以及差距剛好等於容許帶（ALO-GAP-端點）。
+        if incomplete:
+            # F-13／F-19：~~「各類別皆在容許帶內」~~（44 `ALO-0` 規則欄；44 待依 DEC-2026-10-30-04 增修〔44 凍結，未改〕）。
+            return {"_tone": "灰", "text": TEXT_UNDECIDABLE_GAP, "_max_bucket": None, **flag}
         return {"_tone": "灰", "text": TEXT_ALL_IN_BAND, "_max_bucket": None}
     top = max(abs(r["_diff"]) for r in outside)
     leaders = [r["_bucket"] for r in outside if math.isclose(abs(r["_diff"]), top, abs_tol=1e-9)]
@@ -1094,11 +1137,15 @@ def conclusion_light(alo2) -> dict:
     leaders = sorted(row_order, key=lambda b: (0, names.index(b)) if b in names else (1, row_order.index(b)))
     # ALO-GAP-燈的正負號：印絕對值。
     text = f"{'、'.join(leaders)} 與目標差 {top:.1f} 個百分點"
-    return {"_tone": "黃", "text": text, "_max_bucket": leaders[0], "_leaders": tuple(leaders)}
+    # 已評估類別的結果照留（F-13：「已成功評估的類別結果可以保留」）；不完整時只記 `_incomplete`，字樣不動。
+    return {"_tone": "黃", "text": text, "_max_bucket": leaders[0], "_leaders": tuple(leaders), **flag}
 
 
 def _build_alo0(alo2) -> dict:
     light = conclusion_light(alo2)
+    if not isinstance(light["text"], str) or not light["text"]:
+        # F-14（DEC-2026-10-30-04）：任何正式狀態不得有狀態而沒有字 —— 走到這裡是本檔 bug，不畫一枚沒有字的燈。
+        raise AssertionError(f"ALO-0 沒有字：{light!r}")
     glyph, state_word = _LAMP_LOOK_FAILED if alo2["_failed"] else _LAMP_LOOK[light["_tone"]]
     block = {
         "code": "ALO-0",
@@ -1114,12 +1161,15 @@ def _build_alo0(alo2) -> dict:
         "glyph": glyph,
         "state_word": state_word,
         "text": light["text"],
-        "detail_lines": [
+        # BL-0411／F-18：略過的持倉列各一行，放在說明行最前面（沒有 → 與動手前相同）。
+        "detail_lines": list(light.get("lines") or ()) + [
             DEV_NOTE_ALO0 + TEXT_ALO0_READS,
             HINT_NOTE,
         ],
         "buttons": [],
         "badges": [],
+        # 頁級規則（DEC-2026-10-30-04 P3，尚未實作）讀的分類欄位：只在成立時加鍵。
+        **{key: light[key] for key in ("_incomplete", "_omitted_rows") if light.get(key)},
     }
     # BL-0250 批次 3-B（總管第二輪裁定第 1、4 點）：燈照抄 ALO-2 那一格的失敗字串時，資料類一併照抄；燈的 ◇ 是衍生狀態。
     if alo2["_failed"]:

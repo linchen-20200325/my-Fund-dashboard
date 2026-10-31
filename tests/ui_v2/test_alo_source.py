@@ -686,3 +686,22 @@ def test_稽核D_A2_門檻常數換掉_source交出的天數與畫面字面跟�
     assert out["dataset"]["nav_not_ready"] == {"codes": ["AAAA"], "days": 5, "last": {"AAAA": "2026-05-20"}}
     block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
     assert block["placeholder"]["text"] == "⬜ 資料未備：最近一筆淨值 2026-05-20（AAAA），已超過 5 日"
+
+
+def test_BL0411_略過的持倉列與分頁另交進dataset_經遮蔽_notes照舊(wired):
+    """客戶 2026-10-30 裁示 `DEC-2026-10-30-04`（F-18／BL-0411、F-13 條件 (3)）：L2 `skipped_holdings`／`skipped_tabs` 除了照舊放進
+    `notes["skipped"]`，另交進 dataset（`ALO-0` 讀得到；本層只轉交、不判讀）。原因字逐字照 L2，經遮蔽。"""
+    secret = "SECRET-SHEET-ID-123"
+    wired["tables"] = _tables(
+        skipped_holdings=[{"tab": "PX-1", "row": 4, "policy_id": "PX-1", "fund_code": "ZZ1",
+                           "reasons": [f"缺持倉補充 {secret}"]}],
+        skipped_tabs=[{"tab": "PX-2", "error": "標頭格式有誤"}])
+    source.st.secrets = {"SETTINGS_SHEET_ID": secret}
+    out = source.load_live()
+    rows = out["dataset"]["skipped_holdings"]
+    assert rows[0]["tab"] == "PX-1" and rows[0]["row"] == 4 and rows[0]["fund_code"] == "ZZ1"
+    assert secret not in rows[0]["reasons"][0] and rows[0]["reasons"][0].startswith("缺持倉補充 ")
+    assert out["dataset"]["skipped_tabs"] == [{"tab": "PX-2"}]
+    assert out["notes"]["skipped"]["skipped_holdings"] == wired["tables"]["skipped_holdings"]   # notes 照舊原樣
+    alo0 = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-0")
+    assert alo0["_incomplete"] is True and alo0["detail_lines"][0].startswith("⬜ 資料未備：PX-1 第 4 列（ZZ1） 未列入：缺持倉補充 ")

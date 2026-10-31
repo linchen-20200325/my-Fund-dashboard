@@ -1331,6 +1331,29 @@ def parse_user_settings(rows, broken_keys=(), *, tab_missing=False, bad_rows=())
 
 
 # ── S6b-2（第二塊）：L2 輸出 → load_live 回傳值的組裝 ──
+def _omitted_rows_for_dataset(skipped, mask) -> list:
+    """L2 `skipped_holdings` → dataset 的 `skipped_holdings`（`page_health.OMITTED_DATASET_KEY` 的形狀）。
+
+    每一項只留畫面要寫的四樣：分頁、列號、基金代號（原值，可能不是文字）、原因（L2 原字，逐句經 `mask`）。
+    形狀不對當場炸（契約被破壞不畫成別的狀態，§1）。`skipped` 為 None 或空 → 空 list。"""
+    if skipped is None:
+        return []
+    if isinstance(skipped, (str, bytes, dict)) or not isinstance(skipped, (list, tuple)):
+        raise TypeError(f"skipped_holdings 應為 list：{type(skipped).__name__}")
+    out = []
+    for item in skipped:
+        reasons = item["reasons"]
+        if isinstance(reasons, (str, bytes)) or not isinstance(reasons, (list, tuple)) or not reasons:
+            raise ValueError(f"skipped_holdings 的 reasons 應為非空 list：{item!r}")
+        out.append({
+            "tab": mask(item["tab"]) if isinstance(item.get("tab"), str) else item.get("tab"),
+            "row": item.get("row"),
+            "fund_code": mask(item["fund_code"]) if isinstance(item.get("fund_code"), str) else item.get("fund_code"),
+            "reasons": [mask(str(r)) for r in reasons],
+        })
+    return out
+
+
 def assemble_live_load(
     *,
     holding_tables,
@@ -1454,6 +1477,7 @@ def assemble_live_load(
                     raise TypeError(f"配息表的 settled 應為 bool：{code!r}")
 
     errors = {}
+    extra = {}
     if holding_tables is None:
         holding, policy, direct = [], [], []
         errors["holding"] = holding_error
@@ -1472,6 +1496,13 @@ def assemble_live_load(
                 else:
                     parts.append(tab)
             errors["holding"] = mask("；".join(parts))
+        # BL-0411／F-18（客戶 2026-10-30 裁示 `DEC-2026-10-30-04`）：保單分頁上沒寫進持倉的列（L2 `build_alo_tables` 的
+        # `skipped_holdings`）~~本函式不讀~~ → 原樣轉交進 dataset（`page_health.OMITTED_DATASET_KEY`），由 logic 讓燈與檔數
+        # 不假裝覆蓋完整集合。只轉交、不判讀：原因字逐字照 L2（經 `mask`，同 `errors["holding"]`）；沒有略過的列時不帶這個鍵
+        # （dataset 逐鍵與動手前相同）。舊輸入沒有這個鍵 → 當成沒有。
+        omitted = _omitted_rows_for_dataset(holding_tables.get("skipped_holdings"), mask)
+        if omitted:
+            extra["skipped_holdings"] = omitted
 
     if settings is None:
         user_setting = []
@@ -1539,6 +1570,7 @@ def assemble_live_load(
             "fund_errors": per_fund_errors,
             # 客戶 2026-10-16 裁示第 5 點：配息資料未備的那幾檔（`logic.dividend_not_ready` 讀它）。
             "dividend_not_ready": div_not_ready,
+            **extra,
         },
         "live_args": {
             "direct_policy_id": direct_policy_id,

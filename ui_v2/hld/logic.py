@@ -467,6 +467,7 @@ def partial_range_text(start: str, end: str) -> str:
 TEXT_NO_HOLDING = "尚未建立任何持倉"
 TEXT_NO_RULES = "尚未設定門檻"
 TEXT_NO_DEVIATION = "無偏離項"
+TEXT_NO_DEVIATION_LINE = "目前這一組門檻下，沒有任何一檔超出。"
 TEXT_SHEETS_READONLY = "持倉資料在 Sheets 維護，本儀表板唯讀"
 TEXT_GOTO_SHEETS = "前往 Sheets 維護持倉"
 TEXT_BAD_RANGE = "起日不晚於迄日"
@@ -1605,6 +1606,7 @@ def _build_hld1(
 def _build_core_card(
     code, metrics, labels, *, has_holdings, has_window, subtitle, moved_note,
     fail_message=None, unsurfaced=None, window_unknown=False, holding_unknown=False, holding_error=None,
+    omitted_rows=(),
 ):
     groups = []
     for metric in metrics:
@@ -1758,6 +1760,9 @@ def _build_core_card(
         "detail_lines": detail_lines + error_lines,
         "badges": badges,
         "buttons": buttons,
+        # BL-0411／F-18：本塊列出的只是被接受的持倉列 —— 記下沒寫進持倉的那幾列（只記、不改任何一格）；`HLD-0` 與
+        # `sections.hld_holding_count` 讀這個鍵。沒有 → 不加鍵。
+        **({"_omitted_rows": tuple(omitted_rows)} if omitted_rows else {}),
     }
 
 
@@ -1773,7 +1778,49 @@ _LAMP_LOOK = {
 
 def conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
                      holding_unknown=False, rules_unknown=False):
-    """`44` HLD-0 規則與空狀態逐字。本塊不自取數，只讀三塊已經算出來的值。"""
+    """`44` HLD-0 規則與空狀態逐字。本塊不自取數，只讀三塊已經算出來的值。
+
+    BL-0411／F-18（客戶 2026-10-30 裁示 `DEC-2026-10-30-04`）：`HLD-2` 記的 `_omitted_rows`（保單分頁上沒寫進持倉的列，
+    `_build_core_card` 從 dataset 記下；本燈照舊只讀三塊）。有任何一列時，本燈算在不完整的持倉上 ——
+    「無偏離項」「尚未建立任何持倉」兩句都會假裝覆蓋了完整集合，改用既有的 `⬜ 資料未備`（正式模式畫成 ◇）、`_state` 記資料未備；
+    其他各支（取數失敗、門檻未設、偏離、`HLD-1` 資料未備）字樣照舊。不論哪一支，每一列略過的持倉都另寫一行
+    （`page_health.omitted_row_lines`），並記 `_omitted_rows`（頁級規則讀這個鍵，不比對字面）。沒有略過的列 → 逐鍵與動手前相同。
+    """
+    light = _conclusion_light(cards, has_holdings=has_holdings, has_rules=has_rules, deviation_count=deviation_count,
+                              holding_unknown=holding_unknown, rules_unknown=rules_unknown)
+    omitted_rows = next((c.get("_omitted_rows") for c in cards if c.get("code") == "HLD-2" and c.get("_omitted_rows")), ())
+    if not omitted_rows:
+        return light
+    if light["text"] in (TEXT_NO_DEVIATION, TEXT_NO_HOLDING):
+        # ~~「無偏離項」／「尚未建立任何持倉」~~（`44` HLD-0 規則欄與空狀態欄；客戶 2026-10-30 `DEC-2026-10-30-04` F-18：
+        # 有列被略過時不得假裝覆蓋完整集合 → 改既有 `⬜ 資料未備`；44 待依 DEC-2026-10-30-04 增修〔44 凍結，未改〕）。
+        # 「目前這一組門檻下，沒有任何一檔超出。」同屬覆蓋完整集合的宣稱，一併不寫；其餘補述（門檻未設那一句）照留。
+        keep = [line for line in light["lines"] if line != TEXT_NO_DEVIATION_LINE]
+        light = {**light, "_state": STATE_MISSING, "text": ND_TEXT, "lines": keep}
+    return {**light, "lines": list(light["lines"]) + page_health.omitted_row_lines(omitted_rows),
+            "_omitted_rows": tuple(omitted_rows)}
+
+
+def _partial_reason_lines(cards) -> list:
+    """F-2（客戶 2026-10-30 裁示 `DEC-2026-10-30-04`）：`HLD-1` 已完整評估、零偏離，但 `HLD-2`／`HLD-3` 有未評估或缺值（74 H7）時，
+    燈不得只寫「無偏離項」—— 把那兩塊**卡上既有**的未評估字樣帶上來：每一塊一行「<卡名>：<該塊非正常主值的既有字樣，去重後以「、」相接>」
+    （同紅燈那一行「<卡名>：取數失敗。」的體例；字樣是卡上主值原字，例 `⬜ 資料未備`〔正式模式畫成 ◇〕、`⬜ 不適用：…`）。
+    不計數（不寫幾檔、幾項）、不新增第二套缺值字樣；`_state`、偏離筆數、各塊的判定一個都不動。"""
+    lines = []
+    for card in cards:
+        if card.get("code") not in ("HLD-2", "HLD-3") or card["_state"] == STATE_OK:
+            continue
+        texts = list(dict.fromkeys(
+            mv["text"] for group in card.get("fund_groups") or () for mv in group["main_values"]
+            if mv["_state"] in (STATE_MISSING, STATE_BIZ) and isinstance(mv.get("text"), str) and mv["text"]
+        ))
+        if texts:
+            lines.append(f"{card['title']}：{'、'.join(texts)}")
+    return lines
+
+
+def _conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
+                      holding_unknown=False, rules_unknown=False):
     states = [card["_state"] for card in cards]
     lines = []
 
@@ -1896,7 +1943,7 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
             "_tone": "灰",
             "_state": STATE_OK,
             "text": TEXT_NO_DEVIATION,
-            "lines": ["目前這一組門檻下，沒有任何一檔超出。"],
+            "lines": [TEXT_NO_DEVIATION_LINE],
             "detail_lines": [],
             "buttons": [],
         }
@@ -1906,12 +1953,17 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
     #    本檔照草稿被迫挑的那一邊：灰燈，文案沿用「無偏離項」。**這不是規格。**
     # 📌 客戶 2026-10-08 裁示：走得到這裡時 `HLD-1` 每一檔都已評估且零偏離（未完整評估的已被上面那一支接走），
     #    維持灰燈「無偏離項」，只刪掉 ~~「有一塊進了「不適用」，偏離筆數為零。」~~ 那一句
-    #    （不實：走到這裡的那一塊常是 `資料未備`，不是「不適用」；有意識的更正，不是漏刪）。不加任何新字句。
+    #    （不實：走到這裡的那一塊常是 `資料未備`，不是「不適用」；有意識的更正，不是漏刪）。~~不加任何新字句。~~
+    # 📌 客戶 2026-10-30 裁示 F-2（`DEC-2026-10-30-04`；有意識的政策變更，不是漏刪；上一句「不加任何新字句」在寫下當時為真）：
+    #    「持股只評估一部分時：不得只顯示『無偏離項』。必須同時讓使用者看得到既有的缺值／未評估原因。不要新增第二套 Missing vocabulary。」
+    #    ⇒ 燈的字樣、灰、`_state` 照舊，`lines` 帶上 `HLD-2`／`HLD-3` 卡上既有的未評估字樣（`_partial_reason_lines`），
+    #    並記 `_partial`（頁級規則讀這個鍵，不比對字面）。~~`"lines": []`~~
     return {
         "_tone": "灰",
         "_state": worst_state(states),
+        "_partial": True,
         "text": TEXT_NO_DEVIATION,
-        "lines": [],
+        "lines": _partial_reason_lines(cards),
         "detail_lines": [
             "這一頁的燈色描述的是「要不要多看一眼」，不描述持倉好壞。"
         ],
@@ -1930,7 +1982,11 @@ def _build_hld0(cards, *, has_holdings, has_rules, deviation_count,
         rules_unknown=rules_unknown,
     )
     glyph, state_word = _LAMP_LOOK[light["_tone"]]
+    # 頁級規則（DEC-2026-10-30-04 P3，尚未實作）要由 logic 分支明示的分類欄位（74 1.4 第 4 點）：只在成立時加鍵，
+    # 其餘情形模型逐鍵與動手前相同。
+    flags = {key: light[key] for key in ("_partial", "_omitted_rows") if light.get(key)}
     return {
+        **flags,
         "code": "HLD-0",
         "title": BLOCK_TITLES["HLD-0"],
         "_layer": 1,
@@ -2973,6 +3029,8 @@ def _build_page_model(
         window_unknown=window_unknown,
         holding_unknown=holding_unknown,
         holding_error=holding_error,
+        # BL-0411／F-18（DEC-2026-10-30-04）：保單分頁上沒寫進持倉的列（資料承載層原樣轉交；沒有 → 空，不加鍵）。
+        omitted_rows=page_health.omitted_rows(dataset),
         subtitle="兩個主值。各值以原幣計算，逐檔寫出幣別字面值；"
         "本卡沒有任何跨幣別的合計、平均或比值。",
         moved_note=HLD2_MOVED_NOTE,

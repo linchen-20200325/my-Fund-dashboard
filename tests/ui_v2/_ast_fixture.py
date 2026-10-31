@@ -182,12 +182,36 @@ st.session_state["sweep"] = _sweep
 VARIANTS = tuple(_BODY)
 
 
+# DEC-2026-10-30-04 阻擋項（F-2／F-18）用的兩段：
+# `hld_partial=True`：持股側改成 74 H7（零偏離、HLD-1 完整評估、配息表未接上 → HLD-3 資料未備）。
+# `skipped_rows=True`：兩側 dataset 都帶一列 L2 `skipped_holdings`（資料承載層轉交的形狀；BL-0411）。
+_HLD_PARTIAL = """
+_hld_dataset = _scrub(hld_fixtures._dataset(window=(hld_fixtures.WINDOW_START, hld_fixtures.WINDOW_END),
+                                            rules=(hld_fixtures._RULES_NOEXCEED[0],)))
+for _h in _hld_dataset["holding"]:
+    if _h["policy_id"] == "DIRECT":
+        _h["policy_id"] = "P-001"
+_hld_dataset["pending_tables"] = ["fund_profile", "dividend"]
+_hld_args = {"direct_policy_id": "DIRECT", "today": datetime.date(2026, 9, 28),
+             "nav_provenance": {r["fund_code"]: {"cache_fallback": False, "stale": None} for r in _hld_dataset["nav"]}}
+"""
+SKIPPED_ROW = {"tab": "PX-TEST-001", "row": 7, "fund_code": "ZZ9999", "reasons": ["缺持倉補充"]}
+_SKIPPED_ROWS = f"""
+_hld_dataset["skipped_holdings"] = [{SKIPPED_ROW!r}]
+_alo_dataset = dict(_alo_dataset, skipped_holdings=[{SKIPPED_ROW!r}])
+"""
+
+
 def script(variant: str = "full", *, alo: str = "full", hld: str = "full", blank_target: bool = False,
-           drop_one_holding: bool = False) -> str:
+           drop_one_holding: bool = False, hld_partial: bool = False, skipped_rows: bool = False) -> str:
     head = _HEAD.replace('alo_fixtures.scenario("full")', f"alo_fixtures.scenario({alo!r})") \
                 .replace('hld_fixtures.scenario("full")', f"hld_fixtures.scenario({hld!r})")
     if blank_target:
         head += _BLANK_TARGET
     if drop_one_holding:
         head += _DROP_ONE_HOLDING
+    if hld_partial:
+        head += _HLD_PARTIAL
+    if skipped_rows:
+        head += _SKIPPED_ROWS
     return head + _BODY[variant]

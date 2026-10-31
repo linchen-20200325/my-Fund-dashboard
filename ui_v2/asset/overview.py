@@ -45,7 +45,7 @@ def summary_strip() -> dict:
 # ───────────────────────── D-10：一句主判讀（C2 去重版）─────────────────────────
 
 TEXT_UNDECIDABLE_COUNT = "持有檔數無法判定"
-TEXT_UNDECIDABLE_GAP = "配置差距無法判定"
+TEXT_UNDECIDABLE_GAP = alo_logic.TEXT_UNDECIDABLE_GAP   # 「配置差距無法判定」：字面不變，定義自 2026-10-30 起住在 `ui_v2/alo/logic.py`（`ALO-0` 也用它，DEC-2026-10-30-04）
 
 
 def hero_holding_count(n, holding_error: bool):
@@ -60,9 +60,17 @@ def has_unevaluated_category(alo2) -> bool:
     只讀 `ALO-2` 已算出的 `_diff`，不另算；沒有 `ALO-2`（配置那一側沒載入）或沒有任何列 → False（沒有「被漏掉的類別」可說，
     該情形的字樣由 `ALO-0` 自己那一行承擔）。`docs/v2/74` A6m（既有缺陷 F-13）：`ALO-0` 在這幾種情形仍寫「各類別皆在容許帶內」，
     本頁一句主判讀不複述那一句。
-    ⚠️ 只涵蓋 A6m 條件 (1)(2)；條件 (3)（持倉來源有略過的 ALO 分頁）**沒有**涵蓋：`prepare_live` 的回傳不帶 `notes["skipped"]`，
-    已記在 `docs/v2/71`（稽核回修〈沒做或沒驗〉第 4 點）與 `docs/v2/74`（A6m、檔頭 v5 更正），待客戶裁示後再接。"""
+    ~~⚠️ 只涵蓋 A6m 條件 (1)(2)；條件 (3)（持倉來源有略過的 ALO 分頁）**沒有**涵蓋：`prepare_live` 的回傳不帶 `notes["skipped"]`，
+    已記在 `docs/v2/71`（稽核回修〈沒做或沒驗〉第 4 點）與 `docs/v2/74`（A6m、檔頭 v5 更正），待客戶裁示後再接。~~
+    → 2026-10-30（客戶裁示 `DEC-2026-10-30-04` F-13／F-18；狀態更新，不是漏刪）：條件 (3) 與 BL-0411 略過的持倉列改由 `ALO-0` 自己記的
+    `_incomplete` 承擔（資料承載層把略過的分頁與列交進 dataset，`ui_v2/alo/logic.py::conclusion_light`），見 `allocation_incomplete`。"""
     return any(row["_diff"] is None for row in (alo2 or {}).get("_rows") or ())
+
+
+def allocation_incomplete(alo0, alo2) -> bool:
+    """一句主判讀的 `incomplete`：`ALO-2` 有沒評估到的列（`has_unevaluated_category`），或 `ALO-0` 自己記了 `_incomplete`
+    （略過的保單分頁、略過的持倉列，DEC-2026-10-30-04 F-13 條件 (3)／F-18）。只讀既有旗標，不另算。"""
+    return has_unevaluated_category(alo2) or bool((alo0 or {}).get("_incomplete"))
 
 
 def hero_sentence(n, alo0, *, incomplete: bool = False) -> str:

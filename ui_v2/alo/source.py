@@ -287,6 +287,12 @@ def load_live() -> dict:
             "last": dict((notes.get("nav") or {}).get("too_old_last") or {}),
         },
     }
+    # BL-0411／F-18、F-13 條件 (3)（客戶 2026-10-30 裁示 `DEC-2026-10-30-04`）：保單分頁上沒寫進持倉的列（`skipped_holdings`）與
+    # 被略過的保單分頁（`skipped_tabs`）~~只放進 `notes["skipped"]`、畫面用不到~~ → 另交進 dataset，讓 `ALO-0` 不從不完整的持倉推論
+    # 「各類別皆在容許帶內」、不把略過說成「尚未建立任何持倉」。只轉交、不判讀：字逐字照 L2（經遮蔽）；沒有時不帶這兩個鍵
+    # （dataset 逐鍵與動手前相同）。`notes["skipped"]` 照舊原樣保留。
+    if tables:
+        dataset.update(live.skipped_for_dataset(tables, alo_holdings.masker(values)))
     notes.update(
         mask_token=masking.MASK,
         pending_tables=list(settings_store.PENDING_TABLES),

@@ -490,7 +490,7 @@ def _render(alo_live, hld_live, picker_live, settings_page) -> None:
     _render_summary()
     n = hld["holding_n"] if hld["state"] == "ok" else None
     alo0 = alo_logic.find_block(alo["model"], "ALO-0") if alo["state"] == "ok" else None
-    incomplete = alo["state"] == "ok" and OV.has_unevaluated_category(alo_logic.find_block(alo["model"], "ALO-2"))
+    incomplete = alo["state"] == "ok" and OV.allocation_incomplete(alo0, alo_logic.find_block(alo["model"], "ALO-2"))
     st.markdown(f'<div class="ast-hero" data-section="hero">{_esc(OV.hero_sentence(n, alo0, incomplete=incomplete))}</div>',
                 unsafe_allow_html=True)
 
