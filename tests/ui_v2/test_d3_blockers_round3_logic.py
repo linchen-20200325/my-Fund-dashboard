@@ -151,7 +151,8 @@ def _alo(ds, formal=False):
 def test_SF1_ALO6_有略過的列_件數改資料未備_合計之後接略過的列(formal):
     model = _alo(R1._with(AF.scenario("inband"), skipped_holdings=_SKIPPED), formal)
     alo6 = AL.find_block(model, "ALO-6")
-    assert alo6["summary_text"] == ("◇ 資料未備" if formal else AL.TEXT_NOT_READY)
+    # ~~`("◇ 資料未備" if formal else AL.TEXT_NOT_READY)`~~ → 第三輪補（總管派工：帶資料類「持倉」，與持股側一致；有意識的更正，不是漏刪）
+    assert alo6["summary_text"] == ("◇ 資料未備：持倉" if formal else AL.TEXT_OMITTED_COUNT)
     assert not re.fullmatch(r"\d+ 檔.*", alo6["summary_text"])
     total = next(i for i, line in enumerate(alo6["footer_lines"]) if line.startswith("總體佔比合計"))
     assert alo6["footer_lines"][total + 1] == (_SKIPPED_FORMAL if formal else _SKIPPED_LINE)
@@ -171,7 +172,7 @@ def test_SF1_ALO6_有被排除的檔時_被排除那一段照接():
     alo6 = AL.find_block(AL.build_page_model(ds), "ALO-6")
     base = AL.find_block(AL.build_page_model(AF.scenario("nofx")), "ALO-6")
     assert base["summary_text"] == "4 檔；被排除 2 檔"                                 # 前提
-    assert alo6["summary_text"] == f"{AL.TEXT_NOT_READY}；被排除 2 檔"
+    assert alo6["summary_text"] == f"{AL.TEXT_OMITTED_COUNT}；被排除 2 檔"   # ~~`TEXT_NOT_READY`~~（第三輪補，同上）
     assert "被排除 2 檔" in alo6["footer_lines"] and alo6["footer_lines"][-1] == _SKIPPED_LINE
 
 
@@ -192,7 +193,8 @@ def test_SF1_ALO6_沒有略過的列_逐鍵與動手前相同的形狀():
 def test_SF1_ALO4_有略過的列_未指派件數改資料未備_不算成未指派(formal):
     ds = R1._with(AF.scenario("inband"), skipped_holdings=_SKIPPED)
     alo4 = AL.find_block(_alo(ds, formal), "ALO-4")
-    assert ("未指派 ◇ 資料未備" if formal else f"未指派 {AL.TEXT_NOT_READY}") in alo4["summary_text"]
+    # ~~`("未指派 ◇ 資料未備" if formal else f"未指派 {AL.TEXT_NOT_READY}") in …`~~ → 第三輪補：帶資料類「持倉」（有意識的更正，不是漏刪）
+    assert ("未指派 ◇ 資料未備：持倉" if formal else f"未指派 {AL.TEXT_OMITTED_COUNT}") in alo4["summary_text"]
     assert not re.search(r"未指派 \d+ 檔", alo4["summary_text"])
     base = AL.find_block(AL.build_page_model(AF.scenario("inband")), "ALO-4")
     assert alo4["unassigned_lines"] == base["unassigned_lines"]                      # 略過的列不算成未指派
@@ -265,3 +267,63 @@ def test_SF1_HLD5與HLD8_沒有略過的列_照舊N檔(code):
     block = HL.find_block(HL.build_page_model(HF.scenario("full")["dataset"], demo_hint=False), code)
     assert re.match(r"\d+ 檔 · ", block["summary_text"])
     assert not any("未列入" in line for line in block["detail_lines"])
+
+
+# ───────────────────────── 第三輪補 2（總管派工）：ALO-2「未分類 N 檔」、合併頁各檔區間報酬、豁免只限卡名開頭 ─────────────────────────
+
+
+@pytest.mark.parametrize("formal", [False, True])
+def test_補2_ALO2未分類件數_有略過的列_改資料未備持倉(formal):
+    ds = R1._with(AF.scenario("unbkt"), skipped_holdings=_SKIPPED)
+    alo2 = AL.find_block(_alo(ds, formal), "ALO-2")
+    assert f"{AL.UNCLASSIFIED} {'◇ 資料未備：持倉' if formal else AL.TEXT_OMITTED_COUNT}" in alo2["tail_lines"]
+    assert not any(re.fullmatch(rf"{AL.UNCLASSIFIED} \d+ 檔", line) for line in alo2["tail_lines"])
+    assert _HOLDING in alo2[page_health.MISSING_KEYS_KEY]
+
+
+def test_補2_ALO2未分類件數_沒有略過的列_照舊N檔():
+    alo2 = AL.find_block(AL.build_page_model(AF.scenario("unbkt")), "ALO-2")
+    assert any(re.fullmatch(rf"{AL.UNCLASSIFIED} \d+ 檔", line) for line in alo2["tail_lines"])
+    assert page_health.MISSING_KEYS_KEY not in alo2 or _HOLDING not in alo2[page_health.MISSING_KEYS_KEY]
+
+
+def test_補2_TEXT_OMITTED_COUNT與持股側同一個字型():
+    assert AL.TEXT_OMITTED_COUNT == HL.OMITTED_SUMMARY == "⬜ 資料未備：持倉"
+
+
+def _returns_limits(hld2):
+    return dict(OV.returns_detail(hld2)["groups"])["限制"]
+
+
+def test_補2_合併頁各檔區間報酬_有持倉而有略過的列_接一次():
+    hld2 = HL.find_block(R1._hld_formal(R1._with(HF.scenario("full")["dataset"], skipped_holdings=_SKIPPED)), "HLD-2")
+    limits = _returns_limits(hld2)
+    assert limits.count(_SKIPPED_FORMAL) == 1 and limits[-1] == _SKIPPED_FORMAL
+
+
+def test_補2_合併頁各檔區間報酬_持倉全數被略過_說明區已有那一行_不重複():
+    args, ds = R2._hld_empty()
+    hld2 = HL.find_block(R2._hld_model(args, ds, True), "HLD-2")
+    assert _SKIPPED_FORMAL in hld2["detail_lines"]                                   # 前提：B2 已寫進說明區
+    assert _returns_limits(hld2).count(_SKIPPED_FORMAL) == 1
+
+
+def test_補2_合併頁各檔區間報酬_沒有略過的列_與動手前相同():
+    hld2 = HL.find_block(R1._hld_formal(HF.scenario("full")["dataset"]), "HLD-2")
+    assert _returns_limits(hld2) == list(hld2["detail_lines"]) + [OV.TEXT_RETURNS_NOT_SUMMED]
+
+
+def test_補2_附註豁免只限卡名開頭_其他行含取數失敗與殘留字串照舊raise():
+    """`_is_upstream_error_line` 的放寬只給 F-2 那一行（以 `HLD-2`／`HLD-3` 卡名開頭）；行內有「⛔ 取數失敗：」但開頭不是那兩個卡名
+    的範本行，殘留檢查照舊 raise（稽核突變 S3：放寬成「行內有取數失敗前綴就算」時本條轉紅）。"""
+    marker = next(m for code, _f, _o, _t, _a, m in hld_live._DEV_TRIMS if code == "HLD-0")
+    model = HL.build_page_model(R2._h6(), demo_hint=False)
+    hld0 = HL.find_block(model, "HLD-0")
+    other_title = HL.BLOCK_TITLES["HLD-1"]
+    hld0["lines"] = list(hld0["lines"]) + [f"{other_title}：{hld_live._ERROR_LINE_PREFIX}X：{marker}"]
+    with pytest.raises(ValueError, match="開發過程字句"):
+        hld_live._strip_dev_lines(model)
+    for line in (f"（另：{hld_live._ERROR_LINE_PREFIX}{marker}）", f"{marker}　{hld_live._ERROR_LINE_PREFIX}X"):
+        assert hld_live._is_upstream_error_line(line) is False, line
+    for code in ("HLD-2", "HLD-3"):
+        assert hld_live._is_upstream_error_line(f"{HL.BLOCK_TITLES[code]}：{hld_live._ERROR_LINE_PREFIX}X：{marker}") is True

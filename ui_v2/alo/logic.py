@@ -373,6 +373,9 @@ TEXT_GOTO_SHEETS = "前往 Sheets 維護持倉"
 TEXT_SHEETS_READONLY = "持倉資料在 Sheets 維護，本儀表板唯讀"
 TEXT_UNSET = "⬜ 未設定"
 TEXT_NOT_READY = "⬜ 資料未備"
+# D-3 第三輪補（總管派工；`DEC-2026-10-30-04` F-18）：有持倉列被略過時，各處「N 檔」的件數那一段改這一句 —— 既有字型
+# 「⬜ 資料未備：‹資料類›」（正式模式 ◇），資料類取 `page_health.DATA_CLASSES["holding"]`；同 `ui_v2/hld/logic.py::OMITTED_SUMMARY`。
+TEXT_OMITTED_COUNT = f"{TEXT_NOT_READY}：{page_health.DATA_CLASSES['holding']}"
 TEXT_NA_NO_TARGET = "⬜ 不適用：尚未設定目標"
 TEXT_NA_NO_BASIS = "⬜ 不適用：尚未選定比重基準"
 TEXT_NA_OVERFLOW = "⬜ 不適用：假設金額超出該類別現值"
@@ -1017,7 +1020,11 @@ def _build_alo2(dataset) -> dict:
             row["_blocks_lamp"] = row["_current_pct"] is None and row["_target_pct"] is not None
             rows.append(row)
         if UNCLASSIFIED in values:
-            tail_lines.append(f"{UNCLASSIFIED} {values[UNCLASSIFIED]['count']} 檔")
+            # D-3 第三輪補（總管派工；同 `ALO-4`；`DEC-2026-10-30-04` F-18）：有持倉列被略過時 ~~「未分類 N 檔」~~ 的件數只數被接受的持倉
+            # （略過的列沒有進來，有沒有類別無從得知）→ 件數那一段改 `TEXT_OMITTED_COUNT`。有意識的更正，不是漏刪；決策者：AI 總管。
+            unclassified_count = (TEXT_OMITTED_COUNT if page_health.omitted_rows(dataset)
+                                  else f"{values[UNCLASSIFIED]['count']} 檔")
+            tail_lines.append(f"{UNCLASSIFIED} {unclassified_count}")
             tail_lines.append("⚠ 44 沒有寫「未分類」的目標比重；本頁目標、差額、內外三格不算。")
         if uncovered:
             # ALO-GAP-全缺合計未涵蓋：全缺（沒有分母）時這一句列出每一個有持倉的類別。
@@ -1037,7 +1044,7 @@ def _build_alo2(dataset) -> dict:
         if (row["_gap_text"] or "").startswith(TEXT_FX_MISSING_ALO4) or row["target_text"] == TEXT_NOT_READY:
             cell_tones.add("灰")
     tone = placeholder["_tone"] if placeholder else ("灰" if cell_tones else "中性")
-    return {
+    block = {
         "code": "ALO-2",
         "title": BLOCK_TITLES["ALO-2"],
         "answers": ANSWERS["ALO-2"],
@@ -1066,6 +1073,9 @@ def _build_alo2(dataset) -> dict:
         "badges": [],
         **source_marks,
     }
+    if omitted and any(TEXT_OMITTED_COUNT in line for line in tail_lines):   # 「未分類」件數那一格的 ◇ 屬持倉（D-3 第三輪補）
+        page_health.tag_missing(block, _CLASS_HOLDING)
+    return block
 
 
 # ───────────────────────── ALO-0 ─────────────────────────
@@ -1534,7 +1544,8 @@ def _build_alo4(dataset) -> dict:
     # ⇒ 件數那一格改既有 `⬜ 資料未備`（正式模式畫成 ◇，同 `ALO-6` 件數與合併頁件數 chip）；已知未指派的那幾檔照舊逐檔列在
     # `unassigned_lines`。略過的是哪幾列由 `ALO-0` 燈下與 `ALO-6` 表尾寫出（本塊不重寫一份）。有意識的更正，不是漏刪。
     omitted = page_health.omitted_rows(dataset)
-    unassigned_count = TEXT_NOT_READY if omitted else f"{len(unassigned)} 檔"
+    # ~~`TEXT_NOT_READY`~~ → `TEXT_OMITTED_COUNT`（D-3 第三輪補：帶資料類「持倉」，與持股側一致；有意識的更正，不是漏刪）
+    unassigned_count = TEXT_OMITTED_COUNT if omitted else f"{len(unassigned)} 檔"
     summary += f"；類別 {len(bucket_names or ())} 個；未指派 {unassigned_count}"
     if missing:
         summary += "；缺 " + "、".join(missing)
@@ -1745,7 +1756,8 @@ def _build_alo6(dataset) -> dict:
         "_layer": 4,
         "_default_open": False,
         "_tone": "灰" if excluded else "中性",
-        "summary_text": (TEXT_NOT_READY if omitted else f"{len(rows)} 檔") + (f"；被排除 {excluded} 檔" if excluded else ""),
+        # ~~`TEXT_NOT_READY`~~ → `TEXT_OMITTED_COUNT`（D-3 第三輪補：帶資料類「持倉」，與持股側一致；有意識的更正，不是漏刪）
+        "summary_text": (TEXT_OMITTED_COUNT if omitted else f"{len(rows)} 檔") + (f"；被排除 {excluded} 檔" if excluded else ""),
         "column_labels": labels,
         "_rows": rows,
         "placeholder": None,

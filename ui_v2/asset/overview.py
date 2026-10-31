@@ -228,7 +228,12 @@ def share_detail(alo6: dict) -> dict:
 
 
 def returns_detail(hld2: dict) -> dict:
-    return P.detail_model(why=[hld2["answers"]], limits=list(hld2["detail_lines"]) + [TEXT_RETURNS_NOT_SUMMED])
+    """D-3 第三輪補（總管派工；`DEC-2026-10-30-04` F-18）：`HLD-2` 記的 `_omitted_rows`（保單分頁上沒寫進持倉的列）各一行接在最後
+    （字同 `share_omitted_lines`）——「N 檔有值」那一枚只數被接受的持倉，略過的是哪幾列要看得到。持倉列全數被略過時 `HLD-2` 的說明區
+    已經有那幾行（`ui_v2/hld/logic.py::_present_omitted_rows`），已在的不再接（不重複）。沒有 → 與動手前相同。"""
+    limits = list(hld2["detail_lines"]) + [TEXT_RETURNS_NOT_SUMMED]
+    limits += [line for line in share_omitted_lines(hld2) if line not in limits]
+    return P.detail_model(why=[hld2["answers"]], limits=limits)
 
 
 # ───────────────────────── 層 3／層 4：grouped containers（3a＋4a；D-1／D-2／D-11）─────────────────────────

@@ -132,10 +132,10 @@ alo_page.render(load_live=_alo_load, mask_error=str)
 def test_SF1_單頁資產配置_歸屬明細不寫N檔_合計之後接略過的列_分組定義不寫未指派0檔():
     at = _single_alo_skipped()
     labels = [e.label for e in at.expander]
-    assert "歸屬明細　—　◇ 資料未備" in labels
+    assert "歸屬明細　—　◇ 資料未備：持倉" in labels   # ~~「歸屬明細　—　◇ 資料未備」~~（第三輪補：帶資料類；有意識的更正，不是漏刪）
     assert not any(re.match(r"歸屬明細　—　\d+ 檔", label) for label in labels)
     group = next(label for label in labels if label.startswith("分組定義"))
-    assert "未指派 ◇ 資料未備" in group and not re.search(r"未指派 \d+ 檔", group)
+    assert "未指派 ◇ 資料未備：持倉" in group and not re.search(r"未指派 \d+ 檔", group)   # 第三輪補：帶資料類
     md = _md(at)
     total = md.index("總體佔比合計")
     assert _ALO_SKIPPED in md[total:]
@@ -144,7 +144,7 @@ def test_SF1_單頁資產配置_歸屬明細不寫N檔_合計之後接略過的�
 def test_SF1_合併頁配置明細_歸屬明細不寫N檔_略過的列在表尾_基金占比只接一次():
     at = _run(F.script("full", alo="inband", skipped_rows=True))
     md = _md(at)
-    assert not re.search(r"歸屬明細　—　\d+ 檔", md) and "歸屬明細　—　◇ 資料未備" in md
+    assert not re.search(r"歸屬明細　—　\d+ 檔", md) and "歸屬明細　—　◇ 資料未備：持倉" in md   # 第三輪補：帶資料類
     assert not re.search(r"未指派 \d+ 檔", md)
     share = md[md.index(">基金占比</div>"):md.index(">各檔區間報酬（原幣）</div>")]
     assert share.count(_ALO_SKIPPED) == 1
@@ -174,3 +174,12 @@ hld_page.render(load_live=_hld_load, mask_error=str, save_live=lambda *_a: {"sta
     assert "最大回撤與本金類配息佔比　—　◇ 資料未備：持倉 · 有值取不到或不適用" in labels
     assert not any(re.match(r"(單檔展開|最大回撤與本金類配息佔比)　—　\d+ 檔", label) for label in labels)
     assert _md(at).count("◇ 資料未備：PX-TEST-001 第 7 列（ZZ9999） 未列入：缺持倉補充") >= 3   # 燈下、單檔展開、最大回撤表
+
+
+def test_補2_合併頁各檔區間報酬_有持倉而有略過的列_接一次():
+    at = _run(F.script("full", alo="inband", skipped_rows=True))
+    md = _md(at)
+    returns = md[md.index(">各檔區間報酬（原幣）</div>"):]
+    limits = returns[returns.index('<div class="pc-detail-name">限制</div>'):]
+    limits = limits[:limits.index("</ul>")]
+    assert limits.count(_ALO_SKIPPED) == 1 and limits.rstrip().endswith(f"<li>{_ALO_SKIPPED}</li>")

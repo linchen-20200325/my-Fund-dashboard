@@ -7,7 +7,7 @@
 - **F-2**：持股只評估一部分（74 H7）時，`HLD-0` 不得只寫「無偏離項」，要帶上 `HLD-2`／`HLD-3` 卡上既有的未評估字樣。
 - **F-18／BL-0411**：保單分頁上有列沒寫進持倉（L2 `skipped_holdings`）時，燈、「持有 N 檔」、配置／持股整體判定都不得假裝覆蓋完整集合。
 
-另守「domain block 的原始狀態與 reason 完整保留、可追溯」：各修法只改燈那一塊（與 `sections` 的檔數），不動 `ALO-2`／`HLD-1～3` 的任何一格。
+另守「domain block 的原始狀態與 reason 完整保留、可追溯」：各修法只改燈那一塊（與 `sections` 的檔數），~~不動 `ALO-2`／`HLD-1～3` 的任何一格~~（→ D-3 第三輪補，有意識的更正，不是漏刪；依 `DEC-2026-10-30-04` F-18：有持倉列被略過時，`ALO-2` 表尾「未分類 N 檔」的件數那一段改既有「⬜ 資料未備：持倉」，`HLD-1`／`HLD-5`／`HLD-8`、`ALO-4`／`ALO-6` 的件數或覆蓋完整集合的句子同理；各塊的列、主值、`_state` 照舊不動，見`test_追溯_略過紀錄只加在燈與記號上_ALO2與HLD1至3的每一格不變` 與 `test_d3_blockers_round3_logic.py`）。
 本檔不含頁級合併燈（P3 尚未實作）。
 """
 
@@ -378,6 +378,14 @@ def test_追溯_略過紀錄只加在燈與記號上_ALO2與HLD1至3的每一格
     # （只動字與資料類記號）。這兩塊的列、指派、合計數字照舊，見下面逐項；其餘各塊照舊每一格不變。
     for code in [b["code"] for b in alo_a["blocks"] if b["code"] not in ("ALO-0", "ALO-4", "ALO-6")]:
         assert _strip(AL.find_block(alo_b, code)) == AL.find_block(alo_a, code), code
+    # ⚠️ D-3 第三輪補（有意識的更正，不是漏刪）：上面 `ALO-2` 逐格相等只因 `inband` 沒有「未分類」；有「未分類」時表尾
+    # ~~「未分類 N 檔」逐格不變~~ → 件數那一段改「⬜ 資料未備：持倉」，列照舊（`unbkt` 情境）。
+    u_a = AL.find_block(AL.build_page_model(AF.scenario("unbkt")), "ALO-2")
+    u_b = AL.find_block(AL.build_page_model(_with(AF.scenario("unbkt"), skipped_holdings=_SKIPPED)), "ALO-2")
+    assert u_b["_rows"] == u_a["_rows"] and u_b["_values"] == u_a["_values"]
+    assert [l for l in u_b["tail_lines"] if not l.startswith(AL.UNCLASSIFIED + " ")] == \
+        [l for l in u_a["tail_lines"] if not l.startswith(AL.UNCLASSIFIED + " ")]
+    assert f"{AL.UNCLASSIFIED} {AL.TEXT_OMITTED_COUNT}" in u_b["tail_lines"]
     a4, b4 = AL.find_block(alo_a, "ALO-4"), AL.find_block(alo_b, "ALO-4")
     assert (b4["_assign_rows"], b4["unassigned_lines"], b4["_tone"]) == (a4["_assign_rows"], a4["unassigned_lines"], a4["_tone"])
     a6, b6 = AL.find_block(alo_a, "ALO-6"), AL.find_block(alo_b, "ALO-6")
