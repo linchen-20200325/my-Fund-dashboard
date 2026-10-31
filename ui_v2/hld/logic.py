@@ -2990,6 +2990,8 @@ def build_page_model(
 # 空持倉時各卡寫的「尚未建立任何持倉」那幾種字（摘要、說明行）。
 _NO_HOLDING_SUMMARIES = (TEXT_NO_HOLDING, f"{ND_TEXT}：{TEXT_NO_HOLDING}")
 _NO_HOLDING_LINES = (TEXT_NO_HOLDING, HLD5_NO_HOLDING_LINE)
+# 持倉列全數被略過時各展開區的摘要：既有字型「⬜ 資料未備：‹資料類›」，資料類取 `page_health.DATA_CLASSES["holding"]`（＝「持倉」）。
+OMITTED_SUMMARY = f"{ND_TEXT}：{page_health.DATA_CLASSES['holding']}"
 
 
 def _present_omitted_rows(blocks, omitted_rows, *, has_holdings, holding_unknown) -> None:
@@ -2997,7 +2999,7 @@ def _present_omitted_rows(blocks, omitted_rows, *, has_holdings, holding_unknown
     持有 N 檔、配置／持股整體判定都不能假裝覆蓋完整集合。必須先讓 omitted rows／未納入集合的事實可被辨識。」）。就地改，只動字：
 
     - **B2**：持倉列全數被略過（沒有任何一列寫進持倉、持倉表本身讀得到）→ `HLD-0` 以外各塊 ~~「尚未建立任何持倉」~~ 不成立：
-      摘要改既有 `⬜ 資料未備`（`ND_TEXT`），說明行裡那一句改成略過的持倉列各一行（`page_health.omitted_row_lines`，與 `HLD-0`
+      摘要改既有 ~~`⬜ 資料未備`（`ND_TEXT`）~~ `⬜ 資料未備：持倉`（`OMITTED_SUMMARY`，D-3 第三輪：資料類不丟），說明行裡那一句改成略過的持倉列各一行（`page_health.omitted_row_lines`，與 `HLD-0`
       同一組字）。塊的 `_state`、主值、按鈕一個都不動（這幾塊原本就是 `資料未備`）。
     - **S1**：有持倉、`HLD-1` 已評估的檔零偏離（「無偏離項」＋「目前這一組門檻下，沒有任何一檔超出。」那一支）→ 兩句都在宣稱
       覆蓋完整集合，同 `HLD-0`：摘要與主值位置改既有 `⬜ 資料未備`（佔位），那一句改成略過的持倉列各一行；`_state`、`_rows` 不動，
@@ -3024,7 +3026,10 @@ def _present_omitted_rows(blocks, omitted_rows, *, has_holdings, holding_unknown
             continue
         if not has_holdings and not holding_unknown:
             if block.get("summary_text") in _NO_HOLDING_SUMMARIES:
-                block["summary_text"] = ND_TEXT
+                # ~~`block["summary_text"] = ND_TEXT`~~ → D-3 第三輪（獨立稽核 should-fix 3；有意識的更正，不是漏刪；決策者：AI 總管）：
+                # 只寫狀態字會把資料類丟掉（單檔展開、最大回撤那兩個展開區標題由「◇ 資料未備：持倉」變成「◇ 資料未備」）——
+                # 改回既有字型「⬜ 資料未備：‹資料類›」（`OMITTED_SUMMARY`；正式模式畫成 ◇）。舊寫法在寫下當時只想到不寫「尚未建立任何持倉」。
+                block["summary_text"] = OMITTED_SUMMARY
             if any(line in _NO_HOLDING_LINES for line in block.get("detail_lines") or ()):
                 block["detail_lines"] = replace(block["detail_lines"], _NO_HOLDING_LINES)
         elif (block["code"] == "HLD-1" and block["_state"] == STATE_OK and not block["_rows"]

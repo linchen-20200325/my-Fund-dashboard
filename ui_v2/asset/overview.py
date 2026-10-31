@@ -219,11 +219,12 @@ def return_chips(hld4: dict, rows: list) -> list:
 
 
 # 不過濾空白行：`P.detail_model` 的契約是「空行代表上游漏了資訊」→ 當場 `ValueError`（不默默吞掉）；單頁也是原樣畫上游給的行。
-def share_detail(alo6: dict, *, omitted_lines=()) -> dict:
-    """`omitted_lines` 非空時接在 `ALO-6` 表尾（各類別內與總體的佔比合計）之後：那幾個合計只涵蓋被接受的持倉，
-    略過的是哪幾列、為什麼緊接著寫出（D-3 第二輪，稽核 S2）。表尾字一個不改（量的不變式照舊成立）。"""
+def share_detail(alo6: dict) -> dict:
+    """~~`omitted_lines` 非空時接在 `ALO-6` 表尾之後~~（D-3 第二輪，稽核 S2）→ D-3 第三輪（獨立稽核 should-fix 1；有意識的更正，
+    不是漏刪；決策者：AI 總管）：略過的列改由 `ALO-6` 自己接在表尾（`ui_v2/alo/logic.py::_build_alo6`，單頁與合併頁同一份）——
+    這裡照舊只讀 `footer_lines`，不再另接一份（否則同一句寫兩次）。舊參數拿掉。"""
     return P.detail_model(why=[alo6["answers"]],
-                          limits=list(alo6["footer_lines"]) + list(omitted_lines) + list(alo6["detail_lines"]))
+                          limits=list(alo6["footer_lines"]) + list(alo6["detail_lines"]))
 
 
 def returns_detail(hld2: dict) -> dict:

@@ -136,7 +136,9 @@ def test_B2_持倉列全數被略過_整頁沒有一處尚未建立任何持倉(
     for code in ("HLD-1", "HLD-2", "HLD-3"):
         block = HL.find_block(model, code)
         assert line in block["detail_lines"], code
-        assert block["summary_text"] in (HL.ND_TEXT, "◇ 資料未備"), code
+        # ~~`in (HL.ND_TEXT, "◇ 資料未備")`~~ → D-3 第三輪（獨立稽核 should-fix 3；有意識的更正，不是漏刪）：摘要保留資料類，
+        # 既有字型「⬜／◇ 資料未備：持倉」（`HL.OMITTED_SUMMARY`；見 `test_d3_blockers_round3_logic.py::test_SF3_*`）。
+        assert block["summary_text"] == ("◇ 資料未備：持倉" if formal else HL.OMITTED_SUMMARY), code
 
 
 def test_B2_各塊的狀態與主值不動_只換字():
@@ -213,9 +215,12 @@ def test_S2_有略過的列_件數那一枚改資料未備_合計之後接略過
     chips = OV.share_chips(alo4, rows, omitted_lines=omitted)
     assert chips[0]["text"] == presentation.MISSING_CHIP_TEXT == "◇ 資料未備"
     assert not any(re.fullmatch(r"\d+ 檔", c["text"]) for c in chips)
-    limits = dict(OV.share_detail(alo6, omitted_lines=omitted)["groups"])["限制"]
+    # ~~`OV.share_detail(alo6, omitted_lines=omitted)`~~ → D-3 第三輪（獨立稽核 should-fix 1；有意識的更正，不是漏刪）：
+    # 略過的列改由 `ALO-6` 自己接在表尾（單頁與合併頁同一份），`share_detail` 照舊只讀表尾、不另接（參數拿掉）。
+    limits = dict(OV.share_detail(alo6)["groups"])["限制"]
     total = next(i for i, line in enumerate(limits) if line.startswith("總體佔比合計"))
     assert limits[total + 1] == _SKIPPED_FORMAL
+    assert limits.count(_SKIPPED_FORMAL) == 1
 
 
 def test_S2_沒有略過的列_照舊N檔():
@@ -226,7 +231,8 @@ def test_S2_沒有略過的列_照舊N檔():
     rows = OV.share_rows(alo6)
     assert OV.share_chips(alo4, rows, omitted_lines=omitted) == OV.share_chips(alo4, rows)
     assert OV.share_chips(alo4, rows)[0]["text"] == f"{len(rows)} 檔"
-    assert OV.share_detail(alo6, omitted_lines=omitted) == OV.share_detail(alo6)
+    # ~~`assert OV.share_detail(alo6, omitted_lines=omitted) == OV.share_detail(alo6)`~~（D-3 第三輪：參數已拿掉，有意識的更正，不是漏刪）
+    assert not any("未列入" in line for line in dict(OV.share_detail(alo6)["groups"])["限制"])
 
 
 # ───────────────────────── S3：74 H6（逐檔配息取數失敗，塊照舊 ok）─────────────────────────

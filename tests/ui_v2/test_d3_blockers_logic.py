@@ -373,8 +373,16 @@ def _strip(node, keys=("_omitted_rows", "_skipped_tabs")):
 def test_追溯_略過紀錄只加在燈與記號上_ALO2與HLD1至3的每一格不變():
     alo_a = AL.build_page_model(AF.scenario("inband"))
     alo_b = AL.build_page_model(_with(AF.scenario("inband"), skipped_holdings=_SKIPPED, skipped_tabs=[{"tab": "T9"}]))
-    for code in [b["code"] for b in alo_a["blocks"] if b["code"] != "ALO-0"]:
+    # ~~`!= "ALO-0"`（只有燈改）~~ → D-3 第三輪（獨立稽核 should-fix 1，`DEC-2026-10-30-04` F-18；有意識的更正，不是漏刪）：
+    # `ALO-4`「未指派 N 檔」與 `ALO-6`「N 檔」、表尾佔比合計同屬覆蓋完整集合的宣稱 —— 件數改既有 `⬜ 資料未備`、表尾接略過的列
+    # （只動字與資料類記號）。這兩塊的列、指派、合計數字照舊，見下面逐項；其餘各塊照舊每一格不變。
+    for code in [b["code"] for b in alo_a["blocks"] if b["code"] not in ("ALO-0", "ALO-4", "ALO-6")]:
         assert _strip(AL.find_block(alo_b, code)) == AL.find_block(alo_a, code), code
+    a4, b4 = AL.find_block(alo_a, "ALO-4"), AL.find_block(alo_b, "ALO-4")
+    assert (b4["_assign_rows"], b4["unassigned_lines"], b4["_tone"]) == (a4["_assign_rows"], a4["unassigned_lines"], a4["_tone"])
+    a6, b6 = AL.find_block(alo_a, "ALO-6"), AL.find_block(alo_b, "ALO-6")
+    assert (b6["_rows"], b6["_tone"]) == (a6["_rows"], a6["_tone"])
+    assert b6["footer_lines"][:len(a6["footer_lines"])] == a6["footer_lines"]
     assert AL.find_block(alo_b, "ALO-2")["_omitted_rows"] == tuple(_SKIPPED)       # 原始紀錄可追溯
     hds = HF._dataset(window=(HF.WINDOW_START, HF.WINDOW_END), rules=(HF._RULES_NOEXCEED[0],))
     hld_a = HL.build_page_model(hds, demo_hint=False)

@@ -296,7 +296,7 @@ def _secondary_share(alo: dict) -> None:
         alo_page._placeholder(alo6)
         if rows:
             st.markdown(share_bars_html(rows), unsafe_allow_html=True)
-        presentation_view.render_detail(OV.share_detail(alo6, omitted_lines=omitted))
+        presentation_view.render_detail(OV.share_detail(alo6))   # 略過的列已在 ALO-6 表尾（D-3 第三輪，不另接）
 
 
 def _secondary_returns(hld: dict) -> None:

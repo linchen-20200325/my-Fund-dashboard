@@ -1529,7 +1529,13 @@ def _build_alo4(dataset) -> dict:
         missing.append("alo_bucket_names")
     missing.extend(fx_missing_keys)   # ~~missing.append(FX_KEY)~~ → 2026-10-13：缺哪幾個鍵就列哪幾個
     summary = "基準 " + (BASIS_LABELS[basis] if basis else ("取不到" if setting_failed else "未設定"))
-    summary += f"；類別 {len(bucket_names or ())} 個；未指派 {len(unassigned)} 檔"
+    # D-3 第三輪（獨立稽核 should-fix 1；客戶 2026-10-30 裁示 `DEC-2026-10-30-04` F-18）：保單分頁上有持倉列沒寫進持倉時，
+    # ~~「未指派 N 檔」~~ 會讀成整組持倉的未指派數 —— 那幾列根本沒有進來，有沒有指派類別無從得知，也不得算成未指派。
+    # ⇒ 件數那一格改既有 `⬜ 資料未備`（正式模式畫成 ◇，同 `ALO-6` 件數與合併頁件數 chip）；已知未指派的那幾檔照舊逐檔列在
+    # `unassigned_lines`。略過的是哪幾列由 `ALO-0` 燈下與 `ALO-6` 表尾寫出（本塊不重寫一份）。有意識的更正，不是漏刪。
+    omitted = page_health.omitted_rows(dataset)
+    unassigned_count = TEXT_NOT_READY if omitted else f"{len(unassigned)} 檔"
+    summary += f"；類別 {len(bucket_names or ())} 個；未指派 {unassigned_count}"
     if missing:
         summary += "；缺 " + "、".join(missing)
     if failure is not None:
@@ -1561,6 +1567,8 @@ def _build_alo4(dataset) -> dict:
     }
     if fx_missing:   # BL-0250 批次 3-B（裁定第 1 點）：「缺換算匯率」那一句屬市場指標（畫面字不變）
         page_health.tag_missing(block, _CLASS_FX)
+    if omitted:      # D-3 第三輪：件數那一格的 ◇ 屬持倉（沒寫進持倉的列）
+        page_health.tag_missing(block, _CLASS_HOLDING)
     return block
 
 
@@ -1636,7 +1644,7 @@ def _build_alo6(dataset) -> dict:
             if failure is not None
             else page_health.tag_missing(_placeholder(empty_source_text(["holding"]), "來源缺"), _CLASS_HOLDING)
         )
-        return {
+        empty = {
             "code": "ALO-6",
             "title": BLOCK_TITLES["ALO-6"],
             "answers": ANSWERS["ALO-6"],
@@ -1647,11 +1655,16 @@ def _build_alo6(dataset) -> dict:
             "column_labels": labels,
             "_rows": [],
             "placeholder": node,
-            "footer_lines": [],
+            # D-3 第三輪（稽核 should-fix 1；F-18）：持倉列全數被略過時，略過的是哪幾列接在表尾位置（~~`[]`~~；沒有 → 照舊空）。
+            # 取數失敗那一支不加（整塊照舊只寫系統錯誤；略過的列照舊由 `ALO-0` 燈下寫出）。有意識的更正，不是漏刪。
+            "footer_lines": [] if failure is not None else page_health.omitted_row_lines(page_health.omitted_rows(dataset)),
             "detail_lines": [HINT_NOTE],
             "buttons": [],
             "badges": [],
         }
+        if empty["footer_lines"]:   # 略過列那幾行的 ◇ 屬持倉（D-3 第三輪）
+            page_health.tag_missing(empty, _CLASS_HOLDING)
+        return empty
 
     rows = []
     for holding in holdings:
@@ -1714,17 +1727,25 @@ def _build_alo6(dataset) -> dict:
     excluded = len(rows) - len(included)
     if excluded:
         footer.append(f"被排除 {excluded} 檔")
+    # D-3 第三輪（獨立稽核 should-fix 1；客戶 2026-10-30 裁示 `DEC-2026-10-30-04` F-18「頁燈、持有 N 檔、配置／持股整體判定
+    # 都不能假裝覆蓋完整集合」）：保單分頁上有持倉列沒寫進持倉時，~~摘要「N 檔」~~ 與表尾「總體佔比合計 100.0%」都只涵蓋被接受的持倉
+    # ⇒ 摘要的件數改既有 `⬜ 資料未備`（正式模式畫成 ◇，同合併頁件數 chip `P.missing_chip`），表尾各合計之後接略過的列各一行
+    # （`page_health.omitted_row_lines`，字同 `ALO-0` 燈下）。合計的數字照舊（量的不變式：被接受的那幾檔合計照舊是 100%），
+    # 列、分母、「被排除 N 檔」一個都不動。單頁與合併頁「基金占比」都讀本塊的表尾，不各寫一份。沒有略過的列 → 逐鍵與動手前相同。
+    # 有意識的更正，不是漏刪。
+    omitted = page_health.omitted_rows(dataset)
+    footer += page_health.omitted_row_lines(omitted)
     detail = [HINT_NOTE, DEV_NOTE_ALO6]
     if basis is None:
         detail.insert(0, TEXT_NA_NO_BASIS)
-    return {
+    block = {
         "code": "ALO-6",
         "title": BLOCK_TITLES["ALO-6"],
         "answers": ANSWERS["ALO-6"],
         "_layer": 4,
         "_default_open": False,
         "_tone": "灰" if excluded else "中性",
-        "summary_text": f"{len(rows)} 檔" + (f"；被排除 {excluded} 檔" if excluded else ""),
+        "summary_text": (TEXT_NOT_READY if omitted else f"{len(rows)} 檔") + (f"；被排除 {excluded} 檔" if excluded else ""),
         "column_labels": labels,
         "_rows": rows,
         "placeholder": None,
@@ -1733,6 +1754,9 @@ def _build_alo6(dataset) -> dict:
         "buttons": [],
         "badges": [],
     }
+    if omitted:      # 件數那一格與略過列那幾行的 ◇ 屬持倉
+        page_health.tag_missing(block, _CLASS_HOLDING)
+    return block
 
 
 # ───────────────────────── ALO-7 ─────────────────────────

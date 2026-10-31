@@ -238,7 +238,8 @@ def _check_no_direct_holding(dataset: dict, direct_policy_id: str) -> None:
             raise ValueError(f"holding 裡有 DIRECT 列（應由 L2 排除）：{holding.get('holding_id')!r}")
 
 
-def _apply_direct(model: dict, rows: list, *, has_holdings: bool, holding_failed: bool = False) -> dict:
+def _apply_direct(model: dict, rows: list, *, has_holdings: bool, holding_failed: bool = False,
+                  omitted: bool = False) -> dict:
     """HLD-5 卡尾一行黃字＋逐筆位置（灰），收合摘要加 DIRECT 筆數；持倉全空時另把「尚未建立任何持倉」換掉。
 
     N＝0 時什麼都不加（草稿與 alo 都沒寫 N＝0 的畫法；本組的處理，已回報待裁）。
@@ -247,6 +248,18 @@ def _apply_direct(model: dict, rows: list, *, has_holdings: bool, holding_failed
     ＝持倉表有取數失敗、而且一列也沒有讀到（例：部分分頁讀不到，見 `assemble_live_load`）。
     這時只加卡尾 —— HLD-5 的摘要與說明區是讀取失敗的原文，不換；`logic` 也不會寫出「尚未建立任何持倉」，
     沒有出口可換，所以不呼叫 `_replace_exits`。
+
+    D-3 第三輪（獨立稽核 B-NEW-1；客戶 2026-10-30 裁示 `DEC-2026-10-30-04` F-18）：`omitted`＝保單分頁上有持倉列沒寫進持倉
+    （dataset 的 `skipped_holdings`）。持倉全空、N＞0、又有略過的列時，`logic._present_omitted_rows` 已經把「尚未建立任何持倉」
+    那幾個出口換成略過的列（HLD-5 摘要 `logic.OMITTED_SUMMARY`、說明區的 `_HLD5_EMPTY_LINE` 換成逐列一行）——
+    ~~照舊要求 `_HLD5_EMPTY_LINE` 在、不在就 raise~~ 會把一個已經正確揭露的畫面打成「⛔ 取數失敗」（造假，且把略過的列蓋掉）。
+    ⇒ 這一支（有意識的更正，不是漏刪；決策者：AI 總管）：
+    - 摘要 ＝ `logic` 給的摘要（`⬜ 資料未備：持倉`）＋ `DIRECT_SUMMARY_SUFFIX`（同有持倉那一支的接法）——
+      不用 `DIRECT_SUMMARY_ONLY`：那一句會讓人讀成「沒寫進來的只有 DIRECT 那幾筆」，把略過的列蓋掉。兩句都是既有字樣，不新增字；
+    - 說明區不動（略過的列照留）；卡尾照加 DIRECT 那一行黃字與逐筆位置；
+    - 不呼叫 `_replace_exits`：「尚未建立任何持倉」那幾個出口已由 `logic` 換掉，再換會把略過的列改寫成 DIRECT 那一句；
+    - 原本的不變式（`_HLD5_EMPTY_LINE` 該在而不在就 raise）照舊守沒有略過的列那一種情形；有略過的列時改守相反方向：
+      `_HLD5_EMPTY_LINE` 還在 ＝ `logic` 沒有換（改了而本檔沒跟上）→ raise。
     """
     if not rows:
         return model
@@ -254,6 +267,10 @@ def _apply_direct(model: dict, rows: list, *, has_holdings: bool, holding_failed
     warning = DIRECT_EXCLUDED_TEXT.format(n=n)
     hld5 = logic.find_block(model, "HLD-5")
     if has_holdings:
+        hld5["summary_text"] = hld5["summary_text"] + DIRECT_SUMMARY_SUFFIX.format(n=n)
+    elif not holding_failed and omitted:
+        if _HLD5_EMPTY_LINE in hld5["detail_lines"] or hld5["summary_text"] != logic.OMITTED_SUMMARY:
+            raise ValueError(f"HLD-5 有略過的持倉列卻沒有換掉空持倉的說明，logic 改了而本檔沒跟上：{hld5['summary_text']!r}")
         hld5["summary_text"] = hld5["summary_text"] + DIRECT_SUMMARY_SUFFIX.format(n=n)
     elif not holding_failed:
         if _HLD5_EMPTY_LINE not in hld5["detail_lines"]:
@@ -263,7 +280,7 @@ def _apply_direct(model: dict, rows: list, *, has_holdings: bool, holding_failed
     hld5["tail_notes"] = [{"text": warning, "_tone": "黃"}] + [
         {"text": DIRECT_LOCATION_TEXT.format(tab=r["tab"], row=r["row"]), "_tone": "灰"} for r in rows
     ]
-    if has_holdings or holding_failed:
+    if has_holdings or holding_failed or omitted:
         return model
     _replace_exits(model, warning)
     return model
@@ -748,9 +765,17 @@ _DEV_TRIMS = (
 _ERROR_LINE_PREFIX = logic.fetch_failed_text("")
 
 
+# D-3 第三輪（獨立稽核附註；有意識的更正，不是漏刪；決策者：AI 總管）：F-2 那一行（`logic._partial_reason_lines`，
+# `HLD-0` 的 `lines`）把 `HLD-2`／`HLD-3` 卡上逐檔的「⛔ 取數失敗：<代碼>：<上游原文>」接在「<卡名>：」後面 ——
+# 上游原文不在行首，~~只認行首~~ 的話，原文碰巧含殘留檢查那一小段（例「規格沒有寫」）就會被當成開發字句而整頁 raise。
+# ⇒ 以這兩個卡名開頭、而且行內有 `_ERROR_LINE_PREFIX` 的那一行，同樣當成帶上游原文的資料行，略過不查。卡名取自 logic。
+_PARTIAL_LINE_HEADS = tuple(f"{logic.BLOCK_TITLES[code]}：" for code in ("HLD-2", "HLD-3"))
+
+
 def _is_upstream_error_line(line: str) -> bool:
-    """這一行是 logic 用 `fetch_failed_text` 包起來的上游錯誤原文（資料，不是範本）。"""
-    return line.startswith(_ERROR_LINE_PREFIX)
+    """這一行是 logic 用 `fetch_failed_text` 包起來的上游錯誤原文（資料，不是範本）；含 F-2 那一行接在卡名後面的那一種。"""
+    return line.startswith(_ERROR_LINE_PREFIX) or (
+        line.startswith(_PARTIAL_LINE_HEADS) and _ERROR_LINE_PREFIX in line)
 
 
 def _strip_dev_lines(model: dict) -> None:
@@ -1038,6 +1063,8 @@ def build_live_model(
         out, rows, has_holdings=bool(dataset.get("holding")),
         # 與 `logic._build_page_model` 的 `holding_unknown` 同一個判定（「讀取失敗不說空」，2026-10-05）。
         holding_failed=bool(dataset.get("errors", {}).get("holding")) and not dataset.get("holding"),
+        # D-3 第三輪（稽核 B-NEW-1）：與 `logic._build_page_model` 交給 `_present_omitted_rows` 的同一個來源。
+        omitted=bool(page_health.omitted_rows(dataset)),
     )
     return apply_save_results(out, save_results)
 
