@@ -1,5 +1,7 @@
 # 76｜💼 我的資產 V7 Layout A 最小文字線框（客戶 2026-10-31 採 A；~~**待客戶審批線框，通過後才實作**~~ → 客戶已核准線框，A 已實作待獨立稽核，見第 11 節）
 
+> **2026-10-31 追加**：P3 與 A 已實作並合併（#1113，main `5c73f529`；2026-10-31 狀態更新，不是漏刪）。
+
 ~~- **狀態**：⛔ **文字線框 Gate，待客戶審批。不是規格、不是動工授權。** 本批只寫文件：沒有改任何 `ui_v2/`、`tests/`（除 `tests/test_doc_counters.py` 的 `_MD_DOCS` 登記本檔一行）程式，沒有改 production layout。~~
 → 2026-10-31 狀態更新（有意識的更正，不是漏刪；決策者：客戶，`DEC-2026-10-31-02`，逐字 `docs/evidence/decisions/2026-10-31_v7_layout_a_wireframe_approval.md`）：**客戶已核准本線框並授權實作 A；A 已實作（`ui_v2/asset/page.py`），待獨立稽核**。舊「待客戶審批」的理由在寫下當時為真；被推翻的是它的前提（客戶已核准）。實作後的實測見第 11 節；本檔第 1～10 節的線框、盤點與推估原文保留不改。
 - **客戶裁示（2026-10-31；決策者：客戶；`docs/DECISIONS.md` `DEC-2026-10-31-01`；逐字 `docs/evidence/decisions/2026-10-31_v7_layout_a_rulings.md`）**：V7 採 A；不採 B（頁級狀態不移到 Primary 後面）；不採 C（不得放寬 V7、不得修改既有 Mobile Visual Budget）；A 只是 presentation de-duplication，不是刪除 `HLD-0`／`ALO-0` domain blocks；H6 維持「持股只評估一部分」級；F-5 字樣核准；先出 A 的最小文字線框，通過後才實作。
