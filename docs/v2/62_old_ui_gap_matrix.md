@@ -15,6 +15,8 @@
 
 - **2026-10-25 狀態更新（不是漏刪；量測 SHA `7d41705f`；出處 `DEC-2026-10-25-01`）**：新增 **§6 New UI Capability Matrix 與驗收條件**（⚙️ 設定／🔍 找基金／💼 我的持股／五頁 Refresh／Retry；局部 ID `CAP-*` 不是 BL ID）。性質同本檔：規劃與收斂，**不構成 production 動工授權**、不解除 G8、不解凍 44；版面類變更仍須 UI 草稿先行。§1～§5 一字未改。
 
+- **2026-11-01 狀態更新（不是漏刪；出處 `DEC-2026-11-01-01`，決策者：客戶；有意識的政策變更）**：客戶正式裁示 🔍 找基金只保留 MoneyDJ 基金代碼與 ISIN 兩種使用者搜尋入口，取消名稱／模糊／FundClear／TDCC 搜尋入口與 AI 猜基金。本檔 §1 A1、A2、C5，§6.3 CAP-FND-02、CAP-FND-06，§6.3a 的 CAP-FND-02 驗收列，§6.6 CAP-RFR-04，以及 CAP-GATE-05／06／07 已就地加註（舊列原字保留，只加指標）；CAP-GATE-06 superseded，CAP-GATE-07 為「詮釋：已回答，待確認」，CAP-GATE-05 不受影響。盤點與最小 wireframe 見 `docs/v2/78_fund_search_batch_e_inventory_wireframe.md`。文件組單組，未經第二組驗證。
+
 ---
 
 ## §0 三層 UI 的事實（量測 SHA `d2cd3bb`，2026-10-22）
@@ -37,8 +39,8 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 
 | # | 舊功能 | 舊邏輯／用途 | 資料來源 | B 版目前狀態 | Gap | 建議 | 需客戶裁示 |
 |---|---|---|---|---|---|---|---|
-| A1 | 代碼直接查（③ 模式 A `mj_url_input`＋「🚀 分析」；可貼 MoneyDJ URL） | `services.moneydj_fetcher.auto_fetch_moneydj` → `services.fund_service.fetch_fund_from_moneydj_url_enriched` → L1 `repositories/fund/fund_orchestration.fetch_fund_from_moneydj_url`（純代碼依序試境內／境外 page_type；多源 fallback） | MoneyDJ 主＋TDCC／FundClear／Cnyes 備援 | **無單檔查詢框**。唯一路徑 EXP-1「fund_code 等於 ACTI71」→ 存檔 → 重跑；且**只限選股池內代碼** | [舊有B無] | 保留取數鏈邏輯；B 版需一個「輸入代碼即查」入口（客戶明示只要簡單輸入），可查池外代碼 | 是（UI 設計＋池外查詢範圍） |
-| A2 | 找代號（關鍵字 → TDCC/FundClear 搜尋 → 下拉選） | L1 `repositories.fund.tdcc_search_fund`；結果只顯示代碼、不自動帶入 | TDCC OpenAPI／FundClear | 無名稱搜尋（EXP-1 只有 `fund_name 等於 完整名稱`，無「包含」） | [舊有B無] | 保留 `tdcc_search_fund`；改造：結果應能直接帶入查詢，不要求手抄 | 是（UI） |
+| A1 | 代碼直接查（③ 模式 A `mj_url_input`＋「🚀 分析」；可貼 MoneyDJ URL） | `services.moneydj_fetcher.auto_fetch_moneydj` → `services.fund_service.fetch_fund_from_moneydj_url_enriched` → L1 `repositories/fund/fund_orchestration.fetch_fund_from_moneydj_url`（純代碼依序試境內／境外 page_type；多源 fallback） | MoneyDJ 主＋TDCC／FundClear／Cnyes 備援 | **無單檔查詢框**。唯一路徑 EXP-1「fund_code 等於 ACTI71」→ 存檔 → 重跑；且**只限選股池內代碼** | [舊有B無] | 保留取數鏈邏輯；B 版需一個「輸入代碼即查」入口（客戶明示只要簡單輸入），可查池外代碼 | 是（UI 設計＋池外查詢範圍） 〔2026-11-01 amended by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：代碼直查是「找基金」兩種正式入口之一（MoneyDJ 基金代碼，主要入口）；本列「可查池外代碼」的範圍＝CAP-GATE-07，執行組詮釋為已隱含回答、待客戶確認；取數鏈是否算新來源待裁（G-E3）。〕 |
+| A2 | 找代號（關鍵字 → TDCC/FundClear 搜尋 → 下拉選） | L1 `repositories.fund.tdcc_search_fund`；結果只顯示代碼、不自動帶入 | TDCC OpenAPI／FundClear | 無名稱搜尋（EXP-1 只有 `fund_name 等於 完整名稱`，無「包含」） | [舊有B無] | 保留 `tdcc_search_fund`；改造：結果應能直接帶入查詢，不要求手抄 | 是（UI） 〔2026-11-01 superseded by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：使用者端「找代號（關鍵字 → TDCC／FundClear 搜尋）」入口取消，不再作為使用者搜尋入口；`tdcc_search_fund` 作為後端驗證／cross-check 的用途依客戶裁示第五項保留，是否有此用途由 `docs/v2/78` 盤點回答。舊列原字保留。〕 |
 | A3 | 單檔深掘內容（基本資料、三合一趨勢圖 MA20/60＋布林＋配息標記、vs 大盤疊圖、σ 買賣點、4D 健診、進階指標 Sortino/Calmar/Alpha、換標的建議、3-3-3、風險表＋Sharpe 對帳 chip、配息＋配息率／1Y 報酬對帳 chip、前十大持股、個股新聞、三率穿透、投資試算、AI 解盤） | `services.fund_service.calc_metrics／finalize_fund_metrics`（注入三個 `*_reconcile`）、`services.reconcile.*`、`services.precision_service.calc_hwm_sigma_levels`、`services.health.*`、`services.fund_screening.check_333_fund`、`services.benchmark_compare`、`services.capture_ratio`、`services.fund_total_return` | MoneyDJ wb01/wb05/wb07＋NAV、Yahoo 基準、yfinance 財報、Google News、Gemini | 只有 EXP-6 六欄基本資料（名稱／代碼／幣別／成立日／配息方式／費率恆 ⬜）；無績效／風險／配息序列／持股／對帳 | [縮水]（最大單點縮水） | 保留 L2 邏輯（已驗證、含雙演算法對帳）；B 版需設計「單檔頁」要納入哪些子區塊。**買賣點／換標的建議／AI 解盤屬方向性輸出**，受 `44` G1†、修正案 #8、`DEC-2026-10-19-01`（舊決策矩陣退役）約束 | 是（區塊取捨＝UI；方向性輸出＝投資語意） |
 | A4 | 查過的基金紀錄 `services.fund_history.record_fund` | 寫 `cache/fund_history.json` | 本機 | 無 | [過時/重複] | 讀取端 `get_history_df` 在 `ui/` 0 caller（單組 grep），淘汰候選 | 否（登記即可） |
 
@@ -61,7 +63,7 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 | C2 | 低基期篩選器（幣別、類別、只留不吃本金、只留低基期） | `services.fund_screening.screen_funds` → `compute_base_state`（HWM σ）、`check_eating_principal_1y_mk` | 已抓 NAV | EXP-1 七欄「等於／大於…」字面條件；無「不吃本金」「低基期」這類衍生條件 | [縮水]（語意不同） | 兩套篩選語意不同：舊版是投資語意篩，B 版是欄位字面篩。要不要在 B 版加衍生指標篩選屬投資語意 | 是 |
 | C3 | 候選標的產生：互補配對（賣高基期→買別類別低基期）、換標決策紅燈替換、換股顧問（池 × 持倉） | `services.rotation`、`services.switch_strategy.replacement_candidate`、`services.switch_advisor.advise_switches` | 池＋持倉 | 無 | [舊有B無][投資語意] | 三項皆為方向性建議；依 `44` G1†／修正案 #8／BL-0314 Phase 5～8 路線，不得提前進 B 版 | 是 |
 | C4 | NAV 歷史資料維護（一鍵補全 `backfill_to_gs`、對帳單 CSV 匯入、本地 CSV 多檔匯入、增量更新、下載、清除、累積狀態） | `services.nav_history_store`、`services.nav_history_gs` | 本機 `cache/nav_history/` ＋ 雲端 `NAV_SHEET_ID`→`nav_history` | SET-5 只接「市場指標」與「淨值」（淨值只寫 fetch_log、不落地）；配息／其他「尚未接上」 | [縮水] | 保留兩個 service；B 版需「補資料」最小入口；淨值落地與否交叉 BL-0363 | 是 |
-| C5 | 新 ⑧ `ui/views/page_03_research.py` 用 `services.fund_search.search_funds`（thin L2） | — | — | B 版未用 | 可復用 | 登記為可復用入口 | 否 |
+| C5 | 新 ⑧ `ui/views/page_03_research.py` 用 `services.fund_search.search_funds`（thin L2） | — | — | B 版未用 | 可復用 | 登記為可復用入口 | 否 〔2026-11-01 amended by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：`search_funds` 作為「可復用入口」的登記，限於其不涉及名稱／模糊／FundClear／TDCC 使用者搜尋入口的部分；是否可 reuse 以 `docs/v2/78` 盤點為準。〕 |
 | C6 | 新 ⑧（[新] 標的探索）與舊 ③ 的功能差異 | — | — | 本輪未盤 | [未盤] | 登記待查 | 否 |
 
 ### D Google／Sheet
@@ -298,11 +300,11 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 | Capability | Owner page | User action | Existing evidence / current capability | Old UI reference | Current B UI state | Existing BL | Dependency | Implementation order | Decision Gate | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|
 | CAP-FND-01 代碼直接查詢 | 🔍 | 輸入代碼（例 `ACTI71`）→ 查 → 看到該檔 | `services.moneydj_fetcher.auto_fetch_moneydj` → `services.fund_service.fetch_fund_from_moneydj_url_enriched` → L1 `repositories/fund/fund_orchestration.fetch_fund_from_moneydj_url`（多源 fallback） | §1 A1 | 無單檔查詢框；只能經 EXP-1 條件「fund_code 等於…」＋存檔＋重跑，且限選股池內代碼 | BL-0397 | CAP-SET-07（若查詢結果要對照持倉）；否則無 | 2 | CAP-GATE-07（池外查詢範圍） | 客戶 2026-10-25 要點：直接查、使用者不需先理解候選池。文件組讀法＝可查池外代碼（可被客戶推翻，隨 UI 草稿確認） |
-| CAP-FND-02 名稱搜尋（結果可直接帶入查詢） | 🔍 | 輸入名稱關鍵字 → 看候選 → 點一筆直接帶入 CAP-FND-01 | `services.fund_search.search_funds`（thin L2）→ L1 `repositories.fund.tdcc_search_fund`；另有 `tdcc_search_fund_with_error`（交出失敗原文） | §1 A2（舊版結果只顯示代碼、要手抄） | 無名稱搜尋（EXP-1 只有「等於」） | BL-0397 | CAP-FND-01 | 2 | CAP-GATE-06（名稱搜尋涵蓋範圍） | 只重用既有可追溯鏈，不新增來源；`tdcc_search_fund` docstring 寫「搜尋境外基金」，境內基金是否涵蓋未驗 |
+| CAP-FND-02 名稱搜尋（結果可直接帶入查詢） | 🔍 | 輸入名稱關鍵字 → 看候選 → 點一筆直接帶入 CAP-FND-01 | `services.fund_search.search_funds`（thin L2）→ L1 `repositories.fund.tdcc_search_fund`；另有 `tdcc_search_fund_with_error`（交出失敗原文） | §1 A2（舊版結果只顯示代碼、要手抄） | 無名稱搜尋（EXP-1 只有「等於」） | BL-0397 | CAP-FND-01 | 2 | CAP-GATE-06（名稱搜尋涵蓋範圍） | 只重用既有可追溯鏈，不新增來源；`tdcc_search_fund` docstring 寫「搜尋境外基金」，境內基金是否涵蓋未驗 〔2026-11-01 **superseded by `DEC-2026-11-01-01`**（有意識的政策變更，不是漏刪；決策者：客戶）：名稱搜尋、模糊名稱搜尋與結果帶入的候選下拉，因使用者端名稱搜尋入口取消而不再是能力；舊列原字保留，不得據以實作。〕 |
 | CAP-FND-03 候選池：新增 | 🔍（池所在的 Sheet 連線歸 ⚙️） | 在查詢結果或清單上按「加入候選池」 | L1 `repositories/pool_repository.py::add_or_update`（EX-CRUD-1） | §1 C1（⑤ 管理室） | 無；exp 只讀選股池 `code` 欄當母體（`exp_universe.load_pool_codes`）。另有 EXP-5「加入觀察清單」，寫 `user_setting` 的 `exp_watchlist`，只存代碼 | BL-0400 | CAP-SET-07（池 Sheet 連線）；CAP-FND-01 | 2 | CAP-GATE-05（候選池是哪一份）；CAP-GATE-04（寫池＝寫入邊界） | 現行有兩份「候選」清單：選股池（`POOL_SHEET_ID`→`_fund_pool`）與觀察清單（設定試算表 `exp_watchlist`）—— 不得在未裁示前再造第三份 |
 | CAP-FND-04 候選池：移除 | 🔍 | 按「移出候選池」→ 確認 | `pool_repository.remove_from_pool` | §1 C1 | 無 | BL-0400 | CAP-FND-03 | 2 | CAP-GATE-05、CAP-GATE-04；若為實體刪列 → CAP-GATE-03 | 移出是否為狀態改 CLOSED（可回復）或刪列（不可逆）未定 |
 | CAP-FND-05 候選池：重新載入 | 🔍 | 按「重新載入候選池」 | `pool_repository.list_pool`（L1 無快取）；L2 `exp_universe` 有代碼快取 | §1 C1 | 母體隨頁面讀取；無獨立重新載入 | BL-0400、BL-0452 | CAP-FND-03 | 2 | — | 走 §6.6 同一機制 |
-| CAP-FND-06 搜尋失敗／不存在／未取得狀態與 Retry | 🔍 | 查不到時看到原因並可重試 | `search_funds` 明文「空清單的語意是含混的」（`EMPTY_MEANS_UNKNOWN`）；`tdcc_search_fund` 失敗照舊回 `[]`；只有 `_with_error` 版本分得出失敗 | §1 A1、A2 | 無 | BL-0397 | CAP-FND-01、CAP-FND-02 | 2 | — | 現行 thin L2 分不出「查無此檔」與「查詢失敗」→ 在改用 `_with_error` 或等效路徑前，空結果一律顯示「無法判定」，不得說「不存在」 |
+| CAP-FND-06 搜尋失敗／不存在／未取得狀態與 Retry | 🔍 | 查不到時看到原因並可重試 | `search_funds` 明文「空清單的語意是含混的」（`EMPTY_MEANS_UNKNOWN`）；`tdcc_search_fund` 失敗照舊回 `[]`；只有 `_with_error` 版本分得出失敗 | §1 A1、A2 | 無 | BL-0397 | CAP-FND-01、CAP-FND-02 | 2 | — | 現行 thin L2 分不出「查無此檔」與「查詢失敗」→ 在改用 `_with_error` 或等效路徑前，空結果一律顯示「無法判定」，不得說「不存在」 〔2026-11-01 amended by `DEC-2026-11-01-01`（執行組讀法，可被客戶推翻）：三態（查無此檔／查詢失敗／無法判定）與「分不到時只顯示無法判定」的原則照舊，僅適用於 MoneyDJ 基金代碼與 ISIN 兩種入口；涉及名稱候選的部分隨 CAP-FND-02 superseded。〕 |
 | CAP-FND-07 欄位缺值顯示 | 🔍 | 看查詢結果／候選清單的各欄 | EXP-6 單檔基礎資料六欄（費率恆 ⬜） | §1 A3、B1 | 部分欄位已用 ⬜ | BL-0397、BL-0398、BL-0399 | CAP-FND-01 | 2 | — | 缺欄的基金**照列**，該欄顯示「⬜ 資料未備／無法判定」；不得顯示 0、不得因缺欄排除，除非有正式篩選規格 |
 
 ### §6.3a 🔍 找基金 —— 驗收表
@@ -310,7 +312,7 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 | Capability | Acceptance criteria | Success state | Failure state | Missing / Unknown state | Refresh / Retry behavior |
 |---|---|---|---|---|---|
 | CAP-FND-01 | 一個輸入框＋一個按鈕即可完成；可查的代碼範圍依 CAP-GATE-07 裁示；查詢結果可追溯資料來源 | 該檔基本資料＋來源與取得時間 | 失敗＋原文＋重試；保留上一筆有效結果 | 欄位缺值依 CAP-FND-07 | 「重試」只重查同一代碼 |
-| CAP-FND-02 | 點候選即帶入查詢，不需手抄；候選列顯示名稱與代碼 | 候選清單 | 失敗＋原文（需 `_with_error` 或等效）＋重試 | 空結果在無法分辨失敗前顯示「無法判定」 | 重試同一關鍵字 |
+| CAP-FND-02 | 點候選即帶入查詢，不需手抄；候選列顯示名稱與代碼 | 候選清單 | 失敗＋原文（需 `_with_error` 或等效）＋重試 | 空結果在無法分辨失敗前顯示「無法判定」 | 重試同一關鍵字 〔2026-11-01 superseded by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：本驗收列隨 CAP-FND-02 失效；舊列原字保留。〕 |
 | CAP-FND-03 | 加入前明示寫入哪一本；同一檔重複加入只出現一次；加入後清單重讀顯示最新 | 已加入＋最新清單 | 失敗＋原因；清單維持原樣 | 池 Sheet 讀不到 → 「無法判定」，不說「池是空的」 | 可重試 |
 | CAP-FND-04 | 須確認；移除後重讀顯示最新；若屬不可逆刪列須另經 CAP-GATE-03 | 已移除＋最新清單 | 失敗＋原因；清單維持原樣 | 同上 | 可重試 |
 | CAP-FND-05 | 只重讀，不改池內容與觀察清單 | 最新清單＋讀取時間 | 失敗＋原因；保留上一份有效清單 | 無法判定 | 本身即 Retry |
@@ -359,7 +361,7 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 | CAP-RFR-01 🌍 市場與趨勢 | 🌍（機制屬 ⚙️） | 失敗或空時按「重新取數」 | `ui_v2/mkt/logic.py::_retry_button`（宣告寫 `market_indicator`、`fetch_log`） | §1 F1 | 取數失敗與三塊皆無資料時掛一枚 | BL-0452 | CAP-RFR-00 | 4 | — | 只刷新市場指標 |
 | CAP-RFR-02 ⚖️ 資產配置 | ⚖️（機制屬 ⚙️） | 重新讀持倉 facts 與目標 | — | §1 E7 | 「重新取數」不畫（ALO-GAP 登記） | BL-0452 | CAP-RFR-00、CAP-HLD-02 | 4 | CAP-GATE-08 | 只重讀；目標輸入（ALO-1）不得被刷新清掉 |
 | CAP-RFR-03 💼 我的持股 | 💼（機制屬 ⚙️） | 失敗列旁「重試」 | 見 CAP-HLD-04 | §1 F4 | 部分塊有、核心卡與 HLD-8 正式模式依裁示不放 | BL-0452、BL-0390 | CAP-RFR-00 | 3／4 | **CAP-GATE-08** | 與 G6、2026-09-23 裁示衝突，待客戶裁示 |
-| CAP-RFR-04 🔍 找基金 | 🔍（機制屬 ⚙️） | 查詢失敗時「重試」；候選池「重新載入」 | 見 CAP-FND-05、CAP-FND-06 | §1 A1、C1 | 模板那枚「重新取數」本頁不掛（`E-22` 登記） | BL-0452、BL-0397、BL-0400 | CAP-RFR-00 | 2（頁內 Retry）／4 | CAP-GATE-08 | 只重查同一關鍵字／重讀池 |
+| CAP-RFR-04 🔍 找基金 | 🔍（機制屬 ⚙️） | 查詢失敗時「重試」；候選池「重新載入」 | 見 CAP-FND-05、CAP-FND-06 | §1 A1、C1 | 模板那枚「重新取數」本頁不掛（`E-22` 登記） | BL-0452、BL-0397、BL-0400 | CAP-RFR-00 | 2（頁內 Retry）／4 | CAP-GATE-08 | 只重查同一關鍵字／重讀池 〔2026-11-01 amended by `DEC-2026-11-01-01`（執行組讀法，可被客戶推翻）：「只重查同一關鍵字」改讀為只重查同一代碼或 ISIN；關鍵字（名稱）搜尋已取消。〕 |
 | CAP-RFR-05 ⚙️ 設定 | ⚙️ | SET-5「重新取數」；Sheet 狀態「重新載入」 | SET-5（市場指標與淨值兩層；只宣告寫 `fetch_log`） | §1 F2、F4 | 有 SET-5 | BL-0452、BL-0184、BL-0391 | — | 1（Sheet 狀態）／4 | — | 設定值本身不因刷新改變 |
 
 **五頁 Refresh／Retry 驗收表**
@@ -395,9 +397,9 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 | CAP-GATE-02 | Sheet 綁定紀錄的資料模型（存哪裡、可否多本、預設本） | 產品方向＋可能新增設定鍵或 schema；BL-0381 七步流程與 BL-0392 待裁 | CAP-SET-04、06～10 |
 | CAP-GATE-03 | 刪除 Sheet 檔／分頁／資料；新建整本試算表 | 不可逆或寫入使用者 Drive；v1.0 Gate「無法證明安全的資料／歷史成果刪除」 | CAP-SET-09、11；CAP-FND-04（若為刪列） |
 | CAP-GATE-04 | B 版是否開放寫入（持倉操作、寫選股池） | 持倉操作與客戶 2026-09-21／2026-10-13「保單／帳本改由 Sheets 維護，B 線只讀取」裁示衝突，投資語意須獨立稽核，寫入紀錄去向牽動 BL-0405 `_Ledgers`；寫選股池屬寫入邊界（BL-0349），是否在上述裁示射程內待客戶確認（原裁示只涵蓋保單與帳本；44 `READONLY_TABLES` 為 holding／policy／nav／dividend） | CAP-HLD-03；CAP-FND-03、04 |
-| CAP-GATE-05 | 「候選池」是選股池（`_fund_pool`）還是觀察清單（`exp_watchlist`），或兩者合一 | 兩份並存；再造一份即違 SSOT 去重（64 §4） | CAP-FND-03～05 |
-| CAP-GATE-06 | 名稱搜尋涵蓋：境內基金是否納入；是否啟用 UI 0 caller 的 `search_moneydj_by_name`／`search_fundclear` | 客戶要求不新增來源；啟用從未上線的取數路徑是否算新 production 來源路徑，需客戶判定 | CAP-FND-02 |
-| CAP-GATE-07 | 代碼直查可否查選股池以外的代碼 | 本檔 §1 A1 原列「需客戶裁示（池外查詢範圍）」；客戶 2026-10-25 要點「不需理解候選池」傾向可查，正式範圍隨 UI 草稿確認 | CAP-FND-01 |
+| CAP-GATE-05 | 「候選池」是選股池（`_fund_pool`）還是觀察清單（`exp_watchlist`），或兩者合一 | 兩份並存；再造一份即違 SSOT 去重（64 §4） | CAP-FND-03～05 〔2026-11-01 **不受 `DEC-2026-11-01-01` 影響**：候選池／觀察清單定義仍待既有裁示，本批不改。〕 |
+| CAP-GATE-06 | 名稱搜尋涵蓋：境內基金是否納入；是否啟用 UI 0 caller 的 `search_moneydj_by_name`／`search_fundclear` | 客戶要求不新增來源；啟用從未上線的取數路徑是否算新 production 來源路徑，需客戶判定 | CAP-FND-02 〔2026-11-01 **superseded by `DEC-2026-11-01-01`**（有意識的政策變更，不是漏刪；決策者：客戶）：使用者端名稱搜尋入口取消，本 Gate 所問的名稱搜尋涵蓋範圍不再需要裁示；舊列原字保留。〕 |
+| CAP-GATE-07 | 代碼直查可否查選股池以外的代碼 | 本檔 §1 A1 原列「需客戶裁示（池外查詢範圍）」；客戶 2026-10-25 要點「不需理解候選池」傾向可查，正式範圍隨 UI 草稿確認 | CAP-FND-01 〔2026-11-01 詮釋：已回答，待確認（`DEC-2026-11-01-01` G-E6；執行組詮釋，不是客戶裁示，可被推翻）：客戶「輸入 MoneyDJ Code 找到基金」隱含允許池外代碼直查，仍待客戶確認；確認前不視為裁示。〕 |
 | CAP-GATE-08 | 五頁都要有 Refresh／Retry vs 現行裁示（G6：HLD-8 正式模式不放；2026-09-23：hld 三張核心卡不掛；exp `E-22`、alo ALO-GAP 不畫） | 正式規格明定部分塊不放；改動須客戶裁示並走 44 修正程序（含 G7 條文衝突，BL-0390） | CAP-RFR-02～04、CAP-HLD-04 |
 | CAP-GATE-09 | 各能力的版面位置、元件、分頁動線 | UI 草稿先行；G8 未解除；BL-0435 Blueprint 決定 | 本節各能力 |
 | CAP-GATE-10 | ⚙️ 要加更多能力 vs 客戶已判「設定與診斷過度複雜」 | 本檔 §1 F2 已標 [方向衝突]；BL-0391／BL-0408 | CAP-SET-13 |
