@@ -980,7 +980,7 @@
 | evidence／source | 客戶 2026-10-25 在對話中的正式裁示，經總管落盤；逐字存檔 `docs/evidence/decisions/2026-10-25_effort_change_gate_both_directions.md`（PR #1054）。落地：`PROJECT_RULES.md` 第 5 節 5.1 第 10 點與 3.1 第 6 點、第 1 點 ④ 的 supersede 劃線。 |
 | 影響範圍 | 所有未來對話與 agent 的 Model／Effort 切換、Batch 開工前判斷與通知格式（5.1 第 10 點）。不改 Silent Autonomous Cruise、Stop／Decision Gate、GitHub-first 與 Safe Checkpoint。 |
 | 是否可逆 | 可逆（客戶可另行指示） |
-| supersedes／superseded by | supersedes：`PROJECT_RULES.md` 5.1 第 9 點「調低改標示、不停工」讀法與「主動降級義務」的停工範圍；3.1 第 6 點與第 1 點 ④ 中「只限提高」與「降低單獨不出聲」的讀法（已就地劃線）。superseded by：無。 |
+| supersedes／superseded by | supersedes：`PROJECT_RULES.md` 5.1 第 9 點「調低改標示、不停工」讀法與「主動降級義務」的停工範圍；3.1 第 6 點與第 1 點 ④ 中「只限提高」與「降低單獨不出聲」的讀法（已就地劃線）。superseded by：無。同向收緊指標（不是 supersede；2026-11-02，客戶）：`DEC-2026-11-02-04`——Gate 擴及「模式」、恢復用語改「已切換／可以開始」、Gate 訊息送出後全面停手（`PROJECT_RULES.md` 5.1 第 11 點）。 |
 | 補記（2026-10-26 客戶修訂，狀態更新，不是漏刪） | 客戶 2026-10-26 修訂本筆的「工作類型矩陣」（要點轉述，經總管派工單轉達，非逐字；屬同一裁示線的修訂，**不新增 DEC**，沿用本檔既有「補記」列體例）：一般 OAuth／Google Sheet 實作、規格明確的一般跨模組 wiring（含已明確規格的架構 wiring）＝ Sonnet 5.5／Medium，**不再預設直接升 Opus**；複雜 OAuth／資安決策、credential／token storage、scope／callback、資料契約、重大架構取捨、重要跨模組架構、複雜 correctness ＝ Opus 5.5／Medium；Haiku 5.5／Low 為機械與 commit／PR 收尾預設最低成本；Fable 5.1 或更高能力模型非預設。**明示 supersede 舊讀法「OAuth／Google Sheet／跨模組預設 Opus」**（舊矩陣列於 `PROJECT_RULES.md` 5.1 第 10 點與證據檔以劃線保留；有意識的政策變更，不是漏刪）。兩邊理由：舊讀法的用意（安全相關工作不輕忽）仍成立，已由「複雜 OAuth／資安決策」列承接；被權衡掉的是「關鍵字即升 Opus」。同批併入 `PROJECT_RULES.md` 5.1 第 10 點六條濃縮選用規則（最低足夠往上判斷；不因關鍵字升 Opus；性質改變才重判；配置有變仍依本筆 Change Gate 停手；正確性優先於省 token；成本順序），客戶長文 Rule 1–12 不全文落盤。**不改**本筆 Change Gate（升降皆停手）、通知格式與「不得自行切換」。落地：`PROJECT_RULES.md` 5.1 第 10 點、`docs/evidence/decisions/2026-10-25_effort_change_gate_both_directions.md`（矩陣列劃線＋文末修訂註）。文件組讀法（可被客戶推翻）：「Haiku 5.5／Low～Medium」列的模型欄由原「Haiku 或 Sonnet」收為 Haiku（依客戶「Haiku 能安全完成就不升 Sonnet」）。 |
 | provenance | **要點轉述**（決策者：客戶 2026-10-25；文件組未見客戶對話本身）。「不得先施工再補問」「省額度優先」等為條文化措辭，可被客戶推翻。 |
 
@@ -1048,7 +1048,7 @@
 | evidence／source | 客戶 2026-10-26 永久治理要求，經總管派工單轉達；repo 內無逐字存檔，文件組未見客戶對話本身。落地：`PROJECT_RULES.md` 第 6 節 6.1.3、第 0.5 節快速索引一列、本筆、`docs/HANDOFF.md` Resume Checkpoint 一行。 |
 | 影響範圍 | 所有未來對話與 agent 的停止行為與回報格式。**不授權任何 production 實作；不放寬任何 Stop Gate、CI、audit、security gate**。 |
 | 是否可逆 | 可逆（純文件；客戶可另行指示） |
-| supersedes／superseded by | supersedes：無。補充（不取代）：第 4 節 Stop／Decision Gate、第 3 節 3.1 Silent Autonomous Cruise、`DEC-2026-10-26-02`。superseded by：無 |
+| supersedes／superseded by | supersedes：無。補充（不取代）：第 4 節 Stop／Decision Gate、第 3 節 3.1 Silent Autonomous Cruise、`DEC-2026-10-26-02`。superseded by：無。同向收緊指標（不是 supersede；2026-11-02，客戶）：`DEC-2026-11-02-04`——6.1.3 第 3 點回覆用語改「已切換／可以開始」、送出 Gate 後立即停下（`PROJECT_RULES.md` 5.1 第 11 點） |
 | provenance | **要點轉述**（決策者：客戶 2026-10-26，經總管派工單轉達）；條文化摘要由文件組單組寫成，未經第二組驗證。 |
 
 ### DEC-2026-10-27-01｜客戶裁示 D1 Gate 1：選 A（依 D1 草稿 §8.1 方案 A「殼層先行，不拆頁」定義）
@@ -1844,7 +1844,7 @@
 | evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-30_no_progress_narration_gate.md`（圍欄內文 sha256 `0f94d50913abba4a205e9d0026628de9e8f85227341e943cfb266bed20a65392`）；落地 `PROJECT_RULES.md` 第 3 節 3.3 |
 | 影響範圍 | 只動文件（`PROJECT_RULES.md` 新增 3.3 並更新快速索引一列、本檔、evidence 存檔與 README）；不改任何 `.py`、資料語意、UI。規範的是對客戶出聲的時機與完成回報的形式，不改 Stop／Decision Gate、Save／Handoff Gate、揭露義務的內容 |
 | 是否可逆 | 可逆（客戶可另行裁示） |
-| supersedes／superseded by | **收緊，不取代**：`DEC-2026-10-17-04`（`PROJECT_RULES.md` 3.1）與 `DEC-2026-10-27-45`（3.2）的四種出聲情形、固定一行「靜默巡航中。」、完整批次回報格式照舊有效；本筆把「哪些內容絕對不得對客戶出現」逐項點名（internal execution telemetry），並把完成回報定為「一次講完、不拆多則」。與 3.2 第 3 點九項格式的關係（本筆六項內容與其對得上，格式以 3.2 第 3 點為準、本筆不另立）是文件組判讀，可被客戶推翻。無被取代的舊條文 |
+| supersedes／superseded by | **收緊，不取代**：`DEC-2026-10-17-04`（`PROJECT_RULES.md` 3.1）與 `DEC-2026-10-27-45`（3.2）的四種出聲情形、固定一行「靜默巡航中。」、完整批次回報格式照舊有效；本筆把「哪些內容絕對不得對客戶出現」逐項點名（internal execution telemetry），並把完成回報定為「一次講完、不拆多則」。與 3.2 第 3 點九項格式的關係（本筆六項內容與其對得上，格式以 3.2 第 3 點為準、本筆不另立）是文件組判讀，可被客戶推翻。無被取代的舊條文。同向收緊指標（不是 supersede；2026-11-02，客戶）：`DEC-2026-11-02-04`——點名五項禁止回報、第 (4) 類完成回報須已做 GitHub final verification。 |
 | provenance | 客戶裁示原文逐字存於 evidence 檔；「決策內容摘要」為執行組依原文整理，以原文為準；與 3.1／3.2 的關係判讀由執行組單組寫成，可被客戶推翻；未經第二組獨立驗證。 |
 
 ### DEC-2026-10-30-04｜客戶裁示：D-3 Formula／Rule Gate 採 P3、precedence 採 β（只限 page-level presentation status）；F-13／F-2／F-14 必修、F-18 先修 BL-0411、F-19 算「沒評估到」
@@ -1993,6 +1993,21 @@
 | supersedes／superseded by | supersedes：**部分 amend `DEC-2026-11-02-02`**（已就地加指標，原字保留）：其「New UI 是唯一正式產品線」自此讀作「New UI2 是唯一未來正式 presentation layer；ui_v2 為 legacy reuse candidate」；其第 (5) 點「以既有 New UI 為視覺 baseline／只做增量／禁另一套 design system」**superseded，範圍只限 ui_v2 baseline 這一句**，New UI2 視覺語言沿用範圍待 Gate；第 (1)～(4) 點 Old UI 邊界不變。**第 (5) 點其餘片段（執行組讀法，可被客戶推翻）**：「把 Old UI 外觀重新搬回 New UI」與「同時演進 Old／New UI」的禁止仍有效（屬 Old UI 邊界）；「禁止全站 redesign」不適用於 New UI2 greenfield（客戶已裁示建立 New UI2），對 ui_v2 則依 freeze policy（待 BL-0533 Gate）。**其餘既有 presentation DEC 是否需 amendment 待 BL-0533 提出，本筆不逐筆判定**。superseded by：無。 |
 | provenance | **逐字**（以逐字檔為準）；「決策內容摘要」分項、「仍待客戶裁示」清單與 supersedes 欄的範圍判斷為執行組依總管派工單單組寫成，可被客戶推翻；未經第二組獨立驗證。 |
 
+### DEC-2026-11-02-04｜客戶裁示（永久）：Silent Autonomous Cruise／No Progress Narration 重申＋Hard-Stop Model／Mode／Effort Change Gate
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-02 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管轉存，見 `docs/evidence/decisions/2026-11-02_model_effort_hard_stop_and_silent_cruise.md`，全文逐字） |
+| 決策內容摘要 | **以逐字檔為準，以下為逐項摘要。(1) Silent Cruise／No Progress Narration 重申**：不再回報 ① CI 還在跑／跑多久、② writer 還在處理、③ untracked file 為何尚未 commit、④ 下一步準備做什麼、⑤ 沒有新決策價值的中間狀態——以上都屬安全且已授權的進度，自行處理。只在四種情況回報：① 需要客戶裁示的 Decision Gate；② 真 blocker／CI 真錯誤；③ 需要切換 Model／Effort；④ **整批完成並已做 GitHub final verification**。**(2) Hard-Stop Model／Mode／Effort Change Gate**：下一階段建議切換 Model、模式或 Effort → 先回報 Model／Effort Change Gate，明確寫出建議切成什麼，然後**立即停下**；不得先開始下一階段、不得先做下一批任何實作、不得邊提醒邊繼續；必須等客戶明確回覆「已切換／可以開始」後才能進入下一階段。(3) 客戶要求寫入正式 GitHub governance，並納入 HANDOFF／稽核清單。 |
+| 執行組讀法（**可被客戶推翻**；未經第二組驗證） | **(a) 恢復用語**：從嚴，不再把 5.1 第 10 點的「改好了」當等價用語；Gate 範本最後一行改為請客戶回覆「已切換／可以開始」，5.1 第 10 點舊範本行與「收到『改好了』才可進入」就地劃線指向 5.1 第 11 點（原字保留）。**(b) 與 5.1 第 10 點「等待期間，不受影響且不屬於下一完整工作階段的既有安全收尾可依原規則完成」的張力**：讀作——本批的安全收尾（merge、post-merge verification、SSOT 同步）必須在送出 Gate 訊息**之前**完成；Gate 訊息送出後，到客戶回覆前**不得再做任何工作**。該 bullet 原字保留，就地加指標。**(c)「模式」**＝需由客戶手動切換的 permission／plan／fast 等模式。 |
+| 理由／背景 | 客戶原話：「以上都屬安全且已授權的進度，請自行處理。」「不得先開始下一階段，不得先做下一批任何實作，不得邊提醒邊繼續。」 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-02_model_effort_hard_stop_and_silent_cruise.md`；落地 `PROJECT_RULES.md` 0.5 索引兩列、3.3 末尾指標、5.1 第 10 點劃線指標、新增 5.1 第 11 點（含稽核檢查項）；`docs/HANDOFF.md` 第 0 節第 8 點與 Resume Checkpoint |
+| 影響範圍 | 只動文件；不改 production `.py`（`tests/test_doc_counters.py` 的 `_MD_DOCS` 登記屬同批另一項）、資料語意或 UI。規範對客戶出聲的時機與 Model／模式／Effort 切換時的停手方式。**「改好了」舊回覆用語的位置盤點**（2026-11-02 以 `grep -n 改好了` 掃 `PROJECT_RULES.md`、`docs/HANDOFF.md`、`docs/DECISIONS.md`、`PROCESS.md`、`CLAUDE.md`；不宣稱窮舉）：`PROJECT_RULES.md` 5.1 第 7 點範例（客戶 2026-10-17 原文，保留不改，範例下方加指標）、第 8 點「Gate 上的處理」句、第 8 點範本末行、第 8 點「與第 1、3、4、7 點併讀」句、第 10 點三處、6.1.3 第 3 點 —— 皆已就地劃線或加指標指向 5.1 第 11 點；第 9 點「與第 7、8 點的關係」中的引用原已劃線，未動；`docs/DECISIONS.md` 三處屬歷史決策紀錄（`DEC-2026-10-17-05` 的 2026-10-18 指標列、`DEC-2026-10-25-03` 與 `DEC-2026-10-26-04` 的決策內容摘要），原字不改，`-10-25-03`、`-10-26-04` 已加同向收緊指標；`docs/HANDOFF.md`、`PROCESS.md`、`CLAUDE.md`：0 命中。**「等待期間安全工作照常進行」與「立即停下」的張力位置**（原字保留，各加同一張力指標，讀法同本筆讀法 (b)）：`PROJECT_RULES.md` 3.1「④ 為什麼另列」段、5.1 第 4 點、5.1 第 7 點「與第 4 點併讀」句、5.1 第 10 點「等待期間」bullet |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | **同向收緊，不取代**：`DEC-2026-10-25-03`（5.1 第 10 點：Gate 範圍擴及「模式」、恢復用語改「已切換／可以開始」、Gate 送出後全面停手）；`DEC-2026-10-17-04`、`DEC-2026-10-27-45`、`DEC-2026-10-30-03`（3.1～3.3：五項點名禁止回報、第 ④ 種回報須已做 GitHub final verification）。各該條文原字保留，就地加指標。superseded by：無。 |
+| provenance | **逐字**（以逐字檔為準）；「決策內容摘要」分項與「執行組讀法」(a)～(c) 由執行組依總管派工單單組寫成，可被客戶推翻；未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -2098,6 +2113,7 @@
 - 第四節 `DEC-2026-11-02-01`：原文以逐字摘錄落盤於 `docs/evidence/decisions/2026-11-02_final_ui_contract_freeze_assignment.md`（總管逐字轉存，只摘錄與落盤有關的節；未摘錄節號見檔頭；執行組未見客戶對話本身，只依派工單抄入，未另對轉存原文做位元組比對）；（甲）的分項整理、（丙）的一句話標題、supersedes 欄對 `DEC-2026-10-26-01` 第 (4) 點與 44 之十九其五第 5 條的範圍判斷是執行組單組寫成（79 第 14 節、第 9.3 節、UI-13 與第 8 行、第 30／48 節引用處依總管授權同步修正；`DEC-2026-10-26-01` 第 (4) 點依總管指示就地加指標），可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-11-02-02`：原文以逐字摘錄落盤於 `docs/evidence/decisions/2026-11-02_new_ui_only_and_ui15_gate.md` 第三、四節（總管逐字轉存，只摘錄與落盤有關的節；未摘錄節號見檔頭；執行組未見客戶對話本身，只依派工單抄入，未另對轉存原文做位元組比對）；「決策內容摘要」分項、supersedes 欄對 `DEC-2026-10-22-04`、`DEC-2026-10-26-01` 第 (1)／(10) 點的「同向收緊」判讀，以及與第 (10) 點退役原則的未裁張力揭露，是執行組單組寫成，可被客戶推翻；同檔第七～十二、十四、十五節屬 UI-15 proposal，**不構成裁示**；`DEC-2026-11-02-01`（丙）的 UI-15 增補指標依總管派工單加註；未經第二組驗證。
 - 第四節 `DEC-2026-11-02-03`：原文以逐字摘錄落盤於 `docs/evidence/decisions/2026-11-02_new_ui2_architecture_direction.md`（總管逐字轉存，只摘錄與落盤有關的段；未摘錄節號見檔頭；執行組未見客戶對話本身，只依派工單抄入，未另對轉存原文做位元組比對）；「決策內容摘要」分項、「仍待客戶裁示」清單、對 `DEC-2026-11-02-02` 的 amend／supersede 範圍判讀為執行組單組寫成，可被客戶推翻；未經第二組驗證。
+- 第四節 `DEC-2026-11-02-04`：原文逐字落盤於 `docs/evidence/decisions/2026-11-02_model_effort_hard_stop_and_silent_cruise.md`（總管逐字轉存；執行組未見客戶對話本身，只依派工單抄入）；「執行組讀法」(a)～(c) 與 supersedes 欄的同向收緊判讀由執行組單組寫成，可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-10-16-01`、`-02` 兩筆的客戶原話 repo 內沒有；內容依總管派工單與交接本轉述，本組未見原文。
 - 第四節 `DEC-2026-10-16-03`～`-13`：原文已落盤於 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔逐位元組相同）。各筆中標「總管讀法」「總管整理」者不是客戶裁示；「supersedes」欄的例示由文件實作組判讀，不宣稱窮舉，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-14`：原文已落盤於 `docs/evidence/decisions/2026-10-16_proposal8_approval.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔圍欄還原後逐位元組相同）。該筆中標「總管判定」「總管設計基準」者不是客戶裁示；「supersedes」欄的條文清單以 57 為準，由文件實作組整理，未經第二組驗證。
