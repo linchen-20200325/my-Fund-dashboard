@@ -9,6 +9,7 @@
 - **位階**：受 `CLAUDE.md` §-2 ＋ §-1.5 ＋ §-1 與 `PROJECT_RULES.md` 管轄；**不凌駕** `docs/v2/44_fund_ui_ssot.md`（凍結 SSOT）與子法 1（併讀 `docs/v2/57` 正式修正案 #8）。方向性輸出的准入仍依 44 第七節第三小節之四其二的三條件（正式規格經客戶核准、證據足夠、新鮮度與出處合格）與 `DEC-2026-10-16-08`；本檔是那個「正式規格」中**語意**的部分，不是它的全部。
 - **待辦登記**：`docs/BACKLOG.md` BL-0495（Risk Cap 正式定義）、BL-0496（減碼 deterministic trigger 定義）、BL-0490（批次 7 One AI Brain integration）。登記不構成動工授權。
 - 📌 **2026-10-29 增補**（`DEC-2026-10-29-06`）：第 5 節 Decision Digest Contract（最小契約）、第 6 節 One AI Brain contract 整合、第 7 節揭露；第 1～4 節原文一字未改。待辦另見 ~~BL-0526（AI 投資總結入口形式 Gate）~~〔2026-10-29 已裁示方案 C，見第 6.1 節，`DEC-2026-10-29-07`〕、BL-0527（Digest 缺口與守衛）。
+- 📌 **2026-11-02 增補**（`DEC-2026-11-02-07`）：第 8 節 Final UI／Decision System Contract（五條鐵則、System Action State、Constraint Precedence、Risk Cap 禁止事項、Field-Level Provenance／Freshness Policy schema、Digest Full Context 與 OneBrain context 三分、Traceability、qualitative outlook、🤖 四區方向），自 `docs/v2/79` 回寫；第 1～7 節原文未改；僅第 5.3 節末加一行指標。
 
 ---
 
@@ -184,6 +185,8 @@ Raw Sources → Canonical Data → Rules / Indicators / Risk Cap → Decision Di
 | relevant threshold／policy reference | `user_setting` 的 `setting_key`（例 `alo_tolerance_pp`）；淨值不可用天數常數 | **沒有 rule_version**（`git grep -n -i -E "rule_version|規則版本" 02615e41 -- '*.py'` 實跑無輸出，執行組 2026-10-29）；門檻引用沒有統一格式 |
 | confidence／evidence state（僅若既有系統已有正式語意） | 沒有正式語意（`docs/v2/54` 第 2、15 節自述 Non-production；44 `SET-0` 的「可信度」是資料可信度燈，不是投資信心） | **不納入**（客戶第六節的條件不成立） |
 
+→ 2026-11-02 增補：決策欄位 schema 與 Freshness Policy schema 見第 8.5 節（`DEC-2026-11-02-07` UI-8 A）；讀本節須併讀 8.5。
+
 ### 5.4 Missing 保持 Missing
 
 1. 不得 Missing → 0；Missing → neutral；not evaluated → safe；unavailable → HOLD（客戶原話）。
@@ -241,3 +244,146 @@ Raw Sources → Canonical Data → Rules / Indicators / Risk Cap → Decision Di
 1. 第 5、6 節由執行組單組寫成，未經第二組獨立驗證（`CLAUDE.md` §-2 規則 6）；屬 AI decision semantics 與 data semantics 等級，依 `PROJECT_RULES.md` 第 8 節須至少 1 組真正獨立稽核。
 2. 第 5.3 節「既有承載」與第 5.7 節的現有 AI 盤點是調查組 3 單組讀碼結果；執行組抽查四件（與第 5.3 節檔頭同一份清單）：`value_text`、`rule_version`、`build_ai_summary`、B 線沒有 AI 呼叫，其餘照錄，欄位是讀建構函式得出，沒有跑過實際回傳值。
 3. 第 5.1 節兩條鏈的對位、第 5.2 節第 3 點、第 5.5 節、第 6 節第 2、3、8 點為讀法，可被客戶推翻。
+
+## 8. Final UI／Decision System Contract（客戶 2026-11-02 裁示，`DEC-2026-11-02-07`）
+
+> 出處：`docs/v2/79_final_ui_contract_freeze.md` 第 13 節 UI-1、UI-6、UI-7、UI-8、UI-9、UI-14，客戶 2026-11-02 依總管推薦 A 採用（`docs/DECISIONS.md` `DEC-2026-11-02-07`；逐字存檔 `docs/evidence/decisions/2026-11-02_new_ui2_ng_and_final_ui_contract_ruling.md`）。UI-1 選項 A 原文「全採，回寫 67 新節＋DEC」、UI-9 選項 A 原文「採用並回寫 67」，本節即該回寫；依 79 檔頭落盤策略，自本日起本節是這些規則的正式住址，79 對應各處只保留 rationale、不再作為條文引用來源。
+> 本節只把 79 已核准的 A 內容轉錄成條文，不新增任何行動詞、狀態符號、門檻數值、權重或分數；不改第 1～7 節原文（僅第 5.3 節末加一行指向第 8.5 節的指標）；不構成任何實作授權（`ui_v3` production 另受 Model／Mode／Effort Change Gate 約束，`DEC-2026-11-02-04`）。各小節標「仍待」者照舊另走 Gate。
+
+### 8.1 五條鐵則（UI-1 A；79 第 2 節）
+
+| 鐵則 | 一句話 | 本節正式化的明文（79 第 2 節「本提案新增」欄） |
+|---|---|---|
+| **C-1 Single Action Authority** | 唯一的動作權威＝Deterministic Rules＋Risk Cap 產出的 System Action State；OneBrain 不另發 action | 「System Action State」這個具名中介物（第 8.2 節）；OneBrain 只能引用、不能產生 action |
+| **C-2 No Uncalibrated Probability** | 沒有 calibration contract 前，畫面與 AI 輸出禁止任何 % 機率、信心值；LLM 不得自估機率 | calibration contract 的最低構成：historical labels、prediction target、backtest、calibration、reliability curve 或同等、Brier score 或同等、versioning；七項缺一即不得出現機率；**只適用於機率／信心類輸出**，不適用於 deterministic 公式結果（例：已核准的情境指數） |
+| **C-3 Constraint Precedence** | Hard Constraint ＞ interpretation；解讀永遠不能推翻約束 | 優先序的完整排列與「衝突時顯示什麼」（第 8.3 節） |
+| **C-4 Field-Level Provenance** | 每個進入決策的欄位各自帶 source／as_of／freshness 等，不靠頁級時間戳 | 欄位 schema 與「global timestamp 只代表 render 時間」（第 8.5 節）；Freshness Policy schema（不填值） |
+| **C-5 Auditability** | 任何一句畫面字可回溯：UI → Decision Digest → Rule → Canonical Data → Source | 回溯鏈的固定五段與 AI 句子的 traceability 要求（第 8.7 節） |
+
+**共同邊界**（79 第 2 節）：五條都不新增行動詞、不新增狀態符號、不填任何門檻數值、不授權任何實作；C-2 不禁止 deterministic 計算出的比率（例：配置占比 %、報酬率 %）與已核准的 deterministic 情境值（44 之十八其十的情境指數），禁止的是「機率」與「信心」這類對未來或對判斷本身的機率陳述。各條的既有依據見 79 第 2 節表格。
+
+### 8.2 System Action State（UI-6 A；C-1；79 第 6.1 節）
+
+| 項 | 內容 |
+|---|---|
+| 定義 | Deterministic Rules＋Risk Cap 評估後，對某個作用對象（組合／類型／單檔）的唯一動作狀態 |
+| 值域 | 只用本檔第 2 節六詞：續抱、觀察、降低曝險、減碼、替代比較、無法判定；**不新增行動詞** |
+| 現行值 | Rules 與 Risk Cap 未定義前只會是「無法判定」（本檔第 1 節現行可用性；`DEC-2026-10-27-40`） |
+| 產生者 | 只有 deterministic layer；OneBrain 只能引用（C-1） |
+| 必帶欄位 | 作用對象、值、原因（含「缺什麼」）、Rule ID（若存在）、評估時間、輸入 Digest 參照 |
+| 呈現 | 沿用本檔第 2.6 節「⬜ 無法判定（資料未備／證據不足）」字型 |
+
+- 再平衡政策未定時的原因：「待再平衡決策」是「無法判定」的**原因字樣，不是新行動詞**（UI-6 A）。**仍待**：畫面字樣待客戶定字（79 第 6.3 節）。
+
+### 8.3 Constraint Precedence（UI-6 A；C-3；79 第 6.2 節）
+
+```text
+資料狀態（取數失敗／資料未備／不是最新）
+  ＞ Hard Constraints（含 Risk Cap 超限）
+  ＞ Deterministic Rule Result
+  ＞ System Action State
+  ＞ OneBrain interpretation
+```
+
+上層不成立時，下層不得產生比上層更樂觀的結論（例：資料未備時不得出現續抱；Risk Cap 超限時 OneBrain 不得寫「可以維持」）。依據：本檔第 2.6 節、第 5.4 節；`PROJECT_RULES.md` 13.1；`DEC-2026-10-24-10`。
+
+### 8.4 Risk Cap 禁止事項（UI-6 A；79 第 6.3 節右欄）
+
+以下不可做（79 第 6.3 節右欄，客戶依 UI-6 A 核准此清單）：
+1. AI 選擇要賣哪一檔基金（本檔第 2.3、3.3 節；75 第 11 節）。
+2. 計算贖回金額（`DEC-2026-10-27-14`：AI 不得決定資產水位）。
+3. 決定核心或衛星先賣誰（75 第 11 節：不得自行創造 core／satellite 規則）。
+4. 決定成本或稅務優先序。
+
+**不在核准範圍（仍待）**：79 第 6.3 節左欄的 Risk Cap 候選行為（顯示超限與幅度、「凍結加碼」、顯示 constraint reason 與 Rule ID、「需進一步再平衡決策」標示）**未核准**；Risk Cap 數值、trigger 與輸出定義仍走 BL-0495／BL-0496。若日後要表達「禁止新增曝險」，須在本檔六詞框架內另走詞彙 Gate，不得作為隱含新詞出現在畫面、Digest 或 OneBrain 輸出（79 第 6.3 節註）。再平衡政策的未定義清單見 79 第 6.3 節（Rebalance Policy Gap）。
+
+### 8.5 Field-Level Provenance 與 Freshness Policy schema（UI-8 A；C-4；79 第 7 節）
+
+**決策欄位 schema**（作為 Decision Digest／L2 契約目標；對照本檔第 5.3 節最低概念欄位，屬第 5.3 節的增補）：
+
+| 欄 | 意思 | 本檔第 5.3 節已有概念？ |
+|---|---|---|
+| value | 值 | 是（value／result） |
+| unit | 單位 | 是 |
+| source | 具體來源名 | 是 |
+| provenance | 來源鏈與修正紀錄 | 是 |
+| as_of | 觀測日 | 是 |
+| release_date | 公布日 | 部分（as_of 欄內） |
+| retrieved_at | 取得時間 | 是 |
+| frequency | 頻率 | 否（新增） |
+| freshness_state | 依 Freshness Policy 判出的狀態 | 是（stale／freshness state） |
+| stale | 是否不是最新 | 同上 |
+| missing／unavailable／error | 三種不同的缺 | 是（missing／unavailable state） |
+
+- 正式 source 不提供 release date 時**不虛構**，該欄寫「來源未提供」（`CLAUDE.md` §2.3、§1）。
+- **global timestamp 只代表 UI render／summary refresh 時間，不得被讀成資料時間。**
+
+**Freshness Policy schema**（只定欄位，不填任何門檻值）：
+
+| 欄 | 意思 |
+|---|---|
+| policy_id | 政策識別碼 |
+| frequency | 日／週／月／季 |
+| expected_lag | 正常發布延遲（文字或天數，取自來源事實） |
+| stale_after | **值待裁示**（Threshold Gate） |
+| authority | 誰裁示（DEC 編號） |
+
+**仍待**：`stale_after` 等門檻值 per source 另走 Threshold Gate（UI-8 A；`docs/BACKLOG.md` BL-0531 後續項 (5)）；`CLAUDE.md` §2.4 的 TTL 與舊 SPEC 門檻不因本節搬進新 UI；月度指標 `[STALE: XXd]` 標籤規則是否沿用，由 Digest／OneBrain 批決定（79 第 7.2 節）。
+
+### 8.6 Decision Digest Full Context 與 OneBrain context 三分（UI-9 A；79 第 8.1～8.3 節）
+
+**原則**：UI 可以只顯示 10%，Digest 必須保留 100% 有決策意義的 context（10%／100% 為示意比例，不是指標）。這是本檔第 5.1 節客戶原話「Presentation Simplification must never reduce AI Decision Context」與「Data View ≠ Decision Context ≠ AI Output」的展開。
+
+**欄位群**（79 第 8.2 節；**只列欄位群，不是 schema**；落地時以第 5.3 節最低概念欄位為核心，依 BL-0527 缺口逐步擴充，不一次建立全欄位結構 —— 第 5 節「不要現在武斷建立全新巨大 schema」照舊）：
+
+| 群 | 欄位 |
+|---|---|
+| Identity | canonical identifier、類別、identity resolution 狀態（resolved／unresolved） |
+| Value | value、unit、currency／share class |
+| Time | as_of、release_date、retrieved_at、frequency |
+| Source | source（具體名）、source_tier、provenance、fallback 是否發生 |
+| Health | freshness_state、stale、missing、unavailable、error、reason_code |
+| Domain | domain calculation 結果與其輸入參照 |
+| Rule | rule result、Rule ID、rule_version、threshold 引用 |
+| Risk | Risk Cap 輸入／輸出（目前只能「未定義」）、System Action State |
+| Audit | digest id、schema version、fingerprint、policy version、建立時間 |
+
+confidence：**不納入**（本檔第 5.3 節，條件不成立；C-2）。
+
+**OneBrain context 三分**：
+
+| 類 | 定義 | 例 |
+|---|---|---|
+| Required | 沒有就不能做正式分析；缺時 OneBrain 輸出「無法判定」並列出缺什麼 | identity、value、as_of、health、rule result、System Action State |
+| Optional | 有則用、缺則在 missing 清單揭露，不阻擋分析 | 歷史序列、補充 provenance |
+| Excluded | 不得進入 Digest 與 fingerprint | widget 展開狀態、scroll、container 順序、cosmetic color、session-only display metadata |
+
+**OneBrain 不得**從 UI 顏色、widget visibility、圖的位置、收合狀態、UI 文案反推 canonical fact（本檔第 5.2 節第 2 點、75 第 6.3 節）。
+
+**仍待**：Required 清單可能隨 Digest 實作調整（79 UI-9 風險欄）；Digest schema 版本與 fingerprint 另走 Gate；Digest 缺口見 BL-0527。
+
+### 8.7 Traceability（C-5，UI-1 A；79 第 8.4 節）
+
+```text
+AI sentence → Digest fields → Rule Result → Rule ID → Canonical Data → source／as_of
+```
+
+每次 OneBrain 正式輸出至少含：核心理由；使用了哪些 Rule Result；最大反證（Falsification Condition：什麼事實出現就推翻本判讀）；Missing／uncertainty 清單。
+
+**仍待**：Rule ID 編碼、rule_version、門檻引用格式另走格式 Gate（BL-0527 第 4 項；79 UI-10）；「查看依據」對映（`AI-3`）。
+
+### 8.8 OneBrain qualitative outlook（UI-7 A；79 第 8.5 節）
+
+**維持 proposal，不得 production；不是本檔的行動或狀態詞彙。** 候選項目與候選值只住在 79 第 8.5 節（proposal，Illustrative Only），本檔不收；一致性定義與輸出 schema 隨 OneBrain 批另走 Gate。在該 Gate 通過前，qualitative outlook 屬 interpretation 層，不是 System Action State，不得被畫成 regime chip，也不得帶 %（C-2）。
+
+### 8.9 🤖 AI 投資總結版面四區（UI-14 A；79 第 9.4 節）
+
+**方向核准**：System State（deterministic）／OneBrain Interpretation（AI）／Maximum Falsification（最大反證）／Evidence（可展開「查看依據」）四區分隔 —— deterministic 與 AI 分區、要有反證。Maximum Falsification 超出本檔第 6.1 節第 3 點固定輸出，屬新增內容。
+
+**仍待**：精確版面於 Phase 7 實作時出線框再定；屆時擴充第 6.1 節輸出者再回寫本檔（BL-0531 UI-14 子項）。第 6.1 節第 3 點固定輸出與導覽時點（`DEC-2026-10-29-07`，UI-11 不變）照舊。
+
+### 8.10 本節沒有查證的部分
+
+1. 本節由單組轉錄（文件組依 79 第 2、6～9 節）；本批已經 1 組獨立稽核（含 delta 複驗），無剩餘 blocker（總管回報）。屬 AI decision semantics 等級（`DEC-2026-10-16-05`）。
+2. 轉錄範圍的取捨（只收 UI-1、UI-6、UI-7、UI-8、UI-9、UI-14；UI-2～UI-5、UI-10、UI-12、UI-13、UI-15 不收）是總管派工單的範圍、文件組照辦，可被客戶推翻。79 第 3 節概念鏈未綁任何 UI 題，本節未收。
+3. 第 8.5 節依 79 第 2 節 C-4「建議落點：67 第 5 節增補」，為不改第 5 節原文而住在本節；第 5.3 節末已加一行指標，讀第 5.3 節時須併讀第 8.5 節。

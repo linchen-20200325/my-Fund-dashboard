@@ -1,9 +1,10 @@
-# 79｜Final UI／Decision System Contract Freeze（提案；⛔ 待客戶裁示）
+# 79｜Final UI／Decision System Contract Freeze（~~提案；⛔ 待客戶裁示~~ → 已裁示（`DEC-2026-11-02-07`）；New UI2 input contract（正式 implementation input））
 
+- **2026-11-02 裁示狀態（`DEC-2026-11-02-07`；決策者：客戶；狀態更新，不是漏刪）**：客戶 2026-11-02 一次裁示 UI-1～UI-15 —— UI-11 維持既有裁示（`DEC-2026-10-29-07`，不重問）；其餘依總管推薦 A 採用；UI-12 (1) 明確同意 amend `DEC-2026-10-30-01` D1（🌍 Primary 方向改為 TAIEX vs S&P 500 比較圖，最終呈現由 New UI2 🌍 頁 wireframe 重新核准），(2) 「國際｜S&P 500」卡去留併入 New UI2 🌍 wireframe（總管讀法，可被客戶推翻）；UI-13 歸一化基準＝100；UI-15 採 A。逐字見 `docs/evidence/decisions/2026-11-02_new_ui2_ng_and_final_ui_contract_ruling.md`。自此本檔的語意規格是 **New UI2 input contract（正式 implementation input）**；下方原「定位」「落盤策略」各句保留作歷史，凡寫「提案／待客戶裁示／不生效」者，自本日起讀作「已裁示（`DEC-2026-11-02-07`）」；正式條文住址仍依下方落盤策略（DECISIONS／BACKLOG／HANDOFF／67），本檔不升格為第二套規格。五條鐵則依 UI-1 A 正式採用（第 2 節）。各節 `[Gate UI-n]` 標記保留原字，狀態以第 13 節逐題註記為準。
 - **定位**：**Proposal／Decision Gate／Migration Contract。不是規格、不是第二套 UI 或 AI 憲法、不是動工授權。** 本檔把客戶 2026-11-02 要求凍結的「最終 UI 與決策系統契約」整理成一份可一次裁示的提案：現況、提案條文、遷移地圖與 Gate。本檔寫下的任何「提案」在客戶裁示前不生效；裁示後也不以本檔為正式條文住址（見下方落盤策略）。
 - **2026-11-02 客戶永久邊界**：New UI 為唯一正式產品線、Old UI 只作 read-only logic reference、既有 New UI 為視覺 baseline（`DEC-2026-11-02-02`）；本檔所有 wireframe 只對 New UI 增量調整。（→ **2026-11-02 起**：本檔語意規格作為 New UI2 的 input contract；production implementation target＝New UI2；ui_v2 不再作主要演進目標；本檔 §9 wireframe 屬語意示意，New UI2 版面由其 architecture／wireframe Gate 另定（`DEC-2026-11-02-03`；原字保留，狀態更新，不是漏刪））
 - **位階**：不凌駕 `CLAUDE.md`、`PROJECT_RULES.md`、`docs/v2/44_fund_ui_ssot.md`（frozen）、`docs/v2/67_ai_action_vocabulary.md`、`docs/v2/75_onebrain_ai_architecture.md` 與 `docs/DECISIONS.md` 的正式裁示；衝突一律以它們為準。本檔的提案若與它們牴觸，視為本檔寫錯，不視為對它們的修改。
-- **客戶核准後的落盤策略（`PROJECT_RULES.md` 13.4 第 7 條：文件不重複 SSOT）**：正式規則回寫既有 canonical SSOT —— 裁示登記 `docs/DECISIONS.md`；未完成工作進 `docs/BACKLOG.md`（優先掛既有列，不碎片化）；現況與接手點進 `docs/HANDOFF.md`；AI／Decision 語意以 `docs/v2/67` 增節承接；只有在第一個實作批真的與 44 條文衝突時，才開 44 新一輪 amendment（同 `DEC-2026-11-01-02` G-E5 模式）。本檔核准後只保留三樣：rationale、migration map、visual contract rationale；不再作為任何條文的引用來源。
+- **客戶核准後的落盤策略（`PROJECT_RULES.md` 13.4 第 7 條：文件不重複 SSOT）**：正式規則回寫既有 canonical SSOT —— 裁示登記 `docs/DECISIONS.md`；未完成工作進 `docs/BACKLOG.md`（優先掛既有列，不碎片化）；現況與接手點進 `docs/HANDOFF.md`；AI／Decision 語意以 `docs/v2/67` 增節承接（→ 2026-11-02 已回寫 67 第 8 節，`DEC-2026-11-02-07`；狀態更新，不是漏刪）；只有在第一個實作批真的與 44 條文衝突時，才開 44 新一輪 amendment（同 `DEC-2026-11-01-02` G-E5 模式）。本檔核准後只保留三樣：rationale、migration map、visual contract rationale；不再作為任何條文的引用來源。
 - **量測基準**：**程式事實以 main `20bf6442` 為準；`DEC-2026-11-01-02` 見 #1117（Batch E Gate 落盤）——#1117 已 squash 合併，main＝`52da0cab`（~~Draft~~，分支 `815fb88e` 為合併前的落盤 commit；狀態更新，不是漏刪）；`52da0cab` 與 `20bf6442` 在 `ui_v2/`、`services/`、`shared/` 三處無差異（兩點 diff 確認），故程式事實不變。** 本檔撰寫時的本機工作樹是 #1117 較早的 `0d2e05f3`，該 commit 與 `20bf6442` 在 `ui_v2/`、`services/`、`shared/` 三處無差異（本組以兩點 diff 確認）。程式位置寫「檔案::符號」，不寫行號。
 - **現況的來源（據實揭露）**：本檔第 1、9、12 節的「現況」大多來自兩組**單組唯讀盤點**（程式現況組、SSOT 現況組），由總管轉述給本組，**未經第二組複驗**。本組在 1 分鐘內能重驗的承重事實已重驗並改標【F-重驗】；其餘標【F-轉述】。重驗清單見第 16 節。
 - **客戶指示來源**：客戶 2026-11-02「Final UI／Decision System Contract Freeze」任務（對話中）；與本檔相關的段落已由總管逐字摘錄存於 `docs/evidence/decisions/2026-11-02_final_ui_contract_freeze_assignment.md`（`DEC-2026-11-02-01`）。本檔引用其中兩處，以該逐字摘錄為準：「第 30 節」（「找基金 Primary Visual 建議：Normalized NAV，Base = 100」）與「第 48 節」（缺資料時用 `◇ 資料未備`、不新造另一套詞）。
@@ -40,8 +41,12 @@
 
 ---
 
-## 2. 五條鐵則（提案）
+## 2. 五條鐵則（~~提案~~ → 已裁示採用：UI-1 A，`DEC-2026-11-02-07`；狀態更新，不是漏刪）
 
+> → 2026-11-02 起正式條文住 67 §8（§8.1 五條鐵則；UI-1 A，`DEC-2026-11-02-07`）；本檔此處只保留 rationale（狀態更新，不是漏刪）。
+>
+> **2026-11-02 狀態**：客戶依 UI-1 A 全採五條鐵則（回寫 67 新節＋DEC 依落盤策略辦理）；下表「碰 Gate？」欄的「是（新定義，需裁示）」自本日起讀作「已裁示（`DEC-2026-11-02-07` UI-1 A）」；「門檻值：另案」不變 —— 任何門檻數值仍另走 Threshold Gate。原表一字未改。
+>
 > 本節是提案的核心。五條都不是全新的價值觀；多數是把散在 67／58／75／DEC 的既有條文收成一句可引用的名字，另補少量新定義。下表逐條拆開「既有依據」與「本提案新增」。
 
 | 鐵則 | 一句話 | 既有依據 | 本提案新增 | 建議落點 | 碰 Gate？ |
@@ -141,7 +146,7 @@ Raw Sources
 |---|---|---|
 | 主要 series 上限 | 同一張圖原則 ≤3 條主要 series | 新定義，需裁示（44 查無 series 上限） |
 | 同單位同尺度 | 可直接 overlay（例：美 2Y 與美 10Y，皆 %） | 新定義，需裁示 |
-| 不同絕對尺度比走勢 | 用歸一化（Normalized）；必須標起始日、base value、frequency、missing handling；基準值 1 或 100 只是顯示尺度，見 UI-13 | 新定義，需裁示（44 查無 normalized；🔍 已核准的 78 寫起點＝1） |
+| 不同絕對尺度比走勢 | 用歸一化（Normalized）；必須標起始日、base value、frequency、missing handling；基準值 1 或 100 只是顯示尺度，見 UI-13（→ **2026-11-02 已裁示：New UI2 跨頁基準值＝100**，`DEC-2026-11-02-07` UI-13 A；狀態更新，不是漏刪） | 新定義，需裁示（44 查無 normalized；🔍 已核准的 78 寫起點＝1）（→ 2026-11-02：本節多序列規則依 UI-3 A 已裁示，`DEC-2026-11-02-07`；78 的「起點＝1」屬 ui_v2 線框，對 New UI2 由 UI-13 的 100 取代；78 三處「起點＝1」已就地加指向，原字保留） |
 | 不同語意或單位 | 不硬疊；改並排或切換 | 新定義，需裁示 |
 | dual-axis | **預設禁止**（雙軸會誘導讀者看出不存在的相關性），列 Gate | 新定義，需裁示（44 查無 dual-axis） |
 | frequency 不一致 | 不 resample 冒充同頻；圖上標示頻率差 | `CLAUDE.md` §2.3、§4.5 對齊原則 |
@@ -176,6 +181,9 @@ Raw Sources
 ---
 
 ## 6. Action／Risk Cap boundary（提案）
+
+> → 2026-11-02 起正式條文住 67 §8（§8.2 System Action State、§8.3 Constraint Precedence、§8.4 Risk Cap 禁止事項；UI-6 A；第 6.3 節左欄候選未核准，`DEC-2026-11-02-07`）；本檔此處只保留 rationale（狀態更新，不是漏刪）。
+
 
 ### 6.1 System Action State（新定義，需裁示）
 
@@ -220,6 +228,9 @@ Raw Sources
 
 ## 7. Field-Level Provenance／Freshness（提案）
 
+> → 2026-11-02 起正式條文住 67 §8（§8.5；UI-8 A；門檻值仍另走 Threshold Gate，`DEC-2026-11-02-07`）；本檔此處只保留 rationale（狀態更新，不是漏刪）。
+
+
 ### 7.1 決策欄位 schema 候選（新定義，需裁示；對照 67 第 5.3 節）
 
 | 欄 | 意思 | 67 第 5.3 節已有概念？ | repo 既有承載（轉述自盤點） |
@@ -254,6 +265,9 @@ Raw Sources
 ---
 
 ## 8. Decision Digest Full Context Contract（提案）
+
+> → 2026-11-02 起正式條文住 67 §8（§8.6 Digest Full Context 與 OneBrain context 三分〔UI-9 A〕、§8.7 Traceability〔C-5，UI-1 A〕、§8.8 qualitative outlook〔UI-7 A〕，`DEC-2026-11-02-07`）；本檔此處只保留 rationale（狀態更新，不是漏刪）。
+
 
 ### 8.1 原則（依據 67 第 5.1 節客戶原話）
 
@@ -309,6 +323,8 @@ AI sentence → Digest fields → Rule Result → Rule ID → Canonical Data →
 ## 9. 五頁 Page Contract 與文字線框（提案）
 
 > 線框標記：`[現]`＝現況已有；`[提]`＝本檔提案；`[Gate]`＝需客戶裁示。數值一律用 `‹值›` 遮罩。框寬約 56 欄，全形字算 2 欄，右框偶有不齊屬正常。
+>
+> **2026-11-02 狀態（`DEC-2026-11-02-07`、`DEC-2026-11-02-05`；決策者：客戶；狀態更新，不是漏刪）**：以下線框內 `[Gate UI-n]` 原字保留；各題已於 2026-11-02 裁示（逐題見第 13 節）。本節線框仍屬**語意示意**（`DEC-2026-11-02-03` 檔頭指標不變）；New UI2 的最終版面以 `docs/v2/80` 第 7 節五頁 wireframe（`DEC-2026-11-02-05`：正式 implementation input）為起點，並依 NG-5／UI-12 由各頁 New UI2 wireframe 重新核准。
 
 ### 9.1 🌍 市場與趨勢
 
@@ -323,6 +339,7 @@ AI sentence → Digest fields → Rule Result → Rule ID → Canonical Data →
 | Third | Missing、freshness、source、observation dates、limitations、`MKT-1`～`MKT-7`：下沉，不得刪除 `[現]` |
 | 保留 | Batch C 語意；D2 P2 合併切換；D7 順序；chip 規則；Secondary 不複製 Primary 完整資訊（D1 硬限制）。**D1 版面需覆議**（UI-12） |
 | 相對現況差異 | 只在 UI-12 核准時：Primary 由單序列改比較圖、S&P 500 卡去留；其餘維持現況 |
+| **2026-11-02 裁示狀態** | UI-12 (1)：客戶同意 amend `DEC-2026-10-30-01` D1 —— New UI2 🌍 Primary 方向＝**TAIEX vs S&P 500 比較圖**（歸一化基準 100，UI-13），比較圖的最終呈現**由 New UI2 🌍 頁 wireframe 重新核准**；(2) 「國際｜S&P 500」卡去留併入 New UI2 🌍 wireframe（總管讀法，可被客戶推翻）；UI-12 (3) 依據卡 ≤3 已核准（`DEC-2026-11-02-07`；D1 語意「Primary 只一張、Secondary 不複製 Primary」保留；狀態更新，不是漏刪） |
 
 ```text
 桌機 1280                                   手機 390
@@ -354,6 +371,7 @@ AI sentence → Digest fields → Rule Result → Rule ID → Canonical Data →
 | 行動 | action state 只來自 deterministic rules；現況無 → **不顯示任何行動** |
 | 保留不推翻 | Batch D、P3、Layout A、page-state semantics、Domain Block Identity ≠ Presentation Container（`DEC-2026-10-30-02`、`DEC-2026-10-31-01`）；不畫 `HLD-0`／`ALO-0` 重複燈；容許帶等參數無預設值 |
 | 相對現況差異 | 只差 Primary 上的 band 視覺 |
+| **2026-11-02 裁示狀態** | UI-12 (4) 容許帶視覺已核准（出處＝使用者設定；端點歸屬仍未定，見 `ui_v2/alo/fixtures.py` 檔頭 `ALO-GAP-端點`）；UI-15 A：💼 擁有 Dividend Calendar（第 17.2 節）；最終版面由 New UI2 💼 頁 wireframe 核准（`DEC-2026-11-02-07`；狀態更新，不是漏刪） |
 
 ```text
 桌機 1280                                   手機 390
@@ -378,11 +396,12 @@ AI sentence → Digest fields → Rule Result → Rule ID → Canonical Data →
 | 結構 | 同頁上下 P：上「找一檔基金」、下既有 EXP 篩選器原樣（`DEC-2026-11-01-02`） |
 | First Eye | 單一輸入框 X（MoneyDJ 基金代碼或 ISIN）；ISIN「尚未啟用／目前沒有已核准的 ISIN 對照來源」；S6 字樣「輸入類型：代碼型字串（原值未改寫）」「基金身份：◇ 尚未確認」 |
 | Lookup Result | 基金名稱、MoneyDJ code、ISIN（無已核准來源時不顯示推斷值）、fund category、currency、as_of、source／provenance；分清「查無基金」與「取數失敗」，分不清時不寫查無（G-E3） |
-| Comparison Workspace | 使用者手動加入；78 未定上限；Batch E 實作暫以 3 檔為顯示上限（與 Visual Budget ≤3 series 一致），正式上限由 UI-12 確認，不以本題為前置（開工時點依 `DEC-2026-11-02-01`：Step 3 客戶裁示後）（客戶 2026-11-02 任務轉述「最多 2～3 檔」）`[Gate UI-12]`；session-only、唯讀；不寫 Sheet、我的資產、候選、觀察清單（G-E6） |
-| Primary | 歸一化 NAV：基準值裁示前沿用 78 已核准的「起點＝1」，推薦改 100（UI-13）；標 base date、date range、frequency、missing treatment、各檔 as_of、source |
+| Comparison Workspace | 使用者手動加入；78 未定上限；Batch E 實作暫以 3 檔為顯示上限（與 Visual Budget ≤3 series 一致），正式上限由 UI-12 確認，不以本題為前置（開工時點依 `DEC-2026-11-02-01`：Step 3 客戶裁示後）（客戶 2026-11-02 任務轉述「最多 2～3 檔」）`[Gate UI-12]`（→ **2026-11-02 已裁示：比較最多 3 檔**，UI-12 (5) A，`DEC-2026-11-02-07`；與 `EXP-3` 為兩個獨立元件；狀態更新，不是漏刪）；session-only、唯讀；不寫 Sheet、我的資產、候選、觀察清單（G-E6） |
+| Primary | 歸一化 NAV：~~基準值裁示前沿用 78 已核准的「起點＝1」，推薦改 100（UI-13）~~ → **基準值＝100**（UI-13 A，`DEC-2026-11-02-07`；New UI2 跨頁一致；78 的「起點＝1」屬 ui_v2 線框，已就地加指向、原字保留；狀態更新，不是漏刪）；標 base date、date range、frequency、missing treatment、各檔 as_of、source |
 | Secondary（下沉） | 1M／3M／6M／1Y／3Y、Sharpe、Beta、Max Drawdown、配息分布、費用、規模、幣別、經理人、來源、限制 —— 只有 repo 已有正式資料才顯示，否則 `◇ 資料未備` |
 | 下方 | EXP 篩選器原樣（`EXP-0`～`EXP-7`；`EXP-3` 並排對照上限 3 不動） |
 | 禁止 | 名次截取（Top N）、最佳、精選、AI 排名、AI score、名稱模糊搜尋（`DEC-2026-10-27-32`、`-33`、`DEC-2026-11-01-01`） |
+| **2026-11-02 裁示狀態** | UI-12 (5)：比較最多 3 檔；UI-13：歸一化基準＝100；最終版面由 New UI2 🔍 頁 wireframe 核准（`DEC-2026-11-02-07`；狀態更新，不是漏刪） |
 
 > ⚠️ **更正總管轉述的一項現況**：轉述寫「`EXP-3` 並排對照上限 4（44 逐字）」。本組重驗【F-重驗】：44 `EXP-3` 規則欄逐字為「**同時最多對照 3 檔**」，第 4 個勾選框停用；程式 `ui_v2/exp/logic.py::COMPARE_LIMIT`＝3。**上限是 3，不是 4。** 因此「lookup 比較上限 3 與 EXP-3 上限 4 並存」的前提不成立；剩下的小題是：兩者數字相同但是兩個不同元件（選取不互通、不合併計數），是否需要客戶確認（第 13 節 UI-12 第 (5) 子題）。
 
@@ -412,7 +431,7 @@ AI sentence → Digest fields → Rule Result → Rule ID → Canonical Data →
 | 唯一核心問題 | 現在怎麼看、主要原因、最大風險、是否需要行動（67 第 6.1 節第 3 條） |
 | 六段 | 市場一句；我的資產／配置一句；持股一句；找基金／候選比較一句；主要風險 1～3；本期行動 ≤3 |
 | Action | 只能引用 System Action State（目前只會是「無法判定」並寫缺什麼） |
-| 版面四區 `[Gate UI-14]` | System State（deterministic）／OneBrain Interpretation（AI）／Maximum Falsification（最大反證）／Evidence（可展開「查看依據」）—— 超出 67 第 6.1 節固定輸出（Maximum Falsification 為新增），Phase 7 線框時裁示 |
+| 版面四區 `[Gate UI-14]` | System State（deterministic）／OneBrain Interpretation（AI）／Maximum Falsification（最大反證）／Evidence（可展開「查看依據」）—— 超出 67 第 6.1 節固定輸出（Maximum Falsification 為新增），Phase 7 線框時裁示（→ **2026-11-02 已裁示 UI-14 A**：方向核准，Phase 7 實作時出線框再定，`DEC-2026-11-02-07`；狀態更新，不是漏刪）（→ 2026-11-02 起正式條文住 67 §8.9；本檔此處只保留 rationale（狀態更新，不是漏刪）） |
 | 禁止 | 未校準 %；大量長文；複製市場頁全部圖或資產頁全部表；平行 action；AI score；假信心；Missing 時硬判方向（67 第 3.3、6 節；C-1、C-2） |
 | runtime 未啟用時 | 沿用 75 第 12 節字樣「AI 分析暫不可用／無法判定」—— 誠實狀態，不放假資料 |
 | 導覽 | **已裁示**：`DEC-2026-10-29-07` Phase 7 才掛入；目標 IA＝五頁不變（不重問） |
@@ -440,10 +459,11 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 |---|---|
 | 唯一核心問題 | 資料可不可信、連線與來源是否健康、規則參數是什麼 |
 | 保留 `[現]` | 帳號、Sheet picker、`SET-0`～`SET-3`、`SET-5`～`SET-8`、進階診斷【F-轉述】 |
-| notifications | repo 內新版無既有功能 → 標「未定義」，本檔不提案 |
+| notifications | repo 內新版無既有功能 → 標「未定義」，本檔不提案（→ 讀法見第 17 節；**2026-11-02 UI-15 A 已裁示**：⚙️ 擁有 notification preference／delivery health／audit，`DEC-2026-11-02-07`；狀態更新，不是漏刪） |
 | 新提案：Rule Registry（唯讀） | 欄：Rule ID、version、description、threshold、effective date、source／authority（Rule ID 編碼與 rule_version 格式未定，屬 BL-0527 第 4 項、非機械式，見 UI-10；格式定案前殼只列名稱與出處）；**只登錄已存在的正式規則**（現況可登錄者極少，例：`NAV_NOT_READY_DAYS`）；禁止 slider 任意改正式 Risk Cap 或 threshold；第一階段唯讀（44 之十六）不變 |
 | 新提案：Digest Viewer 雙層 | L1 human-readable，例「VIX ‹值›｜Rule：‹Rule ID›｜Result：‹›｜as_of ‹日›｜source ‹›」—— Rule ID 與 threshold 只有真的存在才顯示，例中 Rule ID 為 Illustrative Only；L2 raw Digest JSON：digest id、schema version、input facts、source、as_of、missing、rules、action state、fingerprint、policy version；**不得顯示 secret**（75 第 7.1、13 節） |
 | 前置 | Digest Viewer 需 Decision Digest production 之後才能做 |
+| **2026-11-02 裁示狀態** | UI-10 A：Rule Registry 唯讀殼先做、Digest Viewer 待 Digest production、Rule ID 格式另走格式 Gate（`DEC-2026-11-02-07`；狀態更新，不是漏刪） |
 
 ```text
 桌機 1280                                   手機 390
@@ -505,76 +525,91 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 | 🤖 | 無 | IA、輸出格式（67 第 6.1 節）；Phase 7 掛導覽（`DEC-2026-10-29-07`） | Digest production；句子→依據對映；版面四區（UI-14） | Digest 七項缺口（BL-0527） | System Action State（UI-6） | 頁未掛（已裁示 Phase 7） | runtime、provider、cache、trace、budget（OB-01～10） | Digest；Risk Cap；OB-B |
 | ⚙️ | SET-0～3、5～8、帳號、Sheet | 低頻全域化 | Rule Registry；Digest Viewer；audit；Rule ID 格式 | rule_version 不存在 | 正式規則清單極少 | Registry 殼（UI-10） | Viewer 依賴 Digest | Digest production |
 
+> **2026-11-02 狀態（`DEC-2026-11-02-07`；狀態更新，不是漏刪）**：上表 UI-n 欄位所指各題已裁示（第 13 節）；「本提案 ≤3」等數量限制已依 UI-12 A 核准。表內「已完成／未定義」欄是 2026-11-02 裁示前的現況快照，未重量測；Production 狀態不因裁示而改變（裁示不是實作）。
+
 ---
 
-## 13. Contract Decision Gates（⛔ 待客戶裁示）
+## 13. Contract Decision Gates（~~⛔ 待客戶裁示~~ → 已裁示：`DEC-2026-11-02-07`；狀態更新，不是漏刪）
 
 > 格式依 `PROJECT_RULES.md` 第 4 節：商業語言、附總管推薦與理由；不是選擇題丟回。凡標「推薦」均為總管推薦，不是裁示。UI-11 已有裁示，不重問（`PROJECT_RULES.md` 13.4 第 6 條：Gate 不氾濫）。
 >
 > **2026-11-02 增量（就地加註，原句不改）**：本節完整待裁集合為 **UI-1～UI-15（UI-15 見 §17，2026-11-02 增量）**；UI-11 仍已裁示、不重問。客戶 2026-11-02 指示：待 #1119 收斂後一次呈給客戶，UI-1～UI-15 一次裁示。
+>
+> **2026-11-02 裁示結果（`DEC-2026-11-02-07`；決策者：客戶；逐字見 `docs/evidence/decisions/2026-11-02_new_ui2_ng_and_final_ui_contract_ruling.md`；狀態更新，不是漏刪）**：UI-11 維持既有裁示、不重問；其餘 UI-1～UI-10、UI-12～UI-15 依總管推薦 A 採用。各題下方以「→ **2026-11-02 裁示**」一行註記；原選項、優點、風險、推薦文字一字未改，保留作 rationale。下方各處「推薦」「不是裁示」等字樣是當時的狀態描述，自本日起以該行註記為準。
 
 **UI-1 五條鐵則是否正式採用**
 - A：全採，回寫 67 新節＋DEC。B：只先採 C-1～C-3，C-4／C-5 待 Digest 批。C：維持 proposal。
 - 優點：A 一次定錨，Digest、OneBrain、UI 批都有可引用的名字；B 減少一次寫入量、C-4／C-5 與 Digest 同批驗證；C 零寫入成本。
 - 風險：A 的 C-4／C-5 需 Digest 才能驗證，短期是「有條文、無實作」；B 讓 Digest 批沒有既定的 provenance／audit 目標；C 讓後續各批各自解讀。
 - **推薦 A**：五條多數已有既有依據，正式化成本低，且 C-4／C-5 是 Digest 批的設計輸入，越早定越不會返工。
+- → **2026-11-02 裁示：UI-1 採 A**（五條鐵則全採，回寫 67 新節＋DEC 依落盤策略；`DEC-2026-11-02-07`）。 → 2026-11-02 起正式條文住 67 §8.1、§8.7；本檔此處只保留 rationale（狀態更新，不是漏刪）。
 
 **UI-2 Chart Contract（四層＋出處類別）的落盤方式**
 - A：DEC 核准＋本檔保留 rationale，等第一個實作批真的需要時再開 44 新一輪 amendment（同 G-E5）。B：現在就開 44 amendment。C：延後。
 - 優點：A 不動 frozen 44、仍有正式依據；B 條文最集中；C 零成本。
 - 風險：A 期間有「DEC 有、44 沒有」的落差；B 為尚未實作的東西解凍 44；C 讓下一個畫圖的批次沒有出處類別規則。
 - **推薦 A**：44 每次解凍成本高，現在要畫 band 的實作批還不存在。
+- → **2026-11-02 裁示：UI-2 採 A**（DEC 核准＋本檔保留 rationale；44 amendment 等第一個實作批真的需要時再開；`DEC-2026-11-02-07`）。
 
 **UI-3 Multi-series 規則**
 - A：≤3、同單位 overlay、跨尺度歸一化＋強制揭露、dual-axis 禁止。B：同 A 但允許標示清楚的 dual-axis。C：維持單序列。
 - 優點：A 支撐 🔍 多檔比較且無雙軸誤導；B 可同圖看不同單位；C 最簡單。
 - 風險：A 不同單位需並排、多佔版面；B 的雙軸即使標示清楚，讀者仍易把兩條線交會讀成訊號；C 讓 🔍 多檔 NAV 比較無法成立。
 - **推薦 A**：比較需求真實存在，歸一化已足以比走勢，雙軸的誤導成本不值得。
+- → **2026-11-02 裁示：UI-3 採 A**（≤3 series、同單位 overlay、跨尺度歸一化＋強制揭露、dual-axis 禁止；`DEC-2026-11-02-07`）。
 
 **UI-4 圖上 threshold／band**
 - A：只有登錄於 Rule Registry 且有 DEC 的正式規則才畫；現況維持不畫。B：把舊樹 VIX 22／30 正式採用為系統規則並上圖（需另走 Threshold Gate）。C：畫市場慣例 band 並標「市場慣例」。
 - 優點：A 每條線都有出處；B 很快就有 VIX 參考線；C 對使用者直覺。
 - 風險：A 短期圖上沒有參考線；B 把舊樹內部校準升格成新 UI 規則，而舊樹至少有四組不同 VIX 切法（第 4.3 節），需單獨論證選哪一組；C 讓坊間說法看起來像系統判斷。
 - **推薦 A**（B 另案）：先有出處、後有線。
+- → **2026-11-02 裁示：UI-4 採 A**（只畫登錄於 Rule Registry 且有 DEC 的正式規則；現況不畫；B 另案；`DEC-2026-11-02-07`）。
 
 **UI-5 Market Regime**
 - A：只採 evidence taxonomy 與「無法判定優先」原則，狀態詞為 illustrative，aggregation rule 另走 Formula Gate。B：同時核准狀態詞彙。C：延後。
 - 優點：A 不先定字、不卡 aggregation；B 線框可先用正式字；C 零成本。
 - 風險：A 線框暫時只能寫示意詞；B 若採「牛／熊」詞，會與 `DEC-2026-10-27-14` 既有「中性偏多／中性／中性偏空」並存成兩套；C 讓 regime 相關討論沒有證據分類可依。
 - **推薦 A**：詞彙應與 aggregation rule 一起定，且優先沿用既有詞。
+- → **2026-11-02 裁示：UI-5 採 A**（只採 evidence taxonomy 與「無法判定優先」；狀態詞仍為 illustrative；aggregation rule 另走 Formula Gate；`DEC-2026-11-02-07`）。
 
 **UI-6 System Action State＋Constraint Precedence＋Risk Cap 禁止清單**
 - A：**只採** System Action State 定義（值域只用 67 六詞；「待再平衡決策」作為「無法判定」的原因字樣）、Constraint Precedence 原則、第 6.3 節右欄 Risk Cap 禁止事項清單；**Risk Cap 可做行為（第 6.3 節左欄候選）不在本次核准範圍**，數值、trigger 與輸出定義仍走 BL-0495／0496。B：新增獨立狀態「⬜ 待再平衡決策」為新詞。C：延後。
 - 優點：A 給 Digest 與 🤖 一個唯一動作來源，且不新增詞；B 字面最直接；C 零成本。
 - 風險：A 的 System Action State 目前只會是「無法判定」，看起來空；若有人把左欄候選讀成已核准，會越過 BL-0495 —— 故 A 明文排除左欄；B 新增行動詞，違反「行動詞只限六個」（44 之十八其十一、`DEC-2026-10-27-36`）；C 讓 Digest 批沒有動作欄位的定義。
 - **推薦 A**：不新增詞即可表達，且把待裁的 Risk Cap 行為留在 BL-0495。
+- → **2026-11-02 裁示：UI-6 採 A**（只採 System Action State 定義、Constraint Precedence、第 6.3 節右欄禁止清單；左欄 Risk Cap 候選行為**不在核准範圍**，仍走 BL-0495／0496；`DEC-2026-11-02-07`）。 → 2026-11-02 起正式條文住 67 §8.2～§8.4；本檔此處只保留 rationale（狀態更新，不是漏刪）。
 
 **UI-7 OneBrain qualitative outlook**
 - A：維持 proposal，一致性定義與輸出 schema 隨 OneBrain 批另走 Gate。B：現在採用詞表。C：放棄。
 - 優點：A 不先有字後有義；B 線框可先定字；C 減少一個待辦。
 - 風險：A 多一個待辦；B 詞表與 `DEC-2026-10-27-14` 既有詞重疊、且「一致性」無定義；C 讓 OneBrain 輸出缺少方向以外的不確定性表達。
 - **推薦 A**：沒有一致性定義前採詞表等於先有字、後有義。
+- → **2026-11-02 裁示：UI-7 採 A**（維持 proposal，隨 OneBrain 批另走 Gate；`DEC-2026-11-02-07`）。 → 2026-11-02 起正式條文住 67 §8.8；本檔此處只保留 rationale（狀態更新，不是漏刪）。
 
 **UI-8 Field-level provenance＋Freshness Policy schema**
 - A：採 schema 為 Digest／L2 契約目標，門檻值 per source 另走 Gate。B：連門檻一起定。C：延後。
 - 優點：A 先定欄位、門檻逐源論證；B 一次完成；C 零成本。
 - 風險：A 欄位裡的 `stale_after` 暫時沒有值；B 一次定多個 threshold，屬正式 threshold 的值，須逐源論證；C 讓 Digest 批自行決定欄位，容易出現第四套 stale 說法（67 第 5.3 節已有三套）。
 - **推薦 A**：欄位是 Digest 設計的前置，門檻值卻需要逐源資料事實（發布頻率、延遲）支撐，兩者分開才不會為了趕 schema 而拍腦袋定門檻。
+- → **2026-11-02 裁示：UI-8 採 A**（schema 為 Digest／L2 契約目標；`stale_after` 等門檻值 per source 另走 Threshold Gate；`DEC-2026-11-02-07`）。 → 2026-11-02 起正式條文住 67 §8.5；本檔此處只保留 rationale（狀態更新，不是漏刪）。
 
 **UI-9 OneBrain Context 三分與 Digest Full Context 原則**
 - A：採用並回寫 67。B：只採原則。C：延後到 Digest 批。
 - 優點：A 直接決定 fingerprint 不被 UI 汙染；B 寫入量小；C 與 Digest 同批定。
 - 風險：A 的 Required 清單可能隨 Digest 實作調整；B 沒有 Excluded 清單，fingerprint 仍可能吃進 UI 狀態；C 讓 Digest 設計時沒有分層依據。
 - **推薦 A**：Excluded 清單直接決定 fingerprint 不被 UI 汙染（75 第 6.3 節），應在 Digest 設計前定。
+- → **2026-11-02 裁示：UI-9 採 A**（採用並回寫 67；`DEC-2026-11-02-07`）。 → 2026-11-02 起正式條文住 67 §8.6；本檔此處只保留 rationale（狀態更新，不是漏刪）。
 
 **UI-10 ⚙️ Rule Registry（唯讀）＋Digest Viewer 雙層＋Rule ID 格式**
 - A：Batch F 做 Registry 唯讀殼與 source health；Digest Viewer 待 Digest production 後；**Rule ID 編碼、rule_version、門檻引用格式（BL-0527 第 4 項）另走格式 Gate，非機械式**。B：兩者都等 Digest。C：不做。
 - 優點：A 先讓使用者看得到「目前有哪些正式規則」；B 一次做完、格式與 Digest 同批；C 零成本。
 - 風險：A 的 Registry 初期內容極少（正式規則少），看起來空 —— 但那是誠實狀態；且殼的欄位要等 Rule ID 格式定案才能固定；B 讓 source health 跟著延後；C 讓 C-5 Auditability 在 UI 端沒有落點。
 - **推薦 A**：Registry 是 C-5 回溯鏈在畫面上的終點，先做唯讀殼成本低、不涉及語意；格式未定前殼只列名稱與出處，不臆造編碼。
+- → **2026-11-02 裁示：UI-10 採 A**（Registry 唯讀殼；Digest Viewer 待 Digest production；Rule ID 格式另走格式 Gate；`DEC-2026-11-02-07`）。
 
 **UI-11 🤖 導覽掛入時機 —— 已裁示，不重問**
 - `DEC-2026-10-29-07`：Phase 7 實作 One AI Brain 時掛入；目標 IA＝五頁（🌍、💼、🔍、🤖、⚙️）不變。本檔不列為待裁。
+- → **2026-11-02**：客戶裁示明示 UI-11 維持既有裁示、不重問（`DEC-2026-11-02-07` 只記錄「不變」，不另立裁示）。
 
 **UI-12 版面變更是否核准為下一批 wireframe 基準**
 - 子項：(1) 🌍 Primary 改 TAIEX＋S&P 500 歸一化比較 ＝ **修改 `DEC-2026-10-30-01` D1（單序列切換），需客戶覆議**；(2) 若 (1) 核准，現行 Secondary「國際｜S&P 500」卡與 Primary 重複，**其去留一併裁示**（現行 Secondary：「風險｜VIX」「國際｜S&P 500」「利率與信用」）；(3) 🌍 依據卡「≤3 條」—— D7 只定依據卡的位置、未定數量，這是**新的數量限制，需確認**；(4) 💼 Primary 畫出 tolerance band（出處＝使用者設定；端點歸屬未定）；(5) 🔍 lookup 比較上限：78 未定，Batch E 暫以 3 檔顯示（不以本題為前置；開工時點依 `DEC-2026-11-02-01`：Step 3 客戶裁示後），正式上限在此確認；且它與 `EXP-3` 上限 3 為兩個獨立元件、選取不互通（**更正**：轉述的「EXP-3 上限 4」不成立，見第 9.3 節）。
@@ -583,6 +618,10 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 - 優點：A 方向一次定、精確版面仍逐批送審；B 每頁單獨權衡；C 不動已核准的 Batch C／D。
 - 風險：A 會一次覆議 D1，Batch C 已實作的版面要重排；B 多次往返；C 讓 🌍 看不到 TAIEX 與 S&P 500 的相對走勢、💼 容許帶仍只有文字。
 - **推薦 A，但 (1)(2) 請客戶明確表態是否覆議 D1**：(3)～(5) 不改既有裁示（(3)、(5) 是新增數量限制，請一併確認）；(1) 是改既有裁示，不得被「核准方向」一語帶過。
+- → **2026-11-02 裁示：UI-12 採 A；(1) 客戶明確同意 amend `DEC-2026-10-30-01` D1；(2) 未單獨表態，併入 New UI2 🌍 wireframe（總管讀法，可被客戶推翻）**（`DEC-2026-11-02-07`；有意識的政策變更，不是漏刪；決策者：客戶）：
+  - (1) New UI2 🌍 首頁主圖方向改為 **TAIEX vs S&P 500 比較圖**（歸一化基準 100，見 UI-13）；**最終呈現由 New UI2 🌍 頁 wireframe 重新核准**。D1 被 amend 的只限「單序列切換」這個版面；「Primary 只一張、Secondary 不複製 Primary」語意保留。
+  - (2) 現行 Secondary「國際｜S&P 500」卡的去留，併入同一張 New UI2 🌍 wireframe 核准（客戶核准方向，未另就卡片去留單獨表態 —— 此為總管讀法，可被客戶推翻）。
+  - (3) 🌍 依據卡上限 ≤3 核准；(4) 💼 Primary 容許帶視覺核准（出處＝使用者設定；端點歸屬仍未定）；(5) 🔍 lookup 基金比較最多 3 檔核准（與 `EXP-3` 為兩個獨立元件、選取不互通）；本節已列出的其他數量／版面限制一併核准。
 
 **UI-13 歸一化基準值（1 或 100）**
 - 背景：🔍 已核准的 78（`DEC-2026-11-01-02` 第 2 部分原則通過）寫「歸一化起點＝1」；客戶 2026-11-02 任務第 30 節「找基金 Primary Visual 建議：Normalized NAV，Base = 100」（逐字見 `docs/evidence/decisions/2026-11-02_final_ui_contract_freeze_assignment.md`，以該檔為準）。
@@ -590,6 +629,7 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 - 優點：A 符合客戶最新建議、與 🌍 比較圖一致；B 不動已核准線框；C 無。
 - 風險：A 要在 78 加註一行；B 與客戶 2026-11-02 建議不一致；C 違反 44 之十八其四「各頁不得各自不同」的同一精神。
 - **推薦 A**：基準值 1 或 100 只是顯示尺度、不改語意；採 100 跟隨客戶最新建議並跨頁一致。**Batch E 不以本題為前置：本題裁示前，Batch E 的基準值沿用 78 的 1；Batch E 的開工時點仍依 `DEC-2026-11-02-01`（Step 3 客戶裁示後才開始 Step 4）。**
+- → **2026-11-02 裁示：UI-13 採 A —— 歸一化基準值＝100**，New UI2 跨頁一致（`DEC-2026-11-02-07`）。78（ui_v2 線框，`DEC-2026-11-01-02`）的「起點＝1」對 New UI2 自此由 100 取代；依選項 A「採用後在 78 就地加註」，78 第 2.2 節桌機線框、其「要點」段與第 2.3 節 390px 線框三處「起點＝1」已就地加指向「→ 2026-11-02 起 New UI2 歸一化基準＝100」，原字保留、78 其餘未動。上一行「本題裁示前，Batch E 的基準值沿用 78 的 1」一句自本日起失效 —— Batch E 實作落點已改為 New UI2（`DEC-2026-11-02-03`），基準值依本題＝100（狀態更新，不是漏刪）。
 
 **UI-14 🤖 版面四區（含 Maximum Falsification）**
 - 背景：67 第 6.1 節固定輸出為市場、資產、持股、候選各一句＋主要風險 1～3＋本期行動 ≤3；本檔第 9.4 節的四區分隔（System State／OneBrain Interpretation／Maximum Falsification／Evidence）超出該固定輸出，Maximum Falsification 為新增內容。
@@ -597,19 +637,22 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 - 優點：A 先定「deterministic 與 AI 分區、要有反證」的方向；B 線框提早定；C 不增加輸出。
 - 風險：A Phase 7 前沒有精確版面；B 為未啟用的頁先定版面，可能與 Digest 實作不合；C 讓使用者分不清哪句是規則、哪句是 AI，也看不到推翻條件。
 - **推薦 A（方向核准、實作時出線框）**。
+- → **2026-11-02 裁示：UI-14 採 A**（方向核准，Phase 7 實作時出線框再定；`DEC-2026-11-02-07`）。 → 2026-11-02 起正式條文住 67 §8.9；本檔此處只保留 rationale（狀態更新，不是漏刪）。
 
-**UI-15 配息行事曆與 LINE 通知如何納入 Final UI**（2026-11-02 增量）—— 選項、推薦與理由見 **§17.12**；推薦不是已裁示。
+**UI-15 配息行事曆與 LINE 通知如何納入 Final UI**（2026-11-02 增量）—— 選項、推薦與理由見 **§17.12**；~~推薦不是已裁示~~ → **2026-11-02 裁示：UI-15 採 A**（`DEC-2026-11-02-07`；裁示內容與 44 `pay_date` 語意衝突處置見 §17.12；狀態更新，不是漏刪）。
 
 ---
 
 ## 14. Implementation Sequence（提案）
 
+> **2026-11-02 狀態（`DEC-2026-11-02-05`～`-07`；狀態更新，不是漏刪）**：Step 2、3 已完成；Step 4 起的實作落點＝New UI2（`ui_v3/`，NG-1 A）。下一階段（`ui_v3` presentation implementation）須待 Model／Mode／Effort Change Gate 由客戶回覆「已切換／可以開始」後才開始（`DEC-2026-11-02-04`）。下表原字保留，狀態以各列「→ 2026-11-02」註記為準。
+
 | Step | 內容 | 前置 |
 |---|---|---|
 | 1 | 收斂 #1117（本輪）——**已完成（#1117，main `52da0cab`）** | — |
-| 2 | Final UI Contract Freeze（本檔，本輪） | — |
-| 3 | 客戶一次性裁示 ~~UI-1～UI-10、UI-12～UI-14~~ → **UI-1～UI-15（UI-15 見 §17，2026-11-02 增量）**；UI-11 已裁示，不重問（同第 13 節；就地改寫，不是漏刪） | 本檔 |
-| 4 | Batch E production：MoneyDJ code 主入口、ISIN「尚未啟用」、歸一化 NAV session-only 比較（→ 2026-11-02 起實作落點＝New UI2、ui_v2 不再作主要演進目標，`DEC-2026-11-02-03`） | **`DEC-2026-11-01-02` 已核准範圍；內容不以 UI-3／UI-12 為前置；開工時點依 `DEC-2026-11-02-01`（客戶 2026-11-02 第 55 節：Step 3 客戶裁示後才開始 Step 4）**；基準值裁示前沿用 78；78 未定上限；Batch E 實作暫以 3 檔為顯示上限（與 Visual Budget ≤3 series 一致），正式上限由 UI-12 確認，不以本題為前置 |
+| 2 | Final UI Contract Freeze（本檔，本輪）（→ **2026-11-02 已完成**：本檔成為 New UI2 input contract，`DEC-2026-11-02-07`） | — |
+| 3 | 客戶一次性裁示 ~~UI-1～UI-10、UI-12～UI-14~~ → **UI-1～UI-15（UI-15 見 §17，2026-11-02 增量）**；UI-11 已裁示，不重問（同第 13 節；就地改寫，不是漏刪）（→ **2026-11-02 已完成**：客戶一次裁示，UI-11 不變、其餘採 A，`DEC-2026-11-02-07`） | 本檔 |
+| 4 | Batch E production：MoneyDJ code 主入口、ISIN「尚未啟用」、歸一化 NAV session-only 比較（→ 2026-11-02 起實作落點＝New UI2、ui_v2 不再作主要演進目標，`DEC-2026-11-02-03`） | **`DEC-2026-11-01-02` 已核准範圍；內容不以 UI-3／UI-12 為前置；開工時點依 `DEC-2026-11-02-01`（客戶 2026-11-02 第 55 節：Step 3 客戶裁示後才開始 Step 4）**；基準值裁示前沿用 78；78 未定上限；Batch E 實作暫以 3 檔為顯示上限（與 Visual Budget ≤3 series 一致），正式上限由 UI-12 確認，不以本題為前置（→ **2026-11-02**：Step 3 已完成；Batch E 實作目標＝`ui_v3/`（NG-1 A，`DEC-2026-11-02-05`）；基準值＝100（UI-13 A）、比較上限＝3（UI-12 (5) A）（`DEC-2026-11-02-07`）；開工另受 Model／Mode／Effort Change Gate 約束（`DEC-2026-11-02-04`），客戶回覆「已切換／可以開始」前不開始；狀態更新，不是漏刪） |
 | 5 | Batch F：⚙️ source health、Rule Registry 唯讀殼 | UI-10；殼的欄位待 Rule ID 格式 |
 | 6 | Decision Digest production | UI-1、UI-8、UI-9；BL-0527 |
 | 7 | Risk Cap／deterministic action rules | BL-0495／0496 Formula Gate（非機械式） |
@@ -618,7 +661,7 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 
 | 核准後即可機械式實作（不含語意） | 核准方向後仍需逐批線框／格式裁示 | 不可機械式（另走 Gate） |
 |---|---|---|
-| Missing 語彙統一為 `◇ 資料未備`（含 `ui_v2/mkt/chart.py::TEXT_EMPTY` 與 `market_section` 狀態字表；依 44 之十九其五第 4 條，已於 `DEC-2026-11-02-01` 落盤（同批）；開工時點依 `DEC-2026-11-02-01`（Step 3 後）、需客戶開實作批）（→ 2026-11-02 起實作落點＝New UI2、ui_v2 不再作主要演進目標，`DEC-2026-11-02-03`） | annotation 中 as_of／source／freshness／missing 標示框架（不含 threshold） | regime aggregation rule |
+| Missing 語彙統一為 `◇ 資料未備`（含 `ui_v2/mkt/chart.py::TEXT_EMPTY` 與 `market_section` 狀態字表；依 44 之十九其五第 4 條，已於 `DEC-2026-11-02-01` 落盤（同批）；開工時點依 `DEC-2026-11-02-01`（Step 3 後）、需客戶開實作批）（→ 2026-11-02 起實作落點＝New UI2、ui_v2 不再作主要演進目標，`DEC-2026-11-02-03`）（→ **2026-11-02 NG-2 附題 A**：BL-0532 統一字樣也套用到 ui_v2，視為正確性修正，`DEC-2026-11-02-05`；狀態更新，不是漏刪） | annotation 中 as_of／source／freshness／missing 標示框架（不含 threshold） | regime aggregation rule |
 | Batch E（`DEC-2026-11-01-02` 已核准範圍；開工時點依 `DEC-2026-11-02-01`（Step 3 後）） | 💼 容許帶視覺（端點歸屬未定，見 `ui_v2/alo/fixtures.py` 檔頭） | 任何 threshold 值（含 VIX、freshness） |
 | — | Rule Registry 唯讀殼 | Risk Cap 數值、作用層級與輸出 |
 | — | 🤖 版面（UI-14） | action trigger；System Action State 本身的定義 |
@@ -639,7 +682,7 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 | 1 | 75 第 10 節 structured output 示意含 `confidence` | 與 58 U-25、67 第 5.3 節（不納入）、C-2 的張力；75 本身已寫「未定義不得上 production」，建議補一行指向 C-2 |
 | 2 | ⬜／◇ 資料未備不一致 | 客戶 2026-11-02 第 48 節表態＋44 之十九其五第 4 條正式字樣；已於 `DEC-2026-11-02-01` 落盤（同批），機械式修正見 BL-0532（第 11 節） |
 | 3 | `docs/v2/52` 儲備規格（雙軸、寫死 80% 門檻） | 【F-轉述】待複核；與 UI-3、UI-4 推薦方向牴觸，應標 superseded 或註記 |
-| 4 | `docs/v2/78` G-E 區 | `DEC-2026-11-01-02` 後屬裁示前原文，已就地加註（別組進行中）；UI-13 若採 A，另在 78 歸一化起點處加註 |
+| 4 | `docs/v2/78` G-E 區 | `DEC-2026-11-01-02` 後屬裁示前原文，已就地加註（別組進行中）；UI-13 若採 A，另在 78 歸一化起點處加註（→ 2026-11-02：UI-13 已採 A，78 歸一化起點處已加註，`DEC-2026-11-02-07`；狀態更新，不是漏刪） |
 | 5 | `docs/v2/77` 緊急快照 | 已過期，屬歷史 |
 | 6 | `docs/HANDOFF.md` Resume Checkpoint | 「唯一下一接手點」多處疊加（違反 Supersession hygiene「不允許兩個看似同時有效的版本並存」，`PROJECT_RULES.md` 0.5） |
 | 7 | BL-0529 下的 OB-01～OB-10 | 未編正式 BL（75 第 16 節）；依 13.4 第 3 條，可維持為 BL-0529 subtask，不必拆 |
@@ -681,9 +724,13 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 
 **全稱句揭露**：本檔中「查無」「無」類敘述凡標【F-轉述】者，皆取決於盤點組有沒有漏看，本組不宣稱窮舉。第 2、4～8、13 節的提案與推薦為文件組整理、總管推薦，可被客戶推翻。
 
+**2026-11-02 裁示落盤輪**：檔頭、第 2、4.4、9、12、13、14、17 節的裁示註記與第 18 節，依客戶 2026-11-02 裁示（`DEC-2026-11-02-05`～`-07`）由文件組單組就地加註，原字保留；44 `pay_date` 兩處引用由本組於 main `e5794711` 以 `grep` 讀 44 確認；其餘裁示內容以 evidence 逐字檔為準。未經第二組獨立複驗（`CLAUDE.md` §-2 規則 6）。
+
 ---
 
-## 17. UI-15 增量補充｜配息行事曆與 LINE Information／Event Notification（提案；⛔ 待客戶裁示）
+## 17. UI-15 增量補充｜配息行事曆與 LINE Information／Event Notification（~~提案；⛔ 待客戶裁示~~ → 已裁示：UI-15 A，`DEC-2026-11-02-07`；狀態更新，不是漏刪）
+
+> **2026-11-02 狀態**：客戶採 UI-15 A（逐項見 §17.12 末段）。本節以下「proposal」「待裁」「不構成 UI-15 裁示」等字樣保留原字作歷史；ownership／semantic boundary／migration contract 自本日起為 New UI2 input contract。**仍不授權 production migration**：layout、status production copy、reminder cadence、fingerprint／delivery key、任何新 source 照舊另走各自的 Gate；`ui_v3` production 另受 Model／Mode／Effort Change Gate 約束（`DEC-2026-11-02-04`）。
 
 > **定位與 supersession**：本節是客戶 2026-11-02 對同一份 Final UI Proposal 的缺口補充，**不是第二套規格**。它只增補／修正本檔第 1、7～9、12～14 節中與「配息行事曆／通知」相關的空白；第 9.5 節原句「notifications｜repo 內新版無既有功能 → 標未定義，本檔不提案」自本節起讀作：**新 UI 尚未定義／未實作，但 repo 舊線已有可重用的 informational dividend-calendar／LINE capability，故納入 UI-15 proposal；directional/action notification 仍排除。** 本節不構成 UI-15 裁示，也不授權任何 production migration。
 
@@ -751,7 +798,7 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 - `docs/v2/44`（frozen，只讀）：第四節 4.2 表 `nav` 的 `is_estimated`（「推估值在畫面上掛『推估』徽章」）；4.3 表 `dividend` 只有 `ex_date`（除息日）與 `pay_date`，**`pay_date` 語意欄寫「實際入帳日；尚未公布時為空」**；無 `record_date` 欄、無日期狀態值域。Missing presentation 以 `◇ 資料未備`（44 之十九其五第 4 條、`DEC-2026-11-02-01`）為準。
 - `docs/DECISIONS.md`：查無配息日期狀態或配息行事曆的正式裁示。
 
-**結論與待一併確認事項**：`confirmed`／`scheduled`／`estimated`／`unavailable` 是 **date-status 的 data 層候選值，不是 presentation 字樣**；presentation 仍服從既有 `◇ 資料未備` 等 SSOT 與 44 既有「推估」徽章字樣。legacy `is_actual` 不得直接等同 `confirmed`。**與既有正式詞的衝突點，列入 UI-15 裁示時一併確認**：(1) 44 4.3 `pay_date`「實際入帳日」與本節 Date Contract「`payment_date` ≠ 實際銀行／平台入帳日」的語意張力（44 frozen，本輪不改；若 UI-15 採 A，依 79 落盤策略列 44 amendment backlog）；(2) `estimated` 與 44 既有「推估」徽章的對映（候選：`estimated` 在 presentation 層沿用「推估」，不另造字）。
+**結論與待一併確認事項**：`confirmed`／`scheduled`／`estimated`／`unavailable` 是 **date-status 的 data 層候選值，不是 presentation 字樣**；presentation 仍服從既有 `◇ 資料未備` 等 SSOT 與 44 既有「推估」徽章字樣。legacy `is_actual` 不得直接等同 `confirmed`。**與既有正式詞的衝突點，列入 UI-15 裁示時一併確認**：(1) 44 4.3 `pay_date`「實際入帳日」與本節 Date Contract「`payment_date` ≠ 實際銀行／平台入帳日」的語意張力（44 frozen，本輪不改；若 UI-15 採 A，依 79 落盤策略列 44 amendment backlog）（→ **2026-11-02**：UI-15 已採 A，amendment 登記為 BL-0534，處置與過渡約束見 §17.12 末段，`DEC-2026-11-02-07`；狀態更新，不是漏刪）；(2) `estimated` 與 44 既有「推估」徽章的對映（候選：`estimated` 在 presentation 層沿用「推估」，不另造字）。
 
 ### 17.5 Source Precedence（只定方向；本輪不新增 source）
 
@@ -837,9 +884,9 @@ Unavailable
 
 **與 62／BACKLOG 的 anti-bloat 對位**：62 F5 已盤出「除息行事曆」與「LINE 換股通報」兩種舊能力；BL-0401 已承接 directional／action 類 Phase 5～8，不得拿來當 informational calendar migration 的授權。Final UI proposal 的 Gate 工作直接掛 **BL-0531 子項 UI-15**，本輪**不新增 BL**（指 UI-15 輪；同 PR 新增的 BL-0533 屬 New UI2 架構輪，非碎片）；UI-15 核准後若真的需要 official-source research／calendar migration／notification audit implementation，再依 Anti-Bloat 檢查既有列後決定是否開最少必要 BL。
 
-### 17.12 UI-15｜配息行事曆與 LINE 通知如何納入 Final UI？（⛔ 待客戶裁示）
+### 17.12 UI-15｜配息行事曆與 LINE 通知如何納入 Final UI？（~~⛔ 待客戶裁示~~ → 已裁示 A，`DEC-2026-11-02-07`；狀態更新，不是漏刪）
 
-> 選項文字與客戶 2026-11-02 第十四節逐字對齊（逐字見 `docs/evidence/decisions/2026-11-02_new_ui_only_and_ui15_gate.md`）。**A 是推薦，不是已裁示**；不得替客戶選 A，也不得為 A 建立任何 DEC。
+> 選項文字與客戶 2026-11-02 第十四節逐字對齊（逐字見 `docs/evidence/decisions/2026-11-02_new_ui_only_and_ui15_gate.md`）。~~**A 是推薦，不是已裁示**；不得替客戶選 A，也不得為 A 建立任何 DEC。~~ → **2026-11-02 客戶裁示採 A**（`DEC-2026-11-02-07`；逐字見 `docs/evidence/decisions/2026-11-02_new_ui2_ng_and_final_ui_contract_ruling.md`）。舊句在寫下時為真（當時客戶尚未裁示）；被推翻的是它的前提（狀態更新，不是漏刪）。
 
 - **A（推薦，不是已裁示）**：💼 擁有 Dividend Calendar；⚙️ 擁有 notification preferences / health / audit；official date first；deterministic estimate fallback；月底下月 LINE summary 保留；semantic date-change notification 可作未來能力；directional/action LINE 不恢復；**Old UI capability 只參考邏輯；production 只實作 New UI**
 - **B**：只保留月底 LINE summary，不把 Calendar 納入 New UI。
@@ -848,6 +895,14 @@ Unavailable
 **A 的範圍說明（文件組整理，不是選項本文）**：具體 layout、status production copy、reminder cadence、fingerprint／delivery key、任何新 source 都另走既有 Gate；A 只凍結 ownership／semantic boundary／migration contract，**不等於授權 production migration**。
 
 **推薦 A 的理由（總管推薦，可被客戶推翻）**：這是 repo 已存在、且對持有基金的現金流事件有直接使用價值的 capability；如果 Final UI Freeze 完全不登記，後續 New UI 實作很容易因「新版 notifications 未定義」而把既有能力遺失。
+
+**2026-11-02 裁示內容（UI-15 A，`DEC-2026-11-02-07`；決策者：客戶）**：💼 我的資產擁有 Dividend Calendar；⚙️ 設定擁有 notification preference／delivery health／audit；正式日期優先；deterministic estimate 只作 fallback；月底下月 LINE summary 保留；semantic date change 可作未來 notification；directional／action LINE 不恢復；Old UI calendar 只參考 logic／capability，不搬 UI。
+
+**44 `pay_date` 語意衝突的正式處置（客戶 2026-11-02 同批指示；BL-0534）**：
+- **衝突本身**：frozen 的 `docs/v2/44_fund_ui_ssot.md` 第四節 4.3 表把 `dividend.pay_date` 的語意欄寫成「實際入帳日；尚未公布時為空」（本組 2026-11-02 於 main `e5794711` 以 `grep -n pay_date docs/v2/44_fund_ui_ssot.md` 讀到該列，以及第 3 節塊 HLD-6 空狀態列一處引用；後者只說 `pay_date` 是唯一可空欄，不涉及語意）；本檔 §17.3 Date Contract 則寫 `payment_date`＝基金公司／基金正式發放日、**不等於**實際銀行／平台入帳日。兩者對同一欄給了不同語意。
+- **處置**：客戶裁示不得直接偷改 frozen 44；**本批不改 44**。拆分「Payment Date」與「Estimated Bank Credit Window」的 44 amendment 登記為 **BL-0534**，依 `PROJECT_RULES.md` 1.2「改凍結檔另開一輪」與第 4 節 Gate 另批辦理（BL-0534；44 本身沒有獨立的解凍程序條文）。
+- **amendment 完成前的約束（New UI2 input contract）**：New UI2 **不得**把 `pay_date` 標成或讀成「銀行／平台實際入帳日」；畫面字樣若需顯示該欄，只能依 §17.3 的 Payment Date 語意（基金端發放日），或在字樣未定前不顯示。**Estimated Bank Credit Window 仍是另一個欄位候選**（§17.3 `estimated_bank_credit_window`），沒有可支持的 deterministic contract 與實際事件資料時維持 Missing（`◇ 資料未備`），不得由 `pay_date`／`pay_window` 自動升格。
+- 本段取代 §17.4「結論與待一併確認事項」第 (1) 點的「待一併確認」狀態（該處原字保留）。
 
 ### 17.13 Implementation Sequence amendment／本輪禁止事項
 
@@ -868,5 +923,19 @@ Unavailable
 6. engine `confidence` 沒有變成未校準機率／LLM 信心；error band／evidence 仍標 deterministic evidence。
 7. notification delivery metadata 沒有進 Decision Digest／OneBrain fingerprint。
 8. BL-0531／HANDOFF／本檔 UI-15 對位一致；本輪沒有新增碎片化 BL（指 UI-15 輪；同 PR 新增的 BL-0533 屬 New UI2 架構輪，非碎片）。
+9. （2026-11-02 增補，BL-0534）在 44 amendment 完成前，New UI2 沒有把 `pay_date` 標成或讀成銀行／平台實際入帳日；Estimated Bank Credit Window 仍是獨立欄位候選，無資料時為 Missing。
 
 **本輪收斂聲明（2026-11-02 第三則指示）**：第 9.4 節誤刪行已逐位元組恢復；檔頭、第 13 節、UI-12 (1)、第 14 節 Step 3、§17.1／17.2／17.4／17.10～17.13 依客戶第三則指示增補；§17.4 實查為文件組單組 `git grep`，不宣稱窮舉；以上增補尚未經第二組獨立複驗（獨立稽核另派）。
+
+---
+
+## 18. 正式 Streamlit 顯示規則（契約約束；`DEC-2026-11-02-06`，2026-11-02 增補）
+
+> 客戶 2026-11-02 新增的永久正式裁示（決策者：客戶；逐字見 `docs/evidence/decisions/2026-11-02_new_ui2_ng_and_final_ui_contract_ruling.md`）。本節只把它登記為本 input contract 的約束；正式條文住址依檔頭落盤策略（`docs/DECISIONS.md`、`PROJECT_RULES.md`），本節不另立第二份條文。
+
+- **規則**：正式 Streamlit 對使用者只顯示目前最新正式 UI。New UI2 驗收通過並正式切換後，正式 Streamlit 只顯示 New UI2（`ui_v3/`）；Old UI 與 ui_v2 不出現在正式導覽或 entrypoint。
+- **沒有舊／新切換器**：不提供一般使用者舊 UI 切換入口，首頁不放「舊版／新版」切換器；rollback 只作維運用途，不是使用者功能。
+- **保留程式 ≠ 對使用者公開**：repo 內 Old UI 保留（read-only、只作 logic／capability reference）、ui_v2 保留（maintenance-only／rollback candidate）；不先刪除，刪除另走刪除 Gate。
+- **切換前**：New UI2 以獨立 Preview App 平行驗收（NG-3 A，`DEC-2026-11-02-05`），正式 App 維持現行版本、Preview 不影響正式使用者。
+- **可稽核要求（BL-0535）**：cutover 後正式 Streamlit navigation／entrypoint 不得暴露 Old UI 或 ui_v2，需有自動化測試或可驗證證據；測試與 Cloud 設定證據的做法見 `docs/v2/80` 第 9、10 節。
+- **對本檔各節的讀法**：第 9 節線框與第 14 節實作順序凡涉及「正式入口」者，一律受本節約束；本節不改任何資料、投資或規則語意。

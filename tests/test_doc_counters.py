@@ -2459,8 +2459,8 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/76_assets_v7_layout_a_wireframe.md",   # 2026-10-31 BL-0525-D3 💼 我的資產 V7 Layout A 最小文字線框（客戶 2026-10-31 採 A；待客戶審批；不實作）
     "docs/v2/77_emergency_resume_checkpoint_2026-10-31.md",   # 2026-10-31 緊急續接檢查點（另一 session 快照）
     "docs/v2/78_fund_search_batch_e_inventory_wireframe.md",   # 2026-11-01 BL-0525 Batch E 🔍 找基金現況盤點與最小 wireframe（客戶 2026-11-01 裁示 DEC-2026-11-01-01；不實作）
-    "docs/v2/79_final_ui_contract_freeze.md",   # 2026-11-02 Final UI／Decision System Contract Freeze 提案（Proposal／Decision Gate／Migration Contract；待客戶裁示；DEC-2026-11-02-01、BL-0531；不實作）
-    "docs/v2/80_new_ui2_architecture_proposal.md",   # 2026-11-02 New UI2 Architecture Proposal（Proposal／Decision Gate／Migration Contract；待客戶裁示 NG-1～NG-5；DEC-2026-11-02-03、BL-0533；不實作）
+    "docs/v2/79_final_ui_contract_freeze.md",   # 2026-11-02 Final UI／Decision System Contract Freeze（原 Proposal／Decision Gate／Migration Contract；已裁示（DEC-2026-11-02-07）；DEC-2026-11-02-01、BL-0531；New UI2 input contract）
+    "docs/v2/80_new_ui2_architecture_proposal.md",   # 2026-11-02 New UI2 Architecture Proposal（原 Proposal／Decision Gate／Migration Contract；NG-1～NG-5 已裁示（DEC-2026-11-02-05）；DEC-2026-11-02-03、BL-0533；production 實作待 Model／Mode／Effort Change Gate）
     "docs/v2/CONSTITUTION.md",
     "docs/v2/README_DRAFT_PACK.md",
 )
