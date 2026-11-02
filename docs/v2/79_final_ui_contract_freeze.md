@@ -1,6 +1,7 @@
 # 79｜Final UI／Decision System Contract Freeze（提案；⛔ 待客戶裁示）
 
 - **定位**：**Proposal／Decision Gate／Migration Contract。不是規格、不是第二套 UI 或 AI 憲法、不是動工授權。** 本檔把客戶 2026-11-02 要求凍結的「最終 UI 與決策系統契約」整理成一份可一次裁示的提案：現況、提案條文、遷移地圖與 Gate。本檔寫下的任何「提案」在客戶裁示前不生效；裁示後也不以本檔為正式條文住址（見下方落盤策略）。
+- **2026-11-02 客戶永久邊界**：New UI 為唯一正式產品線、Old UI 只作 read-only logic reference、既有 New UI 為視覺 baseline（`DEC-2026-11-02-02`）；本檔所有 wireframe 只對 New UI 增量調整。（→ **2026-11-02 起**：本檔語意規格作為 New UI2 的 input contract；production implementation target＝New UI2；ui_v2 不再作主要演進目標；本檔 §9 wireframe 屬語意示意，New UI2 版面由其 architecture／wireframe Gate 另定（`DEC-2026-11-02-03`；原字保留，狀態更新，不是漏刪））
 - **位階**：不凌駕 `CLAUDE.md`、`PROJECT_RULES.md`、`docs/v2/44_fund_ui_ssot.md`（frozen）、`docs/v2/67_ai_action_vocabulary.md`、`docs/v2/75_onebrain_ai_architecture.md` 與 `docs/DECISIONS.md` 的正式裁示；衝突一律以它們為準。本檔的提案若與它們牴觸，視為本檔寫錯，不視為對它們的修改。
 - **客戶核准後的落盤策略（`PROJECT_RULES.md` 13.4 第 7 條：文件不重複 SSOT）**：正式規則回寫既有 canonical SSOT —— 裁示登記 `docs/DECISIONS.md`；未完成工作進 `docs/BACKLOG.md`（優先掛既有列，不碎片化）；現況與接手點進 `docs/HANDOFF.md`；AI／Decision 語意以 `docs/v2/67` 增節承接；只有在第一個實作批真的與 44 條文衝突時，才開 44 新一輪 amendment（同 `DEC-2026-11-01-02` G-E5 模式）。本檔核准後只保留三樣：rationale、migration map、visual contract rationale；不再作為任何條文的引用來源。
 - **量測基準**：**程式事實以 main `20bf6442` 為準；`DEC-2026-11-01-02` 見 #1117（Batch E Gate 落盤）——#1117 已 squash 合併，main＝`52da0cab`（~~Draft~~，分支 `815fb88e` 為合併前的落盤 commit；狀態更新，不是漏刪）；`52da0cab` 與 `20bf6442` 在 `ui_v2/`、`services/`、`shared/` 三處無差異（兩點 diff 確認），故程式事實不變。** 本檔撰寫時的本機工作樹是 #1117 較早的 `0d2e05f3`，該 commit 與 `20bf6442` 在 `ui_v2/`、`services/`、`shared/` 三處無差異（本組以兩點 diff 確認）。程式位置寫「檔案::符號」，不寫行號。
@@ -425,6 +426,7 @@ AI sentence → Digest fields → Rule Result → Rule ID → Canonical Data →
 │ OneBrain Interpretation               │  │ 市場｜資產｜持股｜候選│
 │  市場：‹一句›     我的資產：‹一句›    │  │ 各一句                │
 │  持股：‹一句›     找基金：‹一句›      │  │ 主要風險 1～3        │
+│  主要風險：1. ‹›  2. ‹›               │  ├──────────────────────┤
 ├───────────────────────────────────────┤  │ 最大反證：‹一句›     │
 │ Maximum Falsification：‹一句›         │  │ ▸ 查看依據           │
 │ ▸ 查看依據（Digest／Rule／來源）      │  └──────────────────────┘
@@ -508,6 +510,8 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 ## 13. Contract Decision Gates（⛔ 待客戶裁示）
 
 > 格式依 `PROJECT_RULES.md` 第 4 節：商業語言、附總管推薦與理由；不是選擇題丟回。凡標「推薦」均為總管推薦，不是裁示。UI-11 已有裁示，不重問（`PROJECT_RULES.md` 13.4 第 6 條：Gate 不氾濫）。
+>
+> **2026-11-02 增量（就地加註，原句不改）**：本節完整待裁集合為 **UI-1～UI-15（UI-15 見 §17，2026-11-02 增量）**；UI-11 仍已裁示、不重問。客戶 2026-11-02 指示：待 #1119 收斂後一次呈給客戶，UI-1～UI-15 一次裁示。
 
 **UI-1 五條鐵則是否正式採用**
 - A：全採，回寫 67 新節＋DEC。B：只先採 C-1～C-3，C-4／C-5 待 Digest 批。C：維持 proposal。
@@ -574,6 +578,7 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 
 **UI-12 版面變更是否核准為下一批 wireframe 基準**
 - 子項：(1) 🌍 Primary 改 TAIEX＋S&P 500 歸一化比較 ＝ **修改 `DEC-2026-10-30-01` D1（單序列切換），需客戶覆議**；(2) 若 (1) 核准，現行 Secondary「國際｜S&P 500」卡與 Primary 重複，**其去留一併裁示**（現行 Secondary：「風險｜VIX」「國際｜S&P 500」「利率與信用」）；(3) 🌍 依據卡「≤3 條」—— D7 只定依據卡的位置、未定數量，這是**新的數量限制，需確認**；(4) 💼 Primary 畫出 tolerance band（出處＝使用者設定；端點歸屬未定）；(5) 🔍 lookup 比較上限：78 未定，Batch E 暫以 3 檔顯示（不以本題為前置；開工時點依 `DEC-2026-11-02-01`：Step 3 客戶裁示後），正式上限在此確認；且它與 `EXP-3` 上限 3 為兩個獨立元件、選取不互通（**更正**：轉述的「EXP-3 上限 4」不成立，見第 9.3 節）。
+- **子項 (1) 的性質（客戶 2026-11-02 第十五節）**：🌍 比較圖若改動既有 `DEC-2026-10-30-01` D1，**這是 amendment，而不是單純機械實作**；最終 Gate 必須明確指出，不得以「核准方向」一語帶過、不得偷偷改既有裁示。
 - A：核准方向，實作前每批仍附精確 wireframe。B：逐頁另審。C：維持現況。
 - 優點：A 方向一次定、精確版面仍逐批送審；B 每頁單獨權衡；C 不動已核准的 Batch C／D。
 - 風險：A 會一次覆議 D1，Batch C 已實作的版面要重排；B 多次往返；C 讓 🌍 看不到 TAIEX 與 S&P 500 的相對走勢、💼 容許帶仍只有文字。
@@ -593,6 +598,8 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 - 風險：A Phase 7 前沒有精確版面；B 為未啟用的頁先定版面，可能與 Digest 實作不合；C 讓使用者分不清哪句是規則、哪句是 AI，也看不到推翻條件。
 - **推薦 A（方向核准、實作時出線框）**。
 
+**UI-15 配息行事曆與 LINE 通知如何納入 Final UI**（2026-11-02 增量）—— 選項、推薦與理由見 **§17.12**；推薦不是已裁示。
+
 ---
 
 ## 14. Implementation Sequence（提案）
@@ -601,8 +608,8 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 |---|---|---|
 | 1 | 收斂 #1117（本輪）——**已完成（#1117，main `52da0cab`）** | — |
 | 2 | Final UI Contract Freeze（本檔，本輪） | — |
-| 3 | 客戶一次性裁示 UI-1～UI-10、UI-12～UI-14 | 本檔 |
-| 4 | Batch E production：MoneyDJ code 主入口、ISIN「尚未啟用」、歸一化 NAV session-only 比較 | **`DEC-2026-11-01-02` 已核准範圍；內容不以 UI-3／UI-12 為前置；開工時點依 `DEC-2026-11-02-01`（客戶 2026-11-02 第 55 節：Step 3 客戶裁示後才開始 Step 4）**；基準值裁示前沿用 78；78 未定上限；Batch E 實作暫以 3 檔為顯示上限（與 Visual Budget ≤3 series 一致），正式上限由 UI-12 確認，不以本題為前置 |
+| 3 | 客戶一次性裁示 ~~UI-1～UI-10、UI-12～UI-14~~ → **UI-1～UI-15（UI-15 見 §17，2026-11-02 增量）**；UI-11 已裁示，不重問（同第 13 節；就地改寫，不是漏刪） | 本檔 |
+| 4 | Batch E production：MoneyDJ code 主入口、ISIN「尚未啟用」、歸一化 NAV session-only 比較（→ 2026-11-02 起實作落點＝New UI2、ui_v2 不再作主要演進目標，`DEC-2026-11-02-03`） | **`DEC-2026-11-01-02` 已核准範圍；內容不以 UI-3／UI-12 為前置；開工時點依 `DEC-2026-11-02-01`（客戶 2026-11-02 第 55 節：Step 3 客戶裁示後才開始 Step 4）**；基準值裁示前沿用 78；78 未定上限；Batch E 實作暫以 3 檔為顯示上限（與 Visual Budget ≤3 series 一致），正式上限由 UI-12 確認，不以本題為前置 |
 | 5 | Batch F：⚙️ source health、Rule Registry 唯讀殼 | UI-10；殼的欄位待 Rule ID 格式 |
 | 6 | Decision Digest production | UI-1、UI-8、UI-9；BL-0527 |
 | 7 | Risk Cap／deterministic action rules | BL-0495／0496 Formula Gate（非機械式） |
@@ -611,7 +618,7 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 
 | 核准後即可機械式實作（不含語意） | 核准方向後仍需逐批線框／格式裁示 | 不可機械式（另走 Gate） |
 |---|---|---|
-| Missing 語彙統一為 `◇ 資料未備`（含 `ui_v2/mkt/chart.py::TEXT_EMPTY` 與 `market_section` 狀態字表；依 44 之十九其五第 4 條，已於 `DEC-2026-11-02-01` 落盤（同批）；開工時點依 `DEC-2026-11-02-01`（Step 3 後）、需客戶開實作批） | annotation 中 as_of／source／freshness／missing 標示框架（不含 threshold） | regime aggregation rule |
+| Missing 語彙統一為 `◇ 資料未備`（含 `ui_v2/mkt/chart.py::TEXT_EMPTY` 與 `market_section` 狀態字表；依 44 之十九其五第 4 條，已於 `DEC-2026-11-02-01` 落盤（同批）；開工時點依 `DEC-2026-11-02-01`（Step 3 後）、需客戶開實作批）（→ 2026-11-02 起實作落點＝New UI2、ui_v2 不再作主要演進目標，`DEC-2026-11-02-03`） | annotation 中 as_of／source／freshness／missing 標示框架（不含 threshold） | regime aggregation rule |
 | Batch E（`DEC-2026-11-01-02` 已核准範圍；開工時點依 `DEC-2026-11-02-01`（Step 3 後）） | 💼 容許帶視覺（端點歸屬未定，見 `ui_v2/alo/fixtures.py` 檔頭） | 任何 threshold 值（含 VIX、freshness） |
 | — | Rule Registry 唯讀殼 | Risk Cap 數值、作用層級與輸出 |
 | — | 🤖 版面（UI-14） | action trigger；System Action State 本身的定義 |
@@ -685,12 +692,14 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 | 能力 | GitHub 實況 | 本提案定位 |
 |---|---|---|
 | 配息／除息行事曆 L2 | `services/dividend_calendar.py`：純 deterministic、零 I/O；以**單一基金自己的歷史**辨識月／季／半年／年／irregular 節奏，推估基準日與發放日；樣本／重現不足時棄權；沒有 `pay_date` 歷史時不硬編 | **Existing legacy capability／migration required**；保留，未來定位為 **Dividend Date Fallback Estimation Engine** |
-| Calendar renderer | `services/dividend_calendar_render.py`：App 與 LINE 共用 HTML renderer；v19.533 起畫面不再直接顯示 high／medium／low confidence，而以逐檔 error band／「僅供參考」呈現 | **Existing legacy capability／migration required**；不因 Final UI freeze 刪除 |
+| Calendar renderer | `services/dividend_calendar_render.py`：App 與 LINE 共用 HTML renderer；v19.533 刪除「高／中／低」confidence 徽章、v19.534 再移除殘留的「?」低信心標記，畫面不再直接顯示 confidence，改以逐檔 error band／「僅供參考」呈現 | **Existing legacy capability／migration required**；不因 Final UI freeze 刪除 |
 | App calendar | `docs/DIVIDEND_CALENDAR_SETUP.md`：舊 UI「我的管理室 → 除息行事曆」可看本月月曆 | **Existing legacy capability／New UI not implemented** |
 | 月底 LINE 摘要 | `.github/workflows/dividend_calendar_notify.yml`＋`scripts/dividend_calendar_notify.py`：現行 cron 為每月 28 日 00:23 UTC（台灣 08:23）產生**下個月**摘要；支援 `workflow_dispatch`、`dry_run`、`target_month`；測試鎖住 cron／target-month pairing | **Existing legacy capability／migration required**；本輪不改 cron、不新增 reminder schedule |
 | LINE transport | `infra/line_push.py`：Messaging API push，token／user id fail-loud，支援 text／flex／image、dry-run；不把 token 寫入回傳訊息 | **Existing infrastructure**；只視為 delivery transport，不是投資規則 |
 | 「actual」接縫 | `actual_ex_for_month`／notify path 會把目標月已有歷史實際紀錄的事件標 `is_actual=True`；現有 renderer 未完整區分 actual／estimate，repo 已登記為已知接縫 | **不得直接映射成本提案的 `confirmed`**：`is_actual` 只證明既有資料內有實際紀錄；若沒有可追溯 authority／announcement provenance，不足以宣稱「官方已確認」 |
 | 舊 LINE 換股／action 通報 | `ui/tab_manage.py::_sec_notify`、`services.switch_notify` 等舊線存在換股／行動相關通知；62 F5 已把 calendar 與 directional notification 同時盤出 | **嚴格排除本輪 migration**：不因 LINE capability 重用而恢復到 New UI；只登記於既有 directional／Phase 5～8 邊界 |
+
+**New UI 邊界讀法（`DEC-2026-11-02-02`，2026-11-02 增補）**：上表「migration required」一律讀作 **capability／logic 遷移**：Old UI capability／logic → 確認仍符合最新 DEC／Contract → 重新設計成 New UI（→ 自 `DEC-2026-11-02-03` 起讀作 New UI2） information architecture／component → 只在 New UI production 實作（→ 2026-11-02 起實作落點＝New UI2、ui_v2 不再作主要演進目標，`DEC-2026-11-02-03`）。舊 UI「除息行事曆」頁（`ui/tab_manage.py` 等）與舊 renderer 的 layout、visual、page structure、component hierarchy 只作 **read-only logic reference**，不搬回 New UI、不修改舊 UI、不當 migration target。`services/dividend_calendar.py` 是 logic capability（Dividend Date Fallback Estimation Engine 候選），不是 Old UI ownership。
 
 **兩類 LINE 永久分離（本提案請求核准此邊界）**：
 
@@ -707,6 +716,8 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 
 **版面 Gate**：💼 具體擺放位置與 ⚙️ 通知區元件仍須 wireframe Gate；UI-15 只定 ownership 與 contract boundary，不定 production layout。
 
+**客戶 2026-11-02 第七節（逐字見 `docs/evidence/decisions/2026-11-02_new_ui_only_and_ui15_gate.md`）**：未來 Dividend Calendar UI 必須依 New UI design system（→ 自 `DEC-2026-11-02-03` 起讀作 New UI2） 重做；Old UI calendar 只能參考其能力／邏輯，**禁止直接複製 Old UI calendar layout**。⚙️ 擁有通知偏好／health／audit，但「Notification Preference ≠ Investment Rule」：⚙️ **不得因此取得** Risk Cap 編輯權、action rule 編輯權、threshold 編輯權。
+
 ### 17.3 Dividend Event Date Contract（提案）
 
 至少分四個概念，**不得混稱**：
@@ -718,7 +729,7 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 | `payment_date` | 基金公司／基金正式發放日 | **只代表基金端正式發放日**；不得稱「實際銀行入帳日」 |
 | `estimated_bank_credit_window` | 預估銀行／平台實際入帳區間 | 只有未來有可支持的 deterministic contract 才能填；repo 現有 `pay_date`／`pay_window` **不得自動升格成銀行實際入帳事實**；沒有銀行／平台實際事件資料時為 Missing |
 
-**Legacy semantic gap**：現行 setup／renderer 有「入帳(估)」與 pay-window 語彙。這是舊線既存語意，**本輪不改 production copy／code**；Final UI migration 必須先依上表拆開 `payment_date` 與 bank credit window，再決定新 UI 字樣。
+**Legacy semantic gap**：現行 setup／renderer 有「入帳(估)」與 pay-window 語彙。這是舊線既存語意，**本輪不改 production copy／code**；Final UI migration 必須先依上表拆開 `payment_date` 與 bank credit window，再決定新 UI 字樣。另：legacy 引擎的 `ex_date`（事件欄；取值 `date`＝配息基準日優先）**≠** 44 `dividend.ex_date`（除息日）；`record_date` 與 `ex_dividend_date` 不得混稱。
 
 ### 17.4 Date Status Contract（提案；domain status ≠ 第二套 Missing copy）
 
@@ -732,6 +743,15 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 | `unavailable` | 沒有足夠證據／資料可給日期 | UI 呈現仍沿用本檔第 11 節正式 Missing contract：`◇ 資料未備`，**不新增第四套 Missing 文案** |
 
 【F-重驗】repo 目前有 `is_actual`、`confidence`、`estimate_error_band` 等 legacy 欄位／內部訊號，但**查無一個已核准、可直接等同上述四態的正式 date-status contract**。因此這四態仍是 UI-15 的 contract proposal；production copy／symbol 若與 44／79 既有字表衝突，以正式 SSOT 為準，另在同一 UI-15 裁示後的 wireframe Gate 定字，不自行創第二套。
+
+**2026-11-02 實查：repo 有無既有正式的日期狀態 vocabulary（客戶第十節「必須先查 repo，不得建立第二套」）**【F-重驗；本組 `git grep` 單組實查，基準 `fade6046` 加本分支，不宣稱窮舉】：
+- `services/dividend_calendar.py`：事件欄 `is_actual`（布林；True＝目標月已有實際基準日紀錄（引擎 `ex`／`ex_date` 欄取值為 `date` 優先、退回 `ex_date`，見 `services/dividend_calendar.py::_parse_records` docstring）、False＝推估）、`confidence`（`none`／`low`／`medium`／`high`，內部 gating evidence，renderer 不直接顯示）、`error_band`／`error_worst`（天）、`pay_date_est`、`pay_window_est`。**全是內部欄位，沒有任何 `confirmed`／`scheduled`／`estimated`／`unavailable` 或 `date_status` 字樣。**
+- `services/dividend_calendar_render.py`、`ui/tab_manage.py`（舊 UI）：只有 presentation 字樣「預估基準日」「入帳(估)」「誤差」「日期為推估」「僅供參考」「上次 M/D」—— 屬舊 UI presentation，依 `DEC-2026-11-02-02` 只作參考、不是正式 vocabulary。
+- `ui_v2/`、`shared/`：查無配息**日期**狀態字表；`ui_v2` 的 `is_estimated`（淨值列推估旗標）與 `none_confirmed`／`undetermined`／`failed`／`rows`（配息**是否存在**的取數結果，同 `services/v2_tables/nav_dividend.py`）是別的語意，不是日期狀態，不得混用。
+- `docs/v2/44`（frozen，只讀）：第四節 4.2 表 `nav` 的 `is_estimated`（「推估值在畫面上掛『推估』徽章」）；4.3 表 `dividend` 只有 `ex_date`（除息日）與 `pay_date`，**`pay_date` 語意欄寫「實際入帳日；尚未公布時為空」**；無 `record_date` 欄、無日期狀態值域。Missing presentation 以 `◇ 資料未備`（44 之十九其五第 4 條、`DEC-2026-11-02-01`）為準。
+- `docs/DECISIONS.md`：查無配息日期狀態或配息行事曆的正式裁示。
+
+**結論與待一併確認事項**：`confirmed`／`scheduled`／`estimated`／`unavailable` 是 **date-status 的 data 層候選值，不是 presentation 字樣**；presentation 仍服從既有 `◇ 資料未備` 等 SSOT 與 44 既有「推估」徽章字樣。legacy `is_actual` 不得直接等同 `confirmed`。**與既有正式詞的衝突點，列入 UI-15 裁示時一併確認**：(1) 44 4.3 `pay_date`「實際入帳日」與本節 Date Contract「`payment_date` ≠ 實際銀行／平台入帳日」的語意張力（44 frozen，本輪不改；若 UI-15 採 A，依 79 落盤策略列 44 amendment backlog）；(2) `estimated` 與 44 既有「推估」徽章的對映（候選：`estimated` 在 presentation 層沿用「推估」，不另造字）。
 
 ### 17.5 Source Precedence（只定方向；本輪不新增 source）
 
@@ -755,7 +775,7 @@ Unavailable
 
 ### 17.6 Existing Estimation Engine 的正式候選定位
 
-`services.dividend_calendar.py` 不刪除；提案定位為 **Dividend Date Fallback Estimation Engine**：只在更高 precedence 的正式日期尚未取得時使用。
+`services/dividend_calendar.py` 不刪除；提案定位為 **Dividend Date Fallback Estimation Engine**：只在更高 precedence 的正式日期尚未取得時使用。
 
 保留的 deterministic 特性：
 - 只用該基金自己的歷史，不借其他基金的日期間隔。
@@ -764,7 +784,7 @@ Unavailable
 - 樣本少、重現度低時降低 engine confidence／直接棄權。
 - 已有正式／較高 precedence date 後，fallback estimate 不得覆蓋。
 
-**C-2 對齊**：現行 engine 的 `confidence` 是 deterministic 內部 gating evidence，不是 LLM 自估機率；renderer 自 v19.534 已停止直接顯示 high／medium／low confidence，改以 historical walk-forward error band／「僅供參考」呈現。Final UI **不得把 `confidence` 當成未校準成功機率或 AI 信心值**。若未來要外露，候選名稱優先研究 `evidence quality`／`estimation reliability`；production 字樣仍需 Gate。可追溯的 `evidence_count`、error window、estimation method 可作 objective evidence；不得把它們轉譯成未經 calibration 的「成功率」。
+**C-2 對齊**：現行 engine 的 `confidence` 是 deterministic 內部 gating evidence，不是 LLM 自估機率；renderer 自 v19.533 刪除「高／中／低」confidence 徽章、v19.534 再移除殘留的「?」低信心標記，改以 historical walk-forward error band／「僅供參考」呈現。Final UI **不得把 `confidence` 當成未校準成功機率或 AI 信心值**。若未來要外露，候選名稱優先研究 `evidence quality`／`estimation reliability`；production 字樣仍需 Gate。可追溯的 `evidence_count`、error window、estimation method 可作 objective evidence；不得把它們轉譯成未經 calibration 的「成功率」。
 
 ### 17.7 Field-Level Provenance＋Revision Contract（proposal）
 
@@ -806,29 +826,34 @@ Unavailable
 
 若未來 Dividend Event 會影響 cash-flow reasoning，**objective facts** 可以是 Decision Digest 候選輸入：record date、ex-dividend date、confirmed／scheduled／estimated state、payment date、Missing、provenance、revision。是否納入 Required／Optional 仍隨 Digest schema Gate。
 
-以下 **delivery metadata 必須 Excluded**，不得進投資 Decision Digest／OneBrain fingerprint：LINE 是否已送達／已讀、notification retry count、Flex／PNG renderer metadata、delivery channel health、widget state。這些屬 notification infrastructure／audit，不得污染投資推理 fingerprint。
+以下 **delivery metadata 必須 Excluded**，不得進投資 Decision Digest／OneBrain fingerprint：LINE 是否已送達／已讀（delivery status）、notification retry count、Flex／PNG renderer metadata、delivery channel health、test notification state、UI widget state、Old UI presentation metadata（後兩項依客戶 2026-11-02 第十二節補列）。這些屬 notification infrastructure／audit，不得污染投資推理 fingerprint。
 
 ### 17.11 Final UI Gap Matrix 增量（amends §12；不是「新版已完成」）
 
 | Page | Capability | Contract status | Production status | Legacy evidence | Migration gap |
 |---|---|---|---|---|---|
-| 💼 我的資產 | Dividend Calendar；Dividend Event Date Contract；confirmed／scheduled／estimated distinction；source／provenance；future official-date upgrade | **defined as proposal／UI-15 pending** | **not implemented in New UI** | App calendar＋L2 estimator／renderer 已存在 | ownership、date semantics、status、provenance、revision、wireframe、official-source research／Gate |
-| ⚙️ 設定 | Notification Preferences；LINE delivery health；notification audit；test notification | **defined as proposal／UI-15 pending** | **not implemented in New UI** | LINE transport＋monthly workflow／dry-run 已存在 | preference model、health／audit schema、idempotency、wireframe；不得含 action-rule controls |
+| 💼 我的資產 | Dividend Calendar；Dividend Event Date Contract；confirmed／scheduled／estimated distinction；source／provenance；future official-date upgrade | **defined as proposal／UI-15 pending** | **not implemented in New UI** | ~~App calendar＋L2 estimator／renderer 已存在~~ → L2 estimator（logic capability）已存在；**Old UI 能力只作 logic reference，New UI 依 design system 重做**（`DEC-2026-11-02-02`） | ownership、date semantics、status、provenance、revision、New UI wireframe（不搬 Old UI calendar layout）、official-source research／Gate |
+| ⚙️ 設定 | Notification Preferences；LINE delivery health；notification audit；test notification | **defined as proposal／UI-15 pending** | **not implemented in New UI** | LINE transport＋monthly workflow／dry-run 已存在（infrastructure；舊 UI 通知設定畫面只作 logic reference，New UI 依 design system 重做，`DEC-2026-11-02-02`） | preference model、health／audit schema、idempotency、New UI wireframe；不得含 action-rule／Risk Cap／threshold controls |
 
-**與 62／BACKLOG 的 anti-bloat 對位**：62 F5 已盤出「除息行事曆」與「LINE 換股通報」兩種舊能力；BL-0401 已承接 directional／action 類 Phase 5～8，不得拿來當 informational calendar migration 的授權。Final UI proposal 的 Gate 工作直接掛 **BL-0531 子項 UI-15**，本輪**不新增 BL**；UI-15 核准後若真的需要 official-source research／calendar migration／notification audit implementation，再依 Anti-Bloat 檢查既有列後決定是否開最少必要 BL。
+**與 62／BACKLOG 的 anti-bloat 對位**：62 F5 已盤出「除息行事曆」與「LINE 換股通報」兩種舊能力；BL-0401 已承接 directional／action 類 Phase 5～8，不得拿來當 informational calendar migration 的授權。Final UI proposal 的 Gate 工作直接掛 **BL-0531 子項 UI-15**，本輪**不新增 BL**（指 UI-15 輪；同 PR 新增的 BL-0533 屬 New UI2 架構輪，非碎片）；UI-15 核准後若真的需要 official-source research／calendar migration／notification audit implementation，再依 Anti-Bloat 檢查既有列後決定是否開最少必要 BL。
 
 ### 17.12 UI-15｜配息行事曆與 LINE 通知如何納入 Final UI？（⛔ 待客戶裁示）
 
-- **A（推薦）**：💼 我的資產擁有配息行事曆；⚙️ 設定擁有通知偏好／delivery health／audit；正式日期優先、歷史 deterministic estimation 只 fallback；保留月底下月 LINE 摘要 use case；日期 semantic change 可作未來通知；directional／action LINE **不在本輪恢復**。具體 layout、status production copy、reminder cadence、fingerprint／delivery key、任何新 source 都另走既有 Gate。
-- **B**：只保留 LINE 月底摘要 use case，不把 calendar 正式納入 New UI。
-- **C**：全部延後，不納入 Final UI Freeze。
+> 選項文字與客戶 2026-11-02 第十四節逐字對齊（逐字見 `docs/evidence/decisions/2026-11-02_new_ui_only_and_ui15_gate.md`）。**A 是推薦，不是已裁示**；不得替客戶選 A，也不得為 A 建立任何 DEC。
 
-**推薦 A**：這是 repo 已存在、且對持有基金的現金流事件有直接使用價值的 capability；如果 Final UI Freeze 完全不登記，後續 migration 很容易因「新版 notifications 未定義」而把既有能力遺失。A 只凍結 ownership／semantic boundary／migration contract，**不等於授權 production migration**。
+- **A（推薦，不是已裁示）**：💼 擁有 Dividend Calendar；⚙️ 擁有 notification preferences / health / audit；official date first；deterministic estimate fallback；月底下月 LINE summary 保留；semantic date-change notification 可作未來能力；directional/action LINE 不恢復；**Old UI capability 只參考邏輯；production 只實作 New UI**
+- **B**：只保留月底 LINE summary，不把 Calendar 納入 New UI。
+- **C**：全部延後。
+
+**A 的範圍說明（文件組整理，不是選項本文）**：具體 layout、status production copy、reminder cadence、fingerprint／delivery key、任何新 source 都另走既有 Gate；A 只凍結 ownership／semantic boundary／migration contract，**不等於授權 production migration**。
+
+**推薦 A 的理由（總管推薦，可被客戶推翻）**：這是 repo 已存在、且對持有基金的現金流事件有直接使用價值的 capability；如果 Final UI Freeze 完全不登記，後續 New UI 實作很容易因「新版 notifications 未定義」而把既有能力遺失。
 
 ### 17.13 Implementation Sequence amendment／本輪禁止事項
 
 - 第 14 節 Step 3 的「一次性裁示」增補 **UI-15**；UI-11 仍不重問。
 - UI-15 裁示前不開始 calendar／notification production migration；即使 A 核准，下一步仍是 wireframe／contract batch，而不是直接寫 production。
+- 任何後續實作只在 New UI production；不修改舊 UI、不維護兩套 UI、不把 Old UI 當 migration target（`DEC-2026-11-02-02`）。（→ 2026-11-02 起實作落點＝New UI2、ui_v2 不再作主要演進目標，`DEC-2026-11-02-03`）
 - 本輪禁止修改：production code、LINE workflow／cron、secrets、新 source／provider、Risk Cap、action trigger、OneBrain runtime、frozen 44、舊 LINE directional／action production。
 - 本輪只做：**inventory＋contract proposal＋Gap registration＋Decision Gate**。
 
@@ -842,4 +867,6 @@ Unavailable
 5. 沒有建立第二套 Missing／status presentation vocabulary；`unavailable` 最終仍映射既有 `◇ 資料未備` presentation contract。
 6. engine `confidence` 沒有變成未校準機率／LLM 信心；error band／evidence 仍標 deterministic evidence。
 7. notification delivery metadata 沒有進 Decision Digest／OneBrain fingerprint。
-8. BL-0531／HANDOFF／本檔 UI-15 對位一致；本輪沒有新增碎片化 BL。
+8. BL-0531／HANDOFF／本檔 UI-15 對位一致；本輪沒有新增碎片化 BL（指 UI-15 輪；同 PR 新增的 BL-0533 屬 New UI2 架構輪，非碎片）。
+
+**本輪收斂聲明（2026-11-02 第三則指示）**：第 9.4 節誤刪行已逐位元組恢復；檔頭、第 13 節、UI-12 (1)、第 14 節 Step 3、§17.1／17.2／17.4／17.10～17.13 依客戶第三則指示增補；§17.4 實查為文件組單組 `git grep`，不宣稱窮舉；以上增補尚未經第二組獨立複驗（獨立稽核另派）。
