@@ -122,7 +122,7 @@ INFERENCE：後綴代表不同通路的 NAV 序列，若 canonical 化時把 `TL
 ## 8. 建議（RECOMMENDATION，推論，可被客戶推翻）
 
 **階段 1 採契約 C，並讓資料結構（`isin`、`currency`、`share_class`、`platform_suffix` 為獨立屬性，不塞進代碼字串）預留日後以加欄方式升級到契約 B 的空間；不建議以契約 A 為主。**
-理由（INFERENCE）：ISIN 目前只在選股池手填、覆蓋率不足；ISIN 不區分通路後綴 NAV，且 54 已寫明不當唯一 SSOT；契約 C 不動儲存資料、可關閉、最快讓 view 之間對同一鍵一致，並為 X3 等不變量提供鍵。代價是「同一級別」只能先用幣別屬性近似，這點需客戶接受。 〔2026-11-01 amended by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：僅限「🔍 找基金」搜尋入口範圍，ISIN 升為正式 alternate lookup key（ISIN → identity resolution → 同一 canonical fund identity）；canonical key 仍是 MoneyDJ 基金代碼、不建立第二套 identity，不要求 Sheet 補 ISIN、缺 ISIN 不警告等其餘語意不變；ISIN → MoneyDJ 基金代碼的來源待客戶裁示（G-E1）。舊句原字保留。〕
+理由（INFERENCE）：ISIN 目前只在選股池手填、覆蓋率不足；ISIN 不區分通路後綴 NAV，且 54 已寫明不當唯一 SSOT；契約 C 不動儲存資料、可關閉、最快讓 view 之間對同一鍵一致，並為 X3 等不變量提供鍵。代價是「同一級別」只能先用幣別屬性近似，這點需客戶接受。 〔2026-11-01 amended by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：僅限「🔍 找基金」搜尋入口範圍，ISIN 升為正式 alternate lookup key（ISIN → identity resolution → 同一 canonical fund identity）；canonical key 仍是 MoneyDJ 基金代碼、不建立第二套 identity，不要求 Sheet 補 ISIN、缺 ISIN 不警告等其餘語意不變；ISIN → MoneyDJ 基金代碼的來源待客戶裁示（G-E1）。舊句原字保留。〕〔→ 已裁示，見 `DEC-2026-11-01-02` G-E1（2026-11-01，客戶）：採 A＋C——ISIN 入口保留但在無已核准 deterministic 對照來源前顯示尚未啟用、不進 resolver／取數鏈；另開 research-only（BL-0530），不導入；不得以選股池手填 isin 欄作 identity authority。〕
 
 ## 9. 客戶需要回答的問題
 
@@ -171,7 +171,7 @@ print("3", f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01"), f("ht
 
 - `TLZF9`／`TLZF9-AL001`／`TLZF9-24A7` 原則上同一核心基金：`base_fund_code = TLZF9`；`original_code`／`platform_suffix`／`channel_code`／`source_url` 另存；後綴不得直接當新身份。
 - 不得盲目剝後綴：證據顯示後綴是不同 share class／幣別／配息／避險／NAV series → Exception／Decision Gate，不硬合併。
-- ISIN 本階段不依賴（不作 key、不必要、缺了不警告）；currency／share class／配息／避險不得猜，沒有可靠資料一律 Unknown，Unknown 不視為相同、不同、安全或已確認。 〔2026-11-01 amended by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：僅限「🔍 找基金」搜尋入口範圍，ISIN 升為正式 alternate lookup key（ISIN → identity resolution → 同一 canonical fund identity）；canonical key 仍是 MoneyDJ 基金代碼、不建立第二套 identity，不要求 Sheet 補 ISIN、缺 ISIN 不警告等其餘語意不變；ISIN → MoneyDJ 基金代碼的來源待客戶裁示（G-E1）。舊句原字保留。〕
+- ISIN 本階段不依賴（不作 key、不必要、缺了不警告）；currency／share class／配息／避險不得猜，沒有可靠資料一律 Unknown，Unknown 不視為相同、不同、安全或已確認。 〔2026-11-01 amended by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：僅限「🔍 找基金」搜尋入口範圍，ISIN 升為正式 alternate lookup key（ISIN → identity resolution → 同一 canonical fund identity）；canonical key 仍是 MoneyDJ 基金代碼、不建立第二套 identity，不要求 Sheet 補 ISIN、缺 ISIN 不警告等其餘語意不變；ISIN → MoneyDJ 基金代碼的來源待客戶裁示（G-E1）。舊句原字保留。〕〔→ 已裁示，見 `DEC-2026-11-01-02` G-E1（2026-11-01，客戶）：採 A＋C——ISIN 入口保留但在無已核准 deterministic 對照來源前顯示尚未啟用、不進 resolver／取數鏈；另開 research-only（BL-0530），不導入；不得以選股池手填 isin 欄作 identity authority。〕
 - 先 Shadow Mode：不改 Sheet schema、production 顯示、NAV precedence、valuation、FX、return formula；flag 預設關；只記差異。
 - 外部來源不得因 `results[0]` 接受；已知屬性衝突 → 拒收、留 evidence、顯示「⬜ 資料來源不一致，暫無法判定」。
 - NAV 與 identity 分開；同 base＋同日＋同幣別 NAV 不一致 → source conflict，不建第二個 canonical fund。
@@ -226,7 +226,7 @@ print("3", f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01"), f("ht
 - **外部候選接受條件（MUST 2）**：`accepted` 必須 `base_fund_code` 或 `isin` 已確認；只有幣別等非身分鍵相符 → `unverified`。
 - **例外登記不會自動更新（SHOULD d）**：`evaluate_suffix_evidence` 的輸出在 Stage-1 **不**寫進 `IDENTITY_EXCEPTIONS`；登記新增須 Decision Gate。在那之前 `same_canonical_fund` 的結果不因任何證據紀錄而改變。
 - **hook 失敗隔離（SHOULD a）**：hook 的 import 與呼叫都包在 try 內，失敗只寫 `logging`（`fund_keys.py` 因此加開 `logging` 一個標準庫名字）；子程序測試確認 flag 關時 `services.fund_identity`／`services.fund_identity_shadow` 都不會被 import（SHOULD c）。
-- **resolver 不做的事**：不從名稱、後綴或幣別推 currency／share class／配息／避險；不預設 USD；不要求 ISIN；不套別名表（除非呼叫端注入）；不 canonicalize 改寫網址；不取數。 〔2026-11-01 `DEC-2026-11-01-01`：「不要求 ISIN」在 resolver 契約層不變（resolver 只收單筆代碼）；ISIN 作為搜尋入口的 identity resolution 是另一個待裁項（G-E1、G-E2），本契約本批不改。〕
+- **resolver 不做的事**：不從名稱、後綴或幣別推 currency／share class／配息／避險；不預設 USD；不要求 ISIN；不套別名表（除非呼叫端注入）；不 canonicalize 改寫網址；不取數。 〔2026-11-01 `DEC-2026-11-01-01`：「不要求 ISIN」在 resolver 契約層不變（resolver 只收單筆代碼）；ISIN 作為搜尋入口的 identity resolution 是另一個待裁項（G-E1、G-E2），本契約本批不改。〕〔→ 已裁示，見 `DEC-2026-11-01-02`（2026-11-01，客戶）：G-E1 採 A＋C（見上）；G-E2 採 A＋C——一對多或 code／ISIN 衝突＝unresolved，不選第一筆、不設猜測型優先序；G-E4 採 A——Batch E 不啟用 `DG2_SHADOW_ENABLED`。本契約仍不改。〕
 - **本階段不改**：Sheet schema、production 顯示、`get_latest_nav`、NAV precedence、FundClear／MoneyDJ／Yahoo 排序、Morningstar `results[0]`（`validate_external_candidate` 未接入）、valuation、FX、return formula、One AI Brain、任何舊 UI 缺陷。
 - **測試**：`tests/test_fund_identity_dg2.py`（無網路；含 flag-off 不呼叫 hook／結果不變、flag-on 只寫 log 結果不變、shadow 失敗不影響 production）。`tests/test_xview_characterization.py` C5b「production 無 `share_class` 符號」改為「僅 `services/fund_identity.py`」（有意識的更正，該檔已註明）。
 - **Stage-2（啟用 resolver 影響任何鍵或顯示）須另一次 Decision Gate。** 待補證據：同一日 `TLZF9` vs `TLZF9-AL001`／`TLZF9-24A7` 的實際 NAV 比對（需網路；見 BL-0521）。
@@ -261,7 +261,7 @@ print("3", f("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=acdd01"), f("ht
 - **後綴**：只在 MoneyDJ 證據（宣告命名空間、MoneyDJ 網址頁型、或命中下列 mapping）**且**已驗證 mapping 命中時才剝；mapping＝注入的通路表（`suffix_provenance="channel_table"`；⚠️ 把整張 L1 `_BANK_PLATFORM_CODES` 都當已驗證 mapping 是**執行組讀法**——客戶確認的只有 `TLZF9-AL001`／`TLZF9-24A7`（與下列 `ACDD01-EQTAL005`），表內其餘條目未經客戶確認）或 L0 `CUSTOMER_CONFIRMED_SUFFIXES`（目前只有 `("ACDD01","EQTAL005")`，`provenance="customer_confirmed_2026-10-29"`、`nav_equivalence="UNVERIFIED"`，不含通路名稱）。有 MoneyDJ 證據但後綴未驗 → `moneydj_suffix_unverified_not_stripped`（不剝、不合併；`same_canonical_fund` 只在完整代碼逐字相同時為真）。這是對裁示第 4 項第 3、4 點的**執行組讀法**：收窄了 `DEC-2026-10-28-05` 實作的「MoneyDJ 命名空間內第一個 `-` 前一律＝基金碼」；既有測試三處依此改寫（已註明）。
 - **FundClear**：`AGIF-HT5`／`AGIF-HTG` 在任何 `namespace`（含誤標 `moneydj`）都不剝成 `AGIF`。不產生 FundClear 對照；沒有已驗證跨來源 mapping 時 resolver 不宣稱同一基金。
 - **基金身份 vs 持倉身份**：resolver 只收單筆代碼，原始碼不含任何持倉欄位（測試以 AST 掃描釘住）；同基金多保單得同一 `canonical_key`，持倉列與 `(policy_id, fund_code)` 鍵不動、不彙總；hook 逐筆記錄、不去重。不改任何儲存鍵。
-- **Unknown**：currency／share class／配息／避險一律 Unknown、不預設 USD、缺 ISIN 不警告不影響。 〔2026-11-01 amended by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：僅限「🔍 找基金」搜尋入口範圍，ISIN 升為正式 alternate lookup key（ISIN → identity resolution → 同一 canonical fund identity）；canonical key 仍是 MoneyDJ 基金代碼、不建立第二套 identity，不要求 Sheet 補 ISIN、缺 ISIN 不警告等其餘語意不變；ISIN → MoneyDJ 基金代碼的來源待客戶裁示（G-E1）。舊句原字保留。〕
+- **Unknown**：currency／share class／配息／避險一律 Unknown、不預設 USD、缺 ISIN 不警告不影響。 〔2026-11-01 amended by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：僅限「🔍 找基金」搜尋入口範圍，ISIN 升為正式 alternate lookup key（ISIN → identity resolution → 同一 canonical fund identity）；canonical key 仍是 MoneyDJ 基金代碼、不建立第二套 identity，不要求 Sheet 補 ISIN、缺 ISIN 不警告等其餘語意不變；ISIN → MoneyDJ 基金代碼的來源待客戶裁示（G-E1）。舊句原字保留。〕〔→ 已裁示，見 `DEC-2026-11-01-02` G-E1（2026-11-01，客戶）：採 A＋C——ISIN 入口保留但在無已核准 deterministic 對照來源前顯示尚未啟用、不進 resolver／取數鏈；另開 research-only（BL-0530），不導入；不得以選股池手填 isin 欄作 identity authority。〕
 - `evaluate_suffix_evidence` 改用 MoneyDJ 文法的候選切分比對（只評估證據、不合併），新增 `channel_table` 參數。
 
 ### 15.2 hook 呼叫鏈（`services/v2_tables/fund_keys.py::resolve_full_keys`）——為何 hook 不宣告 Sheet 來源

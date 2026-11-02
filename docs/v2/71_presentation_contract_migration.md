@@ -344,7 +344,7 @@
 - 處置：第一階段唯讀＋只在本次瀏覽生效的暫時篩選；候選清單不是前提、可讀不寫；搜尋來源未核准 → `◇ 資料未備`，不得以候選池缺失冒充（44 之二十其四）。44 之二其零「存了才算」在第一階段改由暫時篩選生效。
 - 現況（【文】【執抽查】）：B 線沒有搜尋鏈呼叫——`git grep -l -e search_funds -e tdcc_search_fund 02615e41 -- ui_v2 services/v2_tables` 實跑無輸出（【執】2026-10-29）；`ui_v2/readonly.py::PHASE1_HIDDEN_INPUT_CODES` 含 `EXP-1`、`EXP-4`、`EXP-5`。
 - Data Source Decision Gate：登記在既有 BL-0397（CAP-GATE-06、-07 已在該列），不另開新列；不新增外部來源。
-- 〔2026-11-01 amended／superseded by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：找基金的使用者搜尋入口只剩 MoneyDJ 基金代碼與 ISIN，名稱／模糊／FundClear／TDCC 搜尋入口與 AI 猜基金取消；上列「搜尋來源未核准 → `◇ 資料未備`」中涉及名稱搜尋的部分隨之 superseded，「ISIN → MoneyDJ 基金代碼」的來源仍待客戶裁示（G-E1），來源未核准前的 `◇ 資料未備` 語意照舊。Batch E 第一批只做盤點與最小 wireframe：`docs/v2/78_fund_search_batch_e_inventory_wireframe.md`。舊文原字保留。〕
+- 〔2026-11-01 amended／superseded by `DEC-2026-11-01-01`（有意識的政策變更，不是漏刪；決策者：客戶）：找基金的使用者搜尋入口只剩 MoneyDJ 基金代碼與 ISIN，名稱／模糊／FundClear／TDCC 搜尋入口與 AI 猜基金取消；上列「搜尋來源未核准 → `◇ 資料未備`」中涉及名稱搜尋的部分隨之 superseded，「ISIN → MoneyDJ 基金代碼」的來源仍待客戶裁示（G-E1）（→ 已裁示，見 `DEC-2026-11-01-02`；2026-11-01，客戶）（G-E1 採 A＋C：來源未核准前 ISIN 入口顯示尚未啟用、另開 research-only BL-0530），來源未核准前的 `◇ 資料未備` 語意照舊。Batch E 第一批只做盤點與最小 wireframe：`docs/v2/78_fund_search_batch_e_inventory_wireframe.md`。舊文原字保留。〕
 
 ### 6.5 設定頁瘦身
 
@@ -436,7 +436,7 @@
 | **Phase 3＝Batch B** 共用元件 | (1) chart card；(2) metadata／status chip；(3) detail 展開區＋Missing placeholder（含圖表 placeholder） | 無（44 之十九已定）；符號照 44 現行 | 同上＋T10＋desktop／390 截圖 |
 | **Phase 4＝Batch C** 🌍 reference implementation | (1) 段序改為圖表優先、Primary 1＋Secondary ≤3（X-25、T1）；(2) 圖卡改 chips＋「▸」（X-26、T9）；(3) 核心卡 `answers`／`detail_lines` 下沉（X-27） | 無；BL-0517 三張新圖卡不在本批（方案 A 草稿另批）〔2026-10-30：草稿已寫成，`docs/v2/72_mkt_wireframe_batch_c.md`，~~待客戶拍板；拍板前不開實作~~ → **同日客戶核准 D1～D7（`DEC-2026-10-30-01`），Batch C 實作批已做，見下方「Batch C 實際做了什麼」**；狀態更新，不是漏刪〕 | 八項全做＋Visual audit 九問 |
 | **Phase 5＝Batch D** 💼 我的資產 | (1) 合併頁 IA（含一枚結論燈的畫法、層 3／層 4 各超 2 塊的處置〔線框送客戶裁示〕、頁序頁名對齊批）；(2) 情境式持倉資料來源選擇；(3) portfolio visuals（Primary 1＋Secondary ≤3） | 線框草稿先行（新元件與合併頁）；**層 3／層 4 超限的客戶裁示**；BL-0526 若影響頁數，對齊批等它 | 八項全做 |
-| **Phase 6＝Batch E** 🔍 找基金 | (1) 候選清單解耦；(2) 暫時篩選（只在本次瀏覽生效）；(3) search／filter／compare 呈現 | BL-0397 Data Source Decision Gate（未核准前搜尋區 `◇ 資料未備`）；CAP-GATE-05 | 八項全做 〔2026-11-01 `DEC-2026-11-01-01`：Batch E 第一批只做現況盤點＋最小 wireframe＋落盤，未動工；搜尋入口只剩 MoneyDJ 基金代碼與 ISIN，詳見 `docs/v2/78_fund_search_batch_e_inventory_wireframe.md`；本列「search／filter／compare 呈現」的實作仍待客戶就 G-E1～G-E7 裁示。〕 |
+| **Phase 6＝Batch E** 🔍 找基金 | (1) 候選清單解耦；(2) 暫時篩選（只在本次瀏覽生效）；(3) search／filter／compare 呈現 | BL-0397 Data Source Decision Gate（未核准前搜尋區 `◇ 資料未備`）；CAP-GATE-05 | 八項全做 〔2026-11-01 `DEC-2026-11-01-01`：Batch E 第一批只做現況盤點＋最小 wireframe＋落盤，未動工；搜尋入口只剩 MoneyDJ 基金代碼與 ISIN，詳見 `docs/v2/78_fund_search_batch_e_inventory_wireframe.md`；本列「search／filter／compare 呈現」的實作仍待客戶就 G-E1～G-E7 裁示。〕〔→ 已裁示，見 `DEC-2026-11-01-02`（2026-11-01，客戶）：G-E1～G-E7 全裁、`docs/v2/78` 第 2 部分 wireframe 原則核准（S6 修字後正式核准）、IA 採同頁上下；下一實作批＝MoneyDJ code 主入口。〕 |
 | **Batch F** ⚙️ 設定＋帳號位置 | (1) 設定頁瘦身；(2) Google 帳號左側固定與手機控制；(3) desktop／mobile 互動 | callback 查證（6.2，可能再 Gate） | 八項全做 |
 | **Phase 7** One AI Brain／Decision Digest／AI 投資總結 | 依 67 第 5、6 節；先補 BL-0527 缺口與守衛 | ~~BL-0526 入口形式~~（→ 已裁示方案 C，`DEC-2026-10-29-07`；Phase 7 才加入導覽）；BL-0495 Risk Cap；BL-0496 減碼 trigger；`AI-1`、`AI-3` | Digest 契約定義前不寫 prompt 或 LLM glue |
 
