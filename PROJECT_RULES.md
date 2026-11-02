@@ -85,6 +85,7 @@
 | Context Efficiency 與 Context Compaction Gate（自動 compact 建議、最小必要讀取、frozen 44 局部讀取、compact 後恢復順序、compaction 六觸發／保留／可丟棄、GitHub = 長期記憶） | 第 11 節 11.1（`DEC-2026-10-28-02`、`DEC-2026-10-29-04`） |
 | Visual Fidelity Gate（功能測試／CI／QA 全綠 ≠ UI Stage 完成；UI PR 要有 production-like Cloud screenshot 正式確認，CI deterministic screenshot 只是自動安全網） | 第 7 節指標；本文 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九其九（`DEC-2026-10-29-05`） |
 | GitHub Durable Memory Contract（Conversation 不是 SSOT；Batch 結案前檢查五類文件同步；HANDOFF 只是索引） | 第 6 節 6.1.1 末尾指標（`DEC-2026-10-29-06`） |
+| 正式 Streamlit 只顯示目前最新正式 UI；保留程式 ≠ 對使用者公開；三代 UI 邊界（Old UI read-only／`ui_v2` maintenance-only／`ui_v3` 唯一正式）；cutover 暴露守衛 | 第 13 節 13.2 末尾「正式 Streamlit 顯示規則」（`DEC-2026-11-02-06`；New UI2 架構 `DEC-2026-11-02-05`） |
 
 **Supersession hygiene（同裁示）**：(1) 舊內容保留歷史，不刪；(2) 被新裁示取代時，在舊內容就地標示「superseded by <DEC-ID>」；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只能指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（現行四份見 0.4）。
 
@@ -609,6 +610,7 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 - 直接 merge 屬常設授權，只在四條件全成立時：稽核過必修 0、CI 三條綠、改動範圍與派工單相符、PR 說明無 session 網址（交接本第 7 節約 :4229）；用一般 merge commit、禁 squash（約 :4230）；不 force push（約 :4226）。
 - **常設授權 supersede「未經我同意」字面規則（客戶治理第 4 項，`DEC-2026-10-16-06`）**：2026-09-28 之後的常設授權正式 supersede 交接本第 7 節〈沿用〉「未經我同意不准 commit／push／merge」（約 :4214）。符合既有 Auto-Ship／常設授權條件時，commit、push、PR、CI、audit、fix、merge 均可自主完成。**任一必要條件不成立，不得強行 merge**；force push、破壞性操作與不在常設授權內的高風險動作，依 Stop／Decision Gate（第 4 節）處理。
+- → **2026-11-02 重申（客戶，`DEC-2026-11-02-08`；同向重申，不是新規則）**：#1115～#1119 的 squash 合併與 AI 署名／session 網址 trailer 既有歷史不改寫、保持揭露（`docs/HANDOFF.md` Resume Checkpoint）；自 #1120 起合併一律用一般 merge commit，commit 不得含 AI co-author 或 session 網址 trailer。
 - 常設授權的三道邊界（範圍不外溢、前置條件不得省、merge 完不算完）見 `PROCESS.md` §4 Auto-Ship（約 :159 起）與 `CLAUDE.md` §-1.5.1a 接合 A1（約 :1016 起）。`git push --force`、重寫已推送歷史、刪除生產資料、正式下架既有功能、改動或停用正式排程仍逐案請示。
 
 **commit 規則與禁詞索引**：
@@ -720,7 +722,7 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 | 8 | 不得 fake precision | **repo 內未找到以此為名的既有條文**（本組以「假精確」「fake precision」等詞 grep，只在 `STATE.md` 約 :574 一處歷史註解命中「§1 不假精確」）。最接近的既有條文：`CLAUDE.md` §1 禁止自行估一個合理值（約 :2026-2046）、§3.3 反捏造（約 :2400）；54 §00 標記慣例（具體數字一律標 `Candidate / Unvalidated / Non-production`，約 :11） |
 | 9 | 不得 silent source substitution | 交接本第 7 節 2026-10-14 重申「不靜默換來源」（約 :4572）；交接本第 5 節 2026-10-14 第 56 點「不自動換來源」（約 :3937）；54 §1「自行替換來源」（約 :80-84）；`CLAUDE.md` §1「MoneyDJ 子網域 403 走 fallback chain，失敗時須保留來源旗標」（約 :2045） |
 | 10 | 新／替換 production source 必須經客戶裁示 | 交接本第 7 節 2026-10-10 資料 Gate「任何新 production API／MCP／資料來源……無客戶明確授權不得接入」（約 :4535-4567）；本檔第 4 節停下清單 |
-| 11 | B 線 `ui_v2/` 是未來正式 UI 主線；舊 UI／A compatibility line 不新增功能 | 交接本第 7 節 2026-10-14 重申與 2026-10-15 指示第 2、3 點（約 :4572、:4575-4576）；〈客戶 2026-09-28 重申〉「不碰 `ui/tab*.py`」（約 :4224） |
+| 11 | B 線 `ui_v2/` 是未來正式 UI 主線；舊 UI／A compatibility line 不新增功能（→ **2026-11-02 指標**（客戶，`DEC-2026-11-02-05`、`-06`；原字保留，有意識的政策變更，不是漏刪）：未來唯一正式 UI 主線改為 New UI2／`ui_v3`；`ui_v2` 為 maintenance-only／rollback candidate；Old UI 不修改、不新增功能；見 13.2） | 交接本第 7 節 2026-10-14 重申與 2026-10-15 指示第 2、3 點（約 :4572、:4575-4576）；〈客戶 2026-09-28 重申〉「不碰 `ui/tab*.py`」（約 :4224） |
 | 12 | LINE、AI、B UI 是資料層的不同 consumers；不能因 UI 退役誤刪非 UI consumer | 交接本第 5 節 2026-10-13 第 45 點刪除閘門（客戶原文逐字，含「LINE 等非 UI 消費端完成解耦」一道，約 :3951）；54 §14「LINE 是 notification consumer，不是分析 engine」（約 :202-206） |
 | 13 | 方向性投資建議不得再套用舊的「永久禁止」規則；是否啟用、證據門檻與正式行為依目前正式 spec／Phase 7 後續規格處理；資料不足必須維持無法判定，不得猜測 | 44 第七節第三小節之四（標題 `7.3.4`，約 :4397-4487）；交接本第 7 節〈客戶 2026-10-15 裁示：Phase 1.5（A+ 修正版）〉（約 :4582-4607）；客戶治理第 6 項取消「永久禁止」規則、現階段不啟用（`DEC-2026-10-16-08`）；子法 1 正式修正案 #8（`docs/v2/57_amendment_8_directional_judgment.md`，`DEC-2026-10-16-14`） |
 | 14 | Phase 7 Research Hypotheses 仍是 Non-Production；不得因寫進 Backlog 就自動變成 production rule | 54 檔頭警語（約 :3）、§00「純文件、Non-Production……不構成動工授權」（約 :7）、§17 Backlog 更新規則「不施工」（約 :219-226）、§18「是否已核准一律為否」（約 :228 起） |
@@ -760,9 +762,16 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 **大規模資訊架構改版只在四種情況允許**：使用者核心任務明顯改變；五頁已無法合理容納主要任務；有經驗證的 usability 問題；現行架構造成明確的資訊衝突。換 API／AI、新增單一功能、某頁難寫、資料暫時不足，都不是理由。
 
-**舊 UI 退役原則**：舊 UI 只能參考已驗證邏輯與資料流程，不是新 UI 視覺或資訊架構來源；只提供已驗證公式、deterministic logic、已證實資料 mapping、已通過測試的行為；不自動提供新 UI 版型、導覽、文案、interaction pattern、寫入權限。新 UI 覆蓋必要邏輯後才切正式入口、移除舊頁、清 legacy wiring 與死碼，並保留必要 regression tests／domain rules。**退役與刪除仍受既有閘門約束**（第 13 節第 11、12 條、第 4 節停下清單、`CLAUDE.md` §-1.5.1c 判定 3）；本小節不授權任何刪除（最保守讀法，可被客戶推翻）。
+**舊 UI 退役原則**：舊 UI 只能參考已驗證邏輯與資料流程，不是新 UI 視覺或資訊架構來源；只提供已驗證公式、deterministic logic、已證實資料 mapping、已通過測試的行為；不自動提供新 UI 版型、導覽、文案、interaction pattern、寫入權限。新 UI 覆蓋必要邏輯後才切正式入口、移除舊頁、清 legacy wiring 與死碼，並保留必要 regression tests／domain rules。**退役與刪除仍受既有閘門約束**（第 13 節第 11、12 條、第 4 節停下清單、`CLAUDE.md` §-1.5.1c 判定 3）；本小節不授權任何刪除（最保守讀法，可被客戶推翻）。（→ **2026-11-02 指標**（客戶，`DEC-2026-11-02-06`；有意識的政策變更，不是漏刪；本段原文不改）：「切正式入口」讀作 New UI2 Preview 驗收通過後把正式 Streamlit entrypoint 切到 `ui_v3`，已獲授權；「移除舊頁、清 legacy wiring 與死碼」讀作 Old UI 與 `ui_v2`「不先刪除」，刪除另走 Gate、仍未授權。）
 
-**New UI2 唯一未來正式產品線（2026-11-02 指標）**：~~New UI 是唯一正式產品線；Old UI 永久只作 read-only logic reference，不修改、不當 migration target、不移植其 layout／visual／navigation／IA；Final UI 以既有 New UI 為視覺 baseline，只做經 Gate 核准的增量（客戶 2026-11-02，`DEC-2026-11-02-02`）。~~（同日 amended by `DEC-2026-11-02-03`；有意識的政策變更，不是漏刪）→ New UI2（greenfield presentation layer）是唯一未來正式產品線；ui_v2 為 legacy reuse candidate（不再作主要演進目標、不先刪）；Old UI 永久只作 read-only reference，不修改、不當 migration target —— 允許參考：業務邏輯、資料處理方式、已驗證公式、deterministic rule、欄位、流程、edge case、fallback、interaction experience、capability；禁止移植：layout、visual design、navigation、page structure、information architecture、component hierarchy、Old UI presentation pattern（全文見 `DEC-2026-11-02-02`、`DEC-2026-11-02-03`）。
+**New UI2 唯一未來正式產品線（2026-11-02 指標）**：~~New UI 是唯一正式產品線；Old UI 永久只作 read-only logic reference，不修改、不當 migration target、不移植其 layout／visual／navigation／IA；Final UI 以既有 New UI 為視覺 baseline，只做經 Gate 核准的增量（客戶 2026-11-02，`DEC-2026-11-02-02`）。~~（同日 amended by `DEC-2026-11-02-03`；有意識的政策變更，不是漏刪）→ New UI2（greenfield presentation layer）是唯一未來正式產品線；ui_v2 為 legacy reuse candidate（不再作主要演進目標、不先刪）；Old UI 永久只作 read-only reference，不修改、不當 migration target —— 允許參考：業務邏輯、資料處理方式、已驗證公式、deterministic rule、欄位、流程、edge case、fallback、interaction experience、capability；禁止移植：layout、visual design、navigation、page structure、information architecture、component hierarchy、Old UI presentation pattern（全文見 `DEC-2026-11-02-02`、`DEC-2026-11-02-03`）。（→ **2026-11-02 指標**（客戶，`DEC-2026-11-02-05`；本句原文不改）：New UI2 目錄＝`ui_v3/`（NG-1）；ui_v2 由「legacy reuse candidate」收緊為 maintenance-only（NG-2：只修安全／正確性；共用計算可搬 shared／domain 層但 ui_v2 行為不變、搬遷批需獨立稽核）；architecture、Reuse Matrix、migration boundary 凍結（`docs/v2/80`）。）
+
+**正式 Streamlit 顯示規則與三代 UI 正式邊界（客戶 2026-11-02 永久裁示，`DEC-2026-11-02-06`；逐字存檔 `docs/evidence/decisions/2026-11-02_new_ui2_ng_and_final_ui_contract_ruling.md`）**：
+
+1. **正式 Streamlit 對使用者只顯示目前最新正式 UI。保留程式 ≠ 對使用者公開。** New UI2 驗收通過並正式切換後，正式 Streamlit 只顯示 `ui_v3`；Old UI 與 `ui_v2` 不出現在正式導覽／entrypoint；不提供一般使用者舊 UI 切換入口，也不提供首頁「舊版／新版」切換器。
+2. **三代 UI 邊界**：Old UI＝不修改、不新增功能、不公開到正式 Streamlit、只作 logic／capability reference，repo 保留 read-only；`ui_v2`＝maintenance-only、不新增新版面、不公開到正式 Streamlit、只保留 rollback／reuse 能力；`ui_v3`＝New UI2、未來唯一正式 Presentation Layer、正式 cutover 後唯一出現在 Streamlit 對使用者的 UI。Old UI 與 `ui_v2` 不先刪除。
+3. **Preview／Cutover**：切換前以獨立 Preview App 平行驗收，正式 App 維持目前版本、Preview 不影響正式使用者；驗收後才把正式 entrypoint 切到 `ui_v3`，repo 保留 rollback 能力，rollback 僅維運用途、不做一般使用者切換功能。若可在不破壞部署與 OAuth／redirect contract 下維持原正式 URL，優先維持；不得為 New UI2 任意改正式 URL。若維持 URL／OAuth 需要修改 Old UI `app.py`，屆時停下走第 4 節 Stop／Decision Gate（執行組讀法，可被客戶推翻）。
+4. **稽核檢查項**：(a) **cutover PR**（切正式預設的那一批）必須附 BL-0535 守衛測試綠燈（正式 entrypoint 只註冊 `ui_v3` 頁、不 import／不連結 Old UI 樹或 `ui_v2` 頁、無新舊切換 widget）＋ Streamlit Cloud main file 設定與 URL／OAuth redirect 未變的可驗證紀錄；缺任一項不得切換、不得 merge。（執行組讀法，可被客戶推翻：客戶原文要求「測試或可驗證證據」，URL 只是「優先維持、不任意改」；本條把兩者都列為必備是從嚴；若 URL／OAuth 必須改變，依 BL-0535 停下走第 4 節 Stop／Decision Gate，不得自行改。）~~(b) **cutover 前任何 PR** 不得在正式 entrypoint 新增舊版／新版切換器，也不得把 `ui_v2` 或 Old UI 暴露到任何正式入口；Preview App 入口不算正式入口，但不得被設成正式 App 的 main file。~~ → (b) **cutover 前任何 PR** 不得在正式 entrypoint 新增舊版／新版切換器，也不得把 `ui_v2` **新增**暴露到正式入口；正式切換前正式 App 仍維持目前版本（現況推定為 Old UI（Streamlit Cloud 設定，repo 內無法查證）），照現況維持為正式 App 直到 cutover。Preview App 入口不算正式入口；「Preview App 不得被設成正式 App 的 main file」為執行組推論（可被客戶推翻）。（2026-11-02 更正，有意識的更正，不是漏刪；決策者：AI 總管；理由：獨立稽核指出）舊句與客戶「正式切換前……正式 App 仍維持目前版本」牴觸。⚠️ BL-0535 守衛在 `ui_v3` 存在前無法建立；在此之前 (a) 不可能滿足，不得宣稱已有守衛。
 
 ### 13.3 長期規則：Cross-View Data Consistency Gate（客戶 2026-10-28 新增正式高優先需求，`DEC-2026-10-28-01`，永久）
 
