@@ -2068,6 +2068,20 @@
 | supersedes／superseded by | supersedes：無（同向重申 `PROJECT_RULES.md` 第 10 節、`DEC-2026-10-16-09`、`DEC-2026-10-27-15`）。superseded by：無。 |
 | provenance | **逐字**（以逐字檔為準）；「理由／背景」的條文對照與 #1120 實查由執行組單組寫成；未經第二組獨立驗證。 |
 
+### DEC-2026-11-02-09｜客戶裁示：Model／Effort Change Gate 放行（「已切換／可以開始」）；授權 `ui_v3` presentation implementation 於 `DEC-2026-11-02-05`／`-06` 邊界內開始
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-02 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；evidence ＝ 客戶該則對話訊息，由總管轉述並轉錄於本筆「決策內容摘要」，**沒有另存逐字檔**；摘要為要點轉錄，非逐字） |
+| 決策內容摘要 | 客戶回覆「已切換／可以開始」（Model 已切換為 Claude Sonnet 5.5 ＋ Medium）：`DEC-2026-11-02-04` 的 Model／Mode／Effort Change Gate 放行，授權依 `docs/v2/80` 第 13 節開始 `ui_v3` presentation implementation（BL-0536），範圍限於 `DEC-2026-11-02-05`／`-06` 邊界內。客戶同時重申後續條件：(1) Silent Autonomous Cruise；(2) durable persistence（每批落 GitHub）；(3) Old UI 不碰；(4) ui_v2 maintenance-only；(5) 先 Preview 後 cutover；(6) cutover 後正式 Streamlit 只顯示 `ui_v3`；(7) 任何進一步 Model／Mode／Effort 變更 → 送 Gate 後立即停手。 |
+| 理由／背景 | （執行組讀法，可被客戶推翻）批 1 機械式骨架（`ui_v3/` 骨架、preview 入口、守衛、fake fixtures、view model）在本放行下進行；**PORT 批與呈現規則資料表批屬 formula／data semantics 等級**，依 `PROJECT_RULES.md` 5.1 第 10 點須重新評估 Model／Effort（可能需另一次 Gate），並依 `DEC-2026-10-16-05` 至少 1 組真正獨立稽核；逐頁仍須先出 wireframe 送客戶核准（`CLAUDE.md` §-1.5.4）。 |
+| evidence／source | 客戶對話訊息（見決策者欄）；`DEC-2026-11-02-04`、`-05`、`-06`；`PROJECT_RULES.md` 5.1 第 10、11 點；`docs/v2/80` 第 13 節；`docs/BACKLOG.md` BL-0536 |
+| 影響範圍 | BL-0536 由 blocked 改 in progress；不改任何既有條文，不授權刪除 Old UI／ui_v2、不授權改 `app.py`、不授權 cutover。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無（解除 `DEC-2026-11-02-04` 所設的停手狀態，條文不變）。superseded by：無。 |
+| provenance | 要點轉錄（非逐字、無逐字檔）；執行組單組寫成，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
