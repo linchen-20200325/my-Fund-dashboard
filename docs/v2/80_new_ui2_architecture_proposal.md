@@ -1,0 +1,512 @@
+# 80｜New UI2 Architecture Proposal（提案；⛔ 待客戶裁示）
+
+- **定位**：**Architecture Proposal／Decision Gate／Migration Contract。不是規格、不是第二套 UI 憲法、不是動工授權。** 本檔把客戶 2026-11-02 已裁示的 New UI2 架構方向（`DEC-2026-11-02-03`）展開成可一次裁示的提案：目標分層、Reuse Matrix、目錄結構、Design Contract、View Model Contract、五頁文字線框、遷移邊界、測試策略、Cutover，以及少量 Decision Gate（NG-1～NG-5；前端框架改列內部決定，見第 12 節附註）。本檔寫下的任何「提案」在客戶裁示前不生效。
+- **已裁示、本檔不重問的方向**（逐字見 `docs/evidence/decisions/2026-11-02_new_ui2_architecture_direction.md`）：New UI2＝Greenfield Presentation Layer、不是重寫系統；Old UI＝read-only logic reference；ui_v2＝Legacy New UI／Reuse Candidate、不先刪；New UI2＝唯一未來正式 presentation layer；五頁 IA 不變、不得新增第六頁；Cutover 預設順序。**仍待裁示**（本檔 NG-1～NG-5）：目錄命名、ui_v2 freeze policy、preview／cutover、視覺語言沿用範圍、presentation DEC 釋放規則；前端框架屬內部決定（維持 Streamlit 現況），不列客戶 Gate。
+- **位階**：不凌駕 `CLAUDE.md`、`PROJECT_RULES.md`、`docs/v2/44_fund_ui_ssot.md`（frozen）、`docs/v2/67_ai_action_vocabulary.md`、`docs/v2/75_onebrain_ai_architecture.md`、`docs/v2/79_final_ui_contract_freeze.md`（語意部分）與 `docs/DECISIONS.md` 的正式裁示；衝突一律以它們為準，視為本檔寫錯。
+- **客戶核准後的落盤策略**（`PROJECT_RULES.md` 13.4 第 7 條：文件不重複 SSOT）：裁示登記 `docs/DECISIONS.md`；工作項掛 `docs/BACKLOG.md`（優先掛 BL-0533 子項，不碎片化）；接手點進 `docs/HANDOFF.md`；必要時列 44 amendment backlog（不在本批解凍 44）。本檔核准後只保留 rationale 與 migration map，不再作為條文引用來源。
+- **量測基準**：origin/main `fade6046`＋PR #1119（`DEC-2026-11-02-03` 待合併）。本組重驗在本機分支 `d89b1fbc` 上進行；`git diff --stat fade6046 d89b1fbc -- ui_v2 services shared repositories infra tests` → 無輸出，故程式事實等同 `fade6046`；撰寫期間 #1119 分支新增 docs commit `82678c87`，同一指令改比 `82678c87` 亦無輸出。程式位置寫「檔案::符號」，不寫行號。
+- **BACKLOG 追蹤**：BL-0533（本提案＋Gates）；相關：BL-0531（UI-1～UI-15）、BL-0532（Missing 統一）、BL-0525（呈現遷移批）。
+- **現況的來源（據實揭露）**：第 3、8、9、14 節的現況大多來自三組**單組唯讀盤點**（下層組、ui_v2 組、SSOT 組），由總管轉述，**未經第二組複驗**；本組能快速重驗的承重事實已重驗並標【F-重驗】，其餘標【F-轉述】（＝轉述自盤點組）。重驗清單見第 15 節。
+- **建立日**：2026-11-02。**編號**：79 為 Final UI Contract，本檔取 80。
+- **產出者聲明**：文件組單組產出，未經獨立複驗（`CLAUDE.md` §-2 規則 6）。本檔涉及 formula／data semantics 搬遷（PORT）與治理規則，依 `DEC-2026-10-16-05`，正式回寫前至少要 1 組真正獨立稽核。
+
+## 0. 標記法
+
+| 記法 | 意思 |
+|---|---|
+| 【F-重驗】 | 本組這一輪自己讀檔或搜尋重驗過（第 15 節） |
+| 【F-轉述】 | 轉述自盤點組（單組），本組未重驗 |
+| 【I】 | 推論，可推翻 |
+| 【P】 | 提案，待客戶裁示 |
+| `<pkg>` | New UI2 套件目錄名的佔位符；實際名稱待 NG-1 |
+| 符號 | 只用 44 已落字的 ◆ ◇ ⬜ ⛔ ◷；本檔不新增狀態詞或符號 |
+
+---
+
+## 1. 目標與非目標【P；方向依 `DEC-2026-11-02-03`】
+
+| 是 | 不是 |
+|---|---|
+| 一個新的 **presentation layer**：五頁（🌍／💼／🔍／🤖／⚙️）的頁面、元件、設計語言、view model、導覽 | 新資料系統、新 source layer（不新增 provider、不改取數鏈） |
+| 讀取既有已驗證的 data／services／deterministic logic／provenance／health 的「消費者」 | 新 business rule engine（不新增規則、不改門檻值） |
+| mobile-first（390px 首屏先設計）、五頁一致 | 新 AI engine（OneBrain 不在本範圍；只預留接口） |
+| 以 79 語意規格與既有語意 DEC 作為 **input contract** | 新 portfolio engine（不新增彙總公式、不改 β 階梯語意） |
+| 第一階段唯讀（同 44 之十六、`settings_sheet_repository.is_read_only()`） | 第六個主要頁面；任何寫入功能 |
+
+**三條硬規則【P；依據既有條文】**：
+1. **New UI2 不創造 objective facts**：畫面上每個值、狀態、日期都來自下層（canonical data、domain calculation、正式 rule result），不在 presentation 層推估、補值或合成（`CLAUDE.md` §1；67 第 5.4 節）。
+2. **AI 不寫回 data**：OneBrain 只讀 Decision Digest，不回寫 canonical data（67 第 6 節第 5 點；`PROJECT_RULES.md` 13.1）。
+3. **Streamlit 不承擔 domain calculation**：報酬、回撤、偏離、配置彙總、三態篩選等計算住在 domain 層（第 3 節 PORT），Streamlit 頁只渲染 view model。
+
+---
+
+## 2. 目標分層【P】
+
+```text
+L0  Data／External Sources（FRED、Yahoo、MoneyDJ、Google Sheets …；既有，不動）
+      │
+L1  Normalization／Validation        repositories/＋services/v2_tables/（KEEP；寫入守衛照舊）
+      │
+L2  Domain／Deterministic Logic      services/（含 PORT 進來的 ui_v2 領域計算，落點例：services/v2_domain/）
+      │                               ── 未來接口（只預留，不實作）：
+      │                                  Deterministic Rules → Risk Cap → System Action State
+      │                                  → Decision Digest → OneBrain
+      │
+L3a View Model／Presentation Contract  <pkg>/viewmodels/（純 Python、無 streamlit、無 I/O、可單元測試）
+      │                               ← 只經 <pkg>/adapters/ 取下層結果
+      │
+L3b New UI2 pages／components         <pkg>/pages/、<pkg>/shell/、<pkg>/design/（Streamlit；只渲染 view model）
+```
+
+| 層 | 可以做 | 不可以做 |
+|---|---|---|
+| adapters | 呼叫 `services.v2_tables.*` 與 `services/v2_domain`；注入 session state；遮蔽失敗原文 | 計算領域值；決定狀態語意；網路呼叫（經下層才可） |
+| viewmodels | 把下層結果組成元件級 schema（第 6 節）；套用呈現規則資料表（狀態→符號、Missing 字樣） | import streamlit；讀 secrets；補值；從 UI 狀態反推事實 |
+| pages／components | 版面、互動、導覽；把 view model 畫出來 | 任何計算或判定；直接 import 下層 |
+| 未來 Digest／Risk Cap／Action State／OneBrain | 位置預留在 L2 之後、L3a 之前；L3a 只讀其產出 | **本提案不實作**；禁止 fake Risk Cap、fake action state、fake AI probability、fake Digest |
+
+**未來接口的佔位規則【P】**：view model 預留 `ActionSlot`（第 6 節）與 🤖 頁的 Digest 讀取點；在對應 Gate 通過前，`ActionSlot` 恆為「⬜ 無法判定」或不顯示，🤖 頁不掛導覽（`DEC-2026-10-29-07`）。
+
+---
+
+## 3. Reuse Matrix
+
+分類：**KEEP AS-IS**（原樣 import）／**WRAP**（經 adapter 或去掉 presentation 假設後使用）／**PORT**（行為不變搬遷到共同層，測試隨行）／**REIMPLEMENT**（New UI2 重新寫）／**RETIRE LATER**（cutover 後再評估清理）／**DO NOT TOUCH**（Old UI）。
+
+### 3.1 下層（services／repositories／shared／infra）
+
+| 模組 | 分類 | 證據 | New UI2 用法 | 風險 |
+|---|---|---|---|---|
+| `services/v2_tables/contract`、`masking`、`market_indicator`、`nav_dividend`、`alo_holdings`、`personal_session`、`fund_keys`、`exp_universe`、`exp_profile`、`exp_nav` | KEEP AS-IS | 不 import streamlit／`ui_v2`／`ui`【F-重驗：檔內無 streamlit import，僅 docstring 提及】 | adapters 直接呼叫 | 部分回傳帶中文 reason 文字；New UI2 以 `reason_code`／`WITHHELD_*`／`STATUS_*` 為鍵，字樣由 view model 規則表決定 |
+| `services/v2_tables/market_view` | KEEP AS-IS | `_domain` dict 帶 domain／status／reason_code／reason／source／fetched_at／obs_date／value_unit／points【F-轉述】；`STATE_MISSING`＝「資料未備」【F-重驗】 | 最貼近 view model 的來源 | 中文狀態字面屬 presentation 假設；view model 以 status 鍵映射 |
+| `services/v2_tables/settings_store` | WRAP | `PAGES_READING_SETTINGS`＝`("set", "alo", "hld", "mkt", "exp")`【F-重驗】；`RUNTIME_STATE_KEY`＝`_v2_refetch_runtime`【F-重驗】 | adapter 把 New UI2 頁代號對到既有頁常數（不改下層） | 頁代號是 ui_v2 頁形狀；New UI2 若合併 alo／hld 為 💼，需對照表 |
+| `repositories/settings_sheet_repository::is_read_only` | KEEP AS-IS | 第一階段恆為 True【F-重驗】 | 寫入面沿用 | — |
+| `shared/ui_v2_error_codes` | KEEP AS-IS | 九個 error code（`AUTH_REQUIRED` … `UNAVAILABLE`）＋`ALL_ERROR_CODES`【F-重驗】 | view model 錯誤分類鍵 | 檔名含 `ui_v2`，屬 L0 常數；不改名（改名會動 ui_v2） |
+| `repositories/v2_source_status`（冷卻） | KEEP AS-IS | 【F-轉述】 | 經 v2_tables 間接使用 | — |
+| `infra/personal_oauth`＋`services/v2_tables/personal_session` | KEEP AS-IS | PKCE；session namespace `b_oauth.`【F-重驗：兩檔註解】 | 登入流程沿用 | 另一網址需在 Google 端另登記 redirect（第 10 節） |
+| `services/dividend_calendar` 計算核心（`infer_schedule`、`predict_ex_for_month`、`detect_anchor`、`estimate_error_band`） | KEEP AS-IS（capability） | 只 import 標準函式庫、無 I/O【F-重驗：模組 import 清單】；但 `predict_ex_for_month` 經 `_tw_holidays` 讀選配的 `holidays` 套件（缺套件時只跳週末），輸出依執行環境而異【F-重驗：`_tw_holidays` 與 `_HOLIDAY_CAL_WEEKEND`】 | 💼 配息事件（UI-15 未裁前為 proposal） | `confidence` 不得外露為機率（79 §17.6） |
+| `services/dividend_calendar::build_summary_text`、`build_summary_flex`、`ERR_BAND_FOOTNOTE` | 不重用（LINE presentation） | 【F-重驗：符號存在】 | 不用 | — |
+| `services/dividend_calendar_render` | 不重用 | HTML 產生器（presentation 住在 services）【F-轉述】 | 不用；New UI2 依 design system 重做 | — |
+| `infra/line_push`、`.github/workflows/dividend_calendar_notify.yml`（cron `23 0 28 * *`【F-重驗】）、`scripts/dividend_calendar_notify.py` | infrastructure，New UI2 不碰 | `tests/test_line_push_decoupled_from_ui.py` 鎖與 UI 解耦【F-重驗：檔存在】 | ⚙️ 只做唯讀 delivery health（UI-15） | 該 workflow 以 secrets `GOOGLE_SERVICE_ACCOUNT`（服務帳戶）與 `POLICY_SHEET_ID` 讀表、不是個人 Active Sheet【F-重驗：workflow env 段】 |
+| `repositories/macro/yf.py`、`repositories/macro/fred.py` | KEEP AS-IS | 從根目錄 `fund_fetcher` import `_ttl_cache`【F-重驗】 | 經 v2_tables 間接 | 閉包拖入舊 services（體積）；不屬 New UI2 範圍，只登記 |
+| `repositories/pool_repository::_cached_pool_map` | KEEP AS-IS | try-import `st.cache_data`（EX-CACHE-1）【F-重驗】 | 間接 | 同 process 共用快取 |
+| 下層既有測試（v2_tables 各模組、golden、dividend_calendar、line_push、source_backoff、`tests/test_services_purity_contract.py`） | KEEP AS-IS | 【F-轉述；purity 測試檔存在 F-重驗】 | 不重寫 | — |
+| Old UI（`app.py`、`ui/`、舊 services 的 presentation） | **DO NOT TOUCH** | `DEC-2026-11-02-02` 第 (1)～(4) 點 | 只作 logic reference | 切 default 若需改 `app.py` 即撞此邊界（第 10 節） |
+
+### 3.2 ui_v2
+
+| 模組 | 分類 | 證據 | New UI2 用法 | 風險 |
+|---|---|---|---|---|
+| `ui_v2/hld/logic.py::return_pct`、`drawdown_pct`、`vol_pct`、`deviation_rows`、`merge_same_key_holdings` | **PORT** | 符號存在【F-重驗】；領域計算住在 L3【F-轉述】 | 搬到共同 domain 層後 import | formula／data semantics 高風險；模組 import `page_health`、`status_class`【F-重驗】，搬遷須切斷 L3 依賴 |
+| `ui_v2/alo/logic.py::aggregated_holdings`、`basis_value`、`category_of`、`exceeds`、`target_sum` | **PORT** | 同上【F-重驗】 | 同上 | 同上 |
+| `ui_v2/exp/logic.py::apply_rules_tristate`、`compare_tristate` | **PORT** | 同上【F-重驗】 | 同上 | 三態語意（不得把未知當不符合） |
+| `ui_v2/mkt/chart.py::slice_period`；`ui_v2/mkt/logic.py::delay_days` | **PORT** | 同上【F-重驗】 | 同上 | 期間切片＝display control，但切片邊界屬資料語意 |
+| `ui_v2/thresholds.py::NAV_NOT_READY_DAYS`（＝10，客戶裁示的 domain 規則） | **PORT**（見 3.3 (b)） | 定義只在此檔【F-重驗】；`ui_v2/alo/source.py`、各頁 `live.py`／`logic.py` 引用【F-重驗】 | 改從 shared 常數讀 | domain 規則住在 UI 層 |
+| `ui_v2/status_class.py`（β 階梯七類） | KEEP（語意）／隨 PORT 下沉 | 【F-轉述】；不 import streamlit【F-重驗：只在 docstring 出現】 | view model 狀態分類 | 被 logic 依賴；放 shared 或 v2_domain 待內部決定 |
+| `ui_v2/page_health.py`（`KIND_UNCONFIGURED`／`KIND_FETCH`／`KIND_MISSING`／`KIND_STALE`、main_reason） | KEEP（分類部分） | `KIND_*` 存在【F-重驗】 | 頁級狀態分類鍵 | 混有中文字面（KIND 值即字樣）；以鍵用、字樣另表 |
+| `ui_v2/readonly.py`（`WRITE_CONTROLS_ENABLED`＝False） | KEEP（常數） | 【F-重驗】 | New UI2 同型旗標 | — |
+| `ui_v2/presentation.py`（chip／chart_card／detail／missing 四種模型） | WRAP（去掉 `*_html`） | 函式存在；`from ui_v2 import health`【F-重驗】 | 模型形狀參考 | 依賴 `ui_v2.health`（分層例外 E4） |
+| `ui_v2/plain.py`、`symbols.py`、`sections.py`、`health.py`、`health_view.py`（純部分） | WRAP → 以「規則資料表＋純函式」移入共同層（3.3 (c)） | 純函式、無 streamlit【F-重驗：plain／symbols／health docstring】；耦合 block dict 形狀與客戶裁示中文字面【F-轉述】 | 判定規則與字樣表重用，不複製 block dict | 字面契約鎖測試（B 類）在 ui_v2 |
+| `ui_v2/mkt/chart.py::build_spec`（vega-lite 純 dict） | KEEP | 【F-重驗：符號存在】 | 圖表 spec 起點 | 尺寸與配色常數屬 ui_v2 設計 |
+| 各頁 `live.py`／`source.py`、`mkt/market_section`、`mkt/overview`、`asset/overview`、`asset/page_status` | WRAP | 【F-轉述】 | 取其組裝邏輯為 adapter 參考 | `source.py` 混 session／secrets 邏輯（E3） |
+| `ui_v2/active_gate.py` 純邏輯、各頁 `theme.py::contrast_ratio`、`mkt/page.py::mark_fetch_failures` 等 page.py 內純函式 | PORT | `contrast_ratio` 在 alo／hld／set／exp 四份 `theme.py` 各有一份【F-重驗】；`mark_fetch_failures` 存在【F-重驗】 | 收成一份 | 重複（鏡像） |
+| 各頁 `page.py`（含 `hld/page.py::prepare_live` 後處理管線）、`presentation_view`、`shell`、`shell_nav`、CSS、各頁 theme 色碼、`mkt/chart.py::sparkline_svg` | **REIMPLEMENT** | `prepare_live` 存在【F-重驗】；管線就地改寫 block dict、碰 session【F-轉述】 | 不 import | 若 import 等於把 Streamlit 版面假設帶進 New UI2 |
+| `ui_v2/app_*_live.py`、`ui_v2/app_preview.py` 與 production 掛載 | RETIRE LATER | `app_preview.py::PAGES` 四列 mkt／ast／exp／set【F-重驗】 | 不用 | 清理需另走刪除 Gate（第 10 節） |
+| `ui_v2/*/fixtures`、`ui_v2/set/spec` | KEEP（測試資料） | 【F-轉述】 | fake scenario 參考 | 形狀是 ui_v2 block |
+| `tests/ui_v2/`（110 個 `.py`，`fade6046`）【F-重驗】 | 依類分流（第 9 節） | A 類領域語意／B 類字面鎖／C 類 AST 守衛／D 類 source 與寫入／E 類畫面【F-轉述】 | A 隨 PORT 搬；B 轉 view-model 規則測試；C 泛化 | — |
+
+**分層例外（轉述自盤點組 E1～E8，依列序編號）**：E1 page.py 混純邏輯、E2 管線在 page.py、E3 source.py 混 session／secrets、E4 presentation.py 依賴 ui_v2.health、E5 asset/page.py 頁對頁耦合、E6 領域計算在 logic、E7 active_gate／health_view 混檔、E8 set/logic 不一致【F-轉述】。頁間鏡像重複：`_grid_css`（mkt／hld／alo／exp／set 各一份）、`DISPLAY_TZ`（alo／mkt／set 各一份）、`NAV_NOT_READY_TEXT`（alo／hld 各一份）【F-重驗】。
+
+**結論【I】**：ui_v2 的 block dict 內建 Streamlit 版面假設（`_viewport_width`、`_layer`、`_default_open`、`_columns`、inputs／buttons）、文案與資料混在一起、語意靠 `_` 前綴約定【F-轉述】，**不建議直接升級為 New UI2 presentation contract**；可重用的是「判定語意」與「規則表」，不是 block dict。
+
+### 3.3 特別段
+
+**(a) 領域計算 PORT 方案比較【P】**
+
+| 方案 | 做法 | 優點 | 風險 |
+|---|---|---|---|
+| a1 複製 | 把 logic 函式複製到 New UI2 | ui_v2 一行不動 | **兩份同一公式**，日後必然漂移；違反 SSOT（`CLAUDE.md` §2.1）—— **不推薦；僅作 NG-2＝B 時的退路** |
+| **a2 搬到共同層＋ui_v2 留 re-export shim**（推薦） | 函式搬到 `services/v2_domain/`（名稱為提案），ui_v2 原位置改為 re-export；A 類測試指向新住址，golden 不變 | 一份公式、兩代 UI 共用；ui_v2 行為不變 | 需 NG-2 允許「行為不變的抽取」；**現行 `tests/ui_v2/test_ui_v2_live_import_guard.py` 規則 (5) 禁止 ui_v2 檔 import 舊樹模組（`services` 只准 `source.py` 經規則 (2) 逐模組 import）**【F-重驗：檔頭規則】，故 shim 需在該守衛加一條逐檔白名單（shim 檔只准 import `services.v2_domain.*`），屬 ui_v2 測試變更；被搬函式目前 import `page_health`／`status_class`，須先切斷 L3 依賴 |
+| a3 New UI2 直接 import ui_v2 logic | 不搬 | 零搬遷成本 | New UI2 永久耦合 legacy；ui_v2 日後清理時被卡住；L3 依賴 L3 |
+
+**推薦 a2**，列入 NG-2（A 選項包含「行為不變的抽取＋re-export shim」）。a1 不推薦；僅在 NG-2 選 B（hard freeze）時作為退路，採「a1 複製＋等價測試鎖一致」，並在 BACKLOG 登記「ui_v2 清理時收回重複」。
+
+**(b) `NAV_NOT_READY_DAYS` 落點【P】**：搬到 `shared/` 下一個 domain 常數模組（名稱內部決定），值 10 不變；`ui_v2/thresholds.py` 改 re-export（同 a2 的守衛白名單）。理由：它是客戶裁示的 domain 規則（淨值不可用天數），不是 UI 參數；放 shared 讓 New UI2、ui_v2、日後 Digest 讀同一個值。
+
+**(c) 呈現規則的移法【P】**：plain／symbols／sections／health 內客戶裁示的字樣與判定，抽成「**規則資料表**（狀態鍵 → 符號、字樣、tone）＋**純函式**（判定）」放共同層（例：`shared/` 下 presentation-semantic 常數），New UI2 view model 與 ui_v2 皆讀同一表；**不複製貼上**、**不搬 block dict**。字樣衝突（例：`NAV_NOT_READY_TEXT` 用「⬜ 資料未備」【F-重驗】、`ui_v2/mkt/chart.py::TEXT_EMPTY` 用「⬜ 資料未取得」【F-轉述自 79 §11】）依 BL-0532 射程處理：只限正式模式的「⬜ 資料未備」統一為 `◇ 資料未備`；`TEXT_EMPTY` 的「⬜ 資料未取得」屬版面示意字樣，實作批逐一判讀；示範模式依 44 照舊、另議；不得全域取代。在 ui_v2 端是否也統一，見 NG-2 附題。
+
+**(d) settings_store 頁面常數 adapter【P】**：不改 `PAGES_READING_SETTINGS`；New UI2 的 💼 adapter 把「我的資產」對到既有 `alo`＋`hld` 兩個代號讀設定。下層頁常數的泛化（改成與頁無關的設定鍵）列為後續可選，不在第一批。
+
+**(e) dividend_calendar【P】**：計算核心 KEEP；`dividend_calendar_render` 與 LINE 專用 presentation（`build_summary_*`、`ERR_BAND_FOOTNOTE`）不重用；New UI2 的配息呈現依 79 §17.3～17.4 的 date contract 與本檔 design system 重做（UI-15 裁示後）。
+
+---
+
+## 4. 目錄結構提案（命名待 NG-1）
+
+### 4.1 命名選項【P】
+
+| 選項 | cutover 後要改名嗎 | 與 ui_v2 混淆風險 | import 路徑穩定 | 判斷 |
+|---|---|---|---|---|
+| **A `ui_v3/`**（推薦） | 不必 | 中低：數字不同，`ui_v2` 的搜尋不會命中 `ui_v3`；但產品名「New UI2」與目錄名「v3」不一致，須在 SSOT 登記對照一次 | 穩定 | 世代編號一致（Old＝`ui`、New UI＝`ui_v2`、New UI2＝`ui_v3`） |
+| B `ui_next/` | 「next」在 cutover 後變成「current」，名不符實；改名＝全 import 改寫 | 低 | 改名時不穩 | 適合臨時分支，不適合唯一正式層 |
+| C `ui2/` | 不必 | **高**：口語「UI2」與「ui_v2」極易互指，PR 描述、派工單、grep 都會混 | 穩定 | 名稱與產品名一致，但混淆成本最高 |
+
+**推薦 A**：唯一正式層需要一個 cutover 後不必改的名字；世代編號可自我說明；名不一致只需一行對照（「New UI2＝`ui_v3/`」），而 C 的混淆在每一次溝通都要付。
+
+### 4.2 內部結構示例【P；名稱屬內部決定】
+
+```text
+<pkg>/
+  app_preview.py          獨立 preview 入口（Streamlit main file）；不 import ui_v2
+  shell/                  導覽（底部五項／側欄）、頁框、登入卡位置
+  design/                 tokens 命名與元件契約（第 5 節）；不放業務字樣
+  viewmodels/<page>.py    純 Python：下層結果 → 元件級 schema（第 6 節）
+  pages/<page>.py         Streamlit render：只吃 view model
+  adapters/<page>_source.py  唯一可 import services.v2_tables／services.v2_domain 的位置
+  fixtures/               fake／scenario 資料（第 9 節情境清單）；正式路徑不得 import
+services/v2_domain/       PORT 進來的領域計算（行為不變；名稱為提案）
+shared/<presentation-semantic 常數模組>  狀態類別、Missing 字樣 token、NAV_NOT_READY_DAYS（名稱為提案）
+```
+
+頁代號建議沿用 IA 意義：`mkt`／`ast`／`exp`／`ai`／`set`（`ai` 在 Phase 7 前無 render 掛載）【P】。
+
+---
+
+## 5. Design Contract（規則與 token 命名；不寫 CSS）【P】
+
+| 面向 | 規則 | token 命名（建議尺度，屬提案） |
+|---|---|---|
+| spacing | 4px 基數；元件內距與區塊間距分開命名；390px 左右 gutter 固定 | `space.1`＝4、`space.2`＝8、`space.3`＝12、`space.4`＝16、`space.6`＝24、`space.8`＝32；`gutter.mobile`＝16 |
+| typography | 五級：頁標題／區塊標題／主數字／內文／輔助；主數字不靠字重單獨表意；390px 不縮內文以塞內容 | `type.page`、`type.section`、`type.metric`、`type.body`、`type.caption`（建議 22／17／20／15／12） |
+| card system | 三種卡：摘要卡（≤5，`DEC-2026-10-27-26`）、圖卡（核心圖 ≤4）、明細容器（收合）；Block ID ≠ Container（`DEC-2026-10-30-02`） | `card.summary`、`card.chart`、`card.detail`；`radius.card`、`elevation.none` |
+| status chips | **文字＋符號**，顏色只是第三重；只用 ◆ ◇ ⬜ ⛔ ◷；顏色只映射資料狀態與新鮮度、不映射投資好壞（44 第一節） | `chip.attention`（◆）、`chip.missing`（◇）、`chip.undetermined`（⬜）、`chip.failed`（⛔）、`chip.stale`（◷）、`chip.neutral` |
+| source／freshness display | 逐欄 as_of，不以頁級時間代替；source 可收進「▸」；門檻未裁示時只顯示天數與「⬜ 門檻待裁示」 | `meta.asof`、`meta.source`、`meta.freshness` |
+| chart container | 標題＋≤3 chips＋圖＋「▸」detail（44 之十九圖卡模板）；缺段斷線不補、不畫零；不畫目標價線與方向箭頭；非顏色辨識至少一種；期間 3M／6M／1Y／3Y、預設 1Y（`DEC-2026-10-27-31`） | `chart.height.primary`、`chart.height.secondary`、`chart.period` |
+| empty／error／loading | 四空狀態沿用 44（未設定／資料未備／取數失敗／無資料）；Missing 恆為 `◇ 資料未備`；loading 不得顯示假值或骨架數字 | `state.empty.*`、`state.loading` |
+| CTA hierarchy | 每頁至多 1 個主 CTA；第一階段唯讀，CTA 只能是導覽、展開、查詢、加入 session 比較，不得是寫入或交易語意 | `cta.primary`、`cta.secondary`、`cta.link` |
+| mobile navigation | 底部五項導覽；🤖 Phase 7 前不掛（只四項可見）；≤2 次互動到達任何區（`DEC-2026-10-27-11`） | `nav.bottom`、`nav.item` |
+
+**視覺語言沿用範圍**：見 NG-4（推薦沿用狀態符號、語意色名、字樣規範；版面、元件、spacing、typography 重建）。
+
+---
+
+## 6. View Model Contract（元件級 schema）【P】
+
+**共同欄位**（凡帶值的元件皆有；沒有就填 Missing 狀態，不填假值）：
+
+| 欄位 | 意思 | 來源 |
+|---|---|---|
+| `value` | 原值（數字或 None；不是格式化字串） | canonical／domain |
+| `unit` | 單位 | 下層 `value_unit`／`ccy` |
+| `source` | 具體來源名 | 下層 `source`／`provenance.source` |
+| `as_of` | 觀測日 | `obs_date`／`nav_date` 等 |
+| `retrieved_at` | 取得時間 | `fetched_at` |
+| `freshness_state` | 新鮮度狀態；門檻未裁示＝`undetermined` | 只讀下層或正式規則的結果（view model 不自行判新鮮度） |
+| `status` | 資料狀態鍵（ok／missing／failed／stale／undetermined） | 下層 status／reason_code |
+| `reason_code` | 下層原因鍵 | `reason_code`／`WITHHELD_*`／error code |
+
+| 元件 | 額外欄位 | 規則 |
+|---|---|---|
+| `StatusChip` | `kind`、`label_key` | 字樣由規則表依 `kind` 給；不接受自由文字狀態 |
+| `MetricCard` | `title`、`display_value`（由 view model 格式化）、`delta`（可無） | `value` 為 None → `◇ 資料未備`，不顯示 0 |
+| `ChartCard` | `series[]`（各自帶共同欄位）、`period`、`chips[]`（≤3）、`detail` | 缺段斷線；不補線；series ≤3 |
+| `EvidenceItem` | `label`、`rule_ref`（只有正式規則存在才填） | 不得自造 Rule ID |
+| `MissingItem` | `what`、`reason_code` | presentation 恆為 `◇ 資料未備`＋原因 |
+| `ProvenanceTag` | `source`、`as_of`、`fallback_used` | 可收合 |
+| `ActionSlot` | `state`、`reason`、`source_ref` | **Phase 7 前恆為「⬜ 無法判定」或不顯示；來源只能是 System Action State**（79 §6.1）；不得由 view model 推出 |
+
+**禁止**：Missing 補 0、neutral、HOLD、safe；從 UI 狀態（顏色、收合、位置）反推事實；把 `display_value` 當 Digest 值來源（67 第 5.2 節第 3 點）。
+
+---
+
+## 7. 五頁文字線框（390px 先、再 desktop）【P；版面待各頁 New UI2 wireframe 核准】
+
+> 標記：`[語]`＝語意來自既有 input contract（括號註明）；`[提]`＝本檔提案版面；`[Gate]`＝需裁示。數值用 `‹值›`。首屏回答四件事：現在狀態／是否需要關注（◆，不是行動建議）／下一步／主 CTA。
+
+### 7.1 🌍 市場與趨勢
+
+```text
+390px                                   desktop 1280
+┌──────────────────────┐   ┌───────────────────────────────────────┐
+│[語] 狀態 chip ‹n›    │   │[語] 狀態 chip｜暫無完整市場綜合判定     │
+│[語] 暫無完整市場綜合 │   │[提] ◆ 需要注意 ‹n› 項（規則判出）     │
+│     判定（缺正式…）  │   ├───────────────────────┬───────────────┤
+│[提] ◆ 需要注意 ‹n›   │   │[語] Primary（D1 單序列 │[提] 重要證據  │
+│[語] Primary 1Y       │   │ 切換；[Gate] 比較圖）  │ ≤3（D7 順序） │
+│ [3M 6M 1Y 3Y]        │   │ 資料日‹日›｜來源‹›    │               │
+│ 資料日‹日›           │   ├───────────────────────┴───────────────┤
+├──────────────────────┤   │[語] Secondary ≤3（VIX／S&P／利率信用）│
+│[語] Secondary 緊湊列 │   ├───────────────────────────────────────┤
+│[提] ▸ 重要證據       │   │[語] ▸ Missing／新鮮度／來源（下沉）   │
+│[語] ▸ Missing…       │   └───────────────────────────────────────┘
+└──────────────────────┘
+主 CTA：切換 Primary 序列（display control，不是判定）
+```
+
+| 項 | 內容與 input contract |
+|---|---|
+| Market state | 依 79 §5 regime 原則：aggregation rule 裁示前固定「暫無完整市場綜合判定（缺正式 aggregation rule）」（`DEC-2026-10-27-41`）`[語]` |
+| 是否需關注 | 字樣對齊既有「◆ 需要注意」；◆ 只來自正式規則判出的注意事項，不是行動建議；取數失敗（⛔）與不是最新（◷）是資料狀態、另用各自符號，不計入 ◆；正式規則未存在時此列不顯示 `[提]` |
+| Primary | 現行語意＝`DEC-2026-10-30-01` D1 單序列切換；**改比較圖＝D1 amendment**（NG-5 明列、79 UI-12(1)）`[Gate]` |
+| Missing／stale／failure | 斷線＋`◇ 資料未備`；取數失敗 `⛔`；新鮮度門檻未裁示時不判 stale |
+
+### 7.2 💼 我的資產
+
+```text
+390px                                   desktop 1280
+┌──────────────────────┐   ┌───────────────────────────────────────┐
+│[語] 頁級狀態（β 階梯）│   │[語] 頁級狀態：‹頭條›／‹第二行›         │
+│[語] 摘要 2×2         │   │[語] 摘要 ×4（缺→◇ 資料未備）          │
+│ 總資產｜損益｜報酬｜配息│ ├───────────────────────┬───────────────┤
+│[語] 配置 現況 vs 目標 │   │[語] 配置 現況 vs 目標  │[提] 近期事件  │
+│ 偏離 ‹n› 類（事實）  │   │ [Gate] 容許帶標示      │ 配息（UI-15） │
+├──────────────────────┤   ├───────────────────────┴───────────────┤
+│[提] 近期事件（UI-15）│   │[語] 基金占比｜各檔區間報酬（全列）     │
+│[語] ▸ 持股明細       │   ├───────────────────────────────────────┤
+│[提] ▸ 配息行事曆     │   │[語] ▸ 持股／配置明細／Missing          │
+└──────────────────────┘   └───────────────────────────────────────┘
+主 CTA：查看偏離明細（展開，不是再平衡動作）
+```
+
+| 項 | 內容與 input contract |
+|---|---|
+| 資產現況 | 摘要四項不得因 Missing 從第一屏消失；不新增彙總公式；禁 Top N（`DEC-2026-10-30-02`）`[語]` |
+| 頁級狀態 | β 階梯語意與 H6 保留（`DEC-2026-10-30-04`）；位置重設計 `[語]`＋`[提]` |
+| allocation／deviation | 偏離是使用者門檻比較的事實，不產生再平衡動作（44 之十八其十一第 3 條）`[語]` |
+| 近期事件／配息 | UI-15 未裁前為 proposal；date status 四態僅為 data 層候選（79 §17.4）`[提]` |
+| 是否需處理 | 只顯示 ◆ 規則事實；行動恆無（`ActionSlot` 不顯示） |
+
+### 7.3 🔍 找基金
+
+```text
+390px                                   desktop 1280
+┌──────────────────────┐   ┌───────────────────────────────────────┐
+│ 查一檔基金           │   │ 查一檔基金                            │
+│ [MoneyDJ 代碼或 ISIN]│   │ [MoneyDJ 基金代碼或 ISIN      ][查]   │
+│ ISIN：尚未啟用        │   │ ISIN：尚未啟用（無已核准對照來源）    │
+│ 基金身份：◇ 尚未確認 │   │ ‹基金名›｜‹code›｜as_of‹日›｜來源‹›   │
+│ [加入比較 ‹n›/3]     │   │ 歸一化 NAV（基準值依 UI-13）          │
+├══════════════════════┤   ├═══════════════════════════════════════┤
+│[語] 依條件篩選       │   │[語] 依條件篩選（EXP-0～7）            │
+│ 目前條件下有 N 檔符合│   │ 目前條件下有 N 檔符合（不排名）       │
+└──────────────────────┘   └───────────────────────────────────────┘
+主 CTA：查詢（第一區）
+```
+
+| 項 | 內容與 input contract |
+|---|---|
+| 第一區 | MoneyDJ code primary；ISIN「尚未啟用」；分清查無與取數失敗（`DEC-2026-11-01-01`／`-02`；78）`[語]` |
+| 第二區 | 既有 candidate filter；三態篩選；比較上限 3（`EXP-3`）`[語]` |
+| 禁止 | 名次、精選、AI 排名、名稱模糊搜尋（`DEC-2026-10-27-32`／`-33`）`[語]` |
+
+### 7.4 🤖 AI 投資總結（Phase 7；導覽不掛）
+
+```text
+390px（Phase 7 後）                     desktop 1280（Phase 7 後）
+┌──────────────────────┐   ┌───────────────────────────────────────┐
+│ System State         │   │ System State：⬜ 無法判定（‹缺什麼›） │
+│ ⬜ 無法判定（‹缺›）  │   ├───────────────────────────────────────┤
+│ 解讀｜反證｜依據     │   │ 解讀｜最大反證｜▸ 查看依據（UI-14）   │
+└──────────────────────┘   └───────────────────────────────────────┘
+runtime 未啟用：整區只顯示「AI 分析暫不可用／無法判定」（75 第 12 節）
+```
+
+四區方向＝79 UI-14 proposal；不放假資料、不顯示機率或信心（79 C-2）；未啟用前 `<pkg>` 不註冊此頁（`DEC-2026-10-29-07`）。
+
+### 7.5 ⚙️ 設定
+
+```text
+390px                                   desktop 1280
+┌──────────────────────┐   ┌───────────────────────────────────────┐
+│[語] 資料可信度｜帳號 │   │[語] 資料可信度｜Google 帳號｜Active Sheet│
+│[語] Active Sheet     │   │[語] 來源健康｜各頁資料狀態總表         │
+│[語] ▸ 來源健康       │   │[提] ▸ 通知偏好＋送達健康（UI-15）      │
+│[提] ▸ 通知（UI-15）  │   │[提] ▸ 規則登錄（唯讀，UI-10）          │
+│[提] ▸ 規則登錄（唯讀）│  │[提] ▸ Digest viewer（Digest 之後）     │
+└──────────────────────┘   └───────────────────────────────────────┘
+```
+
+不是投資 rule editor：不得編 Risk Cap、action rule、threshold（79 §17.2）；第一階段唯讀；不顯示 secret。
+
+---
+
+## 8. Migration boundary
+
+### 8.1 三代 UI【F-轉述 `DEC-2026-11-02-02`／`-03`；整理為 P】
+
+| | Old UI（`app.py`、`ui/`） | ui_v2（Legacy New UI） | New UI2（`<pkg>`） |
+|---|---|---|---|
+| 定位 | read-only logic reference | Legacy／Reuse Candidate；freeze（政策見 NG-2） | 唯一未來正式 presentation layer |
+| 可做 | 讀它的公式、edge case、fallback 當參考 | 依 NG-2：安全與正確性修正；（A 案）行為不變的抽取＋shim | 新頁、新元件、新 view model、新守衛 |
+| 禁止 | 修改、重構、新增功能、搬 layout／navigation／visual style | 加功能、改版面、刪除（清理另走 Gate） | import ui_v2 的 page／view／css／shell；新增資料源或規則 |
+
+### 8.2 搬什麼、永不搬什麼【P】
+
+| 搬（PORT／KEEP） | 永不搬（REIMPLEMENT 或不用） |
+|---|---|
+| 3.2 表中 PORT 列（領域計算、`NAV_NOT_READY_DAYS`、`contrast_ratio`、`mark_fetch_failures` 類純函式、active_gate 純邏輯）；規則資料表（3.3 (c)）；`status_class`／`page_health` 分類語意 | ui_v2 layout、CSS、theme 色碼、shell／shell_nav、presentation_view、page.py 管線、sparkline_svg、block dict 形狀；Old UI 任何 presentation |
+
+---
+
+## 9. Test Strategy【P】
+
+| 類 | 做法 |
+|---|---|
+| domain 測試 | ui_v2 A 類（例：`test_hld_logic`、`test_alo_logic`、`test_hld_live_freshness`、`test_p3_page_status_logic`【F-轉述】）隨 PORT 搬遷到新住址；golden 值一字不改；搬遷前後同一組輸入輸出比對 |
+| view-model 測試 | 每頁 view model 對 fake scenario 產出元件 schema；B 類字面鎖改寫成「狀態鍵 → 字樣」規則表測試 |
+| navigation 測試 | 頁序、頁名、🤖 Phase 7 前不註冊、無第六頁 |
+| component contract 測試 | `StatusChip` 只接受規則表 kind；`ActionSlot` 在 Phase 7 前只能是無法判定或不顯示；Missing 恆為 `◇ 資料未備` |
+| AppTest smoke | 每頁在 fake adapter 下可 render、不拋例外 |
+| mobile screenshot acceptance | 沿用 `tests/visual_fidelity`：V1～V3 直接用；V4～V8 參數化選擇器（目前綁 `.pc-chip` 等）；M1～M6、A1～A6 屬 ui_v2，New UI2 另寫頁專屬檢查；`evaluate`／`hard_failures`／分級與 `vf_config` 視窗（390×844、desktop）沿用【F-重驗：`evaluate`、`hard_failures`、`VIEWPORTS` 存在】 |
+| 守衛 | (1) New UI2 import guard（同型於 `tests/ui_v2/test_ui_v2_live_import_guard.py`：只 adapters 可 import 下層、禁舊樹、禁網路、禁動態 import、fail-closed 白名單、新檔自動納入）＋**新增「不得 import ui_v2 的 page／view／css／shell，只准 import 明列 reuse allowlist」**；(2) 擴大 `tests/ui_v2/test_readonly_write_surface_guard.py` 的 `SCAN_DIRS`（現為 `ui_v2`、`services/v2_tables`【F-重驗】）納入 `<pkg>` 與 `services/v2_domain`；(3) New UI2 自備頁序守衛（`tests/ui_v2/test_preview_entry.py` 逐字對 44 的頁序，屬 legacy 保留【F-重驗】） |
+| scenario 清單 | Missing、source failure、stale、long text（長基金名、長原因）、no holdings、multiple holdings（含同鍵合併）、ISIN 未啟用、OAuth 未登入、Sheet 未選、權限不足 |
+| 原則 | screenshot 不取代語意測試；CI fixture screenshot ≠ production-like Cloud screenshot（同既有 VF 兩層標示） |
+| CI lane | fast：view-model、守衛、domain、component contract；slow：AppTest、截圖 |
+
+---
+
+## 10. Cutover Strategy＋Preview-first【P】
+
+| 階段 | 內容 | 出口條件 |
+|---|---|---|
+| 0 | ui_v2 進入 freeze（NG-2） | 客戶裁示 |
+| 1 建立 | PORT 共同層、`<pkg>` 骨架、preview 入口、守衛 | 守衛綠、domain golden 不變 |
+| 2 fake／VM 驗證 | 五頁以 fixtures 跑 view model 與 AppTest | scenario 清單全綠 |
+| 3 page-by-page integration | 每頁先出 New UI2 線框送客戶（§-1.5.4）→ 接 adapters | 每頁客戶核准＋稽核 |
+| 4 parallel preview | New UI2 preview 與 ui_v2 並行 | 客戶驗收清單 |
+| 5 acceptance | 390px 與 desktop 驗收、VF Gate | 客戶核准 |
+| 6 switch default | 正式入口改指 New UI2；ui_v2 保留可回切 | 回切演練過 |
+| 7 再評估清理 ui_v2 | 另走刪除 Gate | 客戶裁示 |
+
+| 議題 | 提案 |
+|---|---|
+| preview 部署 | **A**：另建一個 Streamlit Cloud app（main file＝`<pkg>/app_preview.py`）；前例：`fade6046` 的 `docs/HANDOFF.md` 下一步指示寫明 ui_v2 preview 以第二個 App、main file `ui_v2/app_preview.py` 建立【F-重驗：HANDOFF 該句存在】；但書：那是 HANDOFF 的「下一步」指示，HANDOFF 自陳 repo 內無法查證 Cloud App 是否已照此建立。需客戶在 Cloud 建 app、在 Google 端另登記 OAuth redirect。**B**：同 app 內隱藏入口——省一個 app，但 session 與快取和 ui_v2 混在同一 process、導覽守衛更複雜 |
+| switch default | 【I】若以「改 Cloud app 的 main file 設定」切換，不必改 `app.py`，可避開 Old UI DO NOT TOUCH 與 `DEC-2026-11-02-02` supersedes 欄登記的「切正式入口若需動 `app.py`」張力；回切＝改回設定 |
+| session key | New UI2 自有前綴（內部決定）；OAuth 沿用 `b_oauth.` 與 `_v2_refetch_runtime`（下層定義，不改）；B 案同 process 時須確認兩代 UI 不互相清除 |
+| 快取 | 同 process 天然共用（`register_cache`、`_ttl_cache`）【F-轉述】；不同 app 各自一份，冷啟動成本加倍 |
+| 回復 | switch default 可回切；ui_v2 在清理 Gate 前不刪 |
+| 禁止 | 先刪 ui_v2；以 preview 冒充正式驗收 |
+| 清理張力 | ui_v2 清理需另走刪除 Gate；`DEC-2026-10-26-01` (10)「新 UI 覆蓋後移除舊頁」與「先凍結不刪」的關係待客戶表態（本案只凍結不刪） |
+
+---
+
+## 11. Presentation DEC 處置表【P；分類依 `DEC-2026-10-29-05` 的 A 資訊語意／B presentation-only／C mixed】
+
+> DEC 內容為轉述自 SSOT 組【F-轉述】；分類與處置為文件組整理，可被客戶推翻。
+
+| DEC／條文 | 類 | 處置 |
+|---|---|---|
+| `DEC-2026-10-30-01` D1（🌍 Primary 單序列切換） | C | 語意（Primary 只一張、Secondary 不複製 Primary）保留；**改比較圖＝amendment Gate**（79 UI-12(1)） |
+| `DEC-2026-10-30-01` D2～D7 | 多為 B／C | 順序語意（D7：狀態→主判讀→Primary→Secondary→依據→details）保留；版面釋放到 New UI2 🌍 wireframe 核准 |
+| `DEC-2026-10-30-02` D-1～D-12 | 多為 C | 「Block ID ≠ Container」「四項核心欄位不得因 Missing 從第一屏消失」「禁 Top N」「不新增彙總公式」保留；容器排列釋放 |
+| `DEC-2026-10-30-04`、`DEC-2026-10-31-01`、`-02` | C | β 階梯與 H6 語意保留；P3 容器位置與 Layout A 釋放 |
+| `DEC-2026-11-01-02`（IA P、單一輸入框 X、S6 字樣） | C | 上下兩區與身份語意、字樣保留；版面釋放 |
+| `DEC-2026-10-27-09`～`-12`（深色側欄、底部導覽、≤2 次互動、390 實測） | C | 「≤2 次互動」「不做空殼」「390 實測」保留；深色側欄等視覺釋放（NG-4） |
+| `DEC-2026-10-27-26`／`-27`／`-28`／`-31` | A／C | 摘要卡 ≤5、核心圖 ≤4、期間 3M/6M/1Y/3Y 預設 1Y、非顏色辨識保留 |
+| 44 之十九（Visual Budget、圖卡模板、placeholder、其七首屏、其九 VFG 12 項） | A（流程規則） | 建議沿用為 New UI2 流程規則 |
+| 44 第二節／2.1（四層、層 3／4 ≤3、三斷點 375／768／1280） | C | 上限語意保留；層別排列可重設計 |
+| 44 之二十（頁序頁名、Pending≠Active） | A／C | 頁序頁名與 Pending≠Active 保留；位置可重設計 |
+| 各頁 BLOCK 規格 | C | 塊 ID／來源／規則／空狀態保留；層別與排列可重設計 |
+| vnext_visual_blueprint、`DEC-2026-10-27-07`（禁未經 Gate 重設 IA／hierarchy） | C | 併入 New UI2 wireframe Gate（即「經 Gate」） |
+| `DEC-2026-11-02-02` 第 (5) 點 | — | 已由 `DEC-2026-11-02-03` superseded（ui_v2 baseline 一句） |
+
+**純語意 input contract（不釋放）**：◇ 資料未備與符號對照、四狀態與四空狀態、β 階梯語意、Block ID≠Container、67 六行動詞、禁方向詞／排名／星等／Top N、情境指數≠目標價、找基金 identity contract、Digest／OneBrain 邊界（`DEC-2026-10-27-18`、`-10-29-06`／`-07`、`-10-31-03`）、Visual Budget 上限語意、第一階段唯讀、圖表缺段斷線不補／不畫目標價線／不只靠紅綠、期間切換是 display control、13.3 跨頁一致。
+
+**44 處置【P】**：不改 44（`tests/ui_v2/test_alo_logic.py` 等以 md5 鎖 44【F-重驗：`test_alo_logic.py` 有 md5 斷言】）；沿用「以 DEC 指標限定 supersede 範圍」的前例。79 UI-12／UI-13／UI-14 的 presentation 部分併入 New UI2 wireframe 裁示，**UI-12(1) 仍明列為 D1 amendment**。
+
+---
+
+## 12. Decision Gates（⛔ 待客戶裁示）
+
+> UI-1～UI-15（UI-11 已裁示、不重問）仍是**語意 Gate**，建議與 NG-1～NG-5 **一次裁示**；合併呈現時，UI-12／UI-13／UI-14 的 presentation 部分視為由 NG-5 處理，UI-12(1) 另行明列。技術細節（session 前綴、token 數值、目錄內部命名、selector）屬內部決定，不列 Gate。
+
+| Gate | A | B | C | 推薦 | 影響 | 可回復 | 涉及 migration |
+|---|---|---|---|---|---|---|---|
+| **NG-1 目錄命名** | `ui_v3/` | `ui_next/` | `ui2/` | **A**（第 4.1 節） | import 路徑、守衛路徑、文件對照 | 早期可（尚無程式）；有程式後改名成本高 | 否 |
+| **NG-2 ui_v2 freeze policy** | maintenance-only：只修安全與正確性 bug；允許行為不變的領域計算抽取＋re-export shim（含 import 守衛加白名單）；不加功能、不改版面 | hard freeze：一行不改；PORT 改用複製並以測試鎖一致 | 繼續演進（與已裁方向不符，`DEC-2026-11-02-03`） | **A** | A 讓公式只有一份；B 產生重複、清理時收回 | 可 | **是**（PORT 方式） |
+| NG-2 附題：BL-0532 Missing 統一是否也做在 ui_v2 | 做（ui_v2 仍在 preview，字樣一致） | 只做在 New UI2 | — | **A**【I】：正確性修正屬 maintenance 範圍 | ui_v2 B 類字面鎖測試需同步 | 可 | 否 |
+| **NG-3 Preview／cutover** | 另建 Streamlit Cloud preview app 平行驗收；驗收後切 default；ui_v2 保留可回切 | 同 app 隱藏入口 | 直接替換（不建議；與已裁方向不符，`DEC-2026-11-02-03` 第 (6) 點 parallel preview） | **A** | 需客戶建 app、OAuth redirect 另登記 | 可（切回設定） | **是** |
+| **NG-4 視覺語言沿用範圍** | 沿用狀態符號、語意色名、字樣規範；版面／元件／spacing／typography 重建 | 版面與視覺皆重建（含色名） | 沿用 ui_v2 CSS（不建議；與已裁方向不符，`DEC-2026-11-02-03`：New UI2 presentation 必須重新乾淨建立） | **A** | 使用者辨識度延續；設計 token 重訂 | 可 | 否 |
+| **NG-5 Presentation DEC 釋放規則** | 純 presentation DEC 不綁 New UI2、由各頁 New UI2 wireframe 重新核准；混合 DEC 語意保留、版面釋放；會被 amend 的客戶 DEC 逐一明列（見表下） | 既有 presentation DEC 照搬 | 逐條重審 | **A**（第 11 節表） | 決定 New UI2 線框自由度 | 可 | 否 |
+
+**推薦理由摘要（總管推薦，可被客戶推翻）**：NG-1 A 免 cutover 後改名；NG-2 A 是唯一能讓領域公式只有一份的方式，且 shim 讓 ui_v2 行為不變；NG-3 A 有 ui_v2 preview 的 HANDOFF 前例（見第 10 節但書）、可回切，且【I】若以 Cloud main file 設定切換即不碰 `app.py`；NG-4 A 保留使用者已熟悉的狀態語言、同時給 New UI2 乾淨版面；NG-5 A 讓語意不流失、版面不被舊裁示綁死。
+
+**NG-5 A 會 amend 的客戶 DEC（逐一列出；依第 11 節 C 類，射程只限版面，語意保留）**：
+
+| DEC | 被 amend 的部分 | 語意保留的部分 |
+|---|---|---|
+| `DEC-2026-10-30-01` D1 | 🌍 Primary 單序列切換（若改比較圖；即 79 UI-12(1)，**需客戶明確覆議**） | Primary 只一張、Secondary 不複製 Primary |
+| `DEC-2026-10-30-01` D2～D7 | 圖卡與區塊的版面配置 | D7 段序（狀態→主判讀→Primary→Secondary→依據→details） |
+| `DEC-2026-10-27-09` | 正式目標視覺＝深色主側欄＋淺色主內容區（只限視覺 theme；New UI2 視覺依 NG-4 重訂） | —（該則自陳只限視覺 theme） |
+| `DEC-2026-10-27-10`～`-12` | 導覽與側欄的視覺形式 | ≤2 次互動、不做空殼、390 實測 |
+| `DEC-2026-10-30-02` D-1～D-12 | 容器排列 | Block ID ≠ Container、四項核心欄位不得因 Missing 離開第一屏、禁 Top N、不新增彙總公式 |
+| `DEC-2026-10-30-04`、`DEC-2026-10-31-01`、`-02` | P3 容器位置、Layout A | β 階梯、H6 |
+| `DEC-2026-11-01-02` | 兩區的版面位置 | IA P（上下兩區）、單一輸入框 X、S6 字樣與身份語意 |
+| `DEC-2026-10-27-07`（vnext_visual_blueprint） | 舊藍圖的版面與 hierarchy 細節 | 「未經 Gate 不得重設 IA／hierarchy」：New UI2 各頁 wireframe 核准即為該 Gate |
+
+⚠️ 上表 DEC 內容轉述自 SSOT 組【F-轉述】；`DEC-2026-10-27-09` 標題「只限視覺 theme」本組讀過【F-重驗】。
+
+**附註｜前端框架（原列 NG-6，改為內部決定）**：維持 Streamlit 現況（共用 OAuth／secrets／快取／測試工具鏈），不列客戶 Gate；依 `PROJECT_RULES.md` 13.4 第 6 條（Decision Gate 不氾濫）——維持現況、無多個具產品意義的合理方案。若日後真要換框架，屬重大遷移，屆時另開 Gate。
+
+---
+
+## 13. 核准後實作順序【P】
+
+| 批 | 內容 | 可機械式？ | 稽核等級 |
+|---|---|---|---|
+| 1 | PORT 領域計算到共同層（a2）＋`NAV_NOT_READY_DAYS` 落點＋ui_v2 shim＋import 守衛白名單；golden 不變 | 搬遷動作可機械式，但屬 formula／data semantics 等級 | **至少 1 組獨立稽核**（`DEC-2026-10-16-05`） |
+| 1 | `<pkg>` 骨架、preview 入口、New UI2 import guard、readonly guard 擴大、頁序守衛 | 可機械式 | 治理規則等級：1 組獨立稽核 |
+| 1 | fake scenario fixtures＋view model 骨架（共同欄位、`ActionSlot` 佔位） | 可機械式 | 自驗＋稽核併批 1 |
+| 2 | 呈現規則資料表（3.3 (c)）＋Design token 命名 | 規則表內容屬語意，須對照客戶裁示字樣 | 1 組獨立稽核 |
+| 3～ | 逐頁：先線框送客戶（§-1.5.4）→ view model → page → adapters → VF | 線框不可機械式；核准後 render 可機械式 | 每頁依風險分級 |
+| 後續 | Digest／Risk Cap／Action State／OneBrain 接口 | 不可機械式（另走 Gate） | 依 79／75 |
+
+**Model／Effort**（依 `PROJECT_RULES.md` 5.1，不寫模型名）：架構凍結、PORT 稽核通過後，骨架、守衛、render 等機械式批可降低設定；PORT 本身、規則表、Digest 相關批維持較高設定。
+
+---
+
+## 14. 風險與缺口
+
+| # | 風險 | 處置方向 |
+|---|---|---|
+| R1 | 領域計算住在 ui_v2 logic，且 import `page_health`／`status_class`（L3）【F-重驗】。另：`hld/logic.py::deviation_rows` 的輸入是 ui_v2 形狀的 node dict（`_state`／`_raw`／`_fund_code`），state 值是中文字面（`STATE_MISSING`＝「資料未備」、`STATE_ERROR`＝「系統錯誤」）；`exp/logic.py::apply_rules_tristate` 經 `compare_tristate` 回傳中文原因字串【F-重驗】 | PORT 前先切斷依賴；`status_class` 一併下沉或拆分。【I】行為不變地搬入 services 會把 presentation 形狀與字面帶進 L2；要不要先改成鍵值介面（字樣留在 view model），交 PORT 的獨立稽核判讀 |
+| R2 | 現行 ui_v2 import 守衛禁止 ui_v2 檔 import 舊樹（除 `source.py`）【F-重驗】 | a2 需加逐檔白名單；屬 NG-2 A 範圍 |
+| R3 | 頁間鏡像重複（`_grid_css`、`DISPLAY_TZ`、`NAV_NOT_READY_TEXT`、`contrast_ratio`）【F-重驗】 | New UI2 只寫一份；ui_v2 重複留待清理 Gate |
+| R4 | OAuth redirect：另一網址需在 Google 端另登記 | 客戶部署動作，列入 NG-3 A 的前置 |
+| R5 | 快取與 session 共用（同 app 方案） | 推薦另建 app；若 B 案須驗兩代 UI 不互清 state |
+| R6 | VF 選擇器綁 ui_v2 class | V4～V8 參數化；ui_v2 專屬檢查不沿用 |
+| R7 | 44 md5 守衛 | 不改 44；以 DEC 指標限定範圍 |
+| R8 | `DEC-2026-10-26-01` (10) 退役原則與「凍結不刪」張力；切 default 若改 `app.py` 撞 Old UI 邊界 | 清理與切換分開裁示；推薦以 Cloud 設定切換 |
+| R9 | `repositories/macro/yf.py`／`fred.py` 經根目錄 `fund_fetcher` 拖入舊 services【F-重驗】 | 不屬 New UI2 範圍；登記，不動 |
+| R10 | 下層中文 reason／狀態字面被當 presentation 用 | view model 一律以 reason_code／status 鍵映射 |
+| R11 | ui_v2 頁代號（alo／hld）與 New UI2 IA（💼 合併）不同 | settings_store adapter 對照（3.3 (d)） |
+| R12 | 72／73／76／78 是 ui_v2 的線框核准，不自動延伸到 New UI2（§-1.5.4） | New UI2 每頁線框重新送客戶 |
+
+---
+
+## 15. 產出者聲明與未驗證清單
+
+**本組重驗的（`d89b1fbc`；其程式目錄與 `fade6046` 相同）**
+- `services/v2_tables/` 十三個模組檔（含 `__init__`）中，streamlit 字樣只出現在 docstring／註解，無 import；無 `ui_v2`／`ui` import。
+- `services/v2_tables/settings_store.py::PAGES_READING_SETTINGS`＝`("set", "alo", "hld", "mkt", "exp")`、`RUNTIME_STATE_KEY`＝`_v2_refetch_runtime`；`market_view::STATE_MISSING`＝「資料未備」。
+- `ui_v2/thresholds.py::NAV_NOT_READY_DAYS`＝10，定義只在此檔（非測試檔中），引用者為 ui_v2 的 alo／hld／exp 模組。
+- ui_v2 logic 符號存在：`hld/logic.py` 五個、`alo/logic.py` 五個、`exp/logic.py` 兩個、`mkt/chart.py::slice_period`／`build_spec`、`mkt/logic.py::delay_days`；這些 logic 模組 import `page_health`／`status_class`。
+- `services/dividend_calendar.py` 的 `infer_schedule`、`predict_ex_for_month`、`detect_anchor`、`estimate_error_band`、`build_summary_text`、`build_summary_flex`、`ERR_BAND_FOOTNOTE` 存在；workflow cron 字面 `23 0 28 * *`。
+- `repositories/settings_sheet_repository.py::is_read_only` 註明第一階段恆為 True；`ui_v2/readonly.py::WRITE_CONTROLS_ENABLED`＝False；`b_oauth.` namespace 見 `infra/personal_oauth.py`、`services/v2_tables/personal_session.py` 註解。
+- `repositories/macro/yf.py`、`fred.py` 自 `fund_fetcher` import `_ttl_cache`；`repositories/pool_repository.py` 以 try-import 用 `st.cache_data`。
+- `shared/ui_v2_error_codes.py` 九個 code。
+- `ui_v2/app_preview.py::PAGES` 四列；`ui_v2/presentation.py` 函式清單與 `from ui_v2 import health`；`ui_v2/page_health.py::KIND_*` 四個；`contrast_ratio` 在四份 `theme.py`；`_grid_css`、`DISPLAY_TZ`、`NAV_NOT_READY_TEXT` 鏡像位置；`hld/page.py::prepare_live`、`mkt/page.py::mark_fetch_failures`。
+- `tests/ui_v2/` 下 110 個 `.py`（`fade6046`）；`tests/ui_v2/test_ui_v2_live_import_guard.py` 檔頭規則 (1)～(8)；`tests/ui_v2/test_readonly_write_surface_guard.py::SCAN_DIRS`；`tests/visual_fidelity/vf_config.py::VIEWPORTS` 含 390×844；`layout_checks.py::evaluate`／`hard_failures`；`tests/ui_v2/test_alo_logic.py` 對 44 的 md5 斷言；`tests/ui_v2/test_preview_entry.py` 讀 44 3.0 五頁總表。
+- 根目錄無 `ui_v3`、`ui_next`、`ui2` 目錄。
+- `fade6046` 的 `docs/HANDOFF.md` 記載 ui_v2 preview 以第二個 Streamlit Cloud App、main file `ui_v2/app_preview.py` 建立。
+- `docs/DECISIONS.md`（工作樹，別組編修中）`DEC-2026-11-02-03` 條目的「仍待客戶裁示」清單：NG-1／NG-3／NG-4／NG-5 分別對應目錄命名、preview／cutover、視覺語言沿用範圍、presentation DEC amendment；NG-2 對應 ui_v2 freeze policy，其附題依據 BL-0532；原 NG-6（前端框架）已轉為內部決定，不在該清單內。
+
+**本組沒有重驗的（轉述自盤點組）**
+- `market_view` `_domain` dict 欄位全集；`nav_dividend` 的 `WITHHELD_*`／`PENDING_*`；`exp_profile` 逐欄出處與 `STATUS_*`；`repositories/v2_source_status` 冷卻。
+- `dividend_calendar_render` 屬 HTML 產生器、workflow 讀 `POLICY_SHEET_ID`。
+- ui_v2 block dict 的 `_` 前綴欄位、`prepare_live` 管線步驟、E1～E8 分層例外的完整內容。
+- tests/ui_v2 的 A～E 分類與約 3079 個 test；VF 的 V1～V8／M1～M6／A1～A6 泛用性判斷。
+- 第 11 節各 DEC 的內容摘要（本組只讀了 `DEC-2026-10-29-05`、`DEC-2026-11-02-02`、`-03` 的相關段）。
+- 44 第二節、之十九、之二十的條文（經 79 與盤點轉述）。
+
+**全稱句揭露**：本檔「無」「只」類敘述凡標【F-轉述】者，取決於盤點組有沒有漏看，本組不宣稱窮舉；標【F-重驗】者為本組單組搜尋，亦未經第二組驗證。第 2～7、10～13 節的分層、命名、token、schema、線框、Gate 推薦為文件組整理、總管推薦，可被客戶推翻。本檔不授權任何 production 實作、不建立 New UI2 目錄、不改 ui_v2、不改 Old UI、不改 44。
