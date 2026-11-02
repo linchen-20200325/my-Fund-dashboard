@@ -729,6 +729,8 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 **舊 UI 退役原則**：舊 UI 只能參考已驗證邏輯與資料流程，不是新 UI 視覺或資訊架構來源；只提供已驗證公式、deterministic logic、已證實資料 mapping、已通過測試的行為；不自動提供新 UI 版型、導覽、文案、interaction pattern、寫入權限。新 UI 覆蓋必要邏輯後才切正式入口、移除舊頁、清 legacy wiring 與死碼，並保留必要 regression tests／domain rules。**退役與刪除仍受既有閘門約束**（第 13 節第 11、12 條、第 4 節停下清單、`CLAUDE.md` §-1.5.1c 判定 3）；本小節不授權任何刪除（最保守讀法，可被客戶推翻）。
 
+**New UI2 唯一未來正式產品線（2026-11-02 指標）**：~~New UI 是唯一正式產品線；Old UI 永久只作 read-only logic reference，不修改、不當 migration target、不移植其 layout／visual／navigation／IA；Final UI 以既有 New UI 為視覺 baseline，只做經 Gate 核准的增量（客戶 2026-11-02，`DEC-2026-11-02-02`）。~~（同日 amended by `DEC-2026-11-02-03`；有意識的政策變更，不是漏刪）→ New UI2（greenfield presentation layer）是唯一未來正式產品線；ui_v2 為 legacy reuse candidate（不再作主要演進目標、不先刪）；Old UI 永久只作 read-only reference，不修改、不當 migration target —— 允許參考：業務邏輯、資料處理方式、已驗證公式、deterministic rule、欄位、流程、edge case、fallback、interaction experience、capability；禁止移植：layout、visual design、navigation、page structure、information architecture、component hierarchy、Old UI presentation pattern（全文見 `DEC-2026-11-02-02`、`DEC-2026-11-02-03`）。
+
 ### 13.3 長期規則：Cross-View Data Consistency Gate（客戶 2026-10-28 新增正式高優先需求，`DEC-2026-10-28-01`，永久）
 
 > **出處**：客戶 2026-10-28 裁示，逐字存檔 `docs/evidence/decisions/2026-10-28_cross_view_consistency_ruling.md`。audit、Matrix、gap、test proposal 見 `docs/v2/69_cross_view_consistency_spec.md`；工作項 `docs/BACKLOG.md` BL-0519～BL-0524。位階同 3.1：受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄（第 0.1 節）。**本節不授權任何實作**，只定義「之後新增或修改資料時必須維持什麼」。

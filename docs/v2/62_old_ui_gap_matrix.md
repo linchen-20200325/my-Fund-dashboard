@@ -17,6 +17,8 @@
 
 - **2026-11-01 狀態更新（不是漏刪；出處 `DEC-2026-11-01-01`，決策者：客戶；有意識的政策變更）**：客戶正式裁示 🔍 找基金只保留 MoneyDJ 基金代碼與 ISIN 兩種使用者搜尋入口，取消名稱／模糊／FundClear／TDCC 搜尋入口與 AI 猜基金。本檔 §1 A1、A2、C5，§6.3 CAP-FND-02、CAP-FND-06，§6.3a 的 CAP-FND-02 驗收列，§6.6 CAP-RFR-04，以及 CAP-GATE-05／06／07 已就地加註（舊列原字保留，只加指標）；CAP-GATE-06 superseded，CAP-GATE-07 為「詮釋：已回答，待確認」（→ 已裁示，見 `DEC-2026-11-01-02` G-E6：客戶確認允許池外 MoneyDJ code 唯讀查詢；2026-11-01，客戶），CAP-GATE-05 不受影響。盤點與最小 wireframe 見 `docs/v2/78_fund_search_batch_e_inventory_wireframe.md`。文件組單組，未經第二組驗證。
 
+- **2026-11-02 狀態指標（不是漏刪；出處 `DEC-2026-11-02-02`，決策者：客戶）**：2026-11-02：Old UI 永久只作 read-only logic reference（DEC-2026-11-02-02）；本矩陣所列舊能力只作邏輯參考，New UI 依 design system 重做（→ 自 `DEC-2026-11-02-03` 起讀作 New UI2），不修改舊 UI。
+
 ---
 
 ## §0 三層 UI 的事實（量測 SHA `d2cd3bb`，2026-10-22）
