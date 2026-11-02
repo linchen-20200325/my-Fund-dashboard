@@ -523,9 +523,22 @@ _PINNED = {
     "exp_rules": "10cc4aa6a7b4d2eb",
     "hld_deviation": "0f7f2ad7e16c98ce",
     "hld_merge": "dd37fe7bc27ddae6",
-    "hld_nav": "24b7473258ea79a9",
+    # 依直譯器的浮點 sum() 模式各釘一個（見下方 `_SUM_MODE`）；兩個值都由原始實作 a7f120c9 在各該直譯器算出。
+    "hld_nav": {"compensated": "24b7473258ea79a9", "naive": "eb5608866323b376"},
     "mkt": "d6aa40076da8b713",
 }
+
+# Python 3.12 起內建 `sum()` 對浮點改用補償求和（Neumaier；3.12 What's New），3.11 是逐項相加。
+# `vol_pct` 用 `sum()` 求平均與變異數，於是 300 點那一組輸入的期間波動在兩種直譯器差最後一個 ulp
+# （3.11：54.77718607978292；3.13：54.777186079782915）—— 這是直譯器內建算術的差，不是本批的行為改變
+# （同一直譯器下原始實作與搬遷後實作逐位元相同；CI 跑 3.11）。處置：不放寬比對（仍逐位元比 repr），
+# 改依「這個直譯器的 sum() 是哪一種」挑對應的摘要；特徵偵測用 3.12 What's New 的同一個例子。
+_SUM_MODE = "compensated" if sum([0.1] * 10) == 1.0 else "naive"
+
+
+def _pinned(family) -> str:
+    value = _PINNED[family]
+    return value[_SUM_MODE] if isinstance(value, dict) else value
 
 
 def _families(hld_ns, alo_ns, exp_ns, chart_ns, mkt_ns):
@@ -545,7 +558,7 @@ def test_摘要常數_搬遷後的ui_v2輸出符合(family):
     if family == "exp_compare" and not _PANDAS_VALUES:
         pytest.skip("摘要含 pandas NA／NaT 兩個輸入；本環境沒有 pandas")
     fams = _families(vars(new_hld), vars(new_alo), vars(new_exp), vars(new_chart), vars(new_mkt))
-    assert _digest(fams[family]()) == _PINNED[family], family
+    assert _digest(fams[family]()) == _pinned(family), (family, _SUM_MODE)
 
 
 @pytest.mark.parametrize("family", sorted(_PINNED))
@@ -555,7 +568,7 @@ def test_摘要常數_由原始實作算出(family):
     exp = _need("ui_v2/exp/logic.py", "ui_v2.exp")
     chart = _need("ui_v2/mkt/chart.py", "ui_v2.mkt")
     mkt = _need("ui_v2/mkt/logic.py", "ui_v2.mkt")
-    assert _digest(_families(hld, alo, exp, chart, mkt)[family]()) == _PINNED[family], family
+    assert _digest(_families(hld, alo, exp, chart, mkt)[family]()) == _pinned(family), (family, _SUM_MODE)
 
 
 # ═══════════════════════ L2 本體（中性代碼）的直接行為 ═══════════════════════
