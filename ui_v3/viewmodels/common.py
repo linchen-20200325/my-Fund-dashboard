@@ -6,7 +6,8 @@
 - view model 不創造 objective facts：`ok`／`stale` 帶值時必須帶 `source` 與 `as_of`。
 - 值只能是有限數字或 None：NaN／inf／bool／字串一律拒絕（缺值以 None 表達，不以 NaN 表達）。
 
-本檔**不是**呈現規則資料表（批 2）：這裡只有契約需要的最小鍵集與 `MISSING_TEXT` 一個字樣常數。
+本檔**不是**呈現規則資料表：規則表住 `shared/ui_semantics/`（批 2b；80 第 3.3 節 (c)）。這裡只有契約需要的最小鍵集，
+`MISSING_TEXT` 由規則表取得（單一來源，值不變）。
 """
 from __future__ import annotations
 
@@ -15,8 +16,11 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
+from shared.ui_semantics import rules as _rules
+
 # 缺值的 presentation 字樣（BL-0532：正式模式統一為 `◇ 資料未備`；80 第 5 節 empty／error 列）。
-MISSING_TEXT = "◇ 資料未備"
+# 單一來源：`shared/ui_semantics/rules.py`（規則表 `missing` 列）。
+MISSING_TEXT = _rules.MISSING_TEXT
 
 # 資料狀態鍵（80 第 6 節共同欄位 `status`）。
 STATUS_OK = "ok"
@@ -28,7 +32,8 @@ STATUSES = (STATUS_OK, STATUS_MISSING, STATUS_FAILED, STATUS_STALE, STATUS_UNDET
 
 # 新鮮度狀態（80 第 6 節：`freshness_state`；門檻未裁示＝undetermined）。
 # ⚠️ 規格缺口：80 只點名 `undetermined`，未列舉其他值；此處取最小集合（fresh／stale／undetermined），
-#    待批 2 規則表或客戶裁示覆核；view model 不自行判新鮮度，只承載下層或正式規則的結果。
+#    待客戶裁示覆核；view model 不自行判新鮮度，只承載下層或正式規則的結果。
+#    批 2b：三個值對到規則表的對照見 `shared/ui_semantics/rules.py::FRESHNESS_TO_KEY`（一致性由測試鎖）。
 FRESH_FRESH = "fresh"
 FRESH_STALE = "stale"
 FRESH_UNDETERMINED = "undetermined"

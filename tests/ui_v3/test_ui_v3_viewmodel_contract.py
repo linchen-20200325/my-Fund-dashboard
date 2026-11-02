@@ -42,6 +42,12 @@ def test_missing_text_is_the_formal_string():
     assert MissingItem.PRESENTATION == MISSING_TEXT
 
 
+def test_missing_text_comes_from_the_rules_table():
+    """批 2b：單一來源是 `shared/ui_semantics/rules.py`（值不變）。"""
+    from shared.ui_semantics import rules
+    assert MISSING_TEXT is rules.MISSING_TEXT
+
+
 @pytest.mark.parametrize("status", ["missing", "failed"])
 @pytest.mark.parametrize("bad", [0, 0.0, 1.5, -1])
 def test_missing_or_failed_cannot_carry_a_numeric_value(status, bad):
@@ -110,6 +116,8 @@ def test_missing_item_requires_key_style_reason_code():
 # ───────── ActionSlot ─────────
 def test_action_vocabulary_is_exactly_the_six_words_of_67():
     assert ACTION_VOCABULARY == ("續抱", "觀察", "降低曝險", "減碼", "替代比較", "無法判定")
+    from shared.ui_semantics import rules
+    assert ACTION_VOCABULARY is rules.ACTION_WORDS  # 批 2b：單一來源
 
 
 def test_phase7_gate_is_closed_in_batch1():
@@ -175,6 +183,8 @@ def test_provenance_tag_missing_and_complete_are_mutually_exclusive():
 # ───────── StatusChip／Evidence／Chart ─────────
 def test_status_chip_accepts_only_rule_kinds_and_key_labels():
     assert CHIP_KINDS == ("attention", "missing", "undetermined", "failed", "stale", "neutral")
+    from shared.ui_semantics import rules
+    assert tuple(rules.CHIP_KIND_TO_KEY) == CHIP_KINDS  # 批 2b：每個 kind 都有規則表鍵
     assert StatusChip("stale", "not_latest").kind == "stale"
     for kind in ("good", "bad", "red", "buy", ""):
         with pytest.raises(ValueError):

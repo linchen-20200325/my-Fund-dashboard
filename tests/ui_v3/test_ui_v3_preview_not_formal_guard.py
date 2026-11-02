@@ -110,7 +110,11 @@ def test_importing_ui_v3_does_not_import_streamlit_or_old_tree():
     proc = subprocess.run([sys.executable, "-s", "-c", code], capture_output=True, text=True,
                           cwd=str(lib.ROOT), env={"PYTHONPATH": str(lib.ROOT)}, timeout=60)
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.strip() == "BAD:", proc.stdout
+    # 批 2b：viewmodels 讀 shared.ui_semantics（明列白名單）；import 它會連帶載入 `shared` 套件本身（其 __init__ 只有 docstring）。
+    # 白名單逐一列名，任何其他 shared 模組或舊樹模組照舊是紅。
+    allowed = {"shared", "shared.ui_semantics", "shared.ui_semantics.rules"}
+    bad = [n for n in proc.stdout.strip().removeprefix("BAD:").split(",") if n and n not in allowed]
+    assert proc.stdout.startswith("BAD:") and not bad, proc.stdout
 
 
 @pytest.mark.parametrize("source", [

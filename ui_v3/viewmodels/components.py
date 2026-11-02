@@ -4,8 +4,8 @@
 每個元件都在建構時拒絕違反契約的組合（Missing 帶數值、缺 provenance、自由文字狀態……），
 讓「從 UI 狀態反推事實」「Missing 補 0」這類錯誤無法被建出來，而不是靠下游記得檢查。
 
-⚠️ 本批沒有格式化邏輯、沒有規則資料表：`display_value` 由呼叫端（日後的 view model builder）提供，
-本層只驗證它與 `value` 的一致性（None ↔ `◇ 資料未備`）。
+⚠️ 本層沒有格式化邏輯：`display_value` 由呼叫端（日後的 view model builder）提供，
+本層只驗證它與 `value` 的一致性（None ↔ `◇ 資料未備`）。規則資料表住 `shared/ui_semantics/`（批 2b）。
 """
 from __future__ import annotations
 
@@ -25,7 +25,8 @@ from ui_v3.viewmodels.common import (
     require_text,
 )
 
-# 80 第 5 節 status chips 的 kind（token 命名屬提案，批 2 規則表覆核）。字樣由規則表依 kind 給，這裡不放字樣。
+# 80 第 5 節 status chips 的 kind。字樣由規則表依 kind 給，這裡不放字樣：kind → 規則鍵的對照住
+# `shared/ui_semantics/rules.py::CHIP_KIND_TO_KEY`（批 2b；兩邊一致由 `tests/ui_v3/test_ui_v3_semantics_rules.py` 鎖）。
 CHIP_KINDS = ("attention", "missing", "undetermined", "failed", "stale", "neutral")
 CHART_PERIODS = ("3M", "6M", "1Y", "3Y")
 DEFAULT_CHART_PERIOD = "1Y"

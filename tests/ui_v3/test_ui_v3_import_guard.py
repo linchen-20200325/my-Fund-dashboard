@@ -6,7 +6,8 @@
 
 規則（逐檔，母體＝`ui_v3/**/*.py`，新檔自動納入，未知層目錄＝紅）：
 1. 不得 import Old UI（`ui`、根目錄 `app`）與 `ui_v2`（本批不開任何 reuse 白名單）；
-2. 只有 `adapters/` 可以 import `services.v2_tables`／`services.v2_domain`；其餘 services／repositories／shared／infra 一律不准；
+2. 只有 `adapters/` 可以 import `services.v2_tables`／`services.v2_domain`；其餘 services／repositories／shared／infra 一律不准，
+   唯一例外：`viewmodels/`、`pages/` 可以 import `shared.ui_semantics`（批 2b 呈現規則資料表；須寫完整路徑）；
 3. `viewmodels/`、`fixtures/`、`design/` 只准標準函式庫（＋允許的 ui_v3 內部層），不得 import streamlit；
 4. 層間依賴只准 `LAYER_DEPS` 表內的方向（viewmodels 不依賴任何其他層；fixtures 只依賴 viewmodels…）；
 5. 網路／外部程序／持久層套件（含 asyncio、imaplib、poplib、smtplib、xmlrpc、ftplib、telnetlib、sqlite3、http、urllib…）、
@@ -111,6 +112,18 @@ VIOLATING = [
     ("ui_v3/pages/x.py", "from urllib import request", "網路"),
     ("ui_v3/pages/x.py", "import shutil", "網路"),
     ("ui_v3/pages/x.py", "import multiprocessing", "網路"),
+    # 批 2b：shared 只開 shared.ui_semantics、只給 viewmodels／pages、只准完整路徑
+    ("ui_v3/viewmodels/x.py", "from shared import colors", "舊樹"),
+    ("ui_v3/viewmodels/x.py", "from shared import ui_semantics", "舊樹"),
+    ("ui_v3/viewmodels/x.py", "import shared", "舊樹"),
+    ("ui_v3/viewmodels/x.py", "from shared.ui_semantics_extra import x", "舊樹"),
+    ("ui_v3/viewmodels/x.py", "from shared.colors import MATERIAL_RED", "舊樹"),
+    ("ui_v3/pages/x.py", "import shared.fund_identity", "舊樹"),
+    ("ui_v3/fixtures/x.py", "from shared.ui_semantics import rules", "不得 import shared.ui_semantics"),
+    ("ui_v3/adapters/x.py", "from shared.ui_semantics import rules", "不得 import shared.ui_semantics"),
+    ("ui_v3/design/x.py", "from shared.ui_semantics.rules import TONES", "不得 import shared.ui_semantics"),
+    ("ui_v3/shell/x.py", "import shared.ui_semantics", "不得 import shared.ui_semantics"),
+    ("ui_v3/app_preview.py", "from shared.ui_semantics import rules", "不得 import shared.ui_semantics"),
 ]
 
 
@@ -128,6 +141,8 @@ COMPLIANT = [
     ("ui_v3/adapters/x.py", "from services.v2_domain.x import y\nimport streamlit as st"),
     ("ui_v3/pages/x.py", "import streamlit as st\nfrom ui_v3.viewmodels import MetricCard\nfrom ui_v3.shell import registry"),
     ("ui_v3/app_preview.py", "from ui_v3.shell.registry import assert_preview_ready"),
+    ("ui_v3/viewmodels/x.py", "from shared.ui_semantics import rules\nfrom shared.ui_semantics.rules import MISSING_TEXT"),
+    ("ui_v3/pages/x.py", "import shared.ui_semantics.rules as r"),
 ]
 
 

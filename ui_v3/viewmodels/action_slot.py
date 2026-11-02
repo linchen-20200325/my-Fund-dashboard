@@ -13,23 +13,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from shared.ui_semantics import rules as _rules
 from ui_v3.viewmodels.common import optional_text, require_key
 
-# 67 第 2 節六個行動詞（語意邊界 SSOT）。逐字，不增不減。
-ACTION_CONTINUE = "續抱"
-ACTION_WATCH = "觀察"
-ACTION_REDUCE_EXPOSURE = "降低曝險"
-ACTION_TRIM = "減碼"
-ACTION_COMPARE_ALTERNATIVE = "替代比較"
-ACTION_UNDETERMINED = "無法判定"
-ACTION_VOCABULARY = (
+# 67 第 2 節六個行動詞（語意邊界 SSOT）。逐字，不增不減；單一來源 `shared/ui_semantics/rules.py::ACTION_WORDS`（批 2b）。
+ACTION_VOCABULARY = _rules.ACTION_WORDS
+(
     ACTION_CONTINUE,
     ACTION_WATCH,
     ACTION_REDUCE_EXPOSURE,
     ACTION_TRIM,
     ACTION_COMPARE_ALTERNATIVE,
     ACTION_UNDETERMINED,
-)
+) = ACTION_VOCABULARY
 
 # Phase 7（System Action State 存在）之前恆為 False。
 ACTION_SLOT_SOURCES_ENABLED = False
