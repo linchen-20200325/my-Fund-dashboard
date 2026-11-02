@@ -9,7 +9,9 @@
 - (3) `app_<頁>_live.py` 與 `source.py` 不得 import `fixtures`；
 - (4) 網路套件在 `ui_v2` 內一律不准出現；
 - (5) 舊樹模組（`ui`／`services`／`repositories`／`shared`／`infra`／`fund_fetcher`）在 `ui_v2`
-      內一律不准出現，唯一的例外是 (2)。
+      內一律不准出現，~~唯一的例外是 (2)~~ → 例外有兩個（2026-11-02 PORT，客戶 `DEC-2026-11-02-05` NG-2 A；
+      狀態更新，不是漏刪）：(2)，以及 `ui_v2/v2_domain_shim.py` 只准 import 逐一列名的 `services.v2_domain.*`
+      （`_V2_DOMAIN_ALLOWLIST`）。
 - (6) `ui_v2` 內任何檔都不得 import `ui_v2.app_*`（進入點不是模組，被 import 就會執行整頁）；
 - (7) 動態 import 一律不准：`importlib`、`__import__(...)`、`sys.modules` —— 這三種寫法能繞過
       上面每一條靜態規則（2026-09-26 稽核建議）。
@@ -130,6 +132,17 @@ _FILE_ALLOWLIST = {
     },
 }
 
+# 2026-11-02 PORT（客戶 `DEC-2026-11-02-05` NG-2 A：共用計算可搬到 shared／domain 層、ui_v2 行為不變、搬遷批需獨立稽核；
+# `docs/v2/80` 第 3.3 節 (a) a2）：第 (5) 條唯一新增的口子 —— **只有**下列這一檔、**只限**逐一列名的
+# `services.v2_domain` 模組。其他 ui_v2 檔照舊不得 import `services.*`；本檔其餘規則（網路、動態 import、`ui_v2.app_*`）照舊適用。
+_V2_DOMAIN_ALLOWLIST = {
+    "ui_v2/v2_domain_shim.py": {
+        "services.v2_domain",
+        "services.v2_domain.deviation", "services.v2_domain.freshness", "services.v2_domain.holdings",
+        "services.v2_domain.nav_metrics", "services.v2_domain.periods", "services.v2_domain.rule_filter",
+    },
+}
+
 # 第 (8) 條：預覽入口的檔名與它可以 import `source` 的頁（逐一列名，不用前綴比對）。
 _PREVIEW = "ui_v2/app_preview.py"
 # ~~_PREVIEW_LIVE_PAGES = ("mkt", "hld", "alo", "set")~~ → 2026-10-13 加 exp（狀態更新，不是漏刪）。
@@ -236,7 +249,10 @@ def violations_for(rel: str, imported: list[str]) -> list[str]:
     is_preview = rel == _PREVIEW  # 第 (8) 條：只認這一個檔名
 
     imported = [m for m in imported if not m.startswith("__future__.")]  # 編譯器指示，不是模組
+    v2_domain_allowed = _V2_DOMAIN_ALLOWLIST.get(rel, set())
     for module in imported:
+        if module in v2_domain_allowed:   # 2026-11-02 PORT 逐檔白名單（見 `_V2_DOMAIN_ALLOWLIST`）
+            continue
         parts = module.split(".")
         root = parts[0]
         if root in _NET_ROOTS:

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""資產配置純邏輯。零 streamlit import、零舊 repo import、零網路。
+"""資產配置純邏輯。零 streamlit import、零網路；舊 repo import：直接 import 為零；經 ui_v2/v2_domain_shim.py 間接使用 services.v2_domain／shared（DEC-2026-11-02-05 NG-2 A）。
 
 所有判定住在這裡；page.py 只負責把 build_page_model() 產出的模型畫出來。
 模型慣例：底線開頭的鍵是**機器用**（狀態、色調、層號…），不開頭底線的鍵是**畫面文字**。
@@ -22,6 +22,10 @@ import math
 from datetime import date, datetime, timedelta, timezone
 
 from .. import page_health, status_class
+# 2026-11-02 PORT（`docs/v2/80` 第 3.3 節 (a) a2；客戶 `DEC-2026-11-02-05` NG-2 A）：同鍵加總、最近一筆淨值、
+# 匯率對齊、類別歸屬、容許帶判定、目標合計的本體搬到 `services/v2_domain/holdings.py`；本檔原位置保留同名公開符號
+# （re-export 或薄包裝），行為不變。經 ui_v2 唯一的 L2 口子 `ui_v2/v2_domain_shim.py` 取用，本檔不直接 import 舊樹。
+from .. import v2_domain_shim as _v2d
 
 # ───────────────────────── 缺口與矛盾登記（`44` 沒寫或與線框不一致） ─────────────────────────
 #
@@ -732,42 +736,33 @@ def setting_updated_at(dataset, key):
     return _setting_row(dataset, key)["updated_at"]
 
 
+# 2026-11-02 PORT：以下三支的本體搬到 `services/v2_domain/holdings.py`（判定一字未改）；本頁只把 `dataset` 拆成表列交給 L2。
+# 同鍵衝突時 L2 丟中性的 `HoldingKeyConflict`，這裡換回原本的 `ValueError` 原字訊息（型別、字面不變）。
+_AGGREGATE_CONFLICT_TEXT = {
+    "bucket": "{key} 兩列的 bucket 不同（ALO-GAP-同類別兩列）",
+    # 客戶 2026-10-16 裁示第 8 點（護欄：同一個鍵、同一語意才能加總）：幣別不同的原幣成本不得相加（`CLAUDE.md` §4.1）。
+    # 呈現方式與上一行 bucket 衝突相同（raise）。
+    "ccy": "{key} 兩列的 ccy 不同（不同幣別的原幣成本不得相加）",
+}
+
+
 def aggregated_holdings(dataset) -> list:
     """`44` 4.1：業務唯一鍵（`policy_id`, `fund_code`）；來源端登記成多列時顯示時加總成一列。"""
-    merged, order = {}, []
-    for row in dataset["holding"]:
-        key = (row["policy_id"], row["fund_code"])
-        if key not in merged:
-            merged[key] = dict(row)
-            order.append(key)
-            continue
-        base = merged[key]
-        if base["bucket"] != row["bucket"]:
-            raise ValueError(f"{key} 兩列的 bucket 不同（ALO-GAP-同類別兩列）")
-        # 客戶 2026-10-16 裁示第 8 點（護欄：同一個鍵、同一語意才能加總）：幣別不同的原幣成本不得相加（`CLAUDE.md` §4.1）。
-        # 呈現方式與上一行 bucket 衝突相同（raise）。
-        if base["ccy"] != row["ccy"]:
-            raise ValueError(f"{key} 兩列的 ccy 不同（不同幣別的原幣成本不得相加）")
-        for column in ("units_shares", "cost_orig_ccy", "cost_twd"):
-            base[column] = base[column] + row[column]
-    return [merged[key] for key in order]
+    try:
+        return _v2d.holdings.aggregate_holding_rows(dataset["holding"])
+    except _v2d.holdings.HoldingKeyConflict as exc:
+        raise ValueError(_AGGREGATE_CONFLICT_TEXT[exc.columns[0]].format(key=exc.key)) from None
 
 
 def latest_nav(dataset, fund_code):
     """`44` ALO-6 來源欄：`nav.nav_orig_ccy` 最近一筆。"""
-    rows = [r for r in dataset["nav"] if r["fund_code"] == fund_code]
-    return max(rows, key=lambda r: r["nav_date"]) if rows else None
+    return _v2d.holdings.latest_nav_row(dataset["nav"], fund_code)
 
 
 def fx_for_date(dataset, nav_date, key=FX_KEY):
     """44 逐字「取 `obs_date` 不晚於 `nav.nav_date` 的最近一筆」（ALO-GAP-匯率對齊鍵）。
     `key`：美元為 `FX_KEY`；其餘幣別同一條規則換鍵（ALO-GAP-非美元幣別）。"""
-    rows = [
-        r
-        for r in dataset["market_indicator"]
-        if r["indicator_key"] == key and r["obs_date"] <= nav_date
-    ]
-    return max(rows, key=lambda r: r["obs_date"])["value_num"] if rows else None
+    return _v2d.holdings.fx_rate_as_of(dataset["market_indicator"], nav_date, key)
 
 
 def basis_value(dataset, holding, basis):
@@ -814,10 +809,9 @@ _KEY_SCENARIO = page_health.SETTING_SCENARIO_INPUT
 
 def category_of(holding, bucket_names) -> str:
     """`44` 4.1：`bucket` 空值表示未分類；不在類別名稱裡的也併入未分類（ALO-GAP-類別名不符）。"""
-    bucket = holding["bucket"]
-    if bucket is None or bucket not in (bucket_names or ()):
-        return UNCLASSIFIED
-    return bucket
+    # 2026-11-02 PORT：判定本體在 `services/v2_domain/holdings.py::bucket_category`（未分類回 None）；「未分類」字樣留在本頁。
+    category = _v2d.holdings.bucket_category(holding["bucket"], bucket_names)
+    return UNCLASSIFIED if category is None else category
 
 
 # ───────────────────────── ALO-2（其餘幾塊都從這裡讀） ─────────────────────────
@@ -829,10 +823,10 @@ def _band_text(diff, tolerance):
     return TEXT_OUT if exceeds(diff, tolerance) else TEXT_IN
 
 
-def exceeds(diff, tolerance) -> bool:
-    """44 逐字「超出容許帶 → 燈不著色」（~~燈為黃~~ 已於 ◆／◇ 小批劃線；判定照舊，只換燈的顏色與符號：
-    正式模式由 `ui_v2/symbols.py` 換成 ◆、示範模式照舊黃燈）。相等不算超出（ALO-GAP-端點，本頁判讀）。"""
-    return abs(diff) > tolerance and not math.isclose(abs(diff), tolerance, abs_tol=1e-9)
+# 44 逐字「超出容許帶 → 燈不著色」（~~燈為黃~~ 已於 ◆／◇ 小批劃線；判定照舊，只換燈的顏色與符號：
+# 正式模式由 `ui_v2/symbols.py` 換成 ◆、示範模式照舊黃燈）。相等不算超出（ALO-GAP-端點，本頁判讀）。
+# 2026-11-02 PORT：本體搬到 `services/v2_domain/holdings.py::exceeds`（判定一字未改），此處 re-export 同一個函式物件。
+exceeds = _v2d.holdings.exceeds
 
 
 def _category_values(dataset, basis, bucket_names, stale_out=None):
@@ -1262,9 +1256,9 @@ def _save_error_parts(dataset, keys) -> tuple:
     return _save_error_lines(dataset, keys), {}
 
 
-def target_sum(targets):
-    """`44` ALO-1：留空的那一列不計入合計。"""
-    return sum(t["weight_ratio"] for t in targets or () if t["weight_ratio"] is not None)
+# `44` ALO-1：留空的那一列不計入合計。
+# 2026-11-02 PORT：本體搬到 `services/v2_domain/holdings.py::target_sum`（判定一字未改），此處 re-export 同一個函式物件。
+target_sum = _v2d.holdings.target_sum
 
 
 def _build_alo1(dataset) -> dict:

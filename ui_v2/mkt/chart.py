@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""🌍 市場與趨勢頁的折線圖元件（純函式；零 streamlit import、零網路、零舊樹 import）。
+"""🌍 市場與趨勢頁的折線圖元件（純函式；零 streamlit import、零網路；舊樹 import：直接 import 為零；經 ui_v2/v2_domain_shim.py 間接使用 services.v2_domain／shared（DEC-2026-11-02-05 NG-2 A））。
 
 BL-0516 批 1（客戶裁示 C，`DEC-2026-10-27-41`；藍圖 `MK-7`、`SH-7` 的圖表元件）。
 畫圖本身交給 `st.vega_lite_chart`（vega-lite 規格是一個 dict，所以本檔可以在沒有 streamlit 的環境完整測試）；
@@ -23,43 +23,29 @@ BL-0516 批 1（客戶裁示 C，`DEC-2026-10-27-41`；藍圖 `MK-7`、`SH-7` �
 
 from __future__ import annotations
 
-import math
-from datetime import date, timedelta
+from datetime import date
 
-# 期間按鈕（客戶裁示：3M／6M／1Y／3Y；預設 1Y）。月數是定義，不是門檻。
-PERIODS = ("3M", "6M", "1Y", "3Y")
-PERIOD_MONTHS = {"3M": 3, "6M": 6, "1Y": 12, "3Y": 36}
-DEFAULT_PERIOD = "1Y"
+# 2026-11-02 PORT（`docs/v2/80` 第 3.3 節 (a) a2；客戶 `DEC-2026-11-02-05` NG-2 A）：期間切片（含期間定義、狀態碼、
+# 清理與往回推月）的本體搬到 `services/v2_domain/periods.py`（切片邊界一字未改）；本檔原位置保留同名公開符號，行為不變。
+# 經 ui_v2 唯一的 L2 口子 `ui_v2/v2_domain_shim.py` 取用，本檔不直接 import 舊樹。
+from .. import v2_domain_shim as _v2d
 
-STATUS_OK = "ok"
-STATUS_EMPTY = "empty"
-STATUS_INSUFFICIENT = "insufficient"
+# 期間按鈕（客戶裁示：3M／6M／1Y／3Y；預設 1Y）。月數是定義，不是門檻。（2026-11-02 起本體住 L2，此處 re-export 同一物件）
+PERIODS = _v2d.periods.PERIODS
+PERIOD_MONTHS = _v2d.periods.PERIOD_MONTHS
+DEFAULT_PERIOD = _v2d.periods.DEFAULT_PERIOD
+
+STATUS_OK = _v2d.periods.STATUS_OK
+STATUS_EMPTY = _v2d.periods.STATUS_EMPTY
+STATUS_INSUFFICIENT = _v2d.periods.STATUS_INSUFFICIENT
 
 # 固定文案（面向使用者；總管擬，待覆核）。
 TEXT_INSUFFICIENT = "資料不足以呈現此期間"
 TEXT_EMPTY = "⬜ 資料未取得，無法繪圖"
 
-
-def _is_number(value) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
-
-
-def _clean(points) -> list:
-    """排序並把無效值（None／NaN／非數字）一律變成 None（保留這一天，折線在此斷開）。"""
-    cleaned = [{"obs_date": p["obs_date"], "value_num": p["value_num"] if _is_number(p.get("value_num")) else None}
-               for p in points]
-    return sorted(cleaned, key=lambda p: p["obs_date"])
-
-
-def months_back(day: date, months: int) -> date:
-    """往回推整數個日曆月；目標月沒有該日（例 3/31 回推 1 個月）取該月最後一天。"""
-    total = day.year * 12 + (day.month - 1) - months
-    year, month = divmod(total, 12)
-    month += 1
-    # 該月最後一天
-    next_first = date(year + (month == 12), (month % 12) + 1, 1)
-    last_day = (next_first - timedelta(days=1)).day
-    return date(year, month, min(day.day, last_day))
+_is_number = _v2d.periods.is_number
+_clean = _v2d.periods.clean_points
+months_back = _v2d.periods.months_back
 
 
 def slice_period(points, period: str) -> dict:
@@ -69,22 +55,13 @@ def slice_period(points, period: str) -> dict:
     - `status == "empty"`：沒有任何有值的點；`points` 為 []。
     - `status == "insufficient"`：最早有值的觀測日晚於視窗起點；`points` 為 []（不縮短冒充）。
     - `status == "ok"`：`points` 為視窗內全部點（含 None 的點，供斷線）。
+
+    2026-11-02 PORT：切片本體在 `services/v2_domain/periods.py::slice_period`；期間不認得時本頁先丟原字訊息的
+    `ValueError`（與搬遷前同型別、同字面），其餘交給 L2。
     """
     if period not in PERIOD_MONTHS:
         raise ValueError(f"period 須為 {PERIODS} 之一：{period!r}")
-    cleaned = _clean(points)
-    valued = [p for p in cleaned if p["value_num"] is not None]
-    base = {"period": period, "points": [], "window_start": None, "window_end": None,
-            "first_obs": None, "last_obs": None}
-    if not valued:
-        return {**base, "status": STATUS_EMPTY}
-    first_obs, last_obs = valued[0]["obs_date"], valued[-1]["obs_date"]
-    start = months_back(date.fromisoformat(last_obs), PERIOD_MONTHS[period]).isoformat()
-    base.update(window_start=start, window_end=last_obs, first_obs=first_obs, last_obs=last_obs)
-    if first_obs > start:
-        return {**base, "status": STATUS_INSUFFICIENT}
-    window = [p for p in cleaned if start <= p["obs_date"] <= last_obs]
-    return {**base, "status": STATUS_OK, "points": window}
+    return _v2d.periods.slice_period(points, period)
 
 
 def availability(points) -> dict:

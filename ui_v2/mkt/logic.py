@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""市場總覽純邏輯。零 streamlit import、零舊 repo import、零網路。
+"""市場總覽純邏輯。零 streamlit import、零網路；舊 repo import：直接 import 為零；經 ui_v2/v2_domain_shim.py 間接使用 services.v2_domain／shared（DEC-2026-11-02-05 NG-2 A）。
 
 所有判定住在這裡；page.py 只負責把下面 build_page_model() 產出的模型畫出來。
 理由：streamlit 在本環境要靠 scratchpad 才匯入得到，邏輯綁進 streamlit 會讓測試跑不起來。
@@ -12,9 +12,13 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from .. import page_health
+# 2026-11-02 PORT（`docs/v2/80` 第 3.3 節 (a) a2；客戶 `DEC-2026-11-02-05` NG-2 A）：延遲日數的本體搬到
+# `services/v2_domain/freshness.py`（算式一字未改）；本檔原位置保留同名函式，行為不變。
+# 經 ui_v2 唯一的 L2 口子 `ui_v2/v2_domain_shim.py` 取用，本檔不直接 import 舊樹。
+from .. import v2_domain_shim as _v2d
 
 # 「這個參數沒有被傳」與「這個參數被傳成 None」是兩件事，不可混為一談：
 # 前者要退回已套用的那一組，後者是使用者把欄位清空了。
@@ -367,15 +371,14 @@ def delay_days(obs_date: str, fetched_at: str, *, tz=None) -> int:
     `tz`（BL-0250 批次 3-A，客戶 2026-10-19 批次 3 裁示第 4 點；44 第七節第三小節之十二）：`fetched_at` 的「日期」在哪一個時區取。
     None（示範模式，預設）＝ 照舊取字串前 10 碼（存放的世界協調時間日期），輸出一個字都不變；正式模式傳台北時區
     （`ui_v2/mkt/live.py::DISPLAY_TZ`），日期與畫面上顯示的取得時間同一個時區。⚠️ 只換「取得時間是哪一天」的參照時區；
-    `obs_date` 與 `fetched_at` 本身一個字都不改，`obs_date` 照舊是資料自己的日期。`fetched_at` 沒有時區時照拋，不猜。"""
-    if tz is None:
-        fetched_day = date.fromisoformat(fetched_at[:10])
-    else:
-        moment = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
-        if moment.tzinfo is None:
-            raise ValueError(f"取得時間沒有時區：{fetched_at!r}")
-        fetched_day = moment.astimezone(tz).date()
-    return (fetched_day - date.fromisoformat(obs_date)).days
+    `obs_date` 與 `fetched_at` 本身一個字都不改，`obs_date` 照舊是資料自己的日期。`fetched_at` 沒有時區時照拋，不猜。
+
+    2026-11-02 PORT：算式本體在 `services/v2_domain/freshness.py::delay_days`；L2 的 `NaiveTimestampError` 在這裡換回
+    原本的 `ValueError` 原字訊息（型別、字面不變）；其他例外（例：日期格式不對）原樣往上拋。"""
+    try:
+        return _v2d.freshness.delay_days(obs_date, fetched_at, tz=tz)
+    except _v2d.freshness.NaiveTimestampError:
+        raise ValueError(f"取得時間沒有時區：{fetched_at!r}") from None
 
 
 def freshness_badge_text(delay: int) -> str | None:
