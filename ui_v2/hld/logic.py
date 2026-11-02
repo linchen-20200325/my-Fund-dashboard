@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""持倉體檢純邏輯。零 streamlit import、零舊 repo import、零網路。
+"""持倉體檢純邏輯。零 streamlit import、零網路；舊 repo import：直接 import 為零；經 ui_v2/v2_domain_shim.py 間接使用 services.v2_domain／shared（DEC-2026-11-02-05 NG-2 A）。
 
 所有判定住在這裡；page.py 只負責把 build_page_model() 產出的模型畫出來。
 理由：streamlit 在本環境要靠 scratchpad 才匯入得到，邏輯綁進 streamlit 會讓測試跑不起來。
@@ -18,6 +18,10 @@ import re
 from datetime import date
 
 from .. import page_health, status_class
+# 2026-11-02 PORT（`docs/v2/80` 第 3.3 節 (a) a2；客戶 `DEC-2026-11-02-05` NG-2 A）：區間三指標、同鍵合併、
+# 門檻比較方向與差額的本體搬到 `services/v2_domain/`；本檔原位置保留同名公開符號（re-export 或薄包裝），行為不變。
+# 經 ui_v2 唯一的 L2 口子 `ui_v2/v2_domain_shim.py` 取用，本檔不直接 import 舊樹。
+from .. import v2_domain_shim as _v2d
 
 # 「這個參數沒有被傳」與「這個參數被傳成 None」是兩件事。
 _UNSET = object()
@@ -202,7 +206,9 @@ PAGE_ANSWERS = "我手上這些基金，哪幾檔偏離了我自己設的門檻"
 STORAGE_TIMEZONE = "UTC"
 
 # `44` HLD-2 規則欄逐字：年化基數為交易日 252（欄位語意 `days_trading`）。
-TRADING_DAYS_PER_YEAR = 252
+# ~~TRADING_DAYS_PER_YEAR = 252~~ → 2026-11-02 PORT：改讀 `services/v2_domain/nav_metrics.py`（其值取 L0 SSOT
+# `shared/signal_thresholds.py::TRADING_DAYS_PER_YEAR`，同為 252）；有意識的更正，不是漏刪。
+TRADING_DAYS_PER_YEAR = _v2d.nav_metrics.TRADING_DAYS_PER_YEAR
 
 # 每一個數字後面帶的字。草稿逐字要求：「螢幕上每一個數字後面都帶（示意）」。
 # 理由寫在草稿 §A：填一個看起來合理的數字、客戶會把它讀成真的，那是線框最容易犯的一種造假。
@@ -556,44 +562,10 @@ ERR_TEXT = "⛔ 取數失敗"  # 客戶 2026-09-24 裁示：取數失敗 ⛔（4
 # ───────────────────────── 算式（純數學） ─────────────────────────
 
 
-def return_pct(navs) -> float | None:
-    """區間報酬率：以區間首末兩筆計算，單位百分點。"""
-    if not navs or len(navs) < 2:
-        return None
-    first = navs[0]
-    if math.isclose(first, 0.0, abs_tol=1e-12):
-        return None
-    return (navs[-1] / first - 1.0) * 100.0
-
-
-def drawdown_pct(navs) -> float | None:
-    """最大回撤：逐日除以之前的最高值，取最小值後減一。"""
-    if not navs or len(navs) < 2:
-        return None
-    peak = navs[0]
-    worst = 0.0
-    for value in navs:
-        peak = max(peak, value)
-        if math.isclose(peak, 0.0, abs_tol=1e-12):
-            return None
-        worst = min(worst, value / peak - 1.0)
-    return worst * 100.0
-
-
-def vol_pct(navs) -> float | None:
-    """期間波動：日報酬標準差年化，年化基數為交易日 252。"""
-    if not navs or len(navs) < 2:
-        return None
-    rets = []
-    for previous, current in zip(navs, navs[1:]):
-        if math.isclose(previous, 0.0, abs_tol=1e-12):
-            return None
-        rets.append(current / previous - 1.0)
-    if len(rets) < 2:
-        return None
-    mean = sum(rets) / len(rets)
-    variance = sum((r - mean) ** 2 for r in rets) / len(rets)
-    return math.sqrt(variance) * math.sqrt(TRADING_DAYS_PER_YEAR) * 100.0
+# 2026-11-02 PORT：三個算式的本體搬到 `services/v2_domain/nav_metrics.py`（算式一字未改），此處 re-export 同一個函式物件。
+return_pct = _v2d.nav_metrics.return_pct
+drawdown_pct = _v2d.nav_metrics.drawdown_pct
+vol_pct = _v2d.nav_metrics.vol_pct
 
 
 # ───────────────────────── 取數與切片 ─────────────────────────
@@ -1286,10 +1258,13 @@ def blocks_recalculated_by(action_kind: str) -> tuple:
 
 
 def _breaches(rule, value) -> bool:
-    if rule["direction"] == "低於":
-        return value < rule["value"]
-    if rule["direction"] == "高於":
-        return value > rule["value"]
+    # 2026-11-02 PORT：比較本體搬到 `services/v2_domain/deviation.py::breaches`（中性方向代碼）；
+    # 這裡只把方向字面「低於／高於」對到代碼。其他方向照舊回 False，且不讀 `rule["value"]`（與搬遷前相同）。
+    direction = rule["direction"]
+    if direction == "低於":
+        return _v2d.deviation.breaches(_v2d.deviation.DIRECTION_BELOW, value, rule["value"])
+    if direction == "高於":
+        return _v2d.deviation.breaches(_v2d.deviation.DIRECTION_ABOVE, value, rule["value"])
     return False
 
 
@@ -1333,7 +1308,7 @@ def deviation_rows(metrics, rules):
                 continue
             if not _breaches(rule, node["_raw"]):
                 continue
-            delta = node["_raw"] - rule["value"]
+            delta = _v2d.deviation.deviation_delta(node["_raw"], rule["value"])   # 2026-11-02 PORT（實際值減門檻值）
             rows.append(
                 {
                     "_fund_code": metric["_fund_code"],
@@ -1357,8 +1332,7 @@ def deviation_rows(metrics, rules):
     rows.sort(key=lambda row: (row["_fund_code"], row["_indicator"]))
     # 取數失敗的那一檔**只算「取數失敗」**，不再同時算進缺淨值／其他缺漏／不適用
     # （總管 2026-10-02 J1 裁定）：同一檔進兩類，卡尾的計數會加總超過持倉檔數。
-    for kind in ("missing", "missing_other", "na", "not_ready"):
-        skipped[kind] -= skipped["error"]
+    _v2d.deviation.apply_error_precedence(skipped)   # 2026-11-02 PORT：同一套集合差，本體在 L2
     return rows, skipped
 
 
@@ -2261,36 +2235,25 @@ def _check_holding_ids(holdings) -> None:
 # - 同鍵而下列任一欄不同 → 不是同一語意，不加總、也不挑一列 —— raise（呈現方式同 `ui_v2/alo/logic.py::aggregated_holdings`
 #   的 bucket 衝突；正式模式由 `page.render` 的錯誤畫面接住，不印 Traceback）。
 # 本頁不 import ui_v2.alo（各頁自足），所以另寫一份。
-HOLDING_SUM_COLUMNS = ("units_shares", "cost_orig_ccy", "cost_twd")
+# 2026-11-02 PORT：常數與合併本體搬到 `services/v2_domain/holdings.py`（同一組欄、同一套比對），此處 re-export；
+# 同鍵不同語意時 L2 丟中性的 `HoldingKeyConflict`，本頁包裝換回原本的 `ValueError` 原字訊息（型別、字面不變）。
+HOLDING_SUM_COLUMNS = _v2d.holdings.HOLDING_SUM_COLUMNS
 # ~~HOLDING_SAME_COLUMNS = ("ccy", "fund_name", "bucket", "opened_on", "last_synced_at")~~
 # → 總管 2026-10-16 判定（PR #976 稽核後；有意識的更正，不是漏刪）：拿掉 `fund_name` —— 同一個正式鍵下，名稱是手打的標籤、
 #   不是語意欄位；與 `ui_v2/alo/logic.py::aggregated_holdings`（不比名稱）一致；名稱打字差異不得讓整頁失效。
 #   舊表述在寫下當時依派工單列舉；被權衡掉的是「名稱不同就整頁進錯誤畫面」這個代價。
-HOLDING_SAME_COLUMNS = ("ccy", "bucket", "opened_on", "last_synced_at")
+# 值（2026-11-02 起住 L2）：("ccy", "bucket", "opened_on", "last_synced_at")。
+HOLDING_SAME_COLUMNS = _v2d.holdings.HOLDING_SAME_COLUMNS
 
-
-def _holding_key(row) -> tuple:
-    def text(value):
-        return value.strip() if isinstance(value, str) else value
-    return (text(row.get("policy_id")), text(row.get("fund_code")))
+_holding_key = _v2d.holdings.holding_key
 
 
 def merge_same_key_holdings(holdings) -> list:
     """同鍵多列加總成一列（見上方常數的註解）。順序照第一次出現的位置；不改輸入。"""
-    merged, order = {}, []
-    for row in holdings:
-        key = _holding_key(row)
-        if key not in merged:
-            merged[key] = dict(row)
-            order.append(key)
-            continue
-        base = merged[key]
-        diff = [column for column in HOLDING_SAME_COLUMNS if base.get(column) != row.get(column)]
-        if diff:
-            raise ValueError(f"{key} 兩列的 {'、'.join(diff)} 不同（同鍵不同語意，不加總）")
-        for column in HOLDING_SUM_COLUMNS:
-            base[column] = base[column] + row[column]
-    return [merged[key] for key in order]
+    try:
+        return _v2d.holdings.merge_same_key_holdings(holdings)
+    except _v2d.holdings.HoldingKeyConflict as exc:
+        raise ValueError(f"{exc.key} 兩列的 {'、'.join(exc.columns)} 不同（同鍵不同語意，不加總）") from None
 
 
 def _row_is_open(holding_id, open_fund) -> bool:

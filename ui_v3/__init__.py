@@ -10,9 +10,10 @@
 - `fixtures/`    fake scenario 資料；**明確標示 FAKE**；正式路徑（含 `app_preview.py`）不得 import。
 - `adapters/`    **唯一**可 import `services.v2_tables`／`services.v2_domain` 的位置；本批只有 stub、零 import。
 - `shell/`       五頁登錄表（頁序、頁名、是否掛載）；純資料，本批不 import streamlit。
-- `design/`、`pages/`  保留位置（批 2 token 命名、批 3～逐頁 wireframe 核准後才有內容）。
+- `design/`      token 命名（批 2b，值未定）；`pages/` 保留位置（批 3～逐頁 wireframe 核准後才有內容）。
+- 呈現規則資料表住 `shared/ui_semantics/`（批 2b）；`viewmodels/`、`pages/` 可 import（守衛明列白名單）。
 - `app_preview.py`     獨立 preview 入口；本批**不註冊任何頁、不可當正式 main file**（見該檔 docstring）。
 
-⛔ 不得 import Old UI（`ui/`、根目錄 `app.py`）或 `ui_v2`（本批不開任何 reuse 白名單）。
+⛔ 不得 import Old UI（`ui/`、根目錄 `app.py`）或 `ui_v2`（不開任何 reuse 白名單）；`shared/` 只准 `shared.ui_semantics`。
 ⛔ 本檔 import 時零副作用。
 """

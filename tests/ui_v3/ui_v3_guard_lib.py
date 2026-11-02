@@ -39,6 +39,11 @@ BACKDOOR_NAMES = {"__builtins__", "__loader__", "__spec__"}
 BACKDOOR_CALLS = {"globals", "locals", "vars"}
 DYNAMIC_IMPORT_MODULES = {"importlib", "runpy", "pkgutil"}
 LOWER_LAYER_PREFIXES = ("services.v2_tables", "services.v2_domain")
+# `shared/` 唯一開放的套件（批 2b；80 第 3.3 節 (c) 呈現規則資料表）。只准 `viewmodels/`、`pages/` import，
+# 且只准明寫完整路徑（`from shared.ui_semantics import X`／`import shared.ui_semantics.rules`）；
+# 裸 `import shared`、`from shared import ui_semantics` 一律擋（後者無法與 `from shared import colors` 在模組名層級區分，fail-closed）。
+SHARED_ALLOWED_PACKAGE = "shared.ui_semantics"
+SHARED_ALLOWED_LAYERS = frozenset({"viewmodels", "pages"})
 
 # 每層可以 import 的 ui_v3 內部層（fail-closed：不在表內的層目錄一律違規）。
 # root ＝ `ui_v3/__init__.py` 與 `ui_v3/app_preview.py`；進入點（app_*）本身不是模組，任何檔都不得 import。
@@ -151,8 +156,11 @@ def import_violations(rel: str, source: str) -> List[str]:
             elif module != "services" and not module.startswith(LOWER_LAYER_PREFIXES):
                 # 裸 `services` 只會來自 `from services import v2_tables` 的前綴那一筆，放行；其餘舊 services 模組一律擋。
                 bad.append(f"services 模組 {module} 不在 adapters 的允許清單（只准 {LOWER_LAYER_PREFIXES}）")
+        elif root == "shared" and (module == SHARED_ALLOWED_PACKAGE or module.startswith(SHARED_ALLOWED_PACKAGE + ".")):
+            if layer not in SHARED_ALLOWED_LAYERS:
+                bad.append(f"{layer}/ 不得 import {module}（只准 {sorted(SHARED_ALLOWED_LAYERS)}）")
         elif root in OLD_ROOTS:
-            bad.append(f"舊樹模組 {module}（Old UI 與下層一律不准，adapters 亦同）")
+            bad.append(f"舊樹模組 {module}（Old UI 與下層一律不准，adapters 亦同；shared 只開 {SHARED_ALLOWED_PACKAGE}）")
         elif root == "streamlit":
             if layer not in STREAMLIT_LAYERS:
                 bad.append(f"{layer}/ 不得 import streamlit（{module}）")

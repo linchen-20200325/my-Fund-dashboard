@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""標的探索純邏輯。零 streamlit import、零舊 repo import、零網路。
+"""標的探索純邏輯。零 streamlit import、零網路；舊 repo import：直接 import 為零；經 ui_v2/v2_domain_shim.py 間接使用 services.v2_domain／shared（DEC-2026-11-02-05 NG-2 A）。
 
 所有判定住在這裡；page.py 只負責把 build_page_model() 產出的模型畫出來。
 理由：streamlit 在本環境要靠 scratchpad 才匯入得到，邏輯綁進 streamlit 會讓測試跑不起來。
@@ -13,9 +13,13 @@
 from __future__ import annotations
 
 import contextvars
-import decimal
 
 from .. import page_health
+# 2026-11-02 PORT（`docs/v2/80` 第 3.3 節 (a) a2；客戶 `DEC-2026-11-02-05` NG-2 A）：缺值判定、三態比較、逐條累計篩選的
+# 本體搬到 `services/v2_domain/rule_filter.py`（L2 用中性方向代碼與中性原因代碼）；本檔原位置保留同名公開符號，
+# 中文方向字面 → 代碼、原因代碼 → 中文原因字的對照留在本檔，行為不變。
+# 經 ui_v2 唯一的 L2 口子 `ui_v2/v2_domain_shim.py` 取用，本檔不直接 import 舊樹。
+from .. import v2_domain_shim as _v2d
 
 # ───────────────────────── 常數（逐字引 `44`） ─────────────────────────
 
@@ -582,9 +586,9 @@ class UnspecifiedComparison(Exception):
     """條件比較撞到 `44` 沒有訂的情形。**炸掉，不靜默選一邊**（`CLAUDE.md` §1）。"""
 
 
-def rule_is_effective(rule: dict) -> bool:
-    """`44` `EXP-1` 空狀態欄逐字：「數值欄留空 → 該列不生效」。"""
-    return str(rule.get("value", "")).strip() != ""
+# `44` `EXP-1` 空狀態欄逐字：「數值欄留空 → 該列不生效」。
+# 2026-11-02 PORT：本體搬到 `services/v2_domain/rule_filter.py::rule_is_effective`（判定一字未改），此處 re-export 同一個函式物件。
+rule_is_effective = _v2d.rule_filter.rule_is_effective
 
 
 def rule_text(rule: dict) -> str:
@@ -602,32 +606,39 @@ def _compare(left, op: str, right: str) -> bool:
     ⛔ **`44` 也沒有寫「缺值算通過還是不通過」**（`E-09`）。**本檔不替它選**，
        撞到就 `raise` —— 一個靜默的選擇會讓 `EXP-7` 的檔數與 `EXP-0` 的 N 悄悄對不起來，
        而 `44` `EXP-7` 判準逐字要求那兩個數相等。**炸掉比較誠實。**
+
+    2026-11-02 PORT：比較本體搬到 `services/v2_domain/rule_filter.py::compare_values`（判定順序一字未改：先看欄位值
+    是否為 None，再看方向）；本函式只把方向字面對到代碼、把 L2 的 `UncomparableValues` 換回原字的 `UnspecifiedComparison`。
     """
-    if left is None:
-        raise UnspecifiedComparison(
-            f"欄位值為空而條件要比較它（`44` 沒有訂缺值算通過還是不通過；"
-            f"見 `44` `EXP-2` 空狀態欄與 `E-09` 登記）：op={op!r} right={right!r}"
-        )
-    if op in ("等於", "不等於"):
-        same = str(left) == str(right)
-        return same if op == "等於" else not same
-    if op in ("大於", "小於"):
-        try:
-            a, b = float(left), float(right)
-        except (TypeError, ValueError):
+    try:
+        return _v2d.rule_filter.compare_values(left, _op_code(op), right)
+    except _v2d.rule_filter.UncomparableValues as exc:
+        if exc.kind == _v2d.rule_filter.UNCOMPARABLE_LEFT_MISSING:
+            raise UnspecifiedComparison(
+                f"欄位值為空而條件要比較它（`44` 沒有訂缺值算通過還是不通過；"
+                f"見 `44` `EXP-2` 空狀態欄與 `E-09` 登記）：op={op!r} right={right!r}"
+            ) from None
+        if exc.kind == _v2d.rule_filter.UNCOMPARABLE_NOT_NUMBER:
             raise UnspecifiedComparison(
                 f"「{op}」用在一個轉不成數的值上（`44` 沒有訂型別不合時怎麼辦）："
                 f"left={left!r} right={right!r}"
-            )
-        return a > b if op == "大於" else a < b
-    if op in ("早於或等於", "晚於"):
-        a, b = str(left), str(right)
-        return a <= b if op == "早於或等於" else a > b
-    raise UnspecifiedComparison(f"沒有這個比較方向：{op!r}")
+            ) from None
+        raise UnspecifiedComparison(f"沒有這個比較方向：{op!r}") from None
 
 
 # `_compare` 認得的六個比較方向（`fixtures.OPERATORS` 的鏡像，由測試比對；本檔不 import fixtures）。
 KNOWN_OPERATORS = ("等於", "不等於", "大於", "小於", "早於或等於", "晚於")
+# 2026-11-02 PORT：方向字面 → L2 中性代碼（`services/v2_domain/rule_filter.py::OPERATOR_CODES`，兩邊一一對應、順序相同）。
+_OPERATOR_CODE_PAIRS = tuple(zip(KNOWN_OPERATORS, _v2d.rule_filter.OPERATOR_CODES))
+
+
+def _op_code(op):
+    """方向字面 → L2 代碼；不認得 → None（L2 依原順序先看欄位值是否為 None，再判方向不認得）。
+    比對方式同 `op in (...)`（逐一 `字面 == op`），不用 dict 查表 —— 不可雜湊的 op 不得因此改丟 TypeError。"""
+    for literal, code in _OPERATOR_CODE_PAIRS:
+        if literal is op or literal == op:
+            return code
+    return None
 
 
 def undet_tail(count: int) -> str:
@@ -694,38 +705,21 @@ def undet_text(reasons) -> str:
     return f"{UNDET_TEXT}（{'；'.join(reasons)}）"
 
 
-def is_missing(value) -> bool:
-    """缺值判定（集中一處；稽核 K 第六、七輪）：None、空字串、浮點 NaN（含 numpy 純量）、`Decimal` 的 NaN／sNaN、
-    pandas 的 NA／NaT。
+# 缺值判定（集中一處；稽核 K 第六、七輪）：None、空字串、浮點 NaN（含 numpy 純量）、`Decimal` 的 NaN／sNaN、
+# pandas 的 NA／NaT。只認純量；絕不往上拋。示範資料沒有 NaN、沒有空白字串以外的空值 ⇒ 改用本函式的各處示範輸出不變。
+# 2026-11-02 PORT：本體搬到 `services/v2_domain/rule_filter.py::is_missing`（判定一字未改），此處 re-export 同一個函式物件。
+is_missing = _v2d.rule_filter.is_missing
 
-    只認純量：list、tuple、dict、set 與 numpy 陣列（含 0 維）一律不算缺值；其餘任何比較會炸的型別也不算，
-    **絕不往上拋**（`except Exception`）。
-    本檔不 import pandas／numpy —— NA／NaT／ndarray 以型別名判斷，NaN 以「自己不等於自己」判斷。
-    示範資料沒有 NaN、沒有空白字串以外的空值 ⇒ 改用本函式的各處示範輸出不變（以逐位元組比對驗證）。
-    """
-    if value is None:
-        return True
-    if isinstance(value, str):
-        return value.strip() == ""
-    if isinstance(value, (list, tuple, dict, set, frozenset)) or type(value).__name__ == "ndarray":
-        return False
-    if isinstance(value, decimal.Decimal):
-        return value.is_nan()            # 含 sNaN；不做比較，避免 sNaN 的 InvalidOperation
-    if type(value).__name__ in ("NAType", "NaTType"):
-        return True
-    try:
-        return bool(value != value)
-    except Exception:  # noqa: BLE001 — 只做判定，任何型別都不得讓它炸（docstring）
-        return False
+# 轉得成數、而且是有限數（排除 nan、inf）。2026-11-02 PORT：本體在 `services/v2_domain/rule_filter.py::finite_number`。
+_finite_number = _v2d.rule_filter.finite_number
 
 
-def _finite_number(value) -> bool:
-    """轉得成數、而且是有限數（排除 nan、inf）。"""
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return False
-    return number == number and number not in (float("inf"), float("-inf"))
+# 2026-11-02 PORT：L2 原因代碼 → 本頁原因字（`compare_tristate` 第二個回傳值的字面一字未改）。
+_UNDET_REASON_TEXT = {
+    _v2d.rule_filter.UNDET_MISSING: lambda right: UNDET_WHY_MISSING,
+    _v2d.rule_filter.UNDET_LEFT_NOT_NUMBER: lambda right: "欄位值不是數值",
+    _v2d.rule_filter.UNDET_RIGHT_NOT_NUMBER: lambda right: f"條件數值「{right}」不是數值",
+}
 
 
 def compare_tristate(left, op: str, right: str):
@@ -740,25 +734,14 @@ def compare_tristate(left, op: str, right: str):
     同樣歸無法判定、不報錯。
     - 比較方向不在六個之內 → 照舊 `raise UnspecifiedComparison`（那不是資料缺，是條件本身壞了）。
     示範模式不走這一支（照舊 `_compare`，缺值就炸）。
+
+    2026-11-02 PORT：三態判定本體搬到 `services/v2_domain/rule_filter.py::compare_tristate`（判定一字未改）；
+    本函式只做方向字面 → 代碼、原因代碼 → 原因字的對照。
     """
     if op not in KNOWN_OPERATORS:
         raise UnspecifiedComparison(f"沒有這個比較方向：{op!r}")
-    if is_missing(left):
-        return None, UNDET_WHY_MISSING
-    if op in ("大於", "小於"):
-        # 總管 2026-10-13：nan、inf 這類 `float()` 吃得下、但比不出大小的值一律無法判定（與 `44` 檔尾「其五」射程句一致）。
-        if not _finite_number(left):
-            return None, "欄位值不是數值"
-        if not _finite_number(right):
-            return None, f"條件數值「{right}」不是數值"
-    try:
-        return _compare(left, op, right), None
-    except UnspecifiedComparison:
-        try:
-            float(left)
-        except (TypeError, ValueError):
-            return None, "欄位值不是數值"
-        return None, f"條件數值「{right}」不是數值"
+    result, why = _v2d.rule_filter.compare_tristate(left, _op_code(op), right)
+    return result, (None if why is None else _UNDET_REASON_TEXT[why](right))
 
 
 def apply_rules_tristate(rows, rules):
@@ -770,26 +753,12 @@ def apply_rules_tristate(rows, rules):
     - `undet`：`{fund_code: [原因, ...]}`（原因形如「資料未備：ccy」）。
     任一條**明確不符合** → 該檔不列（客戶裁示的「不排除」只針對因缺值而無法判定的那部分）。
     數值欄留空的條件不生效（`44` `EXP-1`），兩個數照抄上一列。
+
+    2026-11-02 PORT：累計判定本體搬到 `services/v2_domain/rule_filter.py::apply_rules_tristate`（判定一字未改），
+    每一格比較交給本頁的 `compare_tristate`（中文方向字面、中文原因字）；L2 回 `(原因, 欄位)`，這裡組回「原因：欄位」。
     """
-    alive = list(rows)
-    undet = {}
-    steps = []
-    for rule in rules:
-        before = len(alive)
-        if rule_is_effective(rule):
-            kept = []
-            for row in alive:
-                result, why = compare_tristate(row.get(rule["field"]), rule["op"], rule["value"])
-                if result is False:
-                    undet.pop(row["fund_code"], None)
-                    continue
-                if result is None:
-                    undet.setdefault(row["fund_code"], []).append(f"{why}：{rule['field']}")
-                kept.append(row)
-            alive = kept
-        sure = sum(1 for row in alive if row["fund_code"] not in undet)
-        steps.append((rule, before, sure, len(alive) - sure))
-    return steps, alive, undet
+    steps, alive, undet = _v2d.rule_filter.apply_rules_tristate(rows, rules, compare=compare_tristate)
+    return steps, alive, {code: [f"{why}：{field}" for why, field in pairs] for code, pairs in undet.items()}
 
 
 def apply_rules(rows, rules):
