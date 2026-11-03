@@ -2113,6 +2113,21 @@
 | supersedes／superseded by | supersedes：無。補充（不取代）：`DEC-2026-11-02-04`、`-09`、`DEC-2026-10-26-04`（6.1.3，Gate 後靜默只是補一條，不改第一則顯式要求）。resolves：`DEC-2026-11-02-07` 執行組讀法 (a)（與 `DEC-2026-11-03-01` 同）。superseded by：無。 |
 | provenance | 四則指示逐字（以逐字檔為準）；G1～G11、F 項整理與讀法由執行組單組寫成，可被客戶推翻；G7 轉錄與全部變更未經第二組獨立驗證。 |
 
+### DEC-2026-11-03-03｜客戶放行 Model／Effort Change Gate：開始 🌍 歸一化公式與視窗對齊（BL-0536-H1）＋本批維持條件；🌍 production rendering 尚未經 SSOT 允許
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-03（客戶回覆日；寫入日同日） |
+| 決策者 | **客戶**（Gate 放行與條件）。原文由總管在派工訊息中轉錄給執行組；執行組未見客戶對話本身。「執行組讀法」欄由執行組單組寫成，可被客戶推翻 |
+| 決策內容摘要 | **以總管轉錄為準（下引為轉錄原字）。** 客戶：「已切換至 Claude Opus 5.5 + High，可以開始下一階段。請依 GitHub 最新 SSOT 執行 🌍 歸一化公式與視窗對齊（BL-0536-H1）。」規則條列（總管轉錄）：TAIEX 與 S&P 500 以第一個共同有效交易日同時設為 100；視窗起點取兩條可比較範圍中的較晚者；歷史不足時明確標示不足，不偷偷縮短定義；各序列可畫到自己的最後觀測日；每個 value / return / date 必須對應自身資料日；缺一條序列時，另一條仍可顯示，但必須明確標示缺項；不得改寫既有資料語意或自行新增門檻。實作要求（總管轉錄）：新 L2 函式放在共用 domain 層；golden tests；property tests；edge cases：無共同日、單邊缺資料、單點、不同終點、視窗不足、重複日期／異常順序；每批至少一組真正獨立稽核；Old UI 不動；"ui_v2" 行為不變；frozen 44 不動；不開始 🌍 production rendering，除非本批完成後 GitHub SSOT 明確允許。另：「VIX 在 Primary 顯示時是否讓 Secondary VIX 卡讓位，目前只是總管讀法，不得當成正式裁示；若實作會碰到，另送 Decision Gate。」「所有新規則、測試約束、待辦、稽核要求與接手點必須 Durable Persistence 到 GitHub。」「Gate 送出後只回報一次，之後保持靜默。」「完成本批後，再重新評估下一階段 Model / Mode / Effort；若需要切換，先送 Gate 並立即停手。」 |
+| 執行組讀法（**可被客戶推翻**；未經第二組驗證） | **(a) 🌍 production rendering 目前未經 GitHub SSOT 允許。** 本筆只放行 H1（L2 公式與視窗對齊），並明文「不開始 🌍 production rendering，除非本批完成後 GitHub SSOT 明確允許」；截至本筆，GitHub SSOT 沒有任何一處明確允許。🌍 線框已核准（`DEC-2026-11-03-01`）只滿足「核准線框才可寫該頁」的前提，不等於本條所要的明確允許。**(b)** 順序：H1 獨立稽核＋合併 → 重新評估下一階段 Model／Mode／Effort（需切換則先送 Gate 並停手）→ H2（PORT 期間漲跌／新鮮度 helper，基準對齊 H1）、H3（ChartCard 歸一化揭露欄位）與 🌍 rendering 批；rendering 批開工前須有一筆新的客戶明確允許落盤（建議總管於 H1 合併後向客戶取得；客戶未給，不得自行登記為允許）。**(c)** VIX 讓位（Primary 顯示 VIX 時 Secondary VIX 卡是否讓位）不是裁示；實作若碰到，另送 Decision Gate。**(d)** 本批 H1 實作中裁示未寫到、由執行組自行決定的語意點（例：共同有效日不足 2 天的計法、`withheld` 序列狀態、日期格式只收 `YYYY-MM-DD`）列於該批 PR 描述，須獨立稽核與客戶覆核。 |
+| 理由／背景 | `PROJECT_RULES.md` 5.1 第 10、11 點（Model／Effort Change Gate；回覆「已切換／可以開始」才續）；BL-0536-H1 原標「先送 Gate 並停手」（`DEC-2026-11-03-01`、`-02` G10）；`PROJECT_RULES.md` 12.1 新裁示同批落盤。 |
+| evidence／source | **沒有另存逐字檔**：原文即本筆「決策內容摘要」欄所引，係總管在本批派工對話中的轉錄（第一句與帶「」者為客戶原字；規則與實作要求兩段條列由總管以清單轉錄，是否逐字執行組無法核對）。落地：`docs/BACKLOG.md` BL-0536-H1、`docs/HANDOFF.md` 頂部則；實作 `services/v2_domain/normalization.py`、`tests/test_v2_domain_normalization.py`（同批 PR）。 |
+| 影響範圍 | 授權 BL-0536-H1 的 L2 實作與測試；不授權 🌍 production rendering、`ui_v3` 頁／adapter／ChartCard 擴充、Old UI／`ui_v2` 變更、frozen 44 變更、新增門檻或改寫資料語意。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。resolves：BL-0536-H1 與 `DEC-2026-11-03-02` G10 所列的 Model／Effort Change Gate 等待狀態（已回覆「可以開始」）。superseded by：無。 |
+| provenance | 客戶原字經總管轉錄（見 evidence 欄的逐字程度說明）；讀法 (a)～(d) 由執行組單組寫成，可被客戶推翻；未經第二組驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -2222,6 +2237,7 @@
 - 第四節 `DEC-2026-11-02-05`～`-08`：原文逐字落盤於 `docs/evidence/decisions/2026-11-02_new_ui2_ng_and_final_ui_contract_ruling.md`（總管逐字轉存；執行組未見客戶對話本身，已以 Python 核對圍欄與轉存檔逐位元組相同）；`-05` 的 NG-5 清單依 `docs/v2/80` 第 12 節整理；`-06` 讀法 (a)～(c)、`-07` 讀法 (a)～(e) 與各筆 supersedes 範圍判斷由執行組單組寫成，可被客戶推翻；`-07` 各 A 的內容摘要取自 79 第 13 節與 §17.12；`-08` 的 `7dcab477` author 欄是否算 AI co-author 未裁示；67 第 8 節與 78 加註為同批另組產出，本組未複驗內容。
 - 第四節 `DEC-2026-11-03-01`：原文逐字落盤於 `docs/evidence/decisions/2026-11-03_mkt_wireframe_ruling.md`（總管逐字轉存；執行組未見客戶對話本身，已以 Python 核對圍欄與轉存檔逐位元組相同）；被 amend 清單與讀法 (a)～(e) 由執行組單組寫成，可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-11-03-02`：四則指示原文逐字落盤於 `docs/evidence/decisions/2026-11-03_mkt_wireframe_ruling.md`「同批補錄」一節（總管逐字轉存；執行組未見客戶對話本身）；G1～G11 整理由執行組單組寫成，可被客戶推翻；未經第二組驗證。
+- 第四節 `DEC-2026-11-03-03`：原文沒有另存逐字檔，引於該筆摘要欄，係總管在派工對話中的轉錄（第一句與帶「」者為客戶原字；兩段條列是否逐字無法核對）；執行組未見客戶對話本身；讀法 (a)～(d) 由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-01`、`-02` 兩筆的客戶原話 repo 內沒有；內容依總管派工單與交接本轉述，本組未見原文。
 - 第四節 `DEC-2026-10-16-03`～`-13`：原文已落盤於 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔逐位元組相同）。各筆中標「總管讀法」「總管整理」者不是客戶裁示；「supersedes」欄的例示由文件實作組判讀，不宣稱窮舉，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-14`：原文已落盤於 `docs/evidence/decisions/2026-10-16_proposal8_approval.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔圍欄還原後逐位元組相同）。該筆中標「總管判定」「總管設計基準」者不是客戶裁示；「supersedes」欄的條文清單以 57 為準，由文件實作組整理，未經第二組驗證。

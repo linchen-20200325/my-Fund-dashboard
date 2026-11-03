@@ -519,7 +519,8 @@ def test_mkt_期間切片與延遲日數_與搬遷前逐案相同():
 
 _PINNED = {
     "alo": "ba392ed5e09663b3",
-    "exp_compare": "192bf4e68238e9bc",
+    # 依「本環境有沒有 pandas」各釘一個（見下方 `_PANDAS_MODE`）；兩個值都由原始實作 a7f120c9 算出。
+    "exp_compare": {"pandas": "192bf4e68238e9bc", "no_pandas": "40e1cc53c9167aff"},
     "exp_rules": "10cc4aa6a7b4d2eb",
     "hld_deviation": "0f7f2ad7e16c98ce",
     "hld_merge": "dd37fe7bc27ddae6",
@@ -536,9 +537,19 @@ _PINNED = {
 _SUM_MODE = "compensated" if sum([0.1] * 10) == 1.0 else "naive"
 
 
+# 2026-11-03 補：`exp_compare` 的輸入組 `_LEFTS` 在有 pandas 時多兩個值（`pd.NA`、`pd.NaT`），沒有 pandas 時沒有；
+# 於是同一份原始實作在「沒有 pandas 的直譯器」算出的摘要不同（實測 3.13 擋掉 pandas、3.11 無 pandas 皆為
+# `40e1cc53c9167aff`；有 pandas 為 `192bf4e68238e9bc`；與 sum() 模式無關）。舊寫法只在「搬遷後」那支測試遇無 pandas 時
+# skip，「由原始實作算出」那支沒有 skip → 在無 pandas、又拿得到 git 歷史的環境必紅（CI 是淺層 clone，該支被 skip，所以沒抓到）。
+# 處置：不 skip、不放寬，改依本環境挑對應摘要（兩個摘要都由原始實作算出），兩支測試在兩種環境都真的比對。
+_PANDAS_MODE = "pandas" if _PANDAS_VALUES else "no_pandas"
+# 每個「依環境分歧」的家族用哪一個環境特徵挑摘要。
+_PIN_VARIANT = {"hld_nav": _SUM_MODE, "exp_compare": _PANDAS_MODE}
+
+
 def _pinned(family) -> str:
     value = _PINNED[family]
-    return value[_SUM_MODE] if isinstance(value, dict) else value
+    return value[_PIN_VARIANT[family]] if isinstance(value, dict) else value
 
 
 def _families(hld_ns, alo_ns, exp_ns, chart_ns, mkt_ns):
@@ -555,10 +566,8 @@ def _families(hld_ns, alo_ns, exp_ns, chart_ns, mkt_ns):
 
 @pytest.mark.parametrize("family", sorted(_PINNED))
 def test_摘要常數_搬遷後的ui_v2輸出符合(family):
-    if family == "exp_compare" and not _PANDAS_VALUES:
-        pytest.skip("摘要含 pandas NA／NaT 兩個輸入；本環境沒有 pandas")
     fams = _families(vars(new_hld), vars(new_alo), vars(new_exp), vars(new_chart), vars(new_mkt))
-    assert _digest(fams[family]()) == _pinned(family), (family, _SUM_MODE)
+    assert _digest(fams[family]()) == _pinned(family), (family, _SUM_MODE, _PANDAS_MODE)
 
 
 @pytest.mark.parametrize("family", sorted(_PINNED))
@@ -568,7 +577,14 @@ def test_摘要常數_由原始實作算出(family):
     exp = _need("ui_v2/exp/logic.py", "ui_v2.exp")
     chart = _need("ui_v2/mkt/chart.py", "ui_v2.mkt")
     mkt = _need("ui_v2/mkt/logic.py", "ui_v2.mkt")
-    assert _digest(_families(hld, alo, exp, chart, mkt)[family]()) == _pinned(family), (family, _SUM_MODE)
+    assert _digest(_families(hld, alo, exp, chart, mkt)[family]()) == _pinned(family), (family, _SUM_MODE, _PANDAS_MODE)
+
+
+def test_依環境分歧的摘要_每一個都有對應的環境特徵():
+    # 防呆：dict 型摘要必須在 `_PIN_VARIANT` 登記，且目前環境的特徵值必須是它的一個鍵（否則是 KeyError 而不是誤綠）
+    for family, value in _PINNED.items():
+        if isinstance(value, dict):
+            assert family in _PIN_VARIANT and _PIN_VARIANT[family] in value, family
 
 
 # ═══════════════════════ L2 本體（中性代碼）的直接行為 ═══════════════════════
@@ -619,6 +635,8 @@ _DOMAIN_DIR = _ROOT / "services" / "v2_domain"
 _DOMAIN_ALLOWED_IMPORTS = {
     "__future__", "__future__.annotations", "math", "decimal", "datetime", "datetime.date", "datetime.datetime",
     "datetime.timedelta", "shared.signal_thresholds", "shared.signal_thresholds.TRADING_DAYS_PER_YEAR",
+    # 2026-11-03 BL-0536-H1 `normalization.py` 的 frozen dataclass 回傳型別（標準庫、純資料結構、無 I/O）。
+    "dataclasses", "dataclasses.dataclass",
 }
 _DOMAIN_FORBIDDEN_CALLS = {"open", "exec", "eval", "compile", "__import__", "input", "print"}
 
@@ -671,7 +689,7 @@ def _domain_files():
 def test_v2_domain_母體不是空的():
     names = {p.name for p in _domain_files()}
     assert {"__init__.py", "nav_metrics.py", "holdings.py", "deviation.py", "rule_filter.py", "periods.py",
-            "freshness.py"} <= names, names
+            "freshness.py", "normalization.py"} <= names, names
 
 
 def test_v2_domain只import白名單_不碰streamlit_ui_網路_檔案_也不帶中文畫面字():
