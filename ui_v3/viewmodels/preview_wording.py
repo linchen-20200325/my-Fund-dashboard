@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-"""🌍 Preview 頁的**暫時字樣**（BL-0536 rendering 批）：尚未經客戶核准的畫面字樣，集中在這一個檔。
+"""🌍 Preview 頁的字樣查表：**已核准字樣取規則表、尚未核准的暫時字樣集中在這一個檔**（BL-0536 rendering 批）。
 
 規則：
-- **只有 Preview App 用**；這些字樣**不是**呈現規則資料表（`shared/ui_semantics/rules.py`）的內容，也不得進該表
-  （守衛 `tests/ui_v3/test_ui_v3_preview_wording_guard.py` 鎖：每一條都不得與規則表任何已核准字樣相同、規則表的 PENDING 列不得被這裡補字）。
-- 已核准的狀態符號與字樣（◆ ◇ ⬜ ⛔ ◷ 與其句型）一律取規則表，**不在這裡重複**。
-- 每一條都帶 `source`（它從哪來：81 線框「擬：」、ui_v2 既有字樣沿用、或執行組暫擬），以及 `status`：
-  `pending`（待客戶定字）。畫面上以 `pending_span()` 輸出時帶 `data-pending-wording="<key>"` 屬性，機器可辨識。
-- 客戶驗收 Preview 時，一次檢視 `PREVIEW_PENDING_WORDING` 全表即可定字或改字；定字後再搬進規則表並自此刪除對應列。
+- 客戶 2026-11-03 已裁示的正式字樣（`DEC-2026-11-03-07`）住 `shared/ui_semantics/rules.py::APPROVED_WORDING`，**單一來源、不在這裡重複**；
+  `text()`／`span()` 先查規則表、再查本檔，畫面上已核准字樣**不帶** `data-pending-wording` 與虛線底線。
+- 本檔只剩**尚未核准**的暫時字樣（`PREVIEW_PENDING_WORDING`，status 恆為 `pending`）。已核准的鍵不得同時留在本檔
+  （守衛 `tests/ui_v3/test_ui_v3_preview_wording_guard.py` 鎖：兩表鍵不重疊；暫時字樣不得與規則表任何已核准字樣相同）。
+- 已核准的狀態符號與字樣（◆ ◇ ⬜ ⛔ ◷ 與其句型）一律取規則表 `ENTRIES`，**不在這裡重複**。
+- 每一條暫時字樣都帶 `source`（81 線框「擬：」、ui_v2 既有字樣沿用、或執行組暫擬）；畫面上以 `pending_span()` 輸出時帶
+  `data-pending-wording="<key>"` 屬性，機器可辨識。客戶定字後搬進規則表並自此刪除對應列。
 
 ⚠️ 本檔的字樣為**執行組暫擬／沿用**，可被客戶推翻；「沿用 ui_v2」者的核准狀態**未查證**。
 """
@@ -17,6 +18,8 @@ from dataclasses import dataclass
 from html import escape
 from types import MappingProxyType
 from typing import Mapping
+
+from shared.ui_semantics import rules
 
 STATUS_PENDING = "pending"
 
@@ -46,40 +49,25 @@ def _w(key: str, text: str, source: str) -> PendingWording:
 _LIST = (
     # 首屏欄位名（81 第 3.1 節）
     _w("status_row_label", "市場狀態／是否需注意", _SRC_81),
-    _w("hero_sentence", "暫無完整市場綜合判定（缺正式 aggregation rule）", _SRC_81 + "；`DEC-2026-10-27-41` 既有句"),
-    _w("evidence_label", "重要依據", _SRC_81),
-    _w("freshness_label", "資料新鮮度", _SRC_81),
     _w("evidence_single_note", "只含這一條序列自身的視窗，未與另一條比較", _SRC_EXEC),
     # Primary
     _w("title_compare", "台股 vs S&P 500（歸一化）", _SRC_81 + "；標題字樣 PENDING"),
     _w("view_label", "檢視", _SRC_81),
     _w("period_label", "期間", _SRC_EXEC),
-    _w("view_compare", "比較", _SRC_81),
-    _w("view_vix", "VIX", _SRC_81),
-    _w("view_us10y", "美10Y", _SRC_81),
-    _w("view_us2y", "美2Y", _SRC_81),
     _w("series_taiex", "台股", _SRC_UIV2),
     _w("series_sp500", "S&P 500", _SRC_UIV2),
     _w("series_vix", "VIX", _SRC_UIV2),
     _w("series_us10y", "美 10Y", _SRC_UIV2),
     _w("series_us2y", "美 2Y", _SRC_UIV2),
-    _w("base_chip", "基準日 {date}＝{base}", _SRC_81 + "；normalized disclosure 最終 label 未核准"),
-    _w("frequency_line", "頻率 日｜缺值不補、斷線", _SRC_81),
-    _w("data_date_line", "{label} 資料日 {date}（經過 {days} 日）", _SRC_UIV2 + "；日期格式本批用 YYYY-MM-DD"),
     _w("data_date_no_elapsed", "{label} 資料日 {date}", _SRC_EXEC),
     _w("negative_elapsed_suffix", "取得時間早於觀測日", _SRC_UIV2 + "；字首 `⬜ 不適用` 取規則表（BACKLOG H2 adapter 要求 (1)）"),
-    _w("insufficient", "資料不足", "81 第 4.1 節 S7／`DEC-2026-11-03-04` B2：「資料不足」最終畫面字樣未核准"),
     _w("insufficient_effect", "此期間比序列涵蓋範圍長，未縮短冒充", _SRC_EXEC),
-    _w("chart_empty", "此圖目前沒有可畫的資料", "規則表 `chart_empty` 為 PENDING（BL-0536-W1）；整張圖無資料字樣未核准"),
     _w("fetch_failed_effect", "此序列未畫出", _SRC_EXEC + "；`⛔ <中文資料類> 取數失敗` 句型取規則表"),
-    _w("single_chart_note", "僅畫這一條序列；另一條{reason}，未做比較", _SRC_EXEC),
-    _w("fallback_note", "兩條序列都有資料，但{reason}；僅畫其中一條，不是比較", _SRC_EXEC),
-    _w("window_withheld_note", "兩條序列在這個期間內無法在同一基準日比較（原因代碼：{code}）", _SRC_EXEC),
+    _w("window_withheld_note", "兩條序列在這個期間內無法在同一基準日比較（{reason}）", _SRC_EXEC),
     _w("reason_missing", "缺資料", _SRC_EXEC),
-    _w("reason_insufficient", "資料不足", _SRC_EXEC),
-    _w("reason_no_source", "來源資料無法使用", _SRC_EXEC),
-    _w("reason_no_observation", "沒有觀測值", _SRC_EXEC),
-    _w("reason_unknown", "原因未明", _SRC_EXEC + "；未知／內部原因代碼一律顯示此字樣，不輸出原始代碼"),
+    _w("not_configured_item", "利率資料來源", _SRC_EXEC + "；取代原先顯示環境變數名；「⛔ 尚未設定：<哪一項>」形式取規則表"),
+    _w("reason_fetch_failed", "取數失敗", _SRC_EXEC + "；取數失敗≠缺資料，不併入「缺資料」"),
+    _w("reason_not_configured", "尚未設定", _SRC_EXEC),
     _w("reason_stopped", "在此視窗內已停更", _SRC_EXEC),
     _w("reason_no_common", "沒有共同有效觀測日", _SRC_EXEC),
     _w("reason_few_common", "共同有效觀測日不足", _SRC_EXEC),
@@ -141,10 +129,36 @@ PREVIEW_PENDING_WORDING: Mapping[str, PendingWording] = _index(_LIST)
 
 
 def text(key: str, **fields: object) -> str:
-    """取暫時字樣並代入欄位；未知鍵 → KeyError（不猜）。"""
-    return PREVIEW_PENDING_WORDING[key].text.format(**fields) if fields else PREVIEW_PENDING_WORDING[key].text
+    """取字樣（先規則表的正式字樣、再暫時字樣）並代入欄位；未知鍵 → KeyError（不猜）。"""
+    if key in rules.APPROVED_WORDING:
+        template = rules.APPROVED_WORDING[key].text
+    else:
+        template = PREVIEW_PENDING_WORDING[key].text
+    return template.format(**fields) if fields else template
+
+
+def is_approved(key: str) -> bool:
+    return key in rules.APPROVED_WORDING
 
 
 def pending_span(key: str, **fields: object) -> str:
-    """畫面用 HTML：暫時字樣加 `data-pending-wording` 屬性與虛線底線（機器與人眼都可辨識）。"""
+    """畫面用 HTML：暫時字樣加 `data-pending-wording` 屬性與虛線底線（機器與人眼都可辨識）。已核准的鍵不得走這裡。"""
+    if key in rules.APPROVED_WORDING:
+        raise KeyError(f"{key!r} 已是正式字樣，請用 span()（不得再標 pending）")
     return f'<span class="uv3-pending" data-pending-wording="{escape(key)}">{escape(text(key, **fields))}</span>'
+
+
+def span(key: str, **fields: object) -> str:
+    """畫面用 HTML：正式字樣＝純文字（不加虛線、不標 pending）；暫時字樣＝`pending_span`。呼叫端不需知道它核准了沒有。"""
+    if key in rules.APPROVED_WORDING:
+        return escape(text(key, **fields))
+    return pending_span(key, **fields)
+
+
+def span_html(key: str, **html_fields: str) -> str:
+    """同 `span`，但欄位值是**已跳脫的 HTML 片段**（例如巢狀的暫時字樣）；模板本身仍會跳脫。"""
+    if key in rules.APPROVED_WORDING:
+        template = rules.APPROVED_WORDING[key].text
+    else:
+        template = PREVIEW_PENDING_WORDING[key].text
+    return escape(template).format(**html_fields)

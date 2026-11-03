@@ -70,7 +70,7 @@ def test_primary_chart_has_two_lines_base_chip_frequency_and_per_series_data_dat
     html = page_text(at)
     assert html.count('class="uv3-chart"') == 1 and html.count("stroke-dasharray") == 1   # 兩條線：實線＋虛線
     assert re.search(r"基準日 \d{4}-\d{2}-\d{2}＝100", plain(html))
-    assert "頻率 日｜缺值不補、斷線" in plain(html)
+    assert "頻率：日｜缺值不補、斷線" in plain(html) and "頻率 日" not in plain(html)
     dates = re.findall(r"(台股|S&P 500) 資料日 (\d{4}-\d{2}-\d{2})（經過 (\d+) 日）", plain(html))
     assert dates == [("台股", "2026-11-02", "1"), ("S&P 500", "2026-11-02", "1")]
     assert "100 基準線" not in html and html.count("<line ") == 1
@@ -103,7 +103,8 @@ def test_missing_taiex_shows_data_not_ready_and_still_draws_the_other_series(mon
     assert rules.entry("missing").wording in chips(at, "missing")
     assert re.search(r'data-key="taiex">台股[^<]*<span[^>]*data-status-key="missing"', html)
     assert html.count('class="uv3-chart"') == 1 and html.count("stroke-dasharray") == 1   # 只畫 S&P（單序列；樣式依序列順位＝虛線）
-    assert "single_chart_note" in pending_keys(at) and "evidence_single_note" in pending_keys(at)
+    assert "目前僅顯示可用序列；另一序列" in plain(html) and "暫不進行比較。" in plain(html)
+    assert "single_fallback" not in pending_keys(at) and "evidence_single_note" in pending_keys(at)   # 正式字樣不標 pending
     assert "基準日" in plain(html) and "＝100" in plain(html)   # 單序列也標自己的基準日
     assert not re.search(r"取數失敗", plain(html).split("尚未取得")[0])
 
@@ -122,7 +123,7 @@ def test_both_missing_shows_empty_state_without_drawing_an_empty_chart(monkeypat
     at = run(monkeypatch, ms.view(tw="missing", us="missing"))
     html = page_text(at)
     assert 'class="uv3-chart"' not in html
-    assert "chart_empty" in pending_keys(at)
+    assert "此圖目前沒有可畫的資料" in plain(html) and "chart_empty" not in pending_keys(at)   # 正式字樣（客戶 2026-11-03）
     assert chips(at, "missing").count(rules.entry("missing").wording) >= 2
 
 
@@ -131,7 +132,8 @@ def test_partial_history_falls_back_to_single_chart_with_insufficient_marked(mon
     at = run(monkeypatch, v, state={mkt.KEY_PERIOD: "3Y"})
     html = page_text(at)
     assert html.count('class="uv3-chart"') == 1 and html.count("stroke-dasharray") == 0   # 只畫台股（第一條＝實線）
-    assert "fallback_note" in pending_keys(at) and "insufficient" in pending_keys(at)
+    assert "目前僅顯示可用序列；另一序列" in plain(html) and "資料不足" in plain(html)
+    assert not {"fallback_note", "insufficient", "single_fallback"} & pending_keys(at)   # 已核准字樣不再標 pending
     assert "evidence_single_note" in pending_keys(at)        # 首屏漲跌不得被讀成比較
     assert re.search(r'data-key="sp500">S&amp;P 500[^<]*<span[^>]*data-status-key="undetermined"', html)
 
@@ -140,7 +142,7 @@ def test_missing_fred_key_renders_not_configured_not_fetch_failed(monkeypatch):
     t = ms.table(errors={"credit_spread_pct": "未設定 FRED_API_KEY"}, drop=("credit_spread_pct",))
     at = run(monkeypatch, ms.view(key=""), t, state={mkt.KEY_VIEW: "us10y", mkt.KEY_RATES: "credit_spread_pct"})
     html = page_text(at)
-    assert "⛔ 尚未設定：FRED_API_KEY" in plain(html)
+    assert re.search(r"⛔ 尚未設定： ?利率資料來源", plain(html)) and "FRED_API_KEY" not in html   # 不得外漏環境變數名
     assert "美 10Y 取數失敗" not in plain(html)
 
 
@@ -201,9 +203,13 @@ def test_no_direction_words_target_lines_or_threshold_language_in_the_page(monke
 def test_pending_wording_is_marked_on_screen_and_every_pending_key_exists(monkeypatch):
     at = run(monkeypatch)
     keys = pending_keys(at)
-    assert {"status_row_label", "hero_sentence", "evidence_label", "freshness_label", "title_compare", "base_chip",
-            "frequency_line", "data_date_line", "preview_banner"} <= keys
+    assert {"status_row_label", "title_compare", "preview_banner"} <= keys
     assert keys <= set(W.PREVIEW_PENDING_WORDING)
+    # 客戶 2026-11-03 已核准的字樣：畫面上出現、但不再標 pending
+    text = plain(page_text(at))
+    for approved in ("暫無完整市場綜合判定（尚未建立正式綜合判定規則）", "重要依據", "資料新鮮度", "資料日", "頻率：日｜缺值不補、斷線"):
+        assert approved in text
+    assert not set(rules.APPROVED_WORDING) & keys
 
 
 def test_page_imports_no_fixtures_and_no_old_ui(monkeypatch):

@@ -37,7 +37,6 @@ DEFAULT_PERIOD = "1Y"
 PERIODS = ("3M", "6M", "1Y", "3Y")
 KEY_PERIOD, KEY_VIEW, KEY_RATES = "uv3_mkt_period", "uv3_mkt_view", "uv3_mkt_rates"
 _VIEW_LABEL_KEY = {"compare": "view_compare", "vix": "view_vix", "us10y": "view_us10y", "us2y": "view_us2y"}
-NOT_CONFIGURED_ITEM = "FRED_API_KEY"   # 「⛔ 尚未設定：<哪一項>」的哪一項＝設定名稱本身（不翻譯）
 
 # Preview 暫用樣式（不是 design token）。
 CSS = """
@@ -66,23 +65,25 @@ h3{font-size:1.2rem !important}
 
 # ───────────────────────────── 小工具（純字串） ─────────────────────────────
 
-def chip(key: str, label: Optional[str] = None) -> str:
-    """規則表一列 → chip HTML（符號＋字樣；`label` 只用在 fetch_failed／not_configured 的組合形式）。"""
+def chip(key: str, label: Optional[str] = None, *, label_html: Optional[str] = None) -> str:
+    """規則表一列 → chip HTML（符號＋字樣；`label`／`label_html` 只用在 fetch_failed／not_configured 的組合形式）。"""
     entry = rules.entry(key)
-    wording = label if label is not None else entry.wording
-    return f'<span class="uv3-chip uv3-tone-{entry.tone}" data-status-key="{escape(key)}">{escape(wording)}</span>'
+    inner = label_html if label_html is not None else escape(label if label is not None else entry.wording)
+    return f'<span class="uv3-chip uv3-tone-{entry.tone}" data-status-key="{escape(key)}">{inner}</span>'
 
 
 def failed_text(label: str) -> str:
     return rules.FETCH_FAILED_SCREEN_FORM.replace("<中文資料類>", label)
 
 
-def not_configured_text() -> str:
-    return rules.NOT_CONFIGURED_FORM.replace("<哪一項>", NOT_CONFIGURED_ITEM)
+def not_configured_html() -> str:
+    """`⛔ 尚未設定：<哪一項>` —「哪一項」用使用者看得懂的資料類別字樣（暫時字樣），**不得**是環境變數名或設定鍵名。"""
+    prefix, _, suffix = rules.NOT_CONFIGURED_FORM.partition("<哪一項>")
+    return escape(prefix) + W.span("not_configured_item") + escape(suffix)
 
 
 _REASON_WORDING = {
-    "missing": "reason_missing", "insufficient": "reason_insufficient", "no_common_base": "reason_no_common",
+    "missing": "reason_missing", "insufficient": "insufficient", "no_common_base": "reason_no_common",
     "too_few_common_days": "reason_few_common", "too_few_points": "reason_few_points",
     "no_source": "reason_no_source", "no_observation": "reason_no_observation",
 }
@@ -90,7 +91,7 @@ _REASON_WORDING = {
 
 def reason_span(code: Optional[str]) -> str:
     """原因代碼 → 暫時字樣。未知代碼一律走 `reason_unknown`；內部代碼不上畫面。"""
-    return W.pending_span(_REASON_WORDING.get(code or "", "reason_unknown"))
+    return W.span(_REASON_WORDING.get(code or "", "reason_unknown"))
 
 
 def status_html(status: str, reason: Optional[str], label_key: str) -> str:
@@ -100,10 +101,10 @@ def status_html(status: str, reason: Optional[str], label_key: str) -> str:
         return chip("missing")
     if status == STATUS_FAILED:
         if reason == "not_configured":
-            return chip("not_configured", not_configured_text())
+            return chip("not_configured", label_html=not_configured_html())
         return chip("fetch_failed", failed_text(label))
     if status == STATUS_UNDETERMINED:
-        extra = W.pending_span("insufficient") if reason == "insufficient" else reason_span(reason)
+        extra = W.span("insufficient") if reason == "insufficient" else reason_span(reason)
         return chip("undetermined") + extra
     raise ValueError(f"status_html 只處理非 ok 狀態：{status!r}")
 
@@ -122,12 +123,12 @@ def elapsed_html(label: str, as_of: Optional[str], elapsed: Optional[int]) -> st
     if as_of is None:
         return ""
     if elapsed is None:
-        return W.pending_span("data_date_no_elapsed", label=label, date=as_of)
+        return W.span("data_date_no_elapsed", label=label, date=as_of)
     if elapsed < 0:
-        return (W.pending_span("data_date_no_elapsed", label=label, date=as_of) + " "
+        return (W.span("data_date_no_elapsed", label=label, date=as_of) + " "
                 + f'<span class="uv3-chip uv3-tone-grey" data-status-key="not_applicable">'
-                  f'{escape(rules.entry("not_applicable").wording)}{W.pending_span("colon")}</span>' + W.pending_span("negative_elapsed_suffix"))
-    return W.pending_span("data_date_line", label=label, date=as_of, days=elapsed)
+                  f'{escape(rules.entry("not_applicable").wording)}{W.span("colon")}</span>' + W.span("negative_elapsed_suffix"))
+    return W.span("data_date_line", label=label, date=as_of, days=elapsed)
 
 
 def _label_of(key: str) -> str:
@@ -158,21 +159,20 @@ def disclosure_notes(model: MarketPageModel) -> list:
         return []
     notes = []
     if d.base_date is not None:
-        notes.append(f'<span class="uv3-chip" data-status-key="neutral">{W.pending_span("base_chip", date=d.base_date, base=d.base_value)}</span>')
-    notes.append(f'<div class="uv3-note">{W.pending_span("frequency_line")}</div>')
+        notes.append(f'<span class="uv3-chip" data-status-key="neutral">{W.span("base_chip", date=d.base_date)}</span>')
+    notes.append(f'<div class="uv3-note">{W.span("frequency_line")}</div>')
     issues = {i.series_key: i.reason_code for i in d.series_issues}
     if d.mode == "pair" and d.base_date is None:   # 兩條都有資料但整張不可畫：真正原因只在比較層狀態
-        notes.append(f'<div class="uv3-note">{W.pending_span("window_withheld_note", code=d.status)}</div>')
+        notes.append(f'<div class="uv3-note">{W.span_html("window_withheld_note", reason=W.span(_reason_phrase(d.status)))}</div>')
     elif d.mode in ("single", "fallback"):
         reason = _reason_phrase(next(iter(issues.values()), None) if d.mode == "single" else d.fallback_reason)
-        key = "single_chart_note" if d.mode == "single" else "fallback_note"
-        notes.append(f'<div class="uv3-note">{W.pending_span(key, reason=W.text(reason))}</div>')
+        notes.append(f'<div class="uv3-note">{W.span_html("single_fallback", reason=W.span(reason))}</div>')
     return notes
 
 
 def _reason_phrase(code: Optional[str]) -> str:
-    return {"missing": "reason_missing", "fetch_failed": "reason_missing", "not_configured": "reason_missing",
-            "insufficient": "reason_insufficient", "no_common_base": "reason_no_common",
+    return {"missing": "reason_missing", "fetch_failed": "reason_fetch_failed", "not_configured": "reason_not_configured",
+            "insufficient": "insufficient", "no_common_base": "reason_no_common",
             "too_few_common_days": "reason_few_common", "too_few_points": "reason_few_points"}.get(code or "", "reason_stopped")
 
 
@@ -196,31 +196,31 @@ def _label_key_of(key: str) -> str:
 
 def summary_html(model: MarketPageModel) -> str:
     rows = [
-        f'<div class="uv3-row"><span class="uv3-label">{W.pending_span("status_row_label")}</span>{chip("undetermined")}'
-        f'<span>{W.pending_span("hero_sentence")}</span></div>',
+        f'<div class="uv3-row"><span class="uv3-label">{W.span("status_row_label")}</span>{chip("undetermined")}'
+        f'<span>{W.span("hero_sentence")}</span></div>',
     ]
     items = []
     for change in model.evidence_changes:
         label_key = _label_key_of(change.key)
         label = escape(W.text(label_key))
         if change.status == STATUS_OK:
-            items.append(f'<span class="uv3-evidence" data-key="{escape(change.key)}">{W.pending_span(label_key)} '
-                         f'{W.pending_span("evidence_period_change", period=model.period, change=fmt_change(change.period_change))}</span>')
+            items.append(f'<span class="uv3-evidence" data-key="{escape(change.key)}">{W.span(label_key)} '
+                         f'{W.span("evidence_period_change", period=model.period, change=fmt_change(change.period_change))}</span>')
         else:
             items.append(f'<span class="uv3-evidence" data-key="{escape(change.key)}">{label} '
                          f'{status_html(change.status, change.reason_code, label_key)}</span>')
     note = ""
     if not model.evidence_comparable and any(c.status == STATUS_OK for c in model.evidence_changes):
-        note = f'<div class="uv3-note">{W.pending_span("evidence_single_note")}</div>'
-    rows.append(f'<div class="uv3-row"><span class="uv3-label">{W.pending_span("evidence_label")}</span>'
-                f'{W.pending_span("separator").join(items)}</div>{note}')
-    rows.append(f'<div class="uv3-row"><span class="uv3-label">{W.pending_span("freshness_label")}</span>{chip("threshold_pending")}</div>')
+        note = f'<div class="uv3-note">{W.span("evidence_single_note")}</div>'
+    rows.append(f'<div class="uv3-row"><span class="uv3-label">{W.span("evidence_label")}</span>'
+                f'{W.span("separator").join(items)}</div>{note}')
+    rows.append(f'<div class="uv3-row"><span class="uv3-label">{W.span("freshness_label")}</span>{chip("threshold_pending")}</div>')
     return "".join(rows)
 
 
 def secondary_html(card: SecondaryCard, title_key: str, sub_label_key: Optional[str] = None) -> str:
-    title = W.pending_span(title_key)
-    sub = f"{W.pending_span('separator')}{W.pending_span(sub_label_key)}" if sub_label_key else ""
+    title = W.span(title_key)
+    sub = f"{W.span('separator')}{W.span(sub_label_key)}" if sub_label_key else ""
     head = f'<div class="uv3-card" data-card="{escape(card.key)}"><h4>{title}{sub}</h4>'
     label_key = sub_label_key or "series_vix"
     if card.status != STATUS_OK:
@@ -229,14 +229,14 @@ def secondary_html(card: SecondaryCard, title_key: str, sub_label_key: Optional[
     body += f'<div class="uv3-note">{elapsed_html(W.text(label_key), card.as_of, card.elapsed_days)}</div>'
     if card.spark:
         body += chart_svg.spark_svg(tuple((p.date, p.value) for p in card.spark), aria_label=f"{W.text(title_key)} {W.text('secondary_spark_caption')}")
-        body += f'<div class="uv3-note">{W.pending_span("secondary_spark_caption")}</div>'
+        body += f'<div class="uv3-note">{W.span("secondary_spark_caption")}</div>'
     elif card.spark_status == "insufficient":
-        body += f'<div class="uv3-note">{W.pending_span("secondary_spark_caption")}{W.pending_span("colon")}{W.pending_span("insufficient")}</div>'
+        body += f'<div class="uv3-note">{W.span("secondary_spark_caption")}{W.span("colon")}{W.span("insufficient")}</div>'
     return head + body + "</div>"
 
 
 def fact_html(fact: EvidenceFact) -> str:
-    label = W.pending_span(fact.label_key)
+    label = W.span(fact.label_key)
     if fact.status == STATUS_OK:
         return (f'<div class="uv3-row">{label} {escape(fmt_value(fact.value, fact.unit))}'
                 f' <span class="uv3-note">{escape(fact.as_of)}</span></div>')
@@ -246,8 +246,8 @@ def fact_html(fact: EvidenceFact) -> str:
 def status_row_html(row: DomainStatus) -> str:
     label = W.text(row.label_key)
     if row.status == STATUS_OK:
-        return f'<div class="uv3-row">{W.pending_span("status_ok_row", label=label, source=row.source or "—", date=row.as_of or "—")}</div>'
-    return f'<div class="uv3-row">{W.pending_span("label_colon", label=label)}{status_html(row.status, row.reason_code, row.label_key)}</div>'
+        return f'<div class="uv3-row">{W.span("status_ok_row", label=label, source=row.source or "—", date=row.as_of or "—")}</div>'
+    return f'<div class="uv3-row">{W.span("label_colon", label=label)}{status_html(row.status, row.reason_code, row.label_key)}</div>'
 
 
 # ───────────────────────────── 進入點 ─────────────────────────────
@@ -269,13 +269,13 @@ def render(model: MarketPageModel) -> None:
 
     md = lambda html: st.markdown(html, unsafe_allow_html=True)  # noqa: E731
     md(CSS)
-    md(f'<div class="uv3-banner">{W.pending_span("preview_banner")}</div>')
+    md(f'<div class="uv3-banner">{W.span("preview_banner")}</div>')
     st.title(PAGE_TITLE)
     md(summary_html(model))
 
     st.divider()
     card = model.primary_card
-    md(f'<h3>{W.pending_span("title_compare") if model.view == VIEW_COMPARE else escape(card.title)}</h3>')
+    md(f'<h3>{W.span("title_compare") if model.view == VIEW_COMPARE else escape(card.title)}</h3>')
     st.radio(W.text("view_label"), PRIMARY_VIEWS, key=KEY_VIEW, horizontal=True,
              format_func=lambda v: W.text(_VIEW_LABEL_KEY[v]))
     st.radio(W.text("period_label"), PERIODS, key=KEY_PERIOD, horizontal=True)
@@ -285,7 +285,7 @@ def render(model: MarketPageModel) -> None:
     if chart is not None:
         md(chart)
     else:
-        md(f'<div class="uv3-row">{W.pending_span("chart_empty")}</div>')
+        md(f'<div class="uv3-row">{W.span("chart_empty")}</div>')
     for note in model.primary_notes:
         md(note_html(note))
     with st.expander(W.text("source_limits_title")):
@@ -302,10 +302,10 @@ def render(model: MarketPageModel) -> None:
                          format_func=lambda k: W.text(_RATES_LABEL[k]))
                 md(secondary_html(secondary, "secondary_rates_title", _RATES_LABEL[secondary.key]))
     st.divider()
-    md(f'<div class="uv3-note">{W.pending_span("evidence_no_rule_note")}</div>')
+    md(f'<div class="uv3-note">{W.span("evidence_no_rule_note")}</div>')
     for column, evidence in zip(st.columns(len(model.evidence_cards)), model.evidence_cards):
         with column:
-            md(f'<div class="uv3-card" data-card="{escape(evidence.code)}"><h4>{W.pending_span(evidence.title_key)}</h4>'
+            md(f'<div class="uv3-card" data-card="{escape(evidence.code)}"><h4>{W.span(evidence.title_key)}</h4>'
                + "".join(fact_html(f) for f in evidence.facts) + "</div>")
     with st.expander(W.text("missing_group_title", n=len(model.missing))):
         md("".join(f'<div class="uv3-row">{escape(W.text(m.label_key))} {status_html(m.status, m.reason_code, m.label_key)}</div>'
@@ -324,12 +324,12 @@ def source_limits_html(model: MarketPageModel) -> str:
     for note in model.primary_notes:
         label = _label_of(note.key)
         if note.source:
-            parts.append(f'<div class="uv3-note">{W.pending_span("source_line", label=label, source=note.source)}</div>')
+            parts.append(f'<div class="uv3-note">{W.span("source_line", label=label, source=note.source)}</div>')
         if note.fetched_at:
-            parts.append(f'<div class="uv3-note">{W.pending_span("fetched_at_line", label=label, stamp=_taipei(note.fetched_at))}</div>')
-    parts.append(f'<div class="uv3-note">{W.pending_span("limits_taiex")}</div>')
-    parts.append(f'<div class="uv3-note">{W.pending_span("limits_obs_date")}</div>')
-    parts.append(f'<div class="uv3-note">{W.pending_span("rates_obs_note")}</div>')
+            parts.append(f'<div class="uv3-note">{W.span("fetched_at_line", label=label, stamp=_taipei(note.fetched_at))}</div>')
+    parts.append(f'<div class="uv3-note">{W.span("limits_taiex")}</div>')
+    parts.append(f'<div class="uv3-note">{W.span("limits_obs_date")}</div>')
+    parts.append(f'<div class="uv3-note">{W.span("rates_obs_note")}</div>')
     return "".join(parts)
 
 

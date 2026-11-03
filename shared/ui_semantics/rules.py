@@ -4,9 +4,10 @@
 **只轉錄已核准的字樣，不新增任何詞、符號或 tone。** 每一列都帶 `source`（文件節次／DEC 編號）與 `doc_refs`
 （字樣逐字出現的 repo 文件路徑；規則表守衛測試讀這些文件逐字比對，測試位置見檔尾註解）。
 已核准字樣不明確或不存在的，一律標 `PENDING_WORDING` 並寫明缺口出處（`gap`），**不得在這裡補一個字樣**。
+狀態符號列以外的**純文字正式字樣**（沒有符號、不屬狀態族；例：整張圖無資料、檢視標籤）放 `APPROVED_WORDING`（客戶裁示逐字、帶出處與守衛）。
 
 適用範圍（BL-0532 射程）：**只限正式模式**。示範模式依 44 照舊（例：示範模式仍是 `⬜ 資料未備`），不在本表內；
-`ui_v2/mkt/chart.py::TEXT_EMPTY` 那類版面示意字樣逐一判讀（見 `chart_empty` 列），不得全域取代。
+`ui_v2/mkt/chart.py::TEXT_EMPTY` 那類版面示意字樣逐一判讀，不得全域取代（整張圖無資料的正式字樣見 `APPROVED_WORDING["chart_empty"]`，客戶 2026-11-03 裁示）。
 
 護欄：
 - 顏色不是唯一訊息（44 第一節第二小節、之十九其五第 1 條、`PROJECT_RULES.md` 13.2 第 3 條）：凡 tone 不是中性的列，
@@ -190,19 +191,6 @@ _ENTRY_LIST = (
              "已知落差照 44 據實保留：ui_v2 資產配置／標的探索那幾格現行畫 ◇（BL-0382 登記，未裁），本列字面只依 SET-3。"
              "⚠️ tone＝灰是推論（總管可推翻）：44 未逐字寫這一格的顏色；依 44 之七其四（⬜ 只留給無法判定這一族）推得。",
     ),
-    SemanticEntry(
-        key="chart_empty",
-        symbol=None,
-        wording=PENDING_WORDING,
-        tone=None,
-        source="BL-0532 射程；80 §3.3 (c)；79 §11（「⬜ 資料未取得」之類為版面示意）；44 第七節第三小節之十八其三第 2 條、之十九其五第 3 條",
-        gap=(
-            "圖表整張無資料時的字樣：44 之十八其三第 2 條（之十九其五第 3 條沿用）規定改用空狀態元件的模板（第五節第五小節，"
-            "模板依成因選）、不畫空白座標軸；New UI2 上的確切呈現隨圖卡線框裁定；"
-            "`ui_v2/mkt/chart.py::TEXT_EMPTY`（「⬜ 資料未取得，無法繪圖」）屬版面示意、BL-0532 定為實作批逐一判讀。"
-            "New UI2 圖卡尚無核准線框，本批不定字；日後依成因（缺資料／取數失敗／未設定）隨 New UI2 圖卡線框裁定。"
-        ),
-    ),
 )
 
 # 唯讀（MappingProxyType）：規則表在執行期不得被改寫。
@@ -210,6 +198,64 @@ ENTRIES: Mapping[str, SemanticEntry] = MappingProxyType({e.key: e for e in _ENTR
 
 # 缺值的正式字樣（BL-0532；DEC-2026-11-02-01）。`ui_v3/viewmodels/common.py::MISSING_TEXT` 的單一來源。
 MISSING_TEXT = ENTRIES["missing"].wording
+
+# ───────────────────────── 純文字正式字樣（客戶 2026-11-03 裁示；DEC-2026-11-03-07） ─────────────────────────
+# 狀態符號列（`SemanticEntry`）規定「沒有符號就不得自帶字樣」，所以沒有符號的正式字樣另放這裡，不改上表的不變量。
+# `text`＝程式用的模板（`{欄位}` 由呼叫端代入）；`ruling_text`＝客戶裁示裡逐字出現的那一段（守衛逐字比對出處文件）。
+EVIDENCE_WORDING_RULING = "docs/evidence/decisions/2026-11-03_mkt_formal_wording_ruling.md"
+WORDING_RULING_SOURCE = "DEC-2026-11-03-07（客戶 2026-11-03 裁示；逐字存檔見 EVIDENCE_WORDING_RULING）"
+
+
+@dataclass(frozen=True)
+class ApprovedWording:
+    key: str
+    text: str
+    ruling_text: str
+    source: str = WORDING_RULING_SOURCE
+    doc_refs: Tuple[str, ...] = (DOC_DECISIONS, EVIDENCE_WORDING_RULING)
+
+    def __post_init__(self) -> None:
+        if not self.key or not self.text.strip() or not self.ruling_text.strip() or not self.source.strip():
+            raise ValueError("ApprovedWording 的 key／text／ruling_text／source 不得為空")
+        if not self.doc_refs:
+            raise ValueError(f"{self.key}: 必須列出逐字出處文件（doc_refs）")
+
+
+def _a(key: str, text: str, ruling_text: str = "") -> ApprovedWording:
+    return ApprovedWording(key, text, ruling_text or text)
+
+
+_APPROVED_LIST = (
+    _a("insufficient", "資料不足"),
+    _a("chart_empty", "此圖目前沒有可畫的資料"),
+    _a("base_chip", "基準日 {date}＝100", "基準日 {日}＝100"),
+    _a("frequency_line", "頻率：日｜缺值不補、斷線"),
+    _a("view_compare", "比較"),
+    _a("view_vix", "VIX"),
+    _a("view_us10y", "美10Y"),
+    _a("view_us2y", "美2Y"),
+    _a("field_market_state", "市場狀態"),
+    _a("field_attention", "是否需注意"),
+    _a("evidence_label", "重要依據"),
+    _a("freshness_label", "資料新鮮度"),
+    _a("hero_sentence", "暫無完整市場綜合判定（尚未建立正式綜合判定規則）"),
+    _a("data_date_line", "{label} 資料日 {date}（經過 {days} 日）", "{序列} 資料日 YYYY-MM-DD（經過 N 日）"),
+    _a("single_fallback", "目前僅顯示可用序列；另一序列{reason}，暫不進行比較。",
+       "目前僅顯示可用序列；另一序列{原因}，暫不進行比較。"),
+    _a("reason_unknown", "原因未明"),
+    _a("reason_no_source", "來源資料無法使用"),
+    _a("reason_no_observation", "沒有觀測值"),
+)
+APPROVED_WORDING: Mapping[str, ApprovedWording] = MappingProxyType({a.key: a for a in _APPROVED_LIST})
+# 重複鍵檢查在守衛測試（模組層不得有 if；import 零副作用）。
+
+
+def approved(key: str) -> ApprovedWording:
+    """依鍵取一條純文字正式字樣；未知鍵 → KeyError（不猜）。"""
+    if key not in APPROVED_WORDING:
+        raise KeyError(f"未知的正式字樣鍵 {key!r}")
+    return APPROVED_WORDING[key]
+
 
 # ───────────────────────── view model 鍵 → 規則鍵 ─────────────────────────
 # 80 第 6 節共同欄位 `status` 的五個值（`ui_v3/viewmodels/common.py::STATUSES`，一致性由測試鎖）。
