@@ -307,6 +307,7 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 📌 **2026-11-02 指標（客戶永久裁示，`DEC-2026-11-02-04`；同向收緊，上列條文一字未改）**：另點名不得回報 —— CI 還在跑／跑多久、writer 還在處理、untracked file 為何尚未 commit、下一步準備做什麼、沒有新決策價值的中間狀態；第 1 點第 2 類讀作「真 blocker／CI 真錯誤」，第 4 類完成回報須**已做 GitHub final verification**。Model／模式／Effort 切換改依 5.1 第 11 點 Hard-Stop。
 📌 **2026-11-03 指標（客戶 2026-11-02 明示、`DEC-2026-11-03-02` 補落盤；同向收緊，上列條文一字未改）**：Gate 已送出後保持靜默 —— 不再重複回報「沒有東西要 push／我已停手／等你回覆」；一次 Gate 回報後靜默（逐字見 `docs/evidence/decisions/2026-11-03_mkt_wireframe_ruling.md`「同批補錄」(b)）。**第一則 Gate 回報仍須顯式**（6.1.3、5.1 第 11 點）。
+📌 **2026-11-03 具體適用案例（客戶 2026-11-03 再次要求；`DEC-2026-11-03-08`；本節為 Silent Autonomous Cruise／No Progress Narration 的唯一權威位置，他處只引用不複製）**：「CI 等待狀態不得回報」是上列規則的具體案例。**不得回報**：CI 還在跑、等待 CI、agent 或稽核組處理中、尚未 commit、正在修改哪些檔案、重複通知、「我繼續等」「結果出來才會繼續」。**只在四種情況回報一次**：需客戶裁示；真 blocker 或 CI 真錯誤；Model／Mode／Effort Change Gate；整批完成並附 final GitHub verification。
 
 ## 第 4 節｜Stop／Decision Gate
 
