@@ -12,6 +12,7 @@
 - 所有 import（含 streamlit）都在函式內：import 本檔零副作用（只有定義；`main()` 只在 `__main__` 才執行）。
 - 只導覽 `shell.registry.registered_pages()` 的頁；沒有已核准並實作的頁 → `PreviewNotReady`（不渲染空殼）；
   登錄為已掛載、卻沒有對應 renderer → `NotImplementedError`（Fail Loud，不畫空殼）。
+- 導覽：routing 用 `st.navigation(position="hidden")`，五頁導覽（桌機側欄＋手機底部導覽）與 Status Bar 由 `pages/chrome.py` 自畫（Shell；`docs/v2/80` 第 17 節）；未掛載的頁可見但不可進、不建空殼。
 - 資料：由 `adapters.market_page.load()` 呼叫既有 L2→L1（不新增資料源、不新增 dependency）；FRED 金鑰沿用 `st.secrets`／環境變數 `FRED_API_KEY`。
 """
 from __future__ import annotations
@@ -33,12 +34,15 @@ def _render_mkt() -> None:
     import streamlit as st
 
     from ui_v3.adapters import market_page as adapter
-    from ui_v3.pages import mkt
+    from ui_v3.adapters import shell_status
+    from ui_v3.pages import chrome, mkt
 
     period, view, rates_key = mkt.selected_controls()
     market_view, table = adapter.load([st.secrets, os.environ])
     model = adapter.build_market_page(market_view, table, period=period, primary_view=view, rates_key=rates_key)
+    chrome.render_status(shell_status.from_market_model(model))   # Status Bar＋側欄資料狀態區＋更新資料 CTA（來源：既有 health）
     mkt.render(model)
+    chrome.render_footer()
 
 
 def main() -> None:
@@ -53,11 +57,12 @@ def main() -> None:
     missing = [p.slug for p in pages if p.slug not in renderers]
     if missing:
         raise NotImplementedError(f"已掛載的頁沒有 renderer：{missing}（不畫空殼）")
-    st.set_page_config(page_title=pages[0].title, page_icon="🌍", layout="wide")
-    navigation = st.navigation(
-        [st.Page(renderers[p.slug], title=p.title, url_path=p.slug, default=i == 0) for i, p in enumerate(pages)],
-        position="hidden",
-    )
+    from ui_v3.pages import chrome
+
+    st.set_page_config(page_title=pages[0].title, page_icon="🌍", layout="wide", initial_sidebar_state="expanded")
+    st_pages = {p.slug: st.Page(renderers[p.slug], title=p.title, url_path=p.slug, default=i == 0) for i, p in enumerate(pages)}
+    navigation = st.navigation(list(st_pages.values()), position="hidden")   # routing 只用 Streamlit；導覽畫面由 Shell 自畫
+    chrome.render_navigation(st_pages, next((p.slug for p in pages if p.title == navigation.title), None))   # 五頁導覽（側欄＋手機底部導覽）；未掛載的頁可見但不可進，不建空殼
     navigation.run()
 
 
