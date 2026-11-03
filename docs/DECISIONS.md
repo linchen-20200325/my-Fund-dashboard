@@ -2222,6 +2222,22 @@
 | supersedes／superseded by | supersedes：`DEC-2026-11-03-07` 第 (2) 項的 Decision Gate 狀態、`docs/v2/81` 第 3.1 節與第 10.2 節「市場狀態／是否需注意共用一枚 chip」「基準日 chip」「待客戶裁示」、`docs/v2/81` 第 10.1 節「待客戶確認是否統一美10Y／美2Y 空格」「利率資料來源暫時字樣」、`ui_v3/viewmodels/preview_wording.py` 的 `status_row_label`／`not_configured_item`／`series_us10y`／`series_us2y` 暫時字樣（原字保留劃線，有意識的更正，不是漏刪；決策者：客戶）。superseded by：無。 |
 | provenance | **逐字**（以逐字檔為準）；「未採方案與理由」「影響範圍」「與既有裁示的關係」由執行組單組整理，可被客戶推翻；未經第二組獨立驗證。 |
 
+### DEC-2026-11-03-10｜客戶要求：New UI2 全站共用 Navigation Shell（只進 Preview App）與選型（執行組讀法）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-03 |
+| 決策者 | **客戶**（授權與 Shell 要求；客戶對話本身執行組未見，經總管派工單轉達，repo 內無逐字存檔）；**選型（Route C）為執行組讀法，非客戶裁示** |
+| 決策內容摘要 | 客戶要求（總管轉達要點）：五頁共用同一個 Shell；桌機／平板左側固定側欄、手機 390px 固定五格底部導覽、極薄 Top／Status Bar（內容須來自既有 health，不得自造狀態）；未完成頁可見但不進空殼頁、🤖 Phase 7 前不啟用；更新資料 CTA 須沿用既有正式 refresh 流程，不能安全接上就停用並標示原因；完成 H5 390px 首屏實測；Shell 新字樣客戶未核准者標 preview-only／pending。選型：routing 用 `st.navigation(position="hidden")`、presentation shell 自畫（Route C），比較表在 `docs/v2/80` 第 17.1 節。 |
+| 未採方案與理由 | Route A（原生 sidebar navigation）：要讓未完成頁可見就得建空殼頁。Route B（完全自製 router）：自管 URL／session、改動最大、不可逆性低。 |
+| 理由／背景 | `PROJECT_RULES.md` 9.2 Minimum-Cost Correct Path；`docs/v2/80` 第 7、16 節。 |
+| evidence／source | `docs/v2/80` 第 17 節；`ui_v3/shell/nav.py`、`ui_v3/pages/chrome.py`、`ui_v3/adapters/shell_status.py`、`ui_v3/viewmodels/shell.py`；`tests/ui_v3/test_ui_v3_navigation_shell.py`；`docs/evidence/bl0536_shell_h5_2026-11-03/`（注入的人造資料量測）。 |
+| 影響範圍 | 只限 Preview App 的導覽與頁首／側欄資料狀態呈現。**不**改資料、來源、公式、門檻、狀態判定；**不** cutover、**不**動 Old UI、`ui_v2`、frozen 文件；**不**新增 dependency；**不**自創 refresh pipeline。需客戶定字：Shell pending 字樣（候選與推薦見 `docs/v2/80` 第 17.4 節）；需客戶確認：Status Bar 不計入首屏 chip／數字預算的讀法（80 第 17.2 節）、資料全取得時不寫「正常」（與客戶範例「主要資料正常」的差異）。 |
+| 與既有裁示的關係 | 承接 `DEC-2026-11-02-05`（NG-1～NG-5）、`DEC-2026-11-03-08`（共用呈現規則）、`DEC-2026-11-03-09`（首屏採 C，頁本體預算 5 不變）。 |
+| 是否可逆 | 可逆（presentation 層；拿掉 `chrome` 呼叫即回到隱藏導覽） |
+| supersedes／superseded by | 無 |
+| provenance | 客戶要求為總管轉達要點；選型、讀法與字樣推薦由執行組單組寫成，可被客戶推翻；未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。

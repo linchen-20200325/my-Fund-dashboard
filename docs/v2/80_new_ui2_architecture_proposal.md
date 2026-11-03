@@ -607,3 +607,69 @@ Data／Sources → Validation／Normalization → Domain／Deterministic Logic �
 - 仍禁止：AI 創造 objective facts、回寫 canonical data、把 Missing 補成 0／neutral／safe／HOLD、fake probability／Risk Cap／action state；Phase 7 前不正式啟用 🤖。
 
 ⚠️ 本節由文件組單組寫成，未經第二組獨立驗證；客戶逐字原文本組未見（要點轉述，見存檔檔頭）。
+
+## 17. 全站共用 Navigation Shell（客戶 2026-11-03 授權只進 Preview App；`DEC-2026-11-03-10`）
+
+> **性質**：實作紀錄與選型依據（BL-0536 Shell 批）。客戶要求與 80 第 7 節五頁 IA 一致：五頁共用同一個 Shell，後續頁直接掛上，不每頁各做導航。**不 amend 第 1～3、8 節**；未新增資料源、dependency、公式、門檻；不 cutover；`app.py` 不引用 `ui_v3`。程式在 `ui_v3/shell/nav.py`（純邏輯與 CSS）、`ui_v3/pages/chrome.py`（畫面）、`ui_v3/adapters/shell_status.py`（既有 health → 狀態）、`ui_v3/viewmodels/shell.py`。
+
+### 17.1 Minimum-Cost Correct Path 比較（`PROJECT_RULES.md` 9.2；內部決定）
+
+現場讀 `requirements.txt`（`streamlit>=1.59.1,<1.60.0`）與實際安裝版本 1.59.2 的 `st.navigation`／`st.Page`／`st.page_link`／`st.container(key=, horizontal=)`／`st.set_page_config` 簽名後比較：
+
+| 面向 | Route A：原生 sidebar navigation＋CSS 底部列 | Route B：完全自製 router／shell | **Route C（採用）：routing 用 `st.navigation(position="hidden")`，presentation shell 自畫** |
+|---|---|---|---|
+| 未完成頁「可見但不可進」 | 原生導覽只列有 `st.Page` 的頁；要讓四個未完成頁出現，就得為它們建 page（＝空殼頁，被禁止） | 可以，但要自己維持目前頁與 URL | 可以：未掛載頁畫成不可點文字項，沒有 `st.Page`、沒有 renderer |
+| 正確性／穩定性 | 手機底部列仍要自製，兩套導覽並存 | 自管 URL／session，換頁與重新整理狀態最容易出錯 | routing 沿用既有 `app_preview` 做法（已有 AppTest 覆蓋），只新增畫面層 |
+| mobile | 原生側欄在手機是抽屜，不是固定五格 | 可做 | 底部列是 `st.container(key=, horizontal=True)`＋CSS 固定列；手機隱藏側欄 |
+| 修改範圍／回歸 | 中 | 大（取代既有導覽） | 小：`app_preview.main()` 加一個 `render_navigation`；頁面 `mkt.py` 只移走頁首長說明 |
+| 可逆性 | 中 | 低 | 高：拿掉 `chrome` 呼叫即回到原本隱藏導覽 |
+| 沿用 registry／app_preview | 部分 | 需重寫 | 完全沿用 `IA_PAGES`／`registered_pages()` |
+| accessibility／測試 | 原生較佳但不適用 | 要全自己做 | `st.page_link` 是真連結；不可點項用 `aria-disabled`＋`aria-label`；AppTest 可測，版面用 Playwright |
+
+選 C 的理由是上表唯一同時滿足「不建空殼頁」「不自管 URL」「改動最小」「可逆」的一列。已知限制：`st.page_link` 沒有 `aria-current`，目前頁以容器 key（`uv3-nav-now-…`）加 CSS 呈現粗體＋色條／上緣線＋底線（不只靠顏色）；CSS 依賴 Streamlit 內部的 `data-testid`，升版時由 Playwright 量測發現。【I】此為執行組選型，可被客戶推翻。
+
+### 17.2 Shell 內容與未完成頁行為
+
+- **桌機／平板（寬度大於 768px）**：左側固定側欄（標題、五頁導覽、資料狀態區、更新資料 CTA）；沒有收合鈕；不顯示底部導覽。**手機（768px 以下）**：固定底部導覽五格（icon＋短名，觸控高度 60px，納入 safe-area，頁尾留白讓內容可捲過導覽）；不顯示側欄。斷點沿用 44 第二節 2.1 的 768，兩種導覽不會同時出現。
+- **未完成頁（💼／🔍／⚙️／🤖）**：可見但不可點，標「開發中」；選擇「不可點文字項」而非「可點後跳提示」，原因是可點會讓人以為已完成，且需要一個 handler；沒有任何 renderer、空殼頁或假資料。🤖 在 Phase 7 前不可進，由登錄表建構時擋（`DEC-2026-10-29-07`）。
+- **Top／Status Bar**：主區頂端一行，內容為「PREVIEW」（滑過顯示「Preview｜非正式頁面」）＋（有缺資料時）資料狀態＋更新時間。資料狀態與時間只來自 `MarketPageModel.statuses` 的既有取得狀態與 `fetched_at`（取得時間，不是資料日）；沒有取得時間就寫規則表的缺資料 chip，不推估。⚠️ **資料全部取得時不寫「正常」「資料齊」**：`rules.entry("ok")` 刻意無字（44 頁首資料狀態行規則），客戶要求範例中的「● 主要資料正常」因此未採用，列入待定字清單。長說明（原頁首 Preview 橫幅）移到頁尾。
+- **「尚未設定」不是取數失敗**：Status Bar 的取數失敗項數不計尚未設定的序列（44 之十二其二第 1 條）。
+- **首屏預算讀法**【I】：Status Bar 是 Shell 的一行純文字（不是 chip、不是頁級核心數字），與導覽同屬 chrome，不計入 44 之十九其一之一的「頁級 chip＋核心數字 ≤5」；頁本體仍是 3 chip＋2 數字＝5（量測見 17.5）。此讀法未經客戶確認；若客戶認為 Status Bar 該計入，會變成 6，需回到 Decision Gate。
+
+### 17.3 更新資料 CTA：盤點結果與選擇
+
+盤點到的既有路徑：(a) `infra.cache.global_refresh_all`（Old UI 側欄「全域刷新」：清全部 TTL／`st.cache_data`／磁碟快取，並**一併清掉來源退避**，且清 session state）；(b) 舊 B 線 `ui_v2/mkt/live.py` 的「重新取數」按鈕在 `ui_v2` 自己就是停用（原因文案「重新取數尚未接上」，冷卻中則寫來源冷卻秒數）；(c) `services.v2_tables.market_indicator.source_cooldowns()` 只回報冷卻狀態，不提供清除。
+選擇：**不可用＋一句原因**（「預覽版尚未開放更新資料」，pending 字樣）。理由：(a) 在 `ui_v3` 分層守衛下 adapters 只能 import `services.v2_tables`／`services.v2_domain`，不能碰 `infra`；且它會清掉退避，違反「失敗時退避、不連續轟炸來源」；要安全接上需要新增一個尊重冷卻、只清市場資料快取的 L2 函式——那是新的 refresh pipeline，不在本批授權內。`ShellStatus.refresh_available` 目前恆為 False（原因代碼 `refresh_not_wired`），日後有安全入口時由 adapter 改成 True 並接上；手機沒有 CTA（Status Bar 保持極薄），位置待 ⚙️ 線框。
+
+### 17.4 候選字樣與推薦（Shell 新字樣全部為 pending；定字後搬進 `shared/ui_semantics/rules.py`）
+
+| 鍵 | 目前字樣 | 來源 | 推薦 |
+|---|---|---|---|
+| `shell_app_title` | 基金投資儀表板 | 客戶要求列舉 | 採用 |
+| `shell_nav_short_*` | 市場／資產／找基金／AI／設定 | 客戶要求列舉 | 採用 |
+| `shell_nav_soon` | 開發中 | 客戶要求範例 | 採用；🤖 若覺得「開發中」不貼切可改「尚未開放」 |
+| `shell_preview_tag`／`shell_preview_tip` | PREVIEW／Preview｜非正式頁面 | 客戶要求列舉 | 採用（標籤顯示、提示放 tooltip） |
+| `shell_updated`／`shell_updated_label` | 更新：{時間}／最後更新時間 | 客戶要求範例／列舉 | 採用 |
+| `shell_data_status_label` | 資料狀態 | 客戶要求列舉 | 採用 |
+| `shell_refresh_cta` | 更新資料 | 客戶要求列舉 | 採用 |
+| `shell_refresh_unavailable` | 預覽版尚未開放更新資料 | 執行組暫擬 | 採用或客戶改字 |
+| `shell_status_partial`／`_none`／`_counts`／`_failed_note` | 部分資料缺失（{n}／{m} 項取得）等 | 執行組暫擬 | 採用；全取得時維持不寫「正常」，除非客戶明示要放寬 `ok` 無字規則 |
+| `shell_nav_aria` | 主要導覽 | 執行組暫擬 | 採用 |
+
+### 17.5 H5：390px 首屏與桌機量測（BL-0536-H5；注入的人造資料，非真實行情）
+
+Playwright chromium、`deviceScaleFactor` 2；腳本與原始數字在 `docs/evidence/bl0536_shell_h5_2026-11-03/`（`measure.js`、`measurements.jsonl`、截圖）。常態（兩序列 ok）：
+
+| 項目 | 390×844 | 1280×800 |
+|---|---|---|
+| 無橫向捲動（`scrollWidth`＝`clientWidth`） | 是 | 是（另量 768、769 亦是） |
+| 導覽 | 底部列顯示（y 784–844，五格各高 60），側欄隱藏 | 側欄顯示（寬 300），底部列隱藏；768 顯示底部列、769 顯示側欄 |
+| 市場狀態、是否需注意、重要依據、資料新鮮度四列 | 皆在第一屏（最後一列底緣約 y 300 之內，可視高度 784） | 皆在第一屏 |
+| Primary 圖起點 | 圖頂 y 626，在底部列之上可見（可見約 158px；標題、檢視、期間切換、基準日行都在其上） | 圖頂 y 602 |
+| 首屏 chip＋核心數字 | 3 chip＋2 數字＝5（不含 Status Bar） | 同 |
+| 頁尾捲到底 | 頁尾底緣 y 776，在底部列頂緣 783 之上，未被遮住 | — |
+| 側欄不裁切主內容 | — | 主內容區自 x 300 起，無水平溢出 |
+
+結論：未發現首屏預算或資訊密度的實質衝突，沒有放寬 frozen 44。量測限制：真實 Yahoo／FRED 未連線；只量了 Chromium；沒有實機 iOS／Android 瀏覽器（safe-area 與動態網址列為 CSS `env()` 推論，未實機驗）；未驗深色模式的底部列；首屏「可見」以座標判定，不是人眼評審。
+
+⚠️ 本節由執行組單組寫成，未經第二組獨立驗證；選型與首屏預算讀法為總管可推翻的執行組讀法。
