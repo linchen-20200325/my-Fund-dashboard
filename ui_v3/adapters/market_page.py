@@ -2,7 +2,7 @@
 """🌍 頁 adapter：既有正式資料層結果 → `MarketPageModel`（BL-0536 rendering 批）。
 
 資料來源（**不新增資料源、不新增 L1、不新增公式**）：
-- `services.v2_tables.market_view.build_market_view`（VIX／TAIEX／S&P 500／美 10Y／美 2Y 的日頻序列；Yahoo 5y、FRED 1500 筆）；
+- `services.v2_tables.market_view.build_market_view`（VIX／TAIEX／S&P 500／美10Y／美2Y 的日頻序列；Yahoo 5y、FRED 1500 筆）；
 - `services.v2_tables.market_indicator.build_market_indicator_table`（B 線：信用利差、期限利差、政策利率等，與 ui_v2 同一條讀法）。
 兩者都是 L2，且由它們自己去呼叫既有 L1（`repositories/macro/yf.py`、`fred.py`）；本檔不直接 import L1（分層守衛不開洞）。
 `load()` 內才 import（lazy）：import `ui_v3` 時不得連帶載入 pandas／L1（`test_ui_v3_preview_not_formal_guard` 的執行期白名單）。
@@ -198,7 +198,7 @@ def _evidence_changes(comparison, card: ChartCard) -> tuple:
 
 
 def _single_primary(domain: dict, key: str, period: str, tz) -> tuple:
-    """VIX／美 10Y／美 2Y 單序列檢視 → `(ChartCard, (SeriesNote,), unit)`。同一組期間切換；缺／失敗／期間不足都不畫假線。"""
+    """VIX／美10Y／美2Y 單序列檢視 → `(ChartCard, (SeriesNote,), unit)`。同一組期間切換；缺／失敗／期間不足都不畫假線。"""
     label = W.text(_SERIES_LABEL_KEY[key])
     status, reason = domain_state(domain)
     unit = domain.get("value_unit")

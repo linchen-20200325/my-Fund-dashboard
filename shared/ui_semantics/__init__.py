@@ -29,6 +29,7 @@ from shared.ui_semantics.rules import (  # noqa: F401
     FETCH_FAILED_SCREEN_FORM,
     MISSING_TEXT,
     NOT_CONFIGURED_FORM,
+    NOT_CONFIGURED_RATES_SOURCE_TEXT,
     PENDING_WORDING,
     PrecedenceLevel,
     REASON_NOT_CONFIGURED,

@@ -47,8 +47,8 @@ def _w(key: str, text: str, source: str) -> PendingWording:
 
 
 _LIST = (
-    # 首屏欄位名（81 第 3.1 節）
-    _w("status_row_label", "市場狀態／是否需注意", _SRC_81),
+    # 首屏欄位名「市場狀態」「是否需注意」已核准（`field_market_state`／`field_attention`，規則表）；原合併列標籤 `status_row_label`
+    # 於客戶 2026-11-03 首屏採 C 後移除（DEC-2026-11-03-09：兩列各自有欄位標籤）。
     _w("evidence_single_note", "只含這一條序列自身的視窗，未與另一條比較", _SRC_EXEC),
     # Primary
     _w("title_compare", "台股 vs S&P 500（歸一化）", _SRC_81 + "；標題字樣 PENDING"),
@@ -57,15 +57,12 @@ _LIST = (
     _w("series_taiex", "台股", _SRC_UIV2),
     _w("series_sp500", "S&P 500", _SRC_UIV2),
     _w("series_vix", "VIX", _SRC_UIV2),
-    _w("series_us10y", "美 10Y", _SRC_UIV2),
-    _w("series_us2y", "美 2Y", _SRC_UIV2),
     _w("data_date_no_elapsed", "{label} 資料日 {date}", _SRC_EXEC),
     _w("negative_elapsed_suffix", "取得時間早於觀測日", _SRC_UIV2 + "；字首 `⬜ 不適用` 取規則表（BACKLOG H2 adapter 要求 (1)）"),
     _w("insufficient_effect", "此期間比序列涵蓋範圍長，未縮短冒充", _SRC_EXEC),
     _w("fetch_failed_effect", "此序列未畫出", _SRC_EXEC + "；`⛔ <中文資料類> 取數失敗` 句型取規則表"),
     _w("window_withheld_note", "兩條序列在這個期間內無法在同一基準日比較（{reason}）", _SRC_EXEC),
     _w("reason_missing", "缺資料", _SRC_EXEC),
-    _w("not_configured_item", "利率資料來源", _SRC_EXEC + "；取代原先顯示環境變數名；「⛔ 尚未設定：<哪一項>」形式取規則表"),
     _w("reason_fetch_failed", "取數失敗", _SRC_EXEC + "；取數失敗≠缺資料，不併入「缺資料」"),
     _w("reason_not_configured", "尚未設定", _SRC_EXEC),
     _w("reason_no_common", "沒有共同有效觀測日", _SRC_EXEC),

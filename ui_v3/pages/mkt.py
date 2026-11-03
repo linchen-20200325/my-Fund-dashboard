@@ -6,7 +6,7 @@
   `pending_span()` 輸出（`data-pending-wording` 屬性＋虛線底線，機器與人眼都可辨識）。這裡**不發明任何字樣**。
 - 顏色不是唯一訊息：每個狀態 chip 都是「符號＋文字」；`tone` 只決定一個很淡的底色。⚠️ 色碼是 **Preview 暫用的樣式值**，
   不是 design token（`design/tokens.py` 值未定，視覺值待客戶驗收後重建）。
-- 沒有任何方向詞、好壞詞、方向色、目標價線、threshold／band；首屏只放事實與 `⬜ 無法判定`／`⬜ 門檻待裁示` 兩枚規則表 chip＋基準 chip。
+- 沒有任何方向詞、好壞詞、方向色、目標價線、threshold／band；首屏只放事實與規則表 chip：市場狀態、是否需注意各一枚 `⬜ 無法判定`＋資料新鮮度一枚 `⬜ 門檻待裁示`（首屏採 C；基準日改為圖表附近的純文字揭露行）。
 """
 from __future__ import annotations
 
@@ -78,9 +78,12 @@ def failed_text(label: str) -> str:
 
 
 def not_configured_html() -> str:
-    """`⛔ 尚未設定：<哪一項>` —「哪一項」用使用者看得懂的資料類別字樣（暫時字樣），**不得**是環境變數名或設定鍵名。"""
-    prefix, _, suffix = rules.NOT_CONFIGURED_FORM.partition("<哪一項>")
-    return escape(prefix) + W.span("not_configured_item") + escape(suffix)
+    """第一次完整句：`⛔ 利率資料來源尚未設定`（客戶 2026-11-03 核准字樣，`DEC-2026-11-03-09`）。
+
+    「哪一項」用使用者看得懂的資料類別字樣，**不得**是環境變數名或設定鍵名。本頁只有「利率資料來源」這一項會走到這裡；
+    frozen 44 的句型 `NOT_CONFIGURED_FORM` 不改、不在這裡使用。
+    """
+    return escape(rules.NOT_CONFIGURED_RATES_SOURCE_TEXT)
 
 
 _REASON_WORDING = {
@@ -185,9 +188,9 @@ def disclosure_notes(model: MarketPageModel) -> list:
     if d is None:
         return []
     notes = []
-    if d.base_date is not None:
-        notes.append(f'<span class="uv3-chip" data-status-key="neutral">{W.span("base_chip", date=d.base_date)}</span>')
-    notes.append(f'<div class="uv3-note">{W.span("frequency_line")}</div>')
+    # 基準日不再是 chip（首屏採 C，`DEC-2026-11-03-09`）：圖表附近一行純文字揭露，字樣不變（基準日…＝100；頻率：日｜缺值不補、斷線）。
+    line = W.span("disclosure_line", date=d.base_date) if d.base_date is not None else W.span("frequency_line")
+    notes.append(f'<div class="uv3-note" data-disclosure="base-frequency">{line}</div>')
     issues = {i.series_key: i.reason_code for i in d.series_issues}
     if d.mode == "pair" and d.base_date is None:   # 兩條都有資料但整張不可畫：真正原因只在比較層狀態
         notes.append(f'<div class="uv3-note">{W.span_html("window_withheld_note", reason=W.span(_reason_phrase(d.status)))}</div>')
@@ -222,9 +225,13 @@ def _label_key_of(key: str) -> str:
 # ───────────────────────────── 頁面區塊 ─────────────────────────────
 
 def summary_html(model: MarketPageModel) -> str:
+    # 首屏採 C（客戶 2026-11-03，`DEC-2026-11-03-09`）：「市場狀態」「是否需注意」兩列、各自欄位標籤與各自一枚 chip
+    # （無正式規則時各自 `⬜ 無法判定`，語意不變、不新增規則）；符號＋文字，不只靠顏色。
     rows = [
-        f'<div class="uv3-row"><span class="uv3-label">{W.span("status_row_label")}</span>{chip("undetermined")}'
-        f'<span>{W.span("hero_sentence")}</span></div>',
+        f'<div class="uv3-row" data-field="market_state"><span class="uv3-label">{W.span("field_market_state")}</span>'
+        f'{chip("undetermined")}<span>{W.span("hero_sentence")}</span></div>',
+        f'<div class="uv3-row" data-field="attention"><span class="uv3-label">{W.span("field_attention")}</span>'
+        f'{chip("undetermined")}</div>',
     ]
     items = []
     for change in model.evidence_changes:

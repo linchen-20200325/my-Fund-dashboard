@@ -205,13 +205,13 @@ def test_render_path_negative_control_turns_red_when_a_leak_is_injected(monkeypa
     view, table, state = SCENARIOS["no_fred_key"]()
     clean = leaks(_page_visible(_run(monkeypatch, view, table, state={**state, mkt.KEY_RATES: "credit_spread_pct"})))
     assert clean == []
-    monkeypatch.setattr(mkt, "not_configured_html", lambda: "⛔ 尚未設定：" + "FRED" + "_API_" + "KEY")
+    monkeypatch.setattr(mkt, "not_configured_html", lambda: "⛔ " + "FRED" + "_API_" + "KEY" + " 尚未設定")
     at = _run(monkeypatch, view, table, state={**state, mkt.KEY_VIEW: "us10y", mkt.KEY_RATES: "credit_spread_pct"})
     assert any("FRED" in hit for hit in leaks(_page_visible(at)))
 
 
 def test_not_configured_item_is_a_human_readable_data_class_not_a_setting_name():
-    item = W.text("not_configured_item")
-    assert item == "利率資料來源" and leaks(item) == []
+    item = rules.NOT_CONFIGURED_RATES_SOURCE_TEXT
+    assert item == "⛔ 利率資料來源尚未設定" and leaks(item) == []
     html = mkt.not_configured_html()
-    assert visible_text(html).replace(" ", "") == "⛔尚未設定：利率資料來源"
+    assert visible_text(html).replace(" ", "") == "⛔利率資料來源尚未設定"

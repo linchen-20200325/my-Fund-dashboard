@@ -54,8 +54,8 @@ def test_normal_page_renders_four_first_screen_answers_and_no_exception(monkeypa
     assert not at.exception
     assert [t.value for t in at.title] == ["🌍 市場與趨勢"]
     html = page_text(at)
-    # 市場狀態／是否需注意：共用一枚 `⬜ 無法判定`；資料新鮮度：一枚 `⬜ 門檻待裁示`（Q1 A、Q5 B）
-    assert chips(at, "undetermined")[0] == rules.entry("undetermined").wording
+    # 首屏採 C（DEC-2026-11-03-09）：市場狀態、是否需注意各一枚 `⬜ 無法判定`；資料新鮮度：一枚 `⬜ 門檻待裁示`（Q5 B）
+    assert chips(at, "undetermined")[:2] == [rules.entry("undetermined").wording] * 2
     assert chips(at, "threshold_pending") == [rules.entry("threshold_pending").wording]
     summary = plain(html.split('data-card')[0])
     assert re.search(r"台股 近1Y [+-]\d+\.\d\d%", summary) and re.search(r"S&P 500 近1Y [+-]\d+\.\d\d%", summary)
@@ -142,8 +142,8 @@ def test_missing_fred_key_renders_not_configured_not_fetch_failed(monkeypatch):
     t = ms.table(errors={"credit_spread_pct": "未設定 FRED_API_KEY"}, drop=("credit_spread_pct",))
     at = run(monkeypatch, ms.view(key=""), t, state={mkt.KEY_VIEW: "us10y", mkt.KEY_RATES: "credit_spread_pct"})
     html = page_text(at)
-    assert re.search(r"⛔ 尚未設定： ?利率資料來源", plain(html)) and "FRED_API_KEY" not in html   # 不得外漏環境變數名
-    assert "美 10Y 取數失敗" not in plain(html)
+    assert "⛔ 利率資料來源尚未設定" in plain(html) and "FRED_API_KEY" not in html   # 不得外漏環境變數名
+    assert "美10Y 取數失敗" not in plain(html)
 
 
 def test_switching_view_to_vix_drops_the_secondary_vix_card_and_keeps_first_screen(monkeypatch):
@@ -203,7 +203,7 @@ def test_no_direction_words_target_lines_or_threshold_language_in_the_page(monke
 def test_pending_wording_is_marked_on_screen_and_every_pending_key_exists(monkeypatch):
     at = run(monkeypatch)
     keys = pending_keys(at)
-    assert {"status_row_label", "title_compare", "preview_banner"} <= keys
+    assert {"title_compare", "preview_banner"} <= keys
     assert keys <= set(W.PREVIEW_PENDING_WORDING)
     # 客戶 2026-11-03 已核准的字樣：畫面上出現、但不再標 pending
     text = plain(page_text(at))

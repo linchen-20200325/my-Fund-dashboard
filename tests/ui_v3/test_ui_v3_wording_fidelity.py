@@ -58,7 +58,7 @@ NO_KEY = lambda: (ms.view(key=""), ms.table(errors={k: "未設定" for k in ("cr
 
 
 # ───────────── 1. 「哪一項」一頁只交代一次 ─────────────
-FULL = re.compile(r"⛔ 尚未設定：利率資料來源")
+FULL = re.compile(r"⛔ 利率資料來源尚未設定")
 SHORT = re.compile(r"⛔ 尚未設定(?!：)")
 
 
@@ -76,7 +76,7 @@ def test_no_fred_key_repeat_positions_use_status_family_wording(monkeypatch):
     view, table = NO_KEY()
     text = visible(run(monkeypatch, view, table, state={mkt.KEY_VIEW: "us10y"}))
     assert len(SHORT.findall(text)) >= 1          # 同頁其餘位置寫狀態族句
-    assert text.index("⛔ 尚未設定：利率資料來源") <= text.index(SHORT.search(text).group(0))   # 完整句在最先出現的位置
+    assert text.index("⛔ 利率資料來源尚未設定") <= text.index(SHORT.search(text).group(0))   # 完整句在最先出現的位置
 
 
 @pytest.mark.parametrize("view_key", ["compare", "vix", "us10y"])
