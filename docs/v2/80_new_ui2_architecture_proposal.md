@@ -307,7 +307,7 @@ shared/<presentation-semantic 常數模組>  狀態類別、Missing 字樣 token
 | 歸一化與比較（2026-11-02 已裁示） | 第一區歸一化 NAV 基準值＝**100**（UI-13 A）；lookup 基金比較**最多 3 檔**（UI-12 (5) A），與 `EXP-3` 為兩個獨立元件、選取不互通（`DEC-2026-11-02-07`；狀態更新，不是漏刪） |
 | 禁止 | 名次、精選、AI 排名、名稱模糊搜尋（`DEC-2026-10-27-32`／`-33`）`[語]` |
 
-### 7.4 🤖 AI 投資總結（Phase 7；導覽不掛）
+### 7.4 🤖 AI 投資總結（Phase 7 前導覽可見但不可點；不註冊頁面）
 
 ```text
 390px（Phase 7 後）                     desktop 1280（Phase 7 後）
@@ -316,10 +316,10 @@ shared/<presentation-semantic 常數模組>  狀態類別、Missing 字樣 token
 │ ⬜ 無法判定（‹缺›）  │   ├───────────────────────────────────────┤
 │ 解讀｜反證｜依據     │   │ 解讀｜最大反證｜▸ 查看依據（UI-14）   │
 └──────────────────────┘   └───────────────────────────────────────┘
-runtime 未啟用：整區只顯示「AI 分析暫不可用／無法判定」（75 第 12 節）
+Phase 7 前：導覽項可見但不可點，標「尚未開放」；不可註冊 renderer、不可進入空殼頁。下列線框僅供 Phase 7 後審核，不代表現階段已啟用。
 ```
 
-四區方向＝79 UI-14 proposal；不放假資料、不顯示機率或信心（79 C-2）；未啟用前 `<pkg>` 不註冊此頁（`DEC-2026-10-29-07`）。
+四區方向已由 UI-14 裁示；頁面具體 wireframe 及 Phase 7 啟用仍需另行核准。不放假資料、不顯示未校準機率或信心（79 C-2）。目前 Shell 可呈現唯讀且不可點的 🤖 導覽名稱，但 `<pkg>` 不註冊此頁、不提供 URL renderer（`DEC-2026-10-29-07`；Shell `DEC-2026-11-03-10`）。
 
 ### 7.5 ⚙️ 設定
 
@@ -563,7 +563,7 @@ runtime 未啟用：整區只顯示「AI 分析暫不可用／無法判定」（
 
 ### 16.1 Chart SPEC（主要圖表的短小規格列）
 
-主要圖表在圖下提供一行可掃讀的 SPEC，不把完整技術文件塞進主 UI。欄位依適用性取用：
+主要圖表**上方或緊鄰圖表的可見位置**提供一行可掃讀的 SPEC（不要求全部塞入首屏；不得遮蓋主圖）。已核准的歸一化揭露可與 SPEC 共用同一顯示區，不重複佔 chip 預算。完整技術細節改放展開的來源／限制／⚙️ 資料健康度，不把長文件塞進主 UI。欄位依適用性取用：
 
 | 欄位 | 說明 |
 |---|---|
@@ -639,22 +639,26 @@ Data／Sources → Validation／Normalization → Domain／Deterministic Logic �
 ### 17.3 更新資料 CTA：盤點結果與選擇
 
 盤點到的既有路徑：(a) `infra.cache.global_refresh_all`（Old UI 側欄「全域刷新」：清全部 TTL／`st.cache_data`／磁碟快取，並**一併清掉來源退避**，且清 session state）；(b) 舊 B 線 `ui_v2/mkt/live.py` 的「重新取數」按鈕在 `ui_v2` 自己就是停用（原因文案「重新取數尚未接上」，冷卻中則寫來源冷卻秒數）；(c) `services.v2_tables.market_indicator.source_cooldowns()` 只回報冷卻狀態，不提供清除。(d) 既有 `services.macro.clear_tab1_macro_caches(session_state=None)`（Tab1「強制重抓」的正式 L2 路徑）：只清 Tab1 快取與一個 dataset 的退避；是否清得到 `ui_v3` 市場頁用的快取未驗；且 adapters 分層守衛不許 import `services.macro`，直接接上須放寬守衛。
-選擇：**不可用＋一句原因**（「預覽版尚未開放更新資料」，pending 字樣）。理由：(a) 在 `ui_v3` 分層守衛下 adapters 只能 import `services.v2_tables`／`services.v2_domain`，不能碰 `infra`；且它會清掉退避，違反「失敗時退避、不連續轟炸來源」；現有路徑都無法在不新增 L2 函式或放寬分層守衛下安全接上；新增或放寬都屬新的 refresh pipeline 或分層變更，不在本批授權內。`ShellStatus.refresh_available` 目前恆為 False（原因代碼 `refresh_not_wired`），日後有安全入口時由 adapter 改成 True 並接上；手機沒有 CTA（Status Bar 保持極薄），位置待 ⚙️ 線框。
+選擇：**不可用＋一句原因**（「預覽版尚未開放更新資料」，已確認為 Shell 正式用字；實作仍維持 disabled）。理由：(a) 在 `ui_v3` 分層守衛下 adapters 只能 import `services.v2_tables`／`services.v2_domain`，不能碰 `infra`；且它會清掉退避，違反「失敗時退避、不連續轟炸來源」；現有路徑都無法在不新增 L2 函式或放寬分層守衛下安全接上；新增或放寬都屬新的 refresh pipeline 或分層變更，不在本批授權內。`ShellStatus.refresh_available` 目前恆為 False（原因代碼 `refresh_not_wired`），日後有安全入口時由 adapter 改成 True 並接上；手機沒有 CTA（Status Bar 保持極薄），位置待 ⚙️ 線框。
 
-### 17.4 候選字樣與推薦（Shell 新字樣全部為 pending；定字後搬進 `shared/ui_semantics/rules.py`）
+### 17.4 Shell 正式用字（2026-11-04 客戶授權文字規格修訂；程式字樣同步由實作組辦理）
 
 | 鍵 | 目前字樣 | 來源 | 推薦 |
 |---|---|---|---|
 | `shell_app_title` | 基金投資儀表板 | 客戶要求列舉 | 採用 |
 | `shell_nav_short_*` | 市場／資產／找基金／AI／設定 | 客戶要求列舉 | 採用 |
-| `shell_nav_soon` | 開發中 | 客戶要求範例 | 採用；🤖 若覺得「開發中」不貼切可改「尚未開放」 |
+| `shell_nav_soon` | 開發中（💼／🔍／⚙️）；🤖 尚未開放 | 客戶確認最新方向 | 定字；不可點、不註冊空殼頁 |
 | `shell_preview_tag`／`shell_preview_tip` | PREVIEW／Preview｜非正式頁面 | 客戶要求列舉 | 採用（標籤顯示、提示放 tooltip） |
 | `shell_updated`／`shell_updated_label` | 更新：{時間}／最後更新時間 | 客戶要求範例／列舉 | 採用 |
 | `shell_data_status_label` | 資料狀態 | 客戶要求列舉 | 採用 |
 | `shell_refresh_cta` | 更新資料 | 客戶要求列舉 | 採用 |
-| `shell_refresh_unavailable` | 預覽版尚未開放更新資料 | 執行組暫擬 | 採用或客戶改字 |
-| `shell_status_partial`／`_none`／`_counts`／`_failed_note` | 部分資料缺失（{n}／{m} 項取得）等 | 執行組暫擬 | 採用；全取得時維持不寫「正常」，除非客戶明示要放寬 `ok` 無字規則 |
-| `shell_nav_aria` | 主要導覽 | 執行組暫擬 | 採用 |
+| `shell_refresh_unavailable` | 預覽版尚未開放更新資料 | 已確認用字 | 定字；不得暗示 CTA 可用 |
+| `shell_status_partial`／`_none`／`_counts`／`_failed_note` | 部分資料未取得（{n}／{m} 項已取得）；{n}／{m} 項已取得；其中 {n} 項取數失敗 | 客戶確認最新方向 | 定字；分母限明確已登錄且實際檢查的資料項；全取得不寫「正常」 |
+| `shell_nav_aria` | 主要導覽 | 已確認用字 | 定字 |
+
+> **現行契約與實作邊界**：本節是已確認的**文字設計方向**，不是程式已更新的證明。請實作組在獨立程式 PR 內同步 `shared/ui_semantics/rules.py`／Shell renderer／tests，完成獨立稽核與 CI 後才宣稱用字已上線。規格不要求這份文件 PR 修改 production code。
+
+> **首屏計數與降級處理**：僅 PREVIEW／更新時間的純文字 Shell chrome 不計入 frozen 44 的頁級 chip／核心數字 ≤5；若 Status Bar 增加狀態 chip 或核心數字，須納入實際可見首屏計數。正常取得不顯示「正常」；降級情境仍須保留必要警示並控制首屏資訊密度，詳細逐項 failure／Missing 置於圖卡下方或 ⚙️ 資料健康度，不能刪資料或隱藏錯誤。若客觀上無法同時滿足，需新 Decision Gate，不得自行改 frozen 44。此為後續實作驗收約束，不宣稱已實測降級整改。
 
 ### 17.5 H5：390px 首屏與桌機量測（BL-0536-H5；注入的人造資料，非真實行情）
 
