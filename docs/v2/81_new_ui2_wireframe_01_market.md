@@ -439,7 +439,9 @@
 10. 格式錯誤（序列非 list／tuple、點非 dict、缺 `obs_date`、同一序列重複日期含 date 與字串同日）→ `NormalizationInputError`；未排序照 `periods.clean_points` 既有行為先排序。
 11. 單序列模式的基準＝該條自身 `slice_period` 視窗內第一筆有效值。
 
-**待客戶確認（Decision Gate 項；現行程式照字面讀法）**
+~~**待客戶確認（Decision Gate 項；現行程式照字面讀法）**~~
+
+> **已裁示（2026-11-03，`DEC-2026-11-03-04`；逐字 `docs/evidence/decisions/2026-11-03_normalization_abc_and_min_cost_rule.md`）**：(A) 採 A2（週末／休市起點取比較視窗內第一個共同有效觀測日＝100，不是 ±N 日 tolerance；真正歷史不足仍 `insufficient`）、(B) 採 B2（足夠的序列仍顯示，不足者標「資料不足」，Primary 不消失）、(C) 採 C2（可用的另一條仍顯示，舊序列標真正原因，不得把不同日期的兩個 100 當可比較）。下列 (A)(B)(C) 原字保留，記的是 H1 現行字面行為，superseded by `DEC-2026-11-03-04`；實作待 BL-0536-H1b（formula contract 變更，須公式等級獨立稽核）。狀態更新，不是漏刪；決策者：客戶。
 
 - **(A)** 涵蓋判定按各序列**自己的**視窗起點（沿用 `slice_period`）；`periods` 已知限制：起點落在週末／假日而序列恰從其後第一個交易日開始時，該序列被判不足 → 即使比較視窗（較晚起點）兩條都涵蓋，整個比較仍 `insufficient`。
 - **(B)** 一條不足 → 另一條也 `withheld`，不退回單序列模式；例：選 3Y 而 TAIEX 歷史不足 3 年 → 整張比較圖不畫。

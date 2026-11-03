@@ -2120,13 +2120,42 @@
 | 日期 | 2026-11-03（客戶回覆日；寫入日同日） |
 | 決策者 | **客戶**（Gate 放行與條件）。原文由總管在派工訊息中轉錄給執行組；執行組未見客戶對話本身。「執行組讀法」欄由執行組單組寫成，可被客戶推翻 |
 | 決策內容摘要 | **以總管轉錄為準（下引為轉錄原字）。** 客戶：「已切換至 Claude Opus 5.5 + High，可以開始下一階段。請依 GitHub 最新 SSOT 執行 🌍 歸一化公式與視窗對齊（BL-0536-H1）。」規則條列（總管轉錄）：TAIEX 與 S&P 500 以第一個共同有效交易日同時設為 100；視窗起點取兩條可比較範圍中的較晚者；歷史不足時明確標示不足，不偷偷縮短定義；各序列可畫到自己的最後觀測日；每個 value / return / date 必須對應自身資料日；缺一條序列時，另一條仍可顯示，但必須明確標示缺項；不得改寫既有資料語意或自行新增門檻。實作要求（總管轉錄）：新 L2 函式放在共用 domain 層；golden tests；property tests；edge cases：無共同日、單邊缺資料、單點、不同終點、視窗不足、重複日期／異常順序；每批至少一組真正獨立稽核；Old UI 不動；"ui_v2" 行為不變；frozen 44 不動；不開始 🌍 production rendering，除非本批完成後 GitHub SSOT 明確允許。另：「VIX 在 Primary 顯示時是否讓 Secondary VIX 卡讓位，目前只是總管讀法，不得當成正式裁示；若實作會碰到，另送 Decision Gate。」「所有新規則、測試約束、待辦、稽核要求與接手點必須 Durable Persistence 到 GitHub。」「Gate 送出後只回報一次，之後保持靜默。」「完成本批後，再重新評估下一階段 Model / Mode / Effort；若需要切換，先送 Gate 並立即停手。」 |
-| 執行組讀法（**可被客戶推翻**；未經第二組驗證） | **(a) 🌍 production rendering 目前未經 GitHub SSOT 允許。** 本筆只放行 H1（L2 公式與視窗對齊），並明文「不開始 🌍 production rendering，除非本批完成後 GitHub SSOT 明確允許」；截至本筆，GitHub SSOT 沒有任何一處明確允許。🌍 線框已核准（`DEC-2026-11-03-01`）只滿足「核准線框才可寫該頁」的前提，不等於本條所要的明確允許。**(b)** 順序：H1 獨立稽核＋合併 → 重新評估下一階段 Model／Mode／Effort（需切換則先送 Gate 並停手）→ H2（PORT 期間漲跌／新鮮度 helper，基準對齊 H1）、H3（ChartCard 歸一化揭露欄位）與 🌍 rendering 批；rendering 批開工前須有一筆新的客戶明確允許落盤（建議總管於 H1 合併後向客戶取得；客戶未給，不得自行登記為允許）。**(c)** VIX 讓位（Primary 顯示 VIX 時 Secondary VIX 卡是否讓位）不是裁示；實作若碰到，另送 Decision Gate。**(d)** 本批 H1 實作中裁示未寫到、由執行組自行決定的語意點（例：共同有效日不足 2 天的計法、`withheld` 序列狀態、日期格式只收 `YYYY-MM-DD`）列於該批 PR 描述，須獨立稽核與客戶覆核。 |
+| 執行組讀法（**可被客戶推翻**；未經第二組驗證） | ~~**(a) 🌍 production rendering 目前未經 GitHub SSOT 允許。**~~ → **2026-11-03 狀態更新（有意識的更正，不是漏刪；決策者：客戶）：已由 `DEC-2026-11-03-04` 解決——🌍 production-like rendering 只限 Preview App，於 H2／H3 完成、測試與獨立稽核通過後才可開始；下列原字保留為當時讀法。** 本筆只放行 H1（L2 公式與視窗對齊），並明文「不開始 🌍 production rendering，除非本批完成後 GitHub SSOT 明確允許」；截至本筆，GitHub SSOT 沒有任何一處明確允許。🌍 線框已核准（`DEC-2026-11-03-01`）只滿足「核准線框才可寫該頁」的前提，不等於本條所要的明確允許。**(b)** 順序：H1 獨立稽核＋合併 → 重新評估下一階段 Model／Mode／Effort（需切換則先送 Gate 並停手）→ H2（PORT 期間漲跌／新鮮度 helper，基準對齊 H1）、H3（ChartCard 歸一化揭露欄位）與 🌍 rendering 批；rendering 批開工前須有一筆新的客戶明確允許落盤（建議總管於 H1 合併後向客戶取得；客戶未給，不得自行登記為允許）。**(c)** VIX 讓位（Primary 顯示 VIX 時 Secondary VIX 卡是否讓位）不是裁示；實作若碰到，另送 Decision Gate。**(d)** 本批 H1 實作中裁示未寫到、由執行組自行決定的語意點（例：共同有效日不足 2 天的計法、`withheld` 序列狀態、日期格式只收 `YYYY-MM-DD`）列於該批 PR 描述，須獨立稽核與客戶覆核。 |
 | 理由／背景 | `PROJECT_RULES.md` 5.1 第 10、11 點（Model／Effort Change Gate；回覆「已切換／可以開始」才續）；BL-0536-H1 原標「先送 Gate 並停手」（`DEC-2026-11-03-01`、`-02` G10）；`PROJECT_RULES.md` 12.1 新裁示同批落盤。 |
 | evidence／source | **沒有另存逐字檔**：原文即本筆「決策內容摘要」欄所引，係總管在本批派工對話中的轉錄（第一句與帶「」者為客戶原字；規則與實作要求兩段條列由總管以清單轉錄，是否逐字執行組無法核對）。落地：`docs/BACKLOG.md` BL-0536-H1、`docs/HANDOFF.md` 頂部則；實作 `services/v2_domain/normalization.py`、`tests/test_v2_domain_normalization.py`（同批 PR）。 |
 | 影響範圍 | 授權 BL-0536-H1 的 L2 實作與測試；不授權 🌍 production rendering、`ui_v3` 頁／adapter／ChartCard 擴充、Old UI／`ui_v2` 變更、frozen 44 變更、新增門檻或改寫資料語意。 |
 | 是否可逆 | 可逆（客戶可另行裁示） |
-| supersedes／superseded by | supersedes：無。resolves：BL-0536-H1 與 `DEC-2026-11-03-02` G10 所列的 Model／Effort Change Gate 等待狀態（已回覆「可以開始」）。superseded by：無。 |
+| supersedes／superseded by | supersedes：無。resolves：BL-0536-H1 與 `DEC-2026-11-03-02` G10 所列的 Model／Effort Change Gate 等待狀態（已回覆「可以開始」）。superseded by：~~無~~ → 讀法 (a)／(b) 的 rendering 允許部分 resolved by `DEC-2026-11-03-04`（2026-11-03；狀態更新，不是漏刪）。 |
 | provenance | 客戶原字經總管轉錄（見 evidence 欄的逐字程度說明）；讀法 (a)～(d) 由執行組單組寫成，可被客戶推翻；未經第二組驗證。 |
+
+### DEC-2026-11-03-04｜客戶裁示：🌍 歸一化三題 (A) A2、(B) B2、(C) C2（改 formula contract，須重做公式等級獨立稽核）＋允許後續順序 H2 → H3 → 🌍 production-like rendering 只進 Preview App
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-03（客戶裁示日；寫入日同日） |
+| 決策者 | **客戶**。原文由總管逐字轉存；執行組未見客戶對話本身。「執行組讀法」欄由執行組單組寫成，可被客戶推翻 |
+| 決策內容摘要 | **以逐字檔為準。** **(A) A2**：期間起點落在週末／休市日，不應僅因該日沒有市場觀測值就判為歷史不足；以所選期間的比較視窗為基準；起點若為非交易／無觀測日，使用視窗內第一個可供兩序列共同比較的有效觀測日，該共同有效日作為 normalized base＝100；這不是新增 ±N 日 tolerance，不得自行建立「容忍幾天」規則；若真正缺乏所選期間應有的有效歷史覆蓋，仍必須回 `insufficient`；不新增交易日曆 dependency（除非未來另有正式需求）；「週末／休市正常無觀測」與「真正歷史不足」須分開。**(B) B2**：其中一條歷史不足時，歷史足夠的序列仍顯示；不足的序列明確標示「資料不足」；不得因此讓整張 Primary 圖消失；不得把不足序列補值、補 0 或假造基準。**(C) C2**：其中一條因停更而無共同基準日時，仍可顯示可用的另一條；舊序列必須標示真正原因（例如「無共同基準日／資料不足」），不得假裝成正常比較；不得把兩條各自不同日期設成 100 後冒充可比較。**B2／C2 修改 formula contract，完成後須重新做公式等級獨立稽核。** **正式允許順序**：1. H2 期間漲跌＋freshness 共用層（期間漲跌必須與圖表使用一致的基準與資料視窗）；2. H3 normalized chart disclosure（至少揭露基準日、基準值 100、資料頻率、缺值／缺序列處理）；3. 🌍 production-like rendering **只進 Preview App**，可開始於 H2／H3 完成、測試與獨立稽核通過之後。**尚未授權**：切換正式 Streamlit entrypoint、cutover、讓 Old UI／`ui_v2` 出現在正式 navigation、把 Preview App 當正式 App；VIX 在 Primary 顯示時 Secondary VIX 是否讓位仍不是正式裁示，碰到前另送 Decision Gate。另：永久治理規則先以獨立 docs-first governance PR 落盤（`DEC-2026-11-03-05`），完成 governance PR、獨立檢查、CI、final GitHub verification 後，再開始 H2；不得與 H2 formula changes 混成同一個 PR。 |
+| 執行組讀法（**可被客戶推翻**；未經第二組驗證） | **(a)** A2／B2／C2 取代 `docs/v2/81` 第 9 節與 BL-0536-H1「待客戶確認」(A)(B)(C) 所記的現行程式字面行為（各序列以自己起點判涵蓋、一條不足另一條也 `withheld`、無共同基準日時兩條都 `withheld`）；兩處原文保留、就地加指標。**(b) H1b 的位置**：把 A2／B2／C2 實作進 `services/v2_domain/normalization.py` 列為 BL-0536-H1b，排在 H2 之前（H2 的期間漲跌須與圖表同基準，基準規則須先定）——客戶列的允許順序沒有寫 H1b，此排序為總管派工所定、執行組記錄（可被客戶推翻）。**(b') H2 開工條件（客戶原字）**：完成 governance PR、獨立檢查、CI、final GitHub verification 後，再開始 H2。**(c)** Preview rendering 的開工條件以客戶原文為準（H2／H3 完成＋測試＋獨立稽核通過）；本筆不放寬任何其他 Gate（逐頁線框核准、Model／Effort Change Gate、frozen 44）。 |
+| 理由／背景 | `DEC-2026-11-03-03` 讀法 (a)／(b)：🌍 production rendering 原未經 SSOT 允許；BL-0536-H1 實作後由執行組列出待客戶確認三項（`docs/v2/81` 第 9 節）。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-03_normalization_abc_and_min_cost_rule.md`。落地：`docs/BACKLOG.md` BL-0536（H1 待確認項改已裁示、新增 H1b、H2／H3 註記）、`docs/v2/81` 第 9 節指標、`docs/HANDOFF.md` 頂部則。 |
+| 影響範圍 | 授權（依序）H1b、H2、H3 與 🌍 Preview App production-like rendering；不授權正式 entrypoint 切換、cutover、Old UI／`ui_v2` 進正式 navigation、把 Preview App 當正式 App、VIX 讓位。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：BL-0536-H1 與 `docs/v2/81` 第 9 節「待客戶確認」(A)(B)(C) 的現行字面行為（原字保留，有意識的政策變更，不是漏刪；決策者：客戶）。resolves：`DEC-2026-11-03-03` 讀法 (a)（rendering 允許：只限 Preview App，附開工條件）。superseded by：無。 |
+| provenance | 逐字（以逐字檔為準）；讀法 (a)～(c) 由執行組單組寫成，可被客戶推翻；未經第二組驗證。 |
+
+### DEC-2026-11-03-05｜客戶裁示（永久）：多元解法與最小成本決策規則（Minimum-Cost Correct Path）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-03（客戶裁示日；寫入日同日） |
+| 決策者 | **客戶**。原文由總管逐字轉存；執行組未見客戶對話本身 |
+| 決策內容摘要 | **以逐字檔為準。** 遇到技術、資料、UI、架構、流程、除錯或實作問題時，不得預設只有單一路徑，也不得在同一路徑持續原地試錯。**1. 實作前先比較方案**：原則上至少評估 3 個可行方案；客觀上不足 3 個時說明原因，不得為了湊數製造假方案；至少比較正確性與資料／投資語意風險、實作／修復速度、Token 與 Model 成本、修改範圍、回歸風險、可逆性、是否可沿用既有 module／service／data／tests／workflow、是否需新增 dependency、失敗後 fallback／downgrade path。**2. 預設決策優先序**：正確性足夠且風險低 → 完成最快 → Token／成本最低 → 修改範圍最小 → 可逆性最高；採 Minimum-Cost Correct Path（不是追求最少程式碼，而是足夠正確＋最低總成本）。**3. 禁止 sunk-cost 原地試錯**：同一路徑重複失敗、第二次修正仍未解決核心問題、修改範圍持續擴大、開始波及無關模組、需要新增不必要 dependency、workaround 持續堆疊、Token／時間已明顯高於替代方案、已出現更簡單且同樣正確的方案、rollback／regression 風險持續升高——任一發生即重新比較 A／B／C；不得以「已經做到這裡」作為繼續方案 A 的理由。**4. 主動責任**：主動比客戶更早尋找可重用的現有模組、wrapper／adapter 而非重寫、fake／shadow／preview 驗證、presentation-only 解法、不新增 dependency 的方法、小範圍止血方案、B／C fallback；不能等客戶先提出替代方案。**5. 與 Model／Effort 聯動**：方案評估同時包含 Model、Mode、Effort；採既有 Minimum Sufficient Effort；高階模型不是預設答案，只有公式、資料語意、Risk Cap、身份／來源、跨模組 contract 等風險需要時才升級。**6. 不增加碎碎念**：三方案比較預設是內部決策流程；安全、可逆、無須客戶裁示時，內部比較後直接走最佳方案、不必回報三方案；只有 Decision Gate、重大架構差異、不可逆、成本差異顯著、需新增來源／dependency、需客戶裁示時才對外呈現方案比較；不得因這條規則增加不必要 Token。**Durable Persistence**：至少同步檢查 `PROJECT_RULES.md`、`docs/DECISIONS.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md`、適用的 audit checklist／constitution tests、必要 evidence；未完成不得宣告 governance batch 完成。**Model 說明（客戶）**：治理文件本身只需 Medium，但接續 H2 仍是公式等級；為避免先降再升造成額外 Gate、上下文與 Token 成本，本次小型 governance batch 沿用現有高階模型＋High；governance PR 必須保持 docs／governance scope，不能因模型較強而擴大工作；工作性質改變到適合降低 Model／Effort 時，依既有硬停手規則先送 Change Gate。 |
+| 理由／背景 | 客戶原文：避免預設單一路徑與原地試錯；與 `PROJECT_RULES.md` 5.1（Minimum Sufficient Effort）、9.1（Minimum Sufficient Work）、13.4（Anti-Bloat）、第 3 節 Silent Cruise 同向。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-03_normalization_abc_and_min_cost_rule.md`。落地：`PROJECT_RULES.md` 9.2 與 0.5 索引列；`docs/HANDOFF.md` 第 0 節接手檢查。 |
+| 影響範圍 | 永久；適用所有後續技術／資料／UI／架構／流程／除錯／實作工作。不構成任何動工授權（`CLAUDE.md` §-1），不削弱第 4 節 Stop／Decision Gate、第 8 節稽核分級。 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無（新增；與 5.1、9.1、13.4 同向補充）。superseded by：無。 |
+| provenance | 逐字（以逐字檔為準）；摘要由執行組整理，以原文為準；未經第二組驗證。 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
@@ -2238,6 +2267,7 @@
 - 第四節 `DEC-2026-11-03-01`：原文逐字落盤於 `docs/evidence/decisions/2026-11-03_mkt_wireframe_ruling.md`（總管逐字轉存；執行組未見客戶對話本身，已以 Python 核對圍欄與轉存檔逐位元組相同）；被 amend 清單與讀法 (a)～(e) 由執行組單組寫成，可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-11-03-02`：四則指示原文逐字落盤於 `docs/evidence/decisions/2026-11-03_mkt_wireframe_ruling.md`「同批補錄」一節（總管逐字轉存；執行組未見客戶對話本身）；G1～G11 整理由執行組單組寫成，可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-11-03-03`：原文沒有另存逐字檔，引於該筆摘要欄，係總管在派工對話中的轉錄（第一句與帶「」者為客戶原字；兩段條列是否逐字無法核對）；執行組未見客戶對話本身；讀法 (a)～(d) 由執行組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-11-03-04`、`-05`：原文逐字落盤於 `docs/evidence/decisions/2026-11-03_normalization_abc_and_min_cost_rule.md`（總管逐字轉存；執行組未見客戶對話本身，已以 Python 核對圍欄與轉存檔逐位元組相同）；`-04` 讀法 (a)～(c) 與 `-05` 摘要由執行組單組寫成；H1b 排在 H2 之前為總管派工所定、執行組記錄（可被客戶推翻），可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-10-16-01`、`-02` 兩筆的客戶原話 repo 內沒有；內容依總管派工單與交接本轉述，本組未見原文。
 - 第四節 `DEC-2026-10-16-03`～`-13`：原文已落盤於 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔逐位元組相同）。各筆中標「總管讀法」「總管整理」者不是客戶裁示；「supersedes」欄的例示由文件實作組判讀，不宣稱窮舉，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-14`：原文已落盤於 `docs/evidence/decisions/2026-10-16_proposal8_approval.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔圍欄還原後逐位元組相同）。該筆中標「總管判定」「總管設計基準」者不是客戶裁示；「supersedes」欄的條文清單以 57 為準，由文件實作組整理，未經第二組驗證。
