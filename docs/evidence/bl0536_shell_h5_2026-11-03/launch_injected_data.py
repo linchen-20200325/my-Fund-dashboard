@@ -14,6 +14,8 @@ elif scenario == "both_missing": kw = dict(tw="missing", us="missing")
 elif scenario == "stale": kw = dict(us_dates=ms.weekdays("2021-06-01", "2026-10-30"))
 elif scenario == "partial": kw = dict(us_dates=ms.weekdays("2024-11-01", ms.LAST_US))
 elif scenario == "nokey": kw = dict(key=""); tkw = dict(errors={"credit_spread_pct": "未設定 FRED_API_KEY", "term_spread_pct": "未設定 FRED_API_KEY"}, drop=("credit_spread_pct", "term_spread_pct"))
+elif scenario == "all_missing": kw = dict(tw="missing", us="missing", vx="missing"); tkw = dict(drop=("vol_index", "credit_spread_pct", "term_spread_pct", "policy_rate_pct"))
+elif scenario == "all_failed": kw = dict(tw="error", us="error", vx="error"); tkw = dict(errors={k: "HTTP 429 injected" for k in ("vol_index", "credit_spread_pct", "term_spread_pct", "policy_rate_pct")}, drop=("vol_index", "credit_spread_pct", "term_spread_pct", "policy_rate_pct"))
 elif scenario == "negative":
     pass
 v = ms.view(**kw)
