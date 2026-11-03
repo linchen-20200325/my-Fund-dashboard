@@ -420,3 +420,29 @@
 - **T6**：基準日與視窗規則一旦裁示，需回頭確認與 🔍 歸一化 NAV（基準 100，UI-13）的規則是否一致（`PROJECT_RULES.md` 13.3 跨頁一致）；🔍 的歸一化目前只有 78 的線框；`rebased_pair` 是基金 vs 大盤的 Old UI 先例，🔍 多檔比較與 🌍 是否共用同一個 L2 函式，須在 PORT 時一併決定（單組讀碼，未驗）。
 
 **本文件由單組撰寫，須獨立稽核**（`CLAUDE.md` §-2 規則 6；`DEC-2026-10-16-05`）。本檔不授權任何 production 實作、不建立 🌍 頁、不改 ui_v2／Old UI／44。~~不記錄任何客戶裁示為已作出。~~（→ 2026-11-03 起，Q1～Q5 與六項方向已由客戶裁示並記錄於 `DEC-2026-11-03-01`；狀態更新，不是漏刪。獨立稽核本批尚未完成，不得視為已通過。）
+
+## 9. H1 實作語意註記（ruling 未明示處，待客戶確認者標出）
+
+> 2026-11-03 新增。BL-0536-H1 已實作於 `services/v2_domain/normalization.py::normalize_pair`（`DEC-2026-11-03-01` Q2-a／b／c A；Gate 放行 `DEC-2026-11-03-03`）。下列為裁示沒寫到、由執行組自行決定的語意點；執行組單組寫成，可被客戶推翻；獨立稽核 1 組：無 blocker（總管轉述）。
+
+**實作語意（現行程式）**
+
+1. 共同有效日不足 2 天 → 不出線（0 天＝`no_common_base`、1 天＝`too_few_common_days`）；以「兩條皆有效的共同日」計，不以各條點數計（依 Q2-a A 原文「視窗內共同有值日不足 2 天」）。
+2. pair 模式任一條不足 → 整個比較 `insufficient`；單序列模式由剩下那條自行判定（另見待客戶確認 (B)）。
+3. 新增序列狀態 `withheld`：本序列自己涵蓋期間，但整個比較不可畫，故不出線。
+4. `base_date`／`base_value` 只在比較為 `ok` 時有值（`ok` ⇔ 有基準日 ⇔ 有線）。
+5. `last_obs_date` 不畫線也回報（序列不缺時）；`last_normalized`／`period_change` 只在畫線時有值；刻意不提供共同終點日欄位。
+6. 輸出自基準日起到該序列自己的最後有效觀測日；比較視窗起點到基準日之間的點不輸出；含對方休市日、保留 None 缺口。
+7. 基準日原值 ≤ 0 → 大聲失敗（無法當除數）；基準日之後的非正值不另檢查。
+8. `obs_date` 只收 `datetime.date`（不收 `datetime.datetime`）或標準 `YYYY-MM-DD` 字串；輸出一律 ISO 字串（與 `periods.slice_period` 一致）。
+9. None、空 list、整條無有效值，一律視為缺（`missing`）；不區分取數失敗或資料未備（呼叫端自己知道，畫面字在呈現層）。
+10. 格式錯誤（序列非 list／tuple、點非 dict、缺 `obs_date`、同一序列重複日期含 date 與字串同日）→ `NormalizationInputError`；未排序照 `periods.clean_points` 既有行為先排序。
+11. 單序列模式的基準＝該條自身 `slice_period` 視窗內第一筆有效值。
+
+**待客戶確認（Decision Gate 項；現行程式照字面讀法）**
+
+- **(A)** 涵蓋判定按各序列**自己的**視窗起點（沿用 `slice_period`）；`periods` 已知限制：起點落在週末／假日而序列恰從其後第一個交易日開始時，該序列被判不足 → 即使比較視窗（較晚起點）兩條都涵蓋，整個比較仍 `insufficient`。
+- **(B)** 一條不足 → 另一條也 `withheld`，不退回單序列模式；例：選 3Y 而 TAIEX 歷史不足 3 年 → 整張比較圖不畫。
+- **(C)** 一條停更超過所選期間（最後觀測日早於另一條的視窗起點）→ 比較視窗內無共同基準日（`no_common_base`）→ 兩條都 `withheld`。
+
+**沿用限制（adapter 要求）**：沿用 `periods.is_number` 的既有行為：`numpy.int64`、`Decimal` 等非 `int`／`float` 子類的數值會被當缺口；**adapter 須在呼叫前轉成 `float`**（登記為 H2／H3 的 adapter 要求）。
