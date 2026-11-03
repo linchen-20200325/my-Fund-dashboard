@@ -152,10 +152,18 @@ def test_pending_mechanism_still_blocks_unapproved_wording_and_beta_gaps_stay_ex
 
 # ─────────────── 1b. 純文字正式字樣（客戶 2026-11-03；DEC-2026-11-03-07） ───────────────
 @pytest.mark.parametrize("item", list(rules.APPROVED_WORDING.values()), ids=lambda a: a.key)
-def test_every_approved_plain_wording_appears_verbatim_in_decisions_and_evidence(item):
-    assert item.doc_refs and rules.EVIDENCE_WORDING_RULING in item.doc_refs and rules.DOC_DECISIONS in item.doc_refs
+def test_every_approved_plain_wording_appears_verbatim_in_each_cited_doc(item):
+    assert item.doc_refs and item.source.strip()
     for rel in item.doc_refs:
         assert item.ruling_text in _doc(rel), f"{item.key}: {item.ruling_text!r} 不在 {rel}"
+
+
+def test_customer_ruling_wording_is_in_decisions_and_evidence_and_44_wording_is_in_44():
+    from_44 = {k for k, a in rules.APPROVED_WORDING.items() if a.doc_refs == (rules.DOC_44,)}
+    assert from_44 == {"fact_vix", "fact_credit_spread", "fact_leading", "fact_coincident", "fact_policy_rate", "fact_fx"}
+    for key, item in rules.APPROVED_WORDING.items():
+        if key not in from_44:
+            assert rules.EVIDENCE_WORDING_RULING in item.doc_refs and rules.DOC_DECISIONS in item.doc_refs, key
 
 
 def test_approved_plain_wording_view_labels_and_first_screen_fields_match_the_ruling_lines():

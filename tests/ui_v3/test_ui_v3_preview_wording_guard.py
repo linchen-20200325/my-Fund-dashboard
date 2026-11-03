@@ -18,7 +18,7 @@ def test_pending_wording_is_nonempty_unique_and_all_pending():
 
 
 # 序列名稱「VIX」（沿用 ui_v2，未核准）與檢視標籤「VIX」（客戶 2026-11-03 已核准）是兩個角色、字面剛好相同。
-_SAME_LITERAL_DIFFERENT_ROLE = frozenset({"series_vix", "fact_vix"})
+_SAME_LITERAL_DIFFERENT_ROLE = frozenset({"series_vix", "rates_policy_rate"})
 
 
 def test_approved_and_pending_wording_never_share_a_key():

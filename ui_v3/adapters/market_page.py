@@ -288,13 +288,16 @@ def _fact_from_indicator(table: dict, key: str, label_key: str) -> EvidenceFact:
 
 
 def _evidence_cards(table: dict) -> tuple:
-    ndc = _indicator_series(table, "leading_index")
-    ndc_fact = (EvidenceFact("fact_ndc", ndc["status"], ndc["reason"], None, None, None) if ndc["status"] != STATUS_OK
-                else _fact_from_indicator(table, "leading_index", "fact_ndc"))
+    """依據卡 MKT-1～MKT-3：鍵與標籤依 44 3.1 各塊「來源」欄（72 第 3 節表同）；沒有正式資料的鍵就是 Missing，不補欄位。
+
+    MKT-1＝`vol_index`＋`credit_spread_pct`；MKT-2＝`leading_index`＋`coincident_index`（兩鍵目前 pending → ◇ 資料未備）；
+    MKT-3＝`policy_rate_pct`＋`fx_twd_per_usd`（匯率閘門未開 → ◇ 資料未備）。
+    """
     return (
         EvidenceCard("MKT-1", "evidence_card_1", (_fact_from_indicator(table, "vol_index", "fact_vix"),
                                                    _fact_from_indicator(table, RATES_CREDIT, "fact_credit_spread"))),
-        EvidenceCard("MKT-2", "evidence_card_2", (ndc_fact,)),
+        EvidenceCard("MKT-2", "evidence_card_2", (_fact_from_indicator(table, "leading_index", "fact_leading"),
+                                                   _fact_from_indicator(table, "coincident_index", "fact_coincident"))),
         EvidenceCard("MKT-3", "evidence_card_3", (_fact_from_indicator(table, RATES_POLICY, "fact_policy_rate"),
                                                    _fact_from_indicator(table, "fx_twd_per_usd", "fact_fx"))),
     )

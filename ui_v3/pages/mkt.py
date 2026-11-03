@@ -113,9 +113,14 @@ def fmt_change(value: float) -> str:
     return f"{value:+.2f}%"
 
 
-def fmt_value(value: float, unit: Optional[str]) -> str:
+def fmt_value(value: float, unit: Optional[str], decimals: int = 2) -> str:
     suffix = "" if unit in (None, "", "index") else unit
-    return f"{value:,.2f}{suffix}"
+    return f"{value:,.{decimals}f}{suffix}"
+
+
+# 依據卡各指標的小數位數（44 第三節 3.1 規則欄：波動度指數 1 位、信用利差 2 位、政策利率 2 位、新臺幣對美元匯率 3 位）。
+# 領先／同時指標的位數 44 沒有定（47 Q-13）：不替它挑，預設值只會用在它真的有值時；目前兩鍵皆 Missing。
+_FACT_DECIMALS = {"fact_vix": 1, "fact_credit_spread": 2, "fact_policy_rate": 2, "fact_fx": 3}
 
 
 def elapsed_html(label: str, as_of: Optional[str], elapsed: Optional[int]) -> str:
@@ -238,7 +243,7 @@ def secondary_html(card: SecondaryCard, title_key: str, sub_label_key: Optional[
 def fact_html(fact: EvidenceFact) -> str:
     label = W.span(fact.label_key)
     if fact.status == STATUS_OK:
-        return (f'<div class="uv3-row">{label} {escape(fmt_value(fact.value, fact.unit))}'
+        return (f'<div class="uv3-row">{label} {escape(fmt_value(fact.value, fact.unit, _FACT_DECIMALS.get(fact.label_key, 2)))}'
                 f' <span class="uv3-note">{escape(fact.as_of)}</span></div>')
     return f'<div class="uv3-row">{label} {status_html(fact.status, fact.reason_code, fact.label_key)}</div>'
 

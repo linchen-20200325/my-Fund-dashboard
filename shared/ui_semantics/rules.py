@@ -225,6 +225,11 @@ def _a(key: str, text: str, ruling_text: str = "") -> ApprovedWording:
     return ApprovedWording(key, text, ruling_text or text)
 
 
+def _a44(key: str, text: str) -> ApprovedWording:
+    """44 第三節 3.1 各塊「來源」欄已落字的指標名稱（frozen 44＝正式 SSOT；不是客戶 2026-11-03 新裁示）。"""
+    return ApprovedWording(key, text, text, source="44 第三節 3.1 MKT-1／MKT-2／MKT-3 塊「來源」欄與規則欄", doc_refs=(DOC_44,))
+
+
 _APPROVED_LIST = (
     _a("insufficient", "資料不足"),
     _a("chart_empty", "此圖目前沒有可畫的資料"),
@@ -245,6 +250,13 @@ _APPROVED_LIST = (
     _a("reason_unknown", "原因未明"),
     _a("reason_no_source", "來源資料無法使用"),
     _a("reason_no_observation", "沒有觀測值"),
+    # 依據卡指標名稱（44 3.1；ui_v2 `ui_v2/mkt/logic.py::_CARD_SPECS` 同）
+    _a44("fact_vix", "波動度指數"),
+    _a44("fact_credit_spread", "高收益信用利差"),
+    _a44("fact_leading", "領先指標"),
+    _a44("fact_coincident", "同時指標"),
+    _a44("fact_policy_rate", "政策利率"),
+    _a44("fact_fx", "新臺幣對美元匯率"),
 )
 APPROVED_WORDING: Mapping[str, ApprovedWording] = MappingProxyType({a.key: a for a in _APPROVED_LIST})
 # 重複鍵檢查在守衛測試（模組層不得有 if；import 零副作用）。

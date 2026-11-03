@@ -91,11 +91,6 @@ _LIST = (
     _w("evidence_card_1", "MKT-1 風險情緒", _SRC_UIV2),
     _w("evidence_card_2", "MKT-2 景氣位置", _SRC_UIV2),
     _w("evidence_card_3", "MKT-3 資金與匯率", _SRC_UIV2),
-    _w("fact_vix", "VIX", _SRC_UIV2),
-    _w("fact_credit_spread", "信用利差", _SRC_UIV2),
-    _w("fact_policy_rate", "政策利率", _SRC_UIV2),
-    _w("fact_fx", "匯率（新臺幣／美元）", _SRC_UIV2),
-    _w("fact_ndc", "景氣指標", _SRC_UIV2),
     _w("evidence_no_rule_note", "僅列已取得的觀測值，沒有正式規則可判定", _SRC_EXEC),
     # 尚未取得／各項狀態
     _w("missing_group_title", "▸ 尚未取得（{n} 項）", _SRC_81),
