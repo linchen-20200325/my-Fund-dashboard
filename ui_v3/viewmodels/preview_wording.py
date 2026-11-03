@@ -26,6 +26,7 @@ STATUS_PENDING = "pending"
 _SRC_81 = "81 第 3.1 節「擬：」（PENDING，待客戶定字）"
 _SRC_UIV2 = "沿用 ui_v2 既有字樣（核准狀態未查證）"
 _SRC_EXEC = "執行組暫擬（Preview 用；可被客戶推翻）"
+_SRC_SHELL = "客戶 2026-11-03 Shell 要求列舉（尚未入規則表，待客戶定字）"
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,27 @@ _LIST = (
     _w("evidence_period_change", "近{period} {change}", _SRC_EXEC),
     _w("chart_aria", "{title}（{period}）", _SRC_EXEC),
     _w("status_ok_row", "{label}：取得 ｜ 來源 {source} ｜ 資料日 {date}", _SRC_EXEC),
+    # 全站 Navigation Shell（BL-0536 Shell 批；客戶 2026-11-03 Shell 要求列舉的字樣尚未入規則表 → 全部 pending）。
+    # 五頁完整頁名已核准（80 第 7 節／`shell/registry.py`），不在這裡；這裡只有 Shell 自己的字樣。
+    _w("shell_app_title", "基金投資儀表板", _SRC_SHELL),
+    _w("shell_nav_short_mkt", "市場", _SRC_SHELL),
+    _w("shell_nav_short_ast", "資產", _SRC_SHELL),
+    _w("shell_nav_short_exp", "找基金", _SRC_SHELL),
+    _w("shell_nav_short_ai", "AI", _SRC_SHELL),
+    _w("shell_nav_short_set", "設定", _SRC_SHELL),
+    _w("shell_nav_aria", "主要導覽", _SRC_EXEC),
+    _w("shell_nav_soon", "開發中", _SRC_SHELL),
+    _w("shell_preview_tag", "PREVIEW", _SRC_SHELL),
+    _w("shell_preview_tip", "Preview｜非正式頁面", _SRC_SHELL),
+    _w("shell_status_counts", "{ok}／{total} 項取得", _SRC_EXEC),
+    _w("shell_status_partial", "部分資料缺失（{ok}／{total} 項取得）", _SRC_EXEC),
+    _w("shell_status_none", "主要資料缺失（0／{total} 項取得）", _SRC_EXEC),
+    _w("shell_status_failed_note", "其中 {n} 項取數失敗", _SRC_EXEC),
+    _w("shell_updated", "更新：{time}", _SRC_SHELL),
+    _w("shell_data_status_label", "資料狀態", _SRC_SHELL),
+    _w("shell_updated_label", "最後更新時間", _SRC_SHELL),
+    _w("shell_refresh_cta", "更新資料", _SRC_SHELL),
+    _w("shell_refresh_unavailable", "預覽版尚未開放更新資料", _SRC_EXEC),
     # 頁級
     _w("preview_banner", "Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字", _SRC_EXEC),
 )
