@@ -19,6 +19,9 @@
 - `freshness`：延遲日數（原 `ui_v2/mkt/logic.py`）。
 - `normalization`：🌍 TAIEX vs S&P 500 歸一化比較（BL-0536-H1，2026-11-03 新寫；依 `DEC-2026-11-03-01` Q2-a／b／c A；
   不是 PORT，ui_v2 沒有對應實作；ui_v2 不 import 它）。
+- `market_summary`：🌍 首屏期間漲跌＋新鮮度事實（BL-0536-H2，2026-11-03 新寫；`DEC-2026-11-03-04`、`-01` Q4 A／Q5 B）：
+  期間漲跌直接取 `normalization` 的 `period_change`（無新公式）、經過天數取 `freshness.delay_days`；
+  新鮮度狀態恆為 `threshold_pending`（門檻未裁示，不判新舊）。不是 PORT；ui_v2 `period_return` 口徑不同（81 G3），ui_v2 不動。
 
 ⚠️ `NAV_NOT_READY_DAYS`（淨值資料未備門檻 10 天）**本批未搬**，仍住 `ui_v2/thresholds.py`：
 `tests/ui_v2/test_alo_live_logic.py::test_10天門檻_兩頁引用同一個共用常數_值為10` 鎖定「全 ui_v2 只有
