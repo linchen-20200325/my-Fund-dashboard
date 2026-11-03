@@ -42,7 +42,10 @@ NOT_CONFIGURED_ITEM = "FRED_API_KEY"   # 「⛔ 尚未設定：<哪一項>」的
 # Preview 暫用樣式（不是 design token）。
 CSS = """
 <style>
-.block-container{max-width:1100px;padding-left:16px;padding-right:16px;padding-top:1.4rem}
+.block-container,.stMainBlockContainer{padding-top:3.4rem !important}
+.block-container{max-width:1100px;padding-left:16px;padding-right:16px;padding-top:3.4rem}
+h1{font-size:1.7rem !important;padding:.2rem 0 !important}
+h3{font-size:1.2rem !important}
 .uv3-pending{border-bottom:1px dashed rgba(128,128,128,.8)}
 .uv3-banner{font-size:12px;opacity:.75;margin-bottom:.4rem}
 .uv3-chip{display:inline-block;border-radius:12px;padding:1px 10px;font-size:14px;border:1px solid rgba(128,128,128,.45);

@@ -25,3 +25,4 @@
 - 大檔與 JSON 報告以 `gzip -9 -n` 壓縮存放（逐位元組，避開 `check-added-large-files` 的 500KB 上限與文字類 hook 改寫）。
 - 文字原文若已實測無行尾空白、結尾單一換行，則原樣存放、不壓縮，方便直接閱讀與對照行號。
 - 逐字摘錄不改字；含禁詞時在該目錄 README 做撞字登記。
+- `bl0536_mkt_preview_2026-11-03/`：BL-0536 🌍 Preview rendering 截圖（注入的人造資料，非真實行情；見該目錄 README）。

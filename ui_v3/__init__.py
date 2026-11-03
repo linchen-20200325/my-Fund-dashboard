@@ -4,7 +4,7 @@
 依據：`docs/v2/80_new_ui2_architecture_proposal.md`（第 4、5、6、8、9、10、13 節；已凍結，
 `DEC-2026-11-02-05`）、正式 Streamlit 顯示規則 `DEC-2026-11-02-06`（`PROJECT_RULES.md` 13.2）。
 
-本批只有**機械式骨架**，**沒有任何使用者可見頁面**（「不做空殼」，`DEC-2026-10-27-10`）：
+~~本批只有機械式骨架，沒有任何使用者可見頁面~~ → 2026-11-03 BL-0536 rendering 批：**只有 🌍 市場與趨勢**（Preview App only；其餘四頁無核准線框、不做空殼，`DEC-2026-10-27-10`）。以下為批 1 骨架說明（原文保留）：
 
 - `viewmodels/`  純 Python view model dataclass（無 streamlit、無 I/O、無 services import）。
 - `fixtures/`    fake scenario 資料；**明確標示 FAKE**；正式路徑（含 `app_preview.py`）不得 import。
