@@ -51,7 +51,7 @@
 |---|---|---|
 | 段序 | status chip → 一句主判讀 → Primary → Secondary（至多 3 張）→ 依據卡 → details／尚未取得／provenance | `ui_v2/mkt/page.py` 段序註解；`ui_v2/mkt/overview.py` 檔頭【F-重驗】 |
 | 主判讀 | 計數句：「N 項已取得」＋資料未備／業務例外／取數失敗各 M 項（0 項不寫）＋「；暫無完整市場綜合判定。」，不寫日期、不寫方向 | `overview.py::hero_sentence`【F-重驗】 |
-| Primary | 五個序列切換：台股、S&P 500、VIX、美 10Y、美 2Y；預設台股；期間 3M／6M／1Y／3Y、預設 1Y；高度 300px | `overview.py::PRIMARY_KEYS`、`DEFAULT_PRIMARY`、`PRIMARY_CHART_HEIGHT`【F-重驗】 |
+| Primary | 五個序列切換：台股、S&P 500、VIX、美 10Y、美 2Y（此為 ui_v2 現行字樣；🌍 `ui_v3` 正式字樣為「美10Y」「美2Y」無空格，`DEC-2026-11-03-09`）；預設台股；期間 3M／6M／1Y／3Y、預設 1Y；高度 300px | `overview.py::PRIMARY_KEYS`、`DEFAULT_PRIMARY`、`PRIMARY_CHART_HEIGHT`【F-重驗】 |
 | Primary chips | `最新 值`、`近期間 漲跌`（VIX 改放單位說明）、`資料日 MM-DD（經過天數）` | `overview.py::_chart_card`【F-重驗】 |
 | Secondary | 三張：「風險｜VIX」「國際｜S&P 500」「利率與信用」（P2 切換：期限利差／信用利差／政策利率）；迷你圖固定近 1Y、無座標軸、無期間切換 | `overview.py::SECONDARY_*_TITLE`、`SECONDARY_PERIOD`、`RATES_KEYS`【F-重驗】 |
 | 依據卡 | `MKT-1` 風險情緒（`vol_index`＋`credit_spread_pct`）、`MKT-2` 景氣位置（目前 `◇ 資料未備` placeholder）、`MKT-3` 資金與匯率（匯率維持資料未備、政策利率已寫列）；位置在 Secondary 之後 | `docs/v2/72` 第 2.2 節表【F-轉述；本組讀過該表】 |

@@ -4,11 +4,11 @@
 > **歷史**：2026-11-03 Canonical Rule Convergence 批把舊版全文（543 行；含檔頭 40 則追加 checkpoint、24 個「第 N 次現況」框、舊下一步）逐字搬到 `docs/evidence/history/2026-11-03_handoff_pre_convergence.md`（**NOT CURRENT，不是現行規則或現況**）。更舊的交接本 `docs/handover_2026_09_26_latest.md` 為歷史紀錄（第 0 節永遠不准刪，客戶 2026-09-28 裁示）。本檔改寫依據：客戶 2026-11-03 指示（`DEC-2026-11-03-08`）；`PROJECT_RULES.md` 6.1.2「覆蓋、不累加」。
 
 > **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
-> - **查詢時點**：2026-11-03；**latest verified main＝`4d8c07dd`**（Merge #1131，BL-0536 🌍 Preview rendering；本批讀工作樹基底，**未重查 GitHub**，接手先 `git fetch origin main`）。
-> - **Open／Draft PR**：以 GitHub 為準（本檔寫成時，下列兩批尚未開 PR）。
-> - **唯一下一接手點（單一）**：先完成 🌍 字樣批（`DEC-2026-11-03-07`；分支 `ccr-a427a479-81wzdy`，commit `82ba783f`）的獨立稽核、PR、CI 與合併（PR 號以 GitHub 為準，待開）。
-> - **之後（依序進行，不是並列接手點）**：本規則收斂批（`DEC-2026-11-03-08`）的獨立稽核、CI 與合併；再 Navigation Shell＋H5（尚未開始，需前兩批合併與下列 Gate 裁示）。兩批以 docs／字樣為主，無新資料源、無公式變更。
-> - **待客戶裁示（隨 (1) 一併回報；BL-0539）**：🌍 首屏「市場狀態」與「是否需注意」拆兩枚 chip 的預算 Gate——Visual Budget 5 vs 6；方案 A＝兩枚 chip 並 amend 44 預算為 ≤6、B＝維持現況一枚共用 chip、C＝兩列各一枚 chip 並把「基準日」改為圖上純文字揭露行（→ 5；總管推薦 C）。未裁示前不實作、不放寬預算。
+> - **查詢時點**：2026-11-03；**工作樹基底 main＝`d6173220`**（Merge #1132：🌍 九項正式字樣落盤、首屏採 C、用字統一；`DEC-2026-11-03-07`、`-09`）；本批**未重查 GitHub**，接手先 `git fetch origin main`。
+> - **Open／Draft PR**：以 GitHub 為準（本檔寫成時，本規則收斂批尚未開 PR）。
+> - **唯一下一接手點（單一）**：本規則收斂批（`DEC-2026-11-03-08`）的獨立稽核增量、CI 與合併（PR 號以 GitHub 為準，待開）。
+> - **之後（依序進行，不是並列接手點）**：Navigation Shell＋H5 390px 驗收（尚未開始；H5 須實測採 C 後的首屏預算，量測超過不得自行放寬，須停下回報）。本批以 docs 與一支守衛測試為主，無新資料源、無公式變更。
+> - **已裁示、不再待裁**：🌍 首屏「市場狀態」「是否需注意」拆兩枚 chip＝採 C（兩枚獨立 chip、基準日改圖表附近純文字揭露行、首屏 ≤5 不變、不修訂 frozen 44）；用字統一＝「⛔ 利率資料來源尚未設定」「美10Y」「美2Y」（`DEC-2026-11-03-09`；舊 BL-0539 已結案）。證據截圖拍於改版前，已於該目錄 README 註記過期。
 
 ## 1. 必讀順序（新對話或換人接手）
 
@@ -27,7 +27,7 @@
 |---|---|
 | UI 三層邊界 | Old UI read-only；`ui_v2` maintenance-only；`ui_v3`＝New UI2 唯一未來正式（`DEC-2026-11-02-05`、`-06`）。正式 App 現況推定為 Old UI（Streamlit Cloud 設定，repo 內無法查證）；Preview App 平行驗收，尚未 cutover |
 | 現行五頁 | 🌍 市場與趨勢／💼 我的資產／🔍 找基金／🤖 AI 投資總結（Phase 7 前不掛導覽）／⚙️ 設定（`PROJECT_RULES.md` 13.2 第 1 點；程式側 `ui_v3/shell/registry.py`） |
-| 🌍 | wireframe 已裁示（`DEC-2026-11-03-01`）；歸一化 A2／B2／C2、H1b／H2／H3、Preview rendering 已合併（#1125～#1131）；九項正式字樣已落盤於 `82ba783f`（待合併，見上）。詳情看 `docs/BACKLOG.md` BL-0536 與 `docs/v2/81` |
+| 🌍 | wireframe 已裁示（`DEC-2026-11-03-01`）；歸一化 A2／B2／C2、H1b／H2／H3、Preview rendering、九項正式字樣、首屏採 C 與用字統一已合併（#1125～#1132；`DEC-2026-11-03-07`、`-09`）。詳情看 `docs/BACKLOG.md` BL-0536 與 `docs/v2/81` |
 | 💼／🔍／⚙️／🤖 | wireframe 尚未起草（順序 💼 → 🔍 → ⚙️；🤖 依 Phase 7）；核准前不寫該頁 `ui_v3` 代碼 |
 | cutover | 未開始；強制驗收項 BL-0535 |
 | 本機環境 | `ui_v2` 摘要守衛要用 Python 3.11 跑（CI 為 3.11）；`.claude/worktrees` 殘留會讓檔案引用守衛誤紅，需要時在乾淨 worktree 驗 |
@@ -51,13 +51,13 @@
 3. freshness 門檻未裁示（BL-0369），首屏只顯示 `⬜ 門檻待裁示`；不得自創新舊判定。
 4. 本批收斂內容未經客戶確認 Latest-Rule-Only 讀法（BL-0538），否決時須自 `docs/evidence/history/` 還原。
 5. 規則收斂僅第一階段，`PROJECT_RULES.md` 與 `docs/v2/81` 仍有劃線舊句（BL-0541）。
+6. 本批併入 main `d6173220` 時，main 在 `82ba783f` 後新增的 HANDOFF 兩則與 BACKLOG BL-0536 列（`d6173220` 版）已逐字搬 `docs/evidence/history/2026-11-03_main_after_82ba783f_superseded.md`（區塊 H2、B2）。
 
 ## 3. 待客戶裁示（Decision Gate；本檔只列 ID，內容與推薦看 `docs/BACKLOG.md`）
 
 | ID | 題目 |
 |---|---|
 | BL-0538 | Latest-Rule-Only 讀法與 0.5 改寫的客戶確認（G-1；總管讀法採方案 B，待確認） |
-| BL-0539 | 🌍 首屏「市場狀態」「是否需注意」拆兩枚 chip（Visual Budget 5→6；方案 A／B／C，總管推薦 C） |
 | BL-0540 | Missing 字樣並存（`資料不足`／`此圖目前沒有可畫的資料`／`◇ 資料未備`）是否取代或並存（G-2）；🤖 輸出「六項」對映六段／四區（G-5）；資料健康度集中 ⚙️ 與 frozen 44 的承接（G-3，需 amendment） |
 | BL-0369 | freshness 門檻（BL-0536-H4）；未裁示前首屏只顯示 `⬜ 門檻待裁示` |
 | BL-0537 | Old UI／`ui_v2` 凍結清單機械守衛 |
@@ -72,6 +72,6 @@
 
 ## 5. 本檔沒查證的部分
 
-- main `4d8c07dd` 為工作樹基底，**未重查 GitHub／CI**；兩批「待開 PR」為總管轉達。
+- main `d6173220` 為工作樹基底，**未重查 GitHub／CI**；規則收斂批「待開 PR」為總管轉達。
 - 第 3 節 BL-0538～BL-0540 為本批新登記，內容單組寫成、未經第二組驗證。
 - 舊版 HANDOFF 內「未查證」各條（約 60 條，多為 2026-10 月批次紀錄）隨全文搬至歷史檔，**不再是現行聲明**。

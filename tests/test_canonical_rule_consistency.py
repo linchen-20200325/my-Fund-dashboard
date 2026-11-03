@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE_COMMIT = "82ba783f"
+BASE_COMMIT = "82ba783f"  # 預設基準；每個區塊的實際基準記在其 source 的 `@<sha>`（H2、B2 為 d6173220）
 HANDOFF_MAX_LINES = 120
 BL0536_ROW_MAX_BYTES = 8000
 
@@ -208,30 +208,47 @@ def test_history_blocks_hash_and_manifest():
             seen += 1
             assert block_ok(b), f"{p.name} 區塊 {b['id']} 與標記的 sha256／bytes 不符（搬移後被改動或遺失）"
             assert b["id"] in readme, f"README 清冊缺區塊 {b['id']}"
-    assert seen >= 8
+    assert seen >= 10
 
 
-def _git_show(path: str):
+def block_base(b: dict) -> str:
+    """區塊自己的基準 commit：source 的 `@<sha>`；沒寫才退回預設基準。"""
+    m = re.search(r"@([0-9a-f]{7,40})$", b["source"])
+    return m.group(1) if m else BASE_COMMIT
+
+
+def _git_show(path: str, commit: str = BASE_COMMIT):
     try:
-        r = subprocess.run(["git", "show", f"{BASE_COMMIT}:{path}"], cwd=ROOT, capture_output=True, timeout=60)
+        r = subprocess.run(["git", "show", f"{commit}:{path}"], cwd=ROOT, capture_output=True, timeout=60)
     except Exception:
         return None
     return r.stdout.decode("utf-8") if r.returncode == 0 else None
 
 
 def test_history_blocks_match_base_commit_when_available():
-    if _git_show("docs/HANDOFF.md") is None:
-        pytest.skip(f"取不到基準 commit {BASE_COMMIT}（淺 clone）；僅驗了 sha256／清冊，未與原文比對")
+    bases = {block_base(b) for p in HISTORY for b in parse_blocks(p.read_text(encoding="utf-8"))}
+    avail = {c for c in bases if _git_show("docs/HANDOFF.md", c) is not None}
+    if not avail:
+        pytest.skip(f"取不到任何基準 commit {sorted(bases)}（淺 clone）；僅驗了 sha256／清冊，未與原文比對")
     for p in HISTORY:
         for b in parse_blocks(p.read_text(encoding="utf-8")):
+            base = block_base(b)
+            if base not in avail:
+                continue  # 該區塊的基準取不到：僅驗 sha256／清冊
             path = b["source"].split("@")[0].split("#")[0]
-            orig = _git_show(path)
-            assert orig is not None, path
+            orig = _git_show(path, base)
+            assert orig is not None, (base, path)
             if b["id"] == "H1":
                 assert orig == b["body"]
             else:
                 for line in b["body"].split("\n"):
-                    assert line in orig, f"區塊 {b['id']} 有不在基準原文的行"
+                    assert line in orig, f"區塊 {b['id']} 有不在基準 {base} 原文的行"
+
+
+def test_block_base_parsing():
+    assert block_base({"source": "docs/HANDOFF.md#x@d6173220"}) == "d6173220"
+    assert block_base({"source": "docs/HANDOFF.md@82ba783f"}) == "82ba783f"
+    assert block_base({"source": "docs/HANDOFF.md"}) == BASE_COMMIT
 
 
 def test_history_guard_negative_control():
