@@ -183,3 +183,43 @@ def test_slot_counter_counts_a_chip_inside_the_status_bar():
             '<span class="uv3-evidence" data-key="sp500">S 近1Y +1.00%</span>')
     chips, cells = slots(html)
     assert (chips, cells) == (4, 2) and chips + cells == 6
+
+
+# ───────── 圖下逐序列摘要行的序列名必須轉義（`primary_notes_html` 的 `escape(label)`） ─────────
+
+_INJECT = "<b>x</b>"
+
+
+def _notes_with_injected_label(monkeypatch, fn=None) -> str:
+    """測試端注入含標籤的序列名與原因代碼，回傳圖下摘要行的渲染輸出（`fn` 預設為正式的 `primary_notes_html`）。"""
+    from ui_v3.viewmodels.common import STATUS_FAILED, STATUS_MISSING, STATUS_UNDETERMINED
+    from ui_v3.viewmodels.market_page import SeriesNote
+
+    real_text = mkt.W.text
+    monkeypatch.setattr(mkt.W, "text", lambda key, *a, **kw: _INJECT if key.startswith("series_") else real_text(key, *a, **kw))
+    notes = [
+        SeriesNote("taiex", STATUS_MISSING, "missing", None, None, None, None),
+        SeriesNote("sp500", STATUS_FAILED, _INJECT, None, None, None, None),
+        SeriesNote("vix", STATUS_UNDETERMINED, _INJECT, None, None, None, None),
+    ]
+    return "".join((fn or mkt.primary_notes_html)(notes))
+
+
+def test_series_summary_row_escapes_injected_series_label_and_reason(monkeypatch):
+    out = _notes_with_injected_label(monkeypatch)
+    assert 'data-summary="series-status"' in out
+    assert _INJECT not in out, "序列名或原因代碼含標籤時，摘要行輸出不得出現未轉義的 <b>"
+    assert "&lt;b&gt;x&lt;/b&gt;" in out, "序列名應以轉義後的文字呈現（不是被吞掉）"
+
+
+def test_negative_control_unescaped_series_label_in_summary_row_turns_red(monkeypatch):
+    """負控（記憶體內現編 mutant）：把 `primary_notes_html` 內的 `escape(label)` 換成 `label`，上面的斷言必須轉紅。"""
+    import inspect
+    import textwrap
+
+    src = textwrap.dedent(inspect.getsource(mkt.primary_notes_html))
+    assert src.count("escape(label)") >= 1
+    ns = dict(vars(mkt))
+    exec(src.replace("escape(label)", "label"), ns)
+    mutant_out = _notes_with_injected_label(monkeypatch, ns["primary_notes_html"])
+    assert _INJECT in mutant_out, "mutant 未產生未轉義輸出：守衛抓不到拿掉 escape(label) 的改動"
