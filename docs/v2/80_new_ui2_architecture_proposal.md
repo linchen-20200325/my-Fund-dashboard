@@ -556,3 +556,54 @@ runtime 未啟用：整區只顯示「AI 分析暫不可用／無法判定」（
 **全稱句揭露**：本檔「無」「只」類敘述凡標【F-轉述】者，取決於盤點組有沒有漏看，本組不宣稱窮舉；標【F-重驗】者為本組單組搜尋，亦未經第二組驗證。第 2～7、10～13 節的分層、命名、token、schema、線框、Gate 推薦為文件組整理、總管推薦，可被客戶推翻。本檔不授權任何 production 實作、不建立 New UI2 目錄、不改 ui_v2、不改 Old UI、不改 44。
 
 **2026-11-02 裁示落盤輪**：檔頭、第 0、4、7、8、9、10、11、12、13 節與本節的裁示註記，依客戶 2026-11-02 裁示（`DEC-2026-11-02-05`～`-07`）由文件組單組就地加註，原字保留；裁示內容以 evidence 逐字檔為準；第 9 節 BL-0535 守衛與第 10 節 cutover 約束的「首選以 Cloud main file 設定切換」仍是推論【I】，須於 cutover 批實測。未經第二組獨立複驗（`CLAUDE.md` §-2 規則 6）。本輪同樣不授權任何 production 實作。
+
+## 16. 客戶 2026-11-03 增補：New UI2 呈現與資料分流契約（`DEC-2026-11-03-08`）
+
+> **增補性質**：客戶 2026-11-03 的正式有效方向（要點轉述存檔 `docs/evidence/decisions/2026-11-03_canonical_convergence_and_new_ui2_rules.md`；其中 D、G 兩段另有**逐字節錄**存檔 `docs/evidence/decisions/2026-11-03_new_ui2_rules_A_to_I_verbatim_excerpt.md`，16.2、16.3 的欄位清單以該逐字檔為準；不在逐字檔內的句子已標「執行組補充」或「要點轉述」）。**不改**第 1、2、3、8 節的凍結內容；永久共用的人類 UI 呈現原則（簡單不失判讀、chart-first、工程資訊不進一般 UI、Presentation Compression≠Information Loss）住 `PROJECT_RULES.md` 13.5，本節只放架構契約，一條規則只有一個權威位置。**不授權實作、不 amend 44、不改任何 Gate**；各頁具體版面仍須該頁 wireframe 核准。
+
+### 16.1 Chart SPEC（主要圖表的短小規格列）
+
+主要圖表在圖下提供一行可掃讀的 SPEC，不把完整技術文件塞進主 UI。欄位依適用性取用：
+
+| 欄位 | 說明 |
+|---|---|
+| 標的 | 圖畫的是哪個（組）序列 |
+| period | 期間（例 3M／6M／1Y／3Y） |
+| benchmark／normalized base | 比較基準與歸一化基準值 |
+| base date | 歸一化基準日 |
+| unit | 單位 |
+| frequency | 資料頻率 |
+| latest data date | 各序列最新資料日 |
+| Missing handling | 缺值處理 |
+| comparison rule | 比較規則（例 兩序列取共同基準日） |
+
+範例（客戶）：「SPEC｜基準日 2025-11-03＝100｜日頻｜缺值不補」。`docs/v2/79` 第 4.4 節四項強制揭露（基準日、基準值、頻率、缺值處理）是本表的子集；歸一化比較圖必備該四項，其餘欄位依圖適用。已核准字樣仍以 `shared/ui_semantics/rules.py` 為準（🌍 已核准「基準日 {日}＝100」「頻率：日｜缺值不補、斷線」）；其他欄位的字樣待各頁 wireframe 核准，核准前不得自創。
+
+### 16.2 資料健康度集中到 ⚙️ 設定
+
+- 完整資料診斷不再散落在 🌍／💼／🔍 主頁；主頁只留與判讀直接相關的 freshness／source 摘要。完整診斷集中於 ⚙️ 設定→資料健康度。
+- 涵蓋所有正式資料類別：市場、基金、持倉、配息、匯率、利率、景氣、其他正式來源；每項可呈現 status、是否取得、source、as_of、retrieved_at、freshness、Missing 或 failed reason、source health。
+- 三層呈現：① 一般使用者摘要 ② provenance／date／source ③ developer diagnostics（預設收合；工程資訊規則見 `PROJECT_RULES.md` 13.5 第 3 點）。
+- （執行組補充）與 frozen 44 的「進階診斷」「頁內資料狀態塊」及 ui_v2 時期 `docs/v2/65`、`72`、`73`、`78` 的承接：44 不解凍；由各頁 New UI2 wireframe 承接，是否需 amendment 待客戶確認（`docs/BACKLOG.md` BL-0540）。
+
+### 16.3 資料流與分流：UI ViewModel≠Decision Digest
+
+```text
+Data／Sources → Validation／Normalization → Domain／Deterministic Logic → Complete Evidence Layer
+   ├─ UI ViewModel（給人看：精簡、圖表優先、key evidence、mobile-first）
+   └─ Decision Digest／OneBrain Context（完整正式 evidence：已取得的 objective facts、Missing、
+      provenance、source、as_of、retrieved_at、freshness、deterministic calculations、rule results、
+      holdings、allocation、dividend／events、market indicators、counter-evidence、cross-page context）
+```
+
+- UI 沒顯示的正式資料，OneBrain 仍可讀；OneBrain 可讀的資料，不代表 UI 必須全部顯示。
+- UI 精簡不得造成資料精簡：不得因 UI 不顯示就不抓資料、刪 adapter／provenance／health／deterministic result，或停止測試（`PROJECT_RULES.md` 13.5 第 4 點）。
+- （執行組補充）與 `docs/v2/67` 8.6（OneBrain context 的 Required／Optional／Excluded 三分）一致；本節補明「ViewModel≠Digest」。
+
+### 16.4 OneBrain 定位
+
+- （H 段，要點轉述，非逐字）OneBrain 不是讀畫面摘要再摘要；它讀完整 Decision Digest，整合 🌍／💼／🔍 evidence、dividend／events、data health、freshness、rule results、counter-evidence 與其他核准資料。
+- 未來輸出（客戶 2026-11-03 所列）：系統狀態、AI 投資總結、主要依據、最強反證、風險／不確定性、Evidence trace。**此六項與 `docs/v2/67` 6.1 六段（內容）／8.9 四區（版面）的對映待客戶確認（BL-0540），本節不擇一、不改 67。**
+- 仍禁止：AI 創造 objective facts、回寫 canonical data、把 Missing 補成 0／neutral／safe／HOLD、fake probability／Risk Cap／action state；Phase 7 前不正式啟用 🤖。
+
+⚠️ 本節由文件組單組寫成，未經第二組獨立驗證；客戶逐字原文本組未見（要點轉述，見存檔檔頭）。

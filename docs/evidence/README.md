@@ -27,3 +27,4 @@
 - 逐字摘錄不改字；含禁詞時在該目錄 README 做撞字登記。
 - `bl0536_mkt_preview_2026-11-03/`：BL-0536 🌍 Preview rendering 截圖（注入的人造資料，非真實行情；見該目錄 README）。
 - `decisions/2026-11-03_vix_secondary_yield_ruling.md`：客戶 2026-11-03 裁示（Primary 為 VIX 時 Secondary VIX 卡讓位，採 A）逐字存檔；細節見 `decisions/README.md`。
+- `history/`：2026-11-03 Canonical Rule Convergence 批自現行文件**逐字搬出**的歷史內容（**NOT CURRENT**；每區塊 sha256 由 `tests/test_canonical_rule_consistency.py` 機械比對）；`canonical_convergence_2026-11-03/`：同批唯讀盤點報告存檔。細節見各目錄 `README.md`。
