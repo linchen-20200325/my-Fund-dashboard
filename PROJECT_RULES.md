@@ -68,6 +68,7 @@
 | Stop／Decision Gate | 第 4 節「現行」段（`DEC-2026-10-16-03`） |
 | Model／Minimum Sufficient Effort | 第 5 節 5.1（`DEC-2026-10-17-05`）；Change Gate 現行：5.1 第 10 點（`DEC-2026-10-25-03`）＋第 11 點 Hard-Stop（`DEC-2026-11-02-04`：含模式、送出 Gate 後立即停下、回覆「已切換／可以開始」才續） |
 | Minimum Sufficient Work | 第 9 節 9.1（`DEC-2026-10-24-04`） |
+| 多元解法與最小成本決策規則（Minimum-Cost Correct Path：先比較方案、禁止 sunk-cost、含 Model／Effort、預設內部不回報） | 第 9 節 9.2（`DEC-2026-11-03-05`） |
 | Save／Handoff Gate | 第 6 節 6.1（`DEC-2026-10-22-03`；補強 `DEC-2026-10-23-04` F／G；Final Save 禁止事項與零記憶接手測試 `DEC-2026-10-24-11`，6.1 第 7 點） |
 | 新裁示同批 GitHub 落盤 | 第 12 節 12.1（`DEC-2026-10-24-05`） |
 | Stateless AI Handoff／GitHub = Project Memory | 第 6 節 6.1.1（`DEC-2026-10-24-07`） |
@@ -582,6 +583,24 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 **與既有規則的關係**：細化第 8 節稽核風險分級（`DEC-2026-10-16-05`；`CLAUDE.md` §-2 規則 4 下方指標）、第 3 節 3.1 回報節流與第 5 節 5.1 推理強度管理；不推翻其中任何一條，也不構成動工授權。
 ⚠️ **併讀指標（文件組讀法，未經第二組驗證）**：第 3 點「Medium 做必要的 delta audit」不降低第 8 節分級 —— 治理規則、data semantics、investment meaning、formula、identity、freshness、provenance、migration、destructive cleanup 仍至少 1 組真正獨立稽核（可以是只看本批 delta 的獨立稽核），資安／重大合規仍 2 組。第 4 點「不重驗未改動區域」不豁免 `CLAUDE.md` §-2 規則 3（本批 subagent 回報的關鍵宣稱仍須複驗）與規則 6（全稱句要嘛獨立驗、要嘛標未驗）。
+
+### 9.2 長期規則：多元解法與最小成本決策規則（Minimum-Cost Correct Path）（客戶 2026-11-03 永久規則，`DEC-2026-11-03-05`）
+
+> **出處**：客戶 2026-11-03 裁示，逐字存檔 `docs/evidence/decisions/2026-11-03_normalization_abc_and_min_cost_rule.md`。下列第 1～6 點為條文化要點，字句有出入時以存檔原文為準，不新增內容。
+> **位階**：同 9.1（受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄，第 0.1 節）；不構成動工授權，不削弱第 4 節 Stop／Decision Gate 與第 8 節稽核分級。
+
+遇到技術、資料、UI、架構、流程、除錯或實作問題，不得預設只有單一路徑，也不得在同一路徑原地試錯。
+
+1. **先比較方案**：原則上至少評估 3 個可行方案；不足 3 個時說明原因，不得製造假方案。比較面：正確性與資料／投資語意風險、速度、Token 與 Model 成本、修改範圍、回歸風險、可逆性、能否沿用既有 module／service／data／tests／workflow、是否需新增 dependency、失敗後 fallback／downgrade path。
+2. **預設優先序**：正確性足夠且風險低 → 完成最快 → Token／成本最低 → 修改範圍最小 → 可逆性最高。目標是「足夠正確＋最低總成本」，不是最少程式碼。
+3. **禁止 sunk-cost**：同一路徑重複失敗、第二次修正仍未解決核心、範圍持續擴大、波及無關模組、需要不必要的 dependency、workaround 堆疊、Token／時間明顯高於替代方案、出現更簡單且同樣正確的方案、rollback／regression 風險升高——任一發生即重新比較 A／B／C；不得以「已經做到這裡」為理由繼續方案 A。
+4. **主動找替代路徑**（主動比客戶更早尋找，不能等客戶先提）：可重用的現有模組、wrapper／adapter 而非重寫、fake／shadow／preview 驗證、presentation-only 解法、不新增 dependency 的方法、小範圍止血、B／C fallback。
+5. **含 Model／Mode／Effort**：方案評估一併評估三者，採既有 Minimum Sufficient Effort（第 5 節 5.1）；高階模型不是預設，只有公式、資料語意、Risk Cap、身份／來源、跨模組 contract 等風險需要時才升級。
+6. **預設內部、不增碎碎念**：安全、可逆、無須客戶裁示時，內部比較後直接走最佳方案，不必把三方案全部回報（第 3 節 Silent Cruise）；只有 Decision Gate、重大架構差異、不可逆、成本差異顯著、需新增來源／dependency、需客戶裁示時，才對外呈現方案比較。不得因這條規則增加不必要 Token。
+
+**稽核檢查項**（落實客戶原文第四段「適用的 audit checklist」同步要求；以下為執行組條文化，可被客戶推翻）：稽核時可查到選擇依據（簡短即可；安全可逆的內部決定不必列方案）；觸發第 3 點時確有重新比較；對客戶的訊息未在第 6 點條件外傾倒方案清單。
+
+**與既有規則的關係**：同向補充第 5 節 5.1（Minimum Sufficient Effort）、9.1（Minimum Sufficient Work）、13.4（Anti-Bloat）與第 3 節 3.1～3.3；不推翻其中任何一條。
 
 ## 第 10 節｜Branch／PR Lifecycle
 
