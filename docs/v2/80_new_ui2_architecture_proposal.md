@@ -632,7 +632,7 @@ Data／Sources → Validation／Normalization → Domain／Deterministic Logic �
 
 - **桌機／平板（寬度大於 768px）**：左側固定側欄（標題、五頁導覽、資料狀態區、更新資料 CTA）；沒有收合鈕；不顯示底部導覽。**手機（768px 以下）**：固定底部導覽五格（icon＋短名，觸控高度 60px，納入 safe-area，頁尾留白讓內容可捲過導覽）；不顯示側欄。斷點沿用 44 第二節 2.1 的 768，兩種導覽不會同時出現。
 - **未完成頁（💼／🔍／⚙️／🤖）**：可見但不可點，💼／🔍／⚙️ 標「開發中」、🤖 標「尚未開放」（客戶 2026-11-03 定字）；選擇「不可點文字項」而非「可點後跳提示」，原因是可點會讓人以為已完成，且需要一個 handler；沒有任何 renderer、空殼頁或假資料。🤖 在 Phase 7 前不可進，由登錄表建構時擋（`DEC-2026-10-29-07`）。
-- **Top／Status Bar**：主區頂端一行**純文字**，內容為「PREVIEW」（滑過顯示「Preview｜非正式頁面」）＋（有缺資料時）資料狀態一句＋更新時間；**不放 chip 形式元素或核心數字元素**（客戶 2026-11-03 裁示第一項：若放了就不能以位於 Shell 為由排除計數）。資料狀態與時間只來自 `MarketPageModel.statuses` 的既有取得狀態與 `fetched_at`（取得時間，不是資料日）；沒有取得時間就寫規則表的缺資料 chip，不推估。⚠️ **資料全部取得時不寫「正常」「資料齊」**：`rules.entry("ok")` 刻意無字（44 頁首資料狀態行規則），客戶要求範例中的「● 主要資料正常」因此未採用；客戶 2026-11-03 已裁示維持不顯示「正常／資料齊」、不得自創綜合結論（資料取得成功不等於 freshness、可靠性、投資判讀或安全狀態全部正常）。長說明（原頁首 Preview 橫幅）移到頁尾。
+- **Top／Status Bar**：主區頂端一行**純文字**，內容為「PREVIEW」（滑過顯示「Preview｜非正式頁面」）＋（有缺資料時）資料狀態一句＋更新時間；**不放 chip 形式元素或核心數字元素**（客戶 2026-11-03 裁示第一項：若放了就不能以位於 Shell 為由排除計數）。資料狀態與時間只來自 `MarketPageModel.statuses` 的既有取得狀態與 `fetched_at`（取得時間，不是資料日）；沒有取得時間就寫規則表的缺資料字樣（純文字、零 chip），不推估。⚠️ **資料全部取得時不寫「正常」「資料齊」**：`rules.entry("ok")` 刻意無字（44 頁首資料狀態行規則），客戶要求範例中的「● 主要資料正常」因此未採用；客戶 2026-11-03 已裁示維持不顯示「正常／資料齊」、不得自創綜合結論（資料取得成功不等於 freshness、可靠性、投資判讀或安全狀態全部正常）。長說明（原頁首 Preview 橫幅）移到頁尾。
 - **「尚未設定」不是取數失敗**：Status Bar 的取數失敗項數不計尚未設定的序列（44 之十二其二第 1 條）。
 - **首屏預算讀法（客戶 2026-11-03 已裁示，`DEC-2026-11-03-11`）**：Status Bar 與導覽同屬 Shell chrome，採純文字讀法、不計入 44 之十九其一之一的「頁級 chip＋核心數字 ≤5」；**但**若 Status Bar 顯示資料狀態 chip 或核心數字，不能僅以位於 Shell 為由排除計數，故本批兩處（Status Bar、側欄狀態區）都不放 chip 形式元素。降級情境的第一屏名額另見 `docs/v2/81` 第 10.2 節（定義、方案比較、前後計數）。
 
@@ -642,6 +642,8 @@ Data／Sources → Validation／Normalization → Domain／Deterministic Logic �
 選擇：**不可用＋一句原因**（「預覽版尚未開放更新資料」，客戶 2026-11-03 已定字，`DEC-2026-11-03-11`）。理由：(a) 在 `ui_v3` 分層守衛下 adapters 只能 import `services.v2_tables`／`services.v2_domain`，不能碰 `infra`；且它會清掉退避，違反「失敗時退避、不連續轟炸來源」；現有路徑都無法在不新增 L2 函式或放寬分層守衛下安全接上；新增或放寬都屬新的 refresh pipeline 或分層變更，不在本批授權內。`ShellStatus.refresh_available` 目前恆為 False（原因代碼 `refresh_not_wired`），日後有安全入口時由 adapter 改成 True 並接上；手機沒有 CTA（Status Bar 保持極薄），位置待 ⚙️ 線框。
 
 ### 17.4 Shell 字樣（客戶 2026-11-03 已定字，`DEC-2026-11-03-11`；正式用字只在 `shared/ui_semantics/rules.py::APPROVED_WORDING` 的 `shell_*` 鍵）
+
+superseded：本節舊的 pending 候選字樣表與第 17.2 節舊「首屏預算讀法」（含「此讀法未經客戶確認」）已整段取代、未留劃線，原字逐字搬至 `docs/evidence/history/2026-11-03_v2_80_shell_wording_superseded.md`（區塊 S1～S3，基準 `875b1955`，歷史、非現行）。
 
 字樣本文**只有一份**（規則表 `APPROVED_WORDING`；逐字出處 `docs/evidence/decisions/2026-11-03_shell_wording_and_degraded_first_screen_ruling.md`），本節不複製字樣表（不建立第二套字樣表）。`ui_v3/viewmodels/preview_wording.py` 的 `shell_*` preview-only 暫擬定義已退役。與先前暫擬的差異：「部分資料缺失（{n}／{m} 項取得）」→「部分資料未取得（{n}／{m} 項已取得）」；「{n}／{m} 項取得」→「{n}／{m} 項已取得」；🤖 的未開放標籤用「尚未開放」（`shell_nav_not_open`，其餘三頁維持「開發中」）。一項也沒取得時不另造句型，用已核准的「{n}／{m} 項已取得」（總管讀法，可推翻）。
 

@@ -2249,9 +2249,10 @@
 | 理由／背景 | `DEC-2026-11-03-10` 留下兩個待客戶確認：Status Bar 是否計入首屏預算（本裁示第一項）、降級情境首屏 chip 形式元素較多是否另需預算規則（本裁示第三項）；Shell 字樣原為 pending（`docs/v2/80` 第 17.4 節），本裁示第四項定字。 |
 | evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-03_shell_wording_and_degraded_first_screen_ruling.md`。落地：`shared/ui_semantics/rules.py`（`APPROVED_WORDING` 的 `shell_*` 鍵；`preview_wording.py` 的 Shell 暫擬字樣已退役）、`ui_v3/pages/chrome.py`、`ui_v3/pages/mkt.py`、`ui_v3/shell/nav.py`、`tests/ui_v3/`（Shell 定字、分母、降級首屏預算守衛）、`docs/v2/80` 第 17 節、`docs/v2/81` 第 10.2 節、`docs/BACKLOG.md` BL-0536、`docs/HANDOFF.md`；回歸量測 `docs/evidence/bl0536_shell_h5_2026-11-03/`（含降級情境）。 |
 | 影響範圍 | 只限 Preview App 的 Shell 字樣與 🌍 頁降級情境的呈現形式。**不**改資料、來源、公式、門檻、狀態判定、投資語意；**不**修訂 frozen 44；**不**新增 refresh pipeline、資料源、dependency；**不**切正式入口、不動 Old UI、`ui_v2`。 |
+| 待客戶確認（總管讀法，不裁決） | 圖下逐序列摘要行仍各列一項狀態（外觀由 chip 改純文字，資訊量未減）；若把任何帶 `data-status-key` 的元素都算名額，降級 390px 比較檢視仍為 7。客戶不接受此讀法須回 Decision Gate，替代＝彙總句＋逐序列移入展開區（`docs/v2/81` 第 10.2 節）。 |
 | 與既有裁示的關係 | 承接 `DEC-2026-11-03-10`：其「需客戶定字：Shell pending 字樣」「需客戶確認：Status Bar 不計入首屏預算的讀法」「降級情境是否另需預算規則」三項由本裁示處理；資料全取得時不寫「正常」由「待確認」改為已裁示。承接 `DEC-2026-11-03-09`（首屏採 C，頁本體預算 5 不變）。 |
 | 是否可逆 | 可逆（presentation 層；客戶可另行裁示） |
-| supersedes／superseded by | supersedes：`DEC-2026-11-03-10` 影響範圍列中上述三個待確認項的「待客戶確認」狀態、`docs/v2/80` 第 17.2 節「首屏預算讀法」的「此讀法未經客戶確認」、第 17.4 節候選字樣表的 pending 狀態與「部分資料缺失（{n}／{m} 項取得）」等暫擬字樣、`ui_v3/viewmodels/preview_wording.py` 的 `shell_*` 暫時字樣（原字保留於 git 歷史與 `docs/v2/80` 第 17.4 節劃線表，有意識的更正，不是漏刪；決策者：客戶）。superseded by：無。 |
+| supersedes／superseded by | supersedes：`DEC-2026-11-03-10` 影響範圍列中上述三個待確認項的「待客戶確認」狀態、`docs/v2/80` 第 17.2 節「首屏預算讀法」的「此讀法未經客戶確認」、第 17.4 節候選字樣表的 pending 狀態與「部分資料缺失（{n}／{m} 項取得）」等暫擬字樣、`ui_v3/viewmodels/preview_wording.py` 的 `shell_*` 暫時字樣（被取代的舊字樣與舊句在 `docs/v2/80` 現行區是整段取代、未留劃線表；原字逐字搬至 `docs/evidence/history/2026-11-03_v2_80_shell_wording_superseded.md` 區塊 S1～S3〔基準 `875b1955`〕，現行區留 `superseded:` 指標；有意識的更正，不是漏刪；決策者：客戶）。superseded by：無。 |
 | provenance | **逐字**（以逐字檔為準）；「方案比較」「影響範圍」「與既有裁示的關係」由執行組單組整理，可被客戶推翻；未經第二組獨立驗證。 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
