@@ -168,3 +168,61 @@ def test_undecided_decimals_fact_is_not_rounded_to_two_places():
 def test_decided_decimals_facts_keep_their_fixed_places():
     assert "18.3" in mkt.fact_html(EvidenceFact("fact_vix", STATUS_OK, None, 18.2567, "index", "2026-10-31"))
     assert "31.457" in mkt.fact_html(EvidenceFact("fact_fx", STATUS_OK, None, 31.45678, "", "2026-10-31"))
+
+
+# ───────────── 狀態不共用：連續 render／多執行緒 render ─────────────
+def _render_capture(model, out):
+    """以假 streamlit 收集 render() 輸出的 markdown（只測「已交代」狀態的隔離，不起 Streamlit）。"""
+    import sys
+    import types
+
+    calls = []
+    fake = types.SimpleNamespace(
+        markdown=lambda html, **k: calls.append(html), title=lambda *a, **k: None, divider=lambda: None,
+        radio=lambda *a, **k: None, expander=lambda *a, **k: __import__("contextlib").nullcontext(),
+        columns=lambda n: [__import__("contextlib").nullcontext() for _ in range(n if isinstance(n, int) else 1)],
+        session_state={},
+    )
+    return fake, calls
+
+
+def _model_no_key():
+    view, table = NO_KEY()
+    return adapter.build_market_page(view, table, period="1Y", primary_view="us10y", rates_key="credit_spread_pct")
+
+
+def _full_count(monkeypatch_streamlit, model):
+    import sys
+    fake, calls = monkeypatch_streamlit
+    sys.modules["streamlit"], saved = fake, sys.modules.get("streamlit")
+    try:
+        mkt.render(model)
+    finally:
+        sys.modules["streamlit"] = saved
+    return len(FULL.findall(htmllib.unescape(re.sub(r"<[^>]+>", "", "\n".join(calls)))))
+
+
+def test_consecutive_and_threaded_renders_each_write_the_full_sentence_exactly_once():
+    import threading
+    model = _model_no_key()
+    assert mkt._NC_STATE.get() is None
+    assert [_full_count(_render_capture(model, None), model) for _ in range(2)] == [1, 1]   # 第二次不受第一次殘留影響
+    assert mkt._NC_STATE.get() is None                                                      # render 結束即還原
+    results = []
+    barrier = threading.Barrier(2)
+
+    def worker():
+        barrier.wait()
+        results.append(mkt.status_html("failed", "not_configured", "series_us10y").count("利率資料來源"))
+        token = mkt._NC_STATE.set({"seen": False})
+        try:
+            first = mkt.status_html("failed", "not_configured", "series_us10y")
+            second = mkt.status_html("failed", "not_configured", "series_us10y")
+        finally:
+            mkt._NC_STATE.reset(token)
+        results.append((first.count("利率資料來源"), second.count("利率資料來源")))
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert sorted(r for r in results if isinstance(r, tuple)) == [(1, 0), (1, 0)]

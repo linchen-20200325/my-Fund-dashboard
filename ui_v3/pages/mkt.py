@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
 from html import escape
 from typing import Optional
 
@@ -96,13 +97,16 @@ def reason_span(code: Optional[str]) -> str:
 
 # 「尚未設定：<哪一項>」的「哪一項」一頁只交代一次（44 之七其二第 3 條）：render() 期間第一次出現寫完整句，其餘位置只寫狀態族
 # `⛔ 尚未設定`。`active` 只在 render() 內為真；render() 以外直接呼叫輔助函式時一律寫完整句（不影響單元測試與其他呼叫端）。
-_NC_STATE = {"active": False, "seen": False}
+# 狀態放 ContextVar（每個執行緒／context 各自一份；Streamlit 多 session 共用模組，不得用模組層可變全域）。
+_NC_STATE: ContextVar[Optional[dict]] = ContextVar("uv3_mkt_not_configured_state", default=None)
 
 
 def _not_configured_chip() -> str:
-    if _NC_STATE["active"] and _NC_STATE["seen"]:
+    state = _NC_STATE.get()
+    if state is not None and state["seen"]:
         return chip("not_configured")
-    _NC_STATE["seen"] = True
+    if state is not None:
+        state["seen"] = True
     return chip("not_configured", label_html=not_configured_html())
 
 
@@ -294,11 +298,11 @@ def selected_controls() -> tuple:
 
 
 def render(model: MarketPageModel) -> None:
-    _NC_STATE.update(active=True, seen=False)
+    token = _NC_STATE.set({"seen": False})
     try:
         _render(model)
     finally:
-        _NC_STATE["active"] = False
+        _NC_STATE.reset(token)
 
 
 def _render(model: MarketPageModel) -> None:
