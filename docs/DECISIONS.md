@@ -2238,6 +2238,22 @@
 | supersedes／superseded by | 無 |
 | provenance | 客戶要求為總管轉達要點；選型、讀法與字樣推薦由執行組單組寫成，可被客戶推翻；未經第二組獨立驗證。 |
 
+### DEC-2026-11-03-11｜客戶裁示：Shell 驗收（Status Bar 讀法、全取得不寫「正常」、降級首屏收斂至 ≤5、Shell 正式定字、仍待驗證清單）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-03 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管於派工單內逐字轉交，見 `docs/evidence/decisions/2026-11-03_shell_wording_and_degraded_first_screen_ruling.md`，全文逐字） |
+| 決策內容摘要 | **以逐字檔為準，以下為逐項摘要。** **(1) Status Bar** 採現有 Shell chrome 讀法：純文字 PREVIEW 與更新時間，不計入 frozen 44 的頁級 chip＋核心數字 ≤5；若 Status Bar 顯示額外資料狀態 chip 或核心數字，不能僅以位於 Shell 為由排除計數；不放寬 frozen 44。**(2) 全取得狀態**維持不顯示「正常／資料齊」，不得自創「主要資料正常」等綜合結論。**(3) 降級情境首屏**不接受 7 chip＋2 數字；在不修改 frozen 44、不隱藏重要 Missing、不改變資料語意下收斂至既有 ≤5；頁級必要狀態與失敗警示保留；多個逐序列狀態可改為一個明確的摘要呈現；詳細原因保留於圖卡下方或可展開診斷；⚙️ 資料健康度承接全量明細；失敗與尚未設定不得視為相同；做不到就先送 Decision Gate，不得自行改 44；須以至少三個方案依 `PROJECT_RULES.md` 9.2 比較。**(4) Shell 正式定字**：基金投資儀表板／市場、資產、找基金、AI、設定（短標）／開發中／🤖：尚未開放／PREVIEW／Preview｜非正式頁面／更新：{時間}／資料狀態／最後更新時間／更新資料／預覽版尚未開放更新資料／部分資料未取得（{n}／{m} 項已取得）／其中 {n} 項取數失敗／{n}／{m} 項已取得／主要導覽；正式用字只保留一份 SSOT、退役 preview-only 舊定義；計數分母必須是明確、已登錄且本次檢查涵蓋的資料項目，不得推廣為全系統健康結論。**(5) 仍待驗證（保留 BACKLOG，不得宣稱已通過）**：iOS／Android 實機、Safari、深色模式、Yahoo／FRED 真實連線、Streamlit 升版後導覽相容性、安全的資料更新入口；不得為完成 Shell 而開始新 refresh pipeline。**(6) 順序**：本批（Shell 定字與降級首屏收尾）→ 之後才是 💼 線框；仍遵守 Old UI read-only、`ui_v2` maintenance-only、frozen 44 不動、不切正式入口、不做 OneBrain Phase 7；涉及資料語意、公式、正式規則門檻 → 停手送 Model／Effort Gate。 |
+| 未採方案與理由 | 降級首屏三個以上方案的比較表在 `docs/v2/81` 第 10.2 節（方案 B「逐序列非 ok 狀態收成圖下一行文字摘要」為選定；其餘為執行組讀法）。 |
+| 理由／背景 | `DEC-2026-11-03-10` 留下兩個待客戶確認：Status Bar 是否計入首屏預算（本裁示第一項）、降級情境首屏 chip 形式元素較多是否另需預算規則（本裁示第三項）；Shell 字樣原為 pending（`docs/v2/80` 第 17.4 節），本裁示第四項定字。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-03_shell_wording_and_degraded_first_screen_ruling.md`。落地：`shared/ui_semantics/rules.py`（`APPROVED_WORDING` 的 `shell_*` 鍵；`preview_wording.py` 的 Shell 暫擬字樣已退役）、`ui_v3/pages/chrome.py`、`ui_v3/pages/mkt.py`、`ui_v3/shell/nav.py`、`tests/ui_v3/`（Shell 定字、分母、降級首屏預算守衛）、`docs/v2/80` 第 17 節、`docs/v2/81` 第 10.2 節、`docs/BACKLOG.md` BL-0536、`docs/HANDOFF.md`；回歸量測 `docs/evidence/bl0536_shell_h5_2026-11-03/`（含降級情境）。 |
+| 影響範圍 | 只限 Preview App 的 Shell 字樣與 🌍 頁降級情境的呈現形式。**不**改資料、來源、公式、門檻、狀態判定、投資語意；**不**修訂 frozen 44；**不**新增 refresh pipeline、資料源、dependency；**不**切正式入口、不動 Old UI、`ui_v2`。 |
+| 與既有裁示的關係 | 承接 `DEC-2026-11-03-10`：其「需客戶定字：Shell pending 字樣」「需客戶確認：Status Bar 不計入首屏預算的讀法」「降級情境是否另需預算規則」三項由本裁示處理；資料全取得時不寫「正常」由「待確認」改為已裁示。承接 `DEC-2026-11-03-09`（首屏採 C，頁本體預算 5 不變）。 |
+| 是否可逆 | 可逆（presentation 層；客戶可另行裁示） |
+| supersedes／superseded by | supersedes：`DEC-2026-11-03-10` 影響範圍列中上述三個待確認項的「待客戶確認」狀態、`docs/v2/80` 第 17.2 節「首屏預算讀法」的「此讀法未經客戶確認」、第 17.4 節候選字樣表的 pending 狀態與「部分資料缺失（{n}／{m} 項取得）」等暫擬字樣、`ui_v3/viewmodels/preview_wording.py` 的 `shell_*` 暫時字樣（原字保留於 git 歷史與 `docs/v2/80` 第 17.4 節劃線表，有意識的更正，不是漏刪；決策者：客戶）。superseded by：無。 |
+| provenance | **逐字**（以逐字檔為準）；「方案比較」「影響範圍」「與既有裁示的關係」由執行組單組整理，可被客戶推翻；未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。

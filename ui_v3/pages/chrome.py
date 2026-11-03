@@ -5,10 +5,10 @@
   （`st.sidebar`＋`st.page_link`；底部導覽是 `st.container(key=…, horizontal=True)` 以 CSS 固定在視窗底）。
   五頁全部可見；已掛載的頁是真連結（`st.page_link`），未掛載的頁是**不可點的文字項**（`aria-disabled`、標「開發中」），
   沒有 renderer、沒有空殼頁、沒有假資料；🤖 在 Phase 7 前不可進（登錄表建構時就擋）。
-- Status Bar：「PREVIEW」＋（有缺資料時）資料狀態一行＋更新時間；內容全來自 `ShellStatus`（既有 health／provenance），沒有自造狀態；
+- Status Bar：純文字「PREVIEW」＋（有缺資料時）資料狀態一句＋更新時間（不放 chip 形式元素；客戶 2026-11-03 裁示第一項）；內容全來自 `ShellStatus`（既有 health／provenance），沒有自造狀態；
   沒有取得時間就寫規則表的缺資料 chip，不推估。⚠️ 資料全部取得時**不寫「正常」「資料齊」**（`rules.entry("ok")` 刻意無字，44 頁首資料狀態行規則）。
 - 更新資料 CTA：本批沒有安全可接的正式 refresh 流程 → 不可用＋一句原因（一般使用者看得懂；不外漏工程資訊）。
-- 字樣：Shell 自己的字樣一律 `preview_wording`（pending）；五頁頁名取登錄表（已核准）。只用 `streamlit`／`html`／標準庫。
+- 字樣：Shell 字樣已於客戶 2026-11-03 裁示核准（`DEC-2026-11-03-11`），一律取規則表 `APPROVED_WORDING`（`W.span` 輸出純文字、不標 pending）；五頁頁名取登錄表（已核准）。只用 `streamlit`／`html`／標準庫。
 """
 from __future__ import annotations
 
@@ -45,46 +45,49 @@ def format_taipei(stamp: Optional[str], *, today=None, full: bool = False) -> Op
     return local.strftime("%H:%M") if local.date() == day else local.strftime("%m-%d %H:%M")
 
 
-def _missing_chip() -> str:
+def _missing_text() -> str:
+    """沒有取得時間時的缺資料字樣（規則表符號＋字樣）。**純文字、不是 chip**：Shell chrome 不放 chip 形式元素（客戶 2026-11-03 裁示第一項）。"""
     entry = rules.entry("missing")
-    return f'<span class="uv3-chip uv3-tone-{entry.tone}" data-status-key="missing">{escape(entry.wording)}</span>'
+    return f'<span data-status-key="missing">{escape(entry.wording)}</span>'
 
 
 def status_phrase_html(status: ShellStatus) -> str:
-    """資料狀態一句（全部取得時回空字串：不寫「正常」）。符號取規則表缺資料符號；取數失敗另列一句，不冒充缺資料。"""
+    """資料狀態一句（全部取得時回空字串：不寫「正常」）。純文字、符號取規則表缺資料符號；取數失敗另列一句，不冒充缺資料。
+    計數分母＝本次檢查涵蓋的已登錄項目數（`status.total`），不寫成全系統結論。"""
     if status.level == LEVEL_OK:
         return ""
-    key = "shell_status_partial" if status.level == "partial" else "shell_status_none"
     symbol = rules.entry("missing").symbol
-    out = f'{escape(symbol)} {W.span(key, ok=status.ok_count, total=status.total)}'
+    if status.level == "partial":
+        out = f'{escape(symbol)} {W.span("shell_status_partial", ok=status.ok_count, total=status.total)}'
+    else:   # 一項也沒取得：客戶已核准的計數字樣（不另造「全缺」句型）
+        out = f'{escape(symbol)} {W.span("shell_status_counts", ok=status.ok_count, total=status.total)}'
     if status.failed_count:
         out += f'（{W.span("shell_status_failed_note", n=status.failed_count)}）'
     return out
 
 
 def status_bar_html(status: ShellStatus, *, today=None) -> str:
+    """Status Bar：純文字一行（PREVIEW 標籤、資料狀態句、更新時間）；**不含任何 chip 形式元素或核心數字元素**（守衛鎖）。"""
     tip = escape(W.text("shell_preview_tip"))
-    tag = (f'<span class="uv3-tag uv3-pending" data-pending-wording="shell_preview_tag" title="{tip}">'
-           f'{escape(W.text("shell_preview_tag"))}</span>')
+    tag = f'<span class="uv3-tag" title="{tip}">{escape(W.text("shell_preview_tag"))}</span>'
     phrase = status_phrase_html(status)
     stamp = format_taipei(status.last_fetched_at, today=today)
     if stamp:
         updated = W.span("shell_updated", time=stamp)
-    else:   # 沒有取得時間：寫缺資料 chip，不推估
-        updated = (f'<span class="uv3-pending" data-pending-wording="shell_updated">'
-                   f'{W.span_html("shell_updated", time=_missing_chip())}</span>')
+    else:   # 沒有取得時間：寫缺資料字樣，不推估
+        updated = W.span_html("shell_updated", time=_missing_text())
     parts = [tag] + ([f"<span>{phrase}</span>"] if phrase else []) + [f"<span>{updated}</span>"]
     return f'<div class="uv3-statusbar" role="status" data-shell="status-bar">{"".join(parts)}</div>'
 
 
 def sidebar_status_html(status: ShellStatus) -> str:
-    """側欄資料狀態區：取得計數（事實）＋缺資料／失敗說明＋最後更新時間（取得時間，完整）。"""
+    """側欄資料狀態區：取得計數（事實）＋缺資料／失敗說明＋最後更新時間（取得時間，完整）。純文字，不放 chip。"""
     counts = W.span("shell_status_counts", ok=status.ok_count, total=status.total)
     extra = ""
     if status.level != LEVEL_OK:
         extra = f'<div class="uv3-row">{status_phrase_html(status)}</div>'
     stamp = format_taipei(status.last_fetched_at, full=True)
-    when = escape(stamp) if stamp else _missing_chip()
+    when = escape(stamp) if stamp else _missing_text()
     return (f'<div class="uv3-side-block" data-shell="side-status">'
             f'<div class="uv3-row"><span class="uv3-label">{W.span("shell_data_status_label")}</span>{counts}</div>{extra}'
             f'<div class="uv3-row"><span class="uv3-label">{W.span("shell_updated_label")}</span>{when}</div></div>')
@@ -92,17 +95,17 @@ def sidebar_status_html(status: ShellStatus) -> str:
 
 def disabled_side_html(item: nav.NavItem) -> str:
     """未掛載頁的側欄項：可見、不可點（沒有連結、沒有 renderer）。`aria-label` 讓螢幕閱讀器念出「開發中」。"""
-    label = escape(f"{item.title}（{W.text('shell_nav_soon')}）")
+    label = escape(f"{item.title}（{W.text(item.soon_key)}）")
     return (f'<div class="uv3-nav-disabled" role="link" aria-disabled="true" aria-label="{label}" data-nav="{escape(item.slug)}">'
             f'<span>{escape(item.icon)}</span><span>{escape(item.name)}</span>'
-            f'<span class="uv3-nav-soon">{W.span("shell_nav_soon")}</span></div>')
+            f'<span class="uv3-nav-soon">{W.span(item.soon_key)}</span></div>')
 
 
 def disabled_bottom_html(item: nav.NavItem) -> str:
-    label = escape(f"{item.title}（{W.text('shell_nav_soon')}）")
+    label = escape(f"{item.title}（{W.text(item.soon_key)}）")
     return (f'<div class="uv3-bn-disabled" role="link" aria-disabled="true" aria-label="{label}" data-nav="{escape(item.slug)}">'
             f'<span class="uv3-bn-icon">{escape(item.icon)}</span><span>{W.span(item.short_key)}</span>'
-            f'<span class="uv3-bn-soon">{W.span("shell_nav_soon")}</span></div>')
+            f'<span class="uv3-bn-soon">{W.span(item.soon_key)}</span></div>')
 
 
 # ───────────────────────────── Streamlit 畫面 ─────────────────────────────

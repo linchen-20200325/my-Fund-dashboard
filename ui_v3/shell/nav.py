@@ -39,7 +39,8 @@ class NavItem:
     name: str            # 完整頁名（已核准；不含圖示）
     title: str           # 圖示＋空白＋頁名（＝ registry 的 title，原字）
     available: bool      # True＝可進；False＝可見但不可進（開發中；不是空殼頁）
-    short_key: str       # 手機底部導覽短字樣在 `preview_wording` 的鍵
+    short_key: str       # 手機底部導覽短字樣在規則表 `APPROVED_WORDING` 的鍵
+    soon_key: str        # 未掛載時的標籤鍵：🤖 用「尚未開放」（Phase 7 前不可進）、其餘用「開發中」（客戶 2026-11-03，`DEC-2026-11-03-11`）
 
 
 def nav_items(pages: Optional[Tuple[PageSlot, ...]] = None) -> Tuple[NavItem, ...]:
@@ -47,7 +48,8 @@ def nav_items(pages: Optional[Tuple[PageSlot, ...]] = None) -> Tuple[NavItem, ..
     out = []
     for slot in (IA_PAGES if pages is None else pages):
         icon, name = split_title(slot.title)
-        out.append(NavItem(slot.slug, icon, name, slot.title, slot.registered, f"shell_nav_short_{slot.slug}"))
+        soon_key = "shell_nav_not_open" if slot.slug == "ai" else "shell_nav_soon"
+        out.append(NavItem(slot.slug, icon, name, slot.title, slot.registered, f"shell_nav_short_{slot.slug}", soon_key))
     return tuple(out)
 
 

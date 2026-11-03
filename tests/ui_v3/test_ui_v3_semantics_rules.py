@@ -162,8 +162,10 @@ def test_customer_ruling_wording_is_in_decisions_and_evidence_and_44_wording_is_
     from_44 = {k for k, a in rules.APPROVED_WORDING.items() if a.doc_refs == (rules.DOC_44,)}
     assert from_44 == {"fact_vix", "fact_credit_spread", "fact_leading", "fact_coincident", "fact_policy_rate", "fact_fx"}
     for key, item in rules.APPROVED_WORDING.items():
-        if key not in from_44:
-            assert rules.EVIDENCE_WORDING_RULING in item.doc_refs and rules.DOC_DECISIONS in item.doc_refs, key
+        if key in from_44:
+            continue
+        evidence = rules.EVIDENCE_SHELL_RULING if key.startswith("shell_") else rules.EVIDENCE_WORDING_RULING   # Shell 字樣出自 DEC-2026-11-03-11 的裁示檔
+        assert evidence in item.doc_refs and rules.DOC_DECISIONS in item.doc_refs, key
 
 
 def test_approved_plain_wording_view_labels_and_first_screen_fields_match_the_ruling_lines():
