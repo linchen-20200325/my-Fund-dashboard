@@ -1,34 +1,64 @@
 # -*- coding: utf-8 -*-
-"""ui_v3（New UI2）獨立 preview 入口 —— **批 1：存在，但不註冊任何頁、不可當作 main file 使用**。
+"""ui_v3（New UI2）獨立 **Preview App** 入口 —— 目前只有 🌍 市場與趨勢（BL-0536 rendering 批；客戶 2026-11-03 授權只進 Preview）。
 
-為什麼不渲染任何東西（`DEC-2026-10-27-10`／`-12`「不做空殼」、80 第 9、10 節、`PROJECT_RULES.md` 13.2）：
-- 五頁都還沒有經客戶核准的 New UI2 wireframe（`CLAUDE.md` §-1.5.4；80 第 10 節階段 3），
-  任何使用者可見的頁（含「建置中」「規劃中」）都是空殼。
-- 因此本入口**不 import streamlit、不呼叫 `st.navigation`／`st.Page`、不畫任何元素**。
-  以 `python ui_v3/app_preview.py` 執行會拋 `PreviewNotReady`（測試有覆蓋）。以 `streamlit run` 直接跑
-  **未實測**：預期會大聲失敗（`PreviewNotReady`，或因 sys.path 未調整而 `ModuleNotFoundError`），
-  不會產生「看起來可用」的畫面。**絕不可設為 Streamlit Cloud 的 main file**；頁出現之前設計上即不可用。
-- import 本檔零副作用（只有定義；`main()` 只在 `__main__` 才執行）。
-
-接手說明：第一頁 wireframe 經客戶核准並實作後，由該批在 `ui_v3/shell/registry.py` 把該頁改為
-`registered=True`，並在此處補 `st.navigation`；同批必須同步改
-`tests/ui_v3/test_ui_v3_page_registry_guard.py` 與 `tests/ui_v3/test_ui_v3_preview_not_formal_guard.py`。
-正式 cutover（BL-0535）與本檔無關：preview ≠ 正式入口（`DEC-2026-11-02-06`）；
-本檔不得被 `app.py`、`ui/`、`ui_v2/` 引用（守衛：test_ui_v3_preview_not_formal_guard）。
-
+⛔ 這**不是**正式入口：不切正式 Streamlit entrypoint、不 cutover、Old UI 與 `ui_v2` 不在這裡、也不在這裡暴露；
+   preview ≠ 正式 App（`DEC-2026-11-02-06`、`DEC-2026-11-03-04`）。本檔不得被 `app.py`、`ui/`、`ui_v2/` 引用
+   （守衛：`tests/ui_v3/test_ui_v3_preview_not_formal_guard.py`）；絕不可設為 Streamlit Cloud 的 main file。
 ⛔ 不得 import `ui_v3.fixtures`（preview 不得顯示 fake 資料）、不得 import ui_v2／Old UI。
+
+執行：repo 根目錄 `streamlit run ui_v3/app_preview.py`。`main()` 會把 repo 根目錄補進 `sys.path`（`streamlit run` 只加腳本所在資料夾）。
+
+設計：
+- 所有 import（含 streamlit）都在函式內：import 本檔零副作用（只有定義；`main()` 只在 `__main__` 才執行）。
+- 只導覽 `shell.registry.registered_pages()` 的頁；沒有已核准並實作的頁 → `PreviewNotReady`（不渲染空殼）；
+  登錄為已掛載、卻沒有對應 renderer → `NotImplementedError`（Fail Loud，不畫空殼）。
+- 資料：由 `adapters.market_page.load()` 呼叫既有 L2→L1（不新增資料源、不新增 dependency）；FRED 金鑰沿用 `st.secrets`／環境變數 `FRED_API_KEY`。
 """
 from __future__ import annotations
 
-from ui_v3.shell.registry import assert_preview_ready
+
+def _ensure_repo_root_on_path() -> None:
+    import pathlib
+    import sys
+
+    root = str(pathlib.Path(__file__).resolve().parents[1])
+    if root not in sys.path:
+        sys.path.insert(0, root)
+
+
+def _render_mkt() -> None:
+    """🌍 頁：讀 controls → adapter 取數並組 view model → 頁渲染（頁只吃 view model）。"""
+    import os
+
+    import streamlit as st
+
+    from ui_v3.adapters import market_page as adapter
+    from ui_v3.pages import mkt
+
+    period, view, rates_key = mkt.selected_controls()
+    market_view, table = adapter.load([st.secrets, os.environ])
+    model = adapter.build_market_page(market_view, table, period=period, primary_view=view, rates_key=rates_key)
+    mkt.render(model)
 
 
 def main() -> None:
-    """註冊頁並啟動導覽。批 1 沒有可註冊的頁 → `PreviewNotReady`。"""
-    assert_preview_ready()
-    # 批 1 不可能走到這裡（assert_preview_ready 在沒有頁時一定拋出）。
-    # 之後有已核准的頁時，在此以 shell.registry.registered_pages() 建立導覽。
-    raise NotImplementedError("navigation wiring 待第一頁 wireframe 核准後的批次實作")
+    """註冊已掛載的頁並啟動導覽。沒有已掛載的頁 → `PreviewNotReady`。"""
+    _ensure_repo_root_on_path()
+    import streamlit as st
+
+    from ui_v3.shell.registry import assert_preview_ready
+
+    pages = assert_preview_ready()
+    renderers = {"mkt": _render_mkt}
+    missing = [p.slug for p in pages if p.slug not in renderers]
+    if missing:
+        raise NotImplementedError(f"已掛載的頁沒有 renderer：{missing}（不畫空殼）")
+    st.set_page_config(page_title=pages[0].title, page_icon="🌍", layout="wide")
+    navigation = st.navigation(
+        [st.Page(renderers[p.slug], title=p.title, url_path=p.slug, default=i == 0) for i, p in enumerate(pages)],
+        position="hidden",
+    )
+    navigation.run()
 
 
 if __name__ == "__main__":

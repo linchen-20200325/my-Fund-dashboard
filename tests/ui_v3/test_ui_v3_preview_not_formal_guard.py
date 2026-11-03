@@ -5,10 +5,12 @@ BL-0535 的 cutover 守衛（正式 entrypoint 只註冊 ui_v3 頁、無切換 w
 本檔只做批 1 能做的前置，防止 preview 在 cutover 之前被「暴露」：
 1. 正式入口候選（根目錄 `app.py`、其他根目錄 `.py`、`ui/**`、`ui_v2/**`、`services`／`repositories`／`shared`／`infra`／`scripts`／`mcp_server`／`models`、
    `.streamlit/`、`.github/`、`.devcontainer/`）**不得引用 ui_v3**（import 以 AST；其餘文字檔以字串）；
-2. `ui_v3/app_preview.py` 不 import streamlit、不 import fixtures、import 零副作用、`main()` Fail Loud
-   （沒有任何已核准的頁 → 拋 `PreviewNotReady`），因此即使被誤設成 main file 也只會大聲失敗、不會顯示空殼頁（`streamlit run` 本身的行為未實測；絕不可設為 Cloud main file）；
+2. `ui_v3/app_preview.py`：模組層不 import streamlit（所有 import 都在函式內）、不 import fixtures、import 零副作用；
+   `main()` 沒有任何已掛載的頁 → `PreviewNotReady`（不渲染空殼）；
    ⚠️ 引用偵測是 import AST＋字串常數；以字串拼接組成 `ui_v3` 名稱的繞法不在涵蓋內（誠實揭露）；
-3. preview 檔本身沒有任何 Streamlit 顯示呼叫。
+3. ~~preview 檔本身沒有任何 Streamlit 顯示呼叫~~ → 2026-11-03 BL-0536 rendering 批：preview 檔現在會呼叫 `st.set_page_config`／`st.navigation`
+   （只導覽已掛載的頁；仍不畫任何頁內容，頁內容在 `ui_v3/pages/`）；Streamlit 只能在函式內 import。
+   本檔的頁面行為由 `test_ui_v3_market_page_apptest.py` 以 AppTest 覆蓋。
 """
 from __future__ import annotations
 
@@ -72,31 +74,44 @@ def test_config_dirs_do_not_reference_ui_v3():
     assert not hits, "設定／workflow 引用了 ui_v3（不得把 preview 掛進正式或 CI 入口）：" + ", ".join(hits)
 
 
-def test_preview_module_is_pure_declaration_without_streamlit_or_fixtures():
+def test_preview_module_has_no_module_level_streamlit_or_fixtures():
     src = lib.read(_PREVIEW)
+    tree = ast.parse(src)
     assert lib.module_level_side_effects(src) == []
-    mods = lib.imports_of(ast.parse(src), "ui_v3")
-    assert not any(m.split(".")[0] == "streamlit" for m in mods)
+    # 模組層（含 import）不得載入 streamlit；streamlit 只能出現在函式內（import ui_v3 零副作用）
+    top_imports = [m for stmt in tree.body if isinstance(stmt, (ast.Import, ast.ImportFrom))
+                   for m in lib.imports_of(ast.Module(body=[stmt], type_ignores=[]), "ui_v3")]
+    assert not any(m.split(".")[0] == "streamlit" for m in top_imports), top_imports
+    mods = lib.imports_of(tree, "ui_v3")
     assert not any(m.startswith("ui_v3.fixtures") for m in mods)
+    assert not any(m.split(".")[0] in ("ui_v2", "ui") for m in mods)
     assert lib.import_violations("ui_v3/app_preview.py", src) == []
-    # 沒有任何 Streamlit 顯示呼叫（沒有 import streamlit，名稱 st 也不該出現）
-    assert not any(isinstance(n, ast.Name) and n.id == "st" for n in ast.walk(ast.parse(src)))
 
 
-def test_preview_main_fails_loud_when_no_page_is_registered():
+def test_preview_main_fails_loud_when_no_page_is_registered(monkeypatch):
+    pytest.importorskip("streamlit")   # main() 先 import streamlit；沒有 streamlit 的直譯器（--noconftest 本機）跳過，CI 會跑
+    """沒有任何已掛載的頁 → `PreviewNotReady`（負控：在記憶體內換掉登錄表；`st.set_page_config` 之前就拋，不畫任何東西）。"""
     from ui_v3 import app_preview
-    from ui_v3.shell.registry import PreviewNotReady
+    from ui_v3.shell import registry
+    from ui_v3.shell.registry import PageSlot, PreviewNotReady
+    monkeypatch.setattr(registry, "IA_PAGES", tuple(
+        PageSlot(p.slug, p.title, False,
+                 registry.REASON_PHASE7 if p.slug == registry.AI_SLUG else registry.REASON_WIREFRAME_PENDING)
+        for p in registry.IA_PAGES))
     with pytest.raises(PreviewNotReady):
         app_preview.main()
 
 
-def test_running_preview_as_a_script_fails_loud_and_renders_nothing():
-    """以 `__main__` 執行（等同 `streamlit run` 的載入方式）：非 0 結束、stderr 有 PreviewNotReady、stdout 無輸出。"""
-    proc = subprocess.run([sys.executable, "-s", str(_PREVIEW)], capture_output=True, text=True,
-                          cwd=str(lib.ROOT), env={"PYTHONPATH": str(lib.ROOT)}, timeout=60)
-    assert proc.returncode != 0
-    assert "PreviewNotReady" in proc.stderr
-    assert proc.stdout.strip() == ""
+def test_preview_main_fails_loud_when_registered_page_has_no_renderer(monkeypatch):
+    pytest.importorskip("streamlit")   # main() 先 import streamlit；沒有 streamlit 的直譯器（--noconftest 本機）跳過，CI 會跑
+    """登錄為已掛載、卻沒有 renderer → NotImplementedError（不畫空殼；負控）。"""
+    from ui_v3 import app_preview
+    from ui_v3.shell import registry
+    from ui_v3.shell.registry import PageSlot
+    monkeypatch.setattr(registry, "IA_PAGES", tuple(
+        PageSlot(p.slug, p.title, True) if p.slug == "ast" else p for p in registry.IA_PAGES))
+    with pytest.raises(NotImplementedError):
+        app_preview.main()
 
 
 def test_importing_ui_v3_does_not_import_streamlit_or_old_tree():

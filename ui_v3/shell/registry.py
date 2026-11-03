@@ -7,8 +7,9 @@
 - 頁序：🌍 → 💼 → 🔍 → 🤖 → ⚙️；頁名逐字與 `ui_v2/app_preview.py::PAGES` 的四頁一致（守衛：
   `tests/ui_v3/test_ui_v3_page_registry_guard.py` 以 AST 讀 ui_v2 檔，不 import）。
 - url_path 沿用 ui_v2 慣例（mkt／ast／exp／set；🤖 取 `ai`，80 第 4.2 節建議）。
-- **`registered` 是「已有核准 wireframe 且已實作的頁」**。批 1 沒有任何一頁，所以五頁皆 False；
+- **`registered` 是「已有核准 wireframe 且已實作的頁」**。批 1 沒有任何一頁，五頁皆 False；
   逐頁 wireframe 經客戶核准、實作後，由該批**有意識地**把對應頁改為 True 並同步改守衛。
+  ~~批 1 恆為空~~ → 2026-11-03 BL-0536 rendering 批：🌍 `mkt` 改 True（只進 Preview App；其餘四頁維持 False；狀態更新，不是漏刪）。
 - 🤖 `ai`：Phase 7（OneBrain）之前**禁止** registered=True（建構時就擋）。
 """
 from __future__ import annotations
@@ -47,7 +48,7 @@ class PageSlot:
 
 # 頁序與頁名：80 第 7 節；與 ui_v2 預覽導覽的四頁逐字一致。
 IA_PAGES: Tuple[PageSlot, ...] = (
-    PageSlot("mkt", "🌍 市場與趨勢", False, REASON_WIREFRAME_PENDING),
+    PageSlot("mkt", "🌍 市場與趨勢", True),   # 2026-11-03：線框已核准（DEC-2026-11-03-01）、Preview rendering 實作（BL-0536）
     PageSlot("ast", "💼 我的資產", False, REASON_WIREFRAME_PENDING),
     PageSlot("exp", "🔍 找基金", False, REASON_WIREFRAME_PENDING),
     PageSlot(AI_SLUG, "🤖 AI 投資總結", False, REASON_PHASE7),
@@ -56,7 +57,7 @@ IA_PAGES: Tuple[PageSlot, ...] = (
 
 
 def registered_pages() -> Tuple[PageSlot, ...]:
-    """目前實際掛載進導覽的頁（保持 IA 順序）。批 1 恆為空 tuple。"""
+    """目前實際掛載進導覽的頁（保持 IA 順序）。~~批 1 恆為空 tuple~~ → 目前只有 🌍（見模組 docstring）。"""
     return tuple(p for p in IA_PAGES if p.registered)
 
 
@@ -68,7 +69,6 @@ def assert_preview_ready() -> Tuple[PageSlot, ...]:
     pages = registered_pages()
     if not pages:
         raise PreviewNotReady(
-            "ui_v3 preview 尚無任何已核准並實作的頁（批 1 只有骨架）；依「不做空殼」，"
-            "入口不註冊任何頁、也不渲染任何使用者可見內容。"
+            "ui_v3 preview 沒有任何已核准並實作的頁；依「不做空殼」，入口不註冊任何頁、也不渲染任何使用者可見內容。"
         )
     return pages
