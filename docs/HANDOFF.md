@@ -6,7 +6,8 @@
 > **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
 > - **查詢時點**：2026-11-03；**latest verified main＝`4d8c07dd`**（Merge #1131，BL-0536 🌍 Preview rendering；本批讀工作樹基底，**未重查 GitHub**，接手先 `git fetch origin main`）。
 > - **Open／Draft PR**：以 GitHub 為準（本檔寫成時，下列兩批尚未開 PR）。
-> - **唯一下一接手點（單一）**：**(1) 🌍 正式字樣落盤批**（`DEC-2026-11-03-07`；分支 `ccr-a427a479-81wzdy`，commit `82ba783f`）→ 獨立稽核 → 開 PR → CI → 合併（PR 號以 GitHub 為準，**待開**）；**(2) 本規則收斂批**（`DEC-2026-11-03-08`）→ 獨立稽核（治理規則等級，`DEC-2026-10-16-05`）→ CI → 合併。兩批 docs／字樣為主，無新資料源、無公式變更。**(3) 之後**才是 Navigation Shell＋H5（尚未開始，需 (1)(2) 合併與下列 Gate 裁示）。
+> - **唯一下一接手點（單一）**：先完成 🌍 字樣批（`DEC-2026-11-03-07`；分支 `ccr-a427a479-81wzdy`，commit `82ba783f`）的獨立稽核、PR、CI 與合併（PR 號以 GitHub 為準，待開）。
+> - **之後（依序進行，不是並列接手點）**：本規則收斂批（`DEC-2026-11-03-08`）的獨立稽核、CI 與合併；再 Navigation Shell＋H5（尚未開始，需前兩批合併與下列 Gate 裁示）。兩批以 docs／字樣為主，無新資料源、無公式變更。
 > - **待客戶裁示（隨 (1) 一併回報；BL-0539）**：🌍 首屏「市場狀態」與「是否需注意」拆兩枚 chip 的預算 Gate——Visual Budget 5 vs 6；方案 A＝兩枚 chip 並 amend 44 預算為 ≤6、B＝維持現況一枚共用 chip、C＝兩列各一枚 chip 並把「基準日」改為圖上純文字揭露行（→ 5；總管推薦 C）。未裁示前不實作、不放寬預算。
 
 ## 1. 必讀順序（新對話或換人接手）
@@ -30,6 +31,26 @@
 | 💼／🔍／⚙️／🤖 | wireframe 尚未起草（順序 💼 → 🔍 → ⚙️；🤖 依 Phase 7）；核准前不寫該頁 `ui_v3` 代碼 |
 | cutover | 未開始；強制驗收項 BL-0535 |
 | 本機環境 | `ui_v2` 摘要守衛要用 Python 3.11 跑（CI 為 3.11）；`.claude/worktrees` 殘留會讓檔案引用守衛誤紅，需要時在乾淨 worktree 驗 |
+
+## 2.1 背景 active work、不能自行做的事、主要風險
+
+- **背景累積線**：BL-0509 EPS Data Source Probe 與 MoneyDJ NAV probe 照既有排程累積（預計 2026-10-28～2026-11-03），累積達標後一次回報客戶；現況以 `docs/BACKLOG.md` BL-0509 為準，不阻擋主線。
+
+**不能自行做的事**（索引摘要，規則本文見 `PROJECT_RULES.md` 第 4 節與 13.2；不新增規則）：
+
+1. 新增或替換 production 資料源／API、改正式公式、門檻或投資語意、改 data identity 規則——須停下請客戶裁示。
+2. 改 frozen 文件（`docs/v2/44`、子法 1、57）、做 destructive migration、刪 Old UI 或 `ui_v2`、cutover 正式入口——須走 Gate。
+3. 寫任一頁 `ui_v3` 代碼前，該頁 wireframe 須經客戶核准；UI 版面變更先出草稿。
+4. 切換 Model／Effort 前送出 Gate 並停下，等客戶回覆「已切換／可以開始」。
+5. 未經客戶明示不得 `git push --force`、重寫已推送歷史、直接 push main。
+
+**主要風險**：
+
+1. 正式 App 現況推定為 Old UI（Streamlit Cloud 設定，repo 內不可驗）；cutover 前須有 BL-0535 守衛綠燈與 URL／OAuth redirect 未變的紀錄。
+2. 真實 Yahoo／FRED 連線未驗（環境限制）；Preview 截圖為注入資料，不是真實行情。
+3. freshness 門檻未裁示（BL-0369），首屏只顯示 `⬜ 門檻待裁示`；不得自創新舊判定。
+4. 本批收斂內容未經客戶確認 Latest-Rule-Only 讀法（BL-0538），否決時須自 `docs/evidence/history/` 還原。
+5. 規則收斂僅第一階段，`PROJECT_RULES.md` 與 `docs/v2/81` 仍有劃線舊句（BL-0541）。
 
 ## 3. 待客戶裁示（Decision Gate；本檔只列 ID，內容與推薦看 `docs/BACKLOG.md`）
 

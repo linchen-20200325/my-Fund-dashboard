@@ -559,7 +559,7 @@ runtime 未啟用：整區只顯示「AI 分析暫不可用／無法判定」（
 
 ## 16. 客戶 2026-11-03 增補：New UI2 呈現與資料分流契約（`DEC-2026-11-03-08`）
 
-> **增補性質**：客戶 2026-11-03 的正式有效方向（要點轉述；存檔 `docs/evidence/decisions/2026-11-03_canonical_convergence_and_new_ui2_rules.md`）。**不改**第 1、2、3、8 節的凍結內容；永久共用的人類 UI 呈現原則（簡單不失判讀、chart-first、工程資訊不進一般 UI、Presentation Compression≠Information Loss）住 `PROJECT_RULES.md` 13.5，本節只放架構契約，一條規則只有一個權威位置。**不授權實作、不 amend 44、不改任何 Gate**；各頁具體版面仍須該頁 wireframe 核准。
+> **增補性質**：客戶 2026-11-03 的正式有效方向（要點轉述存檔 `docs/evidence/decisions/2026-11-03_canonical_convergence_and_new_ui2_rules.md`；其中 D、G 兩段另有**逐字節錄**存檔 `docs/evidence/decisions/2026-11-03_new_ui2_rules_A_to_I_verbatim_excerpt.md`，16.2、16.3 的欄位清單以該逐字檔為準；不在逐字檔內的句子已標「執行組補充」或「要點轉述」）。**不改**第 1、2、3、8 節的凍結內容；永久共用的人類 UI 呈現原則（簡單不失判讀、chart-first、工程資訊不進一般 UI、Presentation Compression≠Information Loss）住 `PROJECT_RULES.md` 13.5，本節只放架構契約，一條規則只有一個權威位置。**不授權實作、不 amend 44、不改任何 Gate**；各頁具體版面仍須該頁 wireframe 核准。
 
 ### 16.1 Chart SPEC（主要圖表的短小規格列）
 
@@ -582,9 +582,9 @@ runtime 未啟用：整區只顯示「AI 分析暫不可用／無法判定」（
 ### 16.2 資料健康度集中到 ⚙️ 設定
 
 - 完整資料診斷不再散落在 🌍／💼／🔍 主頁；主頁只留與判讀直接相關的 freshness／source 摘要。完整診斷集中於 ⚙️ 設定→資料健康度。
-- 涵蓋範圍：市場、基金、持倉、配息、匯率、利率、景氣與其他正式資料來源；每項可呈現 status、是否取得、source、as_of、retrieved_at、freshness、Missing 或 failed reason、source health。
+- 涵蓋所有正式資料類別：市場、基金、持倉、配息、匯率、利率、景氣、其他正式來源；每項可呈現 status、是否取得、source、as_of、retrieved_at、freshness、Missing 或 failed reason、source health。
 - 三層呈現：① 一般使用者摘要 ② provenance／date／source ③ developer diagnostics（預設收合；工程資訊規則見 `PROJECT_RULES.md` 13.5 第 3 點）。
-- 與 frozen 44 的「進階診斷」「頁內資料狀態塊」及 ui_v2 時期 `docs/v2/65`、`72`、`73`、`78` 的承接：44 不解凍；由各頁 New UI2 wireframe 承接，是否需 amendment 待客戶確認（`docs/BACKLOG.md` BL-0540）。
+- （執行組補充）與 frozen 44 的「進階診斷」「頁內資料狀態塊」及 ui_v2 時期 `docs/v2/65`、`72`、`73`、`78` 的承接：44 不解凍；由各頁 New UI2 wireframe 承接，是否需 amendment 待客戶確認（`docs/BACKLOG.md` BL-0540）。
 
 ### 16.3 資料流與分流：UI ViewModel≠Decision Digest
 
@@ -598,11 +598,11 @@ Data／Sources → Validation／Normalization → Domain／Deterministic Logic �
 
 - UI 沒顯示的正式資料，OneBrain 仍可讀；OneBrain 可讀的資料，不代表 UI 必須全部顯示。
 - UI 精簡不得造成資料精簡：不得因 UI 不顯示就不抓資料、刪 adapter／provenance／health／deterministic result，或停止測試（`PROJECT_RULES.md` 13.5 第 4 點）。
-- 與 `docs/v2/67` 8.6（OneBrain context 的 Required／Optional／Excluded 三分）一致；本節補明「ViewModel≠Digest」。
+- （執行組補充）與 `docs/v2/67` 8.6（OneBrain context 的 Required／Optional／Excluded 三分）一致；本節補明「ViewModel≠Digest」。
 
 ### 16.4 OneBrain 定位
 
-- OneBrain 不是讀畫面摘要再摘要；它讀完整 Decision Digest，整合 🌍／💼／🔍 evidence、dividend／events、data health、freshness、rule results、counter-evidence 與其他核准資料。
+- （H 段，要點轉述，非逐字）OneBrain 不是讀畫面摘要再摘要；它讀完整 Decision Digest，整合 🌍／💼／🔍 evidence、dividend／events、data health、freshness、rule results、counter-evidence 與其他核准資料。
 - 未來輸出（客戶 2026-11-03 所列）：系統狀態、AI 投資總結、主要依據、最強反證、風險／不確定性、Evidence trace。**此六項與 `docs/v2/67` 6.1 六段（內容）／8.9 四區（版面）的對映待客戶確認（BL-0540），本節不擇一、不改 67。**
 - 仍禁止：AI 創造 objective facts、回寫 canonical data、把 Missing 補成 0／neutral／safe／HOLD、fake probability／Risk Cap／action state；Phase 7 前不正式啟用 🤖。
 

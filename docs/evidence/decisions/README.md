@@ -51,6 +51,7 @@
 | `2026-11-03_vix_secondary_yield_ruling.md` | 客戶 2026-11-03 正式裁示全文（Primary 檢視為 VIX 時 Secondary VIX 卡讓位、切回比較／美 10Y／美 2Y 時恢復、presentation 去重規則、不補卡、張數可隨檢視變化、不改 VIX 資料／來源／公式／狀態／freshness；週末起點殘留邊界維持 A2；日期格式 YYYY-MM-DD 暫留、與其他待核准字樣一起送 Gate；三方案 A／B／C 表為執行組整理；`docs/DECISIONS.md` `DEC-2026-11-03-06`）；圍欄內文 sha256 `3718b8f826ffa9c1da754c129a888c74492b07a3ccfe0a94c34e13789ef517d8`（898 bytes，執行組以 Python 計算；無總管原檔可逐位元組比對）；無遮蔽 | 客戶 2026-11-03 對話中的訊息，經總管逐字轉交（執行組只依派工單抄入） | 2026-11-03 | 分支 `ccr-a427a479-81wzdy`（本檔為未追蹤新檔） | 2362 | `905e61e6537711aee02459a959c3cb084b70c486cdd2e1c19c43e830a8df9718` |
 | `2026-11-03_mkt_formal_wording_ruling.md` | 客戶 2026-11-03 正式裁示全文（🌍 市場與趨勢正式字樣九項、首屏欄位拆分要求、一般 UI 工程資訊不外漏；總管於派工單內逐字轉交，本組未見客戶對話本身；`DEC-2026-11-03-07`）。 | 總管於派工單內逐字轉交（本組未見客戶對話本身） | 2026-11-03 | main `4d8c07dd` | 2630 | `2bb9156d2ee866a1aa36702c4d91948421c2dbe1e8c4644ebf503116548aeef0` |
 | `2026-11-03_canonical_convergence_and_new_ui2_rules.md` | 客戶 2026-11-03 Canonical Rule Convergence／Latest-Rule-Only 指示與 New UI2 規則 A～I（**要點轉述，非逐字**；`DEC-2026-11-03-08`） | 總管於派工單內摘要轉交（本組未見客戶對話本身） | 2026-11-03 | main `4d8c07dd`＋`82ba783f` | 3763 | `f0cedd2f77cd2e552ba613127541aae3a1f663dd169c64abce8c0fb664b81028` |
+| `2026-11-03_new_ui2_rules_A_to_I_verbatim_excerpt.md` | 客戶 2026-11-03 New UI2 規則 D（資料健康度集中 ⚙️）與 G（UI ViewModel≠Decision Digest）兩段**逐字節錄，非全文**（`DEC-2026-11-03-08`） | 總管轉交的原文節錄（本組未見客戶對話本身） | 2026-11-03 | main `4d8c07dd`＋`82ba783f` | 1955 | `fe4e5ddb68a30bd4b8877acc45d417d90e6e46538e7431177fb7a2f609496be7` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 

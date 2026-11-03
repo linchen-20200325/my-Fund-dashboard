@@ -111,7 +111,7 @@
 | GitHub Durable Memory Contract（Conversation 不是 SSOT；Batch 結案前檢查五類文件同步；HANDOFF 只是索引） | 第 6 節 6.1.1 末尾指標（`DEC-2026-10-29-06`） |
 | 正式 Streamlit 只顯示目前最新正式 UI；保留程式 ≠ 對使用者公開；三代 UI 邊界（Old UI read-only／`ui_v2` maintenance-only／`ui_v3` 唯一正式）；cutover 暴露守衛 | 第 13 節 13.2 末尾「正式 Streamlit 顯示規則」（`DEC-2026-11-02-06`；New UI2 架構 `DEC-2026-11-02-05`） |
 
-**Supersession hygiene（客戶 2026-11-03 Latest-Rule-Only 指示改寫；`DEC-2026-11-03-08`；總管讀法，待客戶確認，BL-0538）**：(1) 現行區只留 CURRENT 規則；被取代的舊句**逐字搬到** `docs/evidence/history/`（檔頭標 NOT CURRENT／Historical evidence only），原位置只留 `superseded: <DEC-ID>` 指標；(2) 搬出必須無遺失：每段記 sha256 與基準 commit，由 `tests/test_canonical_rule_consistency.py` 機械比對；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（索引不是 SSOT，見 0.4 現行規則索引）；(6) 不適用本改寫：`docs/DECISIONS.md`（追加式，以 supersedes／superseded-by 欄查）、`docs/evidence/decisions/*`（客戶裁示逐字存檔，不改）、凍結文件（`docs/v2/CONSTITUTION.md`、57、44 等，只能走合法 amendment）、`CLAUDE.md`／`PROCESS.md`／`EXCEPTIONS.md`（位階在本檔之上，本批不動）、Git 歷史（不改寫）。（舊 (1)(2)「舊內容保留、就地標示」原文逐字見 history 區塊 P2；本檔其餘章節內尚存的劃線舊句屬第二階段，登記 BL-0541。）
+**Supersession hygiene（客戶 2026-11-03 Latest-Rule-Only 指示改寫；`DEC-2026-11-03-08`；總管讀法，待客戶確認，BL-0538）**：(1) 現行區只留 CURRENT 規則；被取代的舊句**逐字搬到** `docs/evidence/history/`（檔頭標 NOT CURRENT／Historical evidence only），原位置只留 `superseded: <DEC-ID>` 指標；(2) 搬出必須無遺失：每段記 sha256 與基準 commit，由 `tests/test_canonical_rule_consistency.py` 機械比對（基準 commit `82ba783f` 若因 squash 而不可得，逐位元組比對會 skip、僅剩 sha256 自洽檢查；因此本專案合併一律用一般 merge commit、保留 SHA）；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存（第一階段範圍；其餘舊劃線句見 BL-0541）；(5) 不新增第五份治理 SSOT（索引不是 SSOT，見 0.4 現行規則索引）；(6) 不適用本改寫：`docs/DECISIONS.md`（追加式，以 supersedes／superseded-by 欄查）、`docs/evidence/decisions/*`（客戶裁示逐字存檔，不改）、凍結文件（`docs/v2/CONSTITUTION.md`、57、44 等，只能走合法 amendment）、`CLAUDE.md`／`PROCESS.md`／`EXCEPTIONS.md`（位階在本檔之上，本批不動）、Git 歷史（不改寫）。（舊 (1)(2)「舊內容保留、就地標示」原文逐字見 history 區塊 P2；本檔其餘章節內尚存的劃線舊句屬第二階段，登記 BL-0541。）
 
 ## 第 1 節｜真實性與 SSOT 判定順序
 
@@ -785,7 +785,7 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 **禁止**：不得因模型需要把品質未確認的資料硬塞進模型；不得把 Missing 轉成 0／中性／HOLD／安全／未觸發；不得把資料本身視為投資判斷；不得因某 deterministic 指標存在就自動產生買／賣／加碼／減碼／停利語意；不得建立第二套平行金融計算 SSOT；AI 不得自行補交易事實、NAV、FX、配息、持股或其他缺失資料。
 
-**與既有規則的關係**：本原則是既有「資料層 ≠ AI 推理層」（第 13 節第 1 條、`DEC-2026-10-23-12`）的進一步明文化，不推翻任何既有規則；1B／2C／3A（`DEC-2026-10-23-02`）、HWM σ 僅作位置 evidence、BL-0438 為研究、BL-0440 尚未開始、DG-1～DG-3 為暫定傾向未核准（`DEC-2026-10-24-01`）、新五頁順序 🌍市場與趨勢 → ⚖️資產配置 → 💼我的持股 → 🔍找基金 → ⚙️設定、「新研究邏輯＋舊 UI 已驗證精華 → 去重 → 唯一 SSOT → 重新設計五頁」皆維持不變。本節不新增公式、門檻、資料來源或投資語意，也不構成動工授權。
+**與既有規則的關係**：本原則是既有「資料層 ≠ AI 推理層」（第 13 節第 1 條、`DEC-2026-10-23-12`）的進一步明文化，不推翻任何既有規則；1B／2C／3A（`DEC-2026-10-23-02`）、HWM σ 僅作位置 evidence、BL-0438 為研究、BL-0440 尚未開始、DG-1～DG-3 為暫定傾向未核准（`DEC-2026-10-24-01`）、五頁順序以本節 13.2 第 1 點為準（舊五頁順序 `superseded:` `DEC-2026-10-29-06`／`-07`，舊句逐字見 history 區塊 P3，NOT CURRENT）、「新研究邏輯＋舊 UI 已驗證精華 → 去重 → 唯一 SSOT → 重新設計五頁」皆維持不變。本節不新增公式、門檻、資料來源或投資語意，也不構成動工授權。
 
 📌 **2026-10-24 指標（客戶永久原則，`DEC-2026-10-24-10`；本節既有條文一字未改）**：(1) 資料／證據 ≠ 投資行動；(2) Missing／Unknown 不得被另一個單軸訊號繞過後重新產生行動。本文以 `docs/DECISIONS.md` `DEC-2026-10-24-10` 為準。
 
