@@ -45,6 +45,29 @@
 
 `docs/BACKLOG.md` 與 `docs/HANDOFF.md` 由同批另一組建立；本檔只指向它們。
 
+**現行規則索引（Canonical Rule Index；索引不是第五份 SSOT，只放指標、不抄條文；一條規則只有一個主要權威位置）**：
+
+| 頁面 | 現行規格 | 備註 |
+|---|---|---|
+| 🌍 市場與趨勢 | `docs/v2/81`（已裁示線框；字樣＝`shared/ui_semantics/rules.py::APPROVED_WORDING`） | `docs/v2/72` 為 ui_v2 時期，版面僅供 reuse（NG-5），語意仍有效 |
+| 💼 我的資產 | 尚無 New UI2 wireframe（BL-0536-G2） | 現有 `docs/v2/73`、`76` 為 ui_v2 時期，版面須重核，語意仍有效 |
+| 🔍 找基金 | 尚無 New UI2 wireframe（BL-0536-G3） | 現有 `docs/v2/78` 同上 |
+| 🤖 AI 投資總結 | `docs/v2/67` 6.1／8.9、`docs/v2/75`；Phase 7 前不掛導覽 | 輸出「六項」對映待客戶確認（BL-0540） |
+| ⚙️ 設定 | 尚無 New UI2 wireframe（BL-0536-G4） | 現有 `docs/v2/65` 同上；資料健康度見 `docs/v2/80` 第 11 節 |
+
+| 規則 | 唯一權威位置 |
+|---|---|
+| 現行五頁與頁名 | 本檔 13.2 第 1 點 |
+| 簡單但不失判讀、資訊順序、chart-first、工程資訊不進一般 UI、Presentation Compression≠Information Loss（客戶 2026-11-03 A、B、E、F） | 本檔 13.5 |
+| Chart SPEC、資料健康度集中 ⚙️、UI ViewModel≠Decision Digest、OneBrain 定位（客戶 2026-11-03 C、D、G、H） | `docs/v2/80` 第 11 節 |
+| 正式 Streamlit 顯示、三代 UI 邊界、cutover | 本檔 13.2「正式 Streamlit 顯示規則」 |
+| 資料／行動語意、Missing | 本檔第 13 節、13.1 |
+| Missing 與狀態字樣 | `shared/ui_semantics/rules.py`（程式）＋ `docs/v2/81` 第 10.1 節（🌍 用法） |
+| 工作規則（巡航、Effort Gate、Context、Minimum-Cost、Git） | 本檔第 3、5、9、10、11 節（本檔 0.5 為指標表） |
+| 客戶裁示 | `docs/DECISIONS.md`（逐字存檔 `docs/evidence/decisions/`） |
+| 未完成工作／現況 | `docs/BACKLOG.md`／`docs/HANDOFF.md` |
+| 已退役舊內容（NOT CURRENT） | `docs/evidence/history/` |
+
 **上位與規格文件（不因本檔改動）**：`CLAUDE.md`、`EXCEPTIONS.md`（`8.2.A` 例外與 `8.3.P` 待判定登記簿，屬憲法的檔案分割）、`PROCESS.md`、`docs/v2/CONSTITUTION.md`（子法 1，逐位元組存檔，守衛 `tests/test_constitution_archive_integrity.py`）、`docs/v2/57_amendment_8_directional_judgment.md`（子法 1 正式修正案 #8，與子法 1 合讀為單一版本；守衛 `tests/test_amendment_8_integrity.py`）、`docs/v2/44_fund_ui_ssot.md`（凍結 SSOT）、`docs/v2/54_phase7_design_backlog.md`（Phase 7 設計方向登記，Non-Production）。
 
 **歷史文件（凍結，只讀不續寫；檔頭指標由同批另組加，本檔不改它們）**：
@@ -88,7 +111,7 @@
 | GitHub Durable Memory Contract（Conversation 不是 SSOT；Batch 結案前檢查五類文件同步；HANDOFF 只是索引） | 第 6 節 6.1.1 末尾指標（`DEC-2026-10-29-06`） |
 | 正式 Streamlit 只顯示目前最新正式 UI；保留程式 ≠ 對使用者公開；三代 UI 邊界（Old UI read-only／`ui_v2` maintenance-only／`ui_v3` 唯一正式）；cutover 暴露守衛 | 第 13 節 13.2 末尾「正式 Streamlit 顯示規則」（`DEC-2026-11-02-06`；New UI2 架構 `DEC-2026-11-02-05`） |
 
-**Supersession hygiene（同裁示）**：(1) 舊內容保留歷史，不刪；(2) 被新裁示取代時，在舊內容就地標示「superseded by <DEC-ID>」；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只能指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（現行四份見 0.4）。
+**Supersession hygiene（客戶 2026-11-03 Latest-Rule-Only 指示改寫；`DEC-2026-11-03-08`；總管讀法，待客戶確認，BL-0538）**：(1) 現行區只留 CURRENT 規則；被取代的舊句**逐字搬到** `docs/evidence/history/`（檔頭標 NOT CURRENT／Historical evidence only），原位置只留 `superseded: <DEC-ID>` 指標；(2) 搬出必須無遺失：每段記 sha256 與基準 commit，由 `tests/test_canonical_rule_consistency.py` 機械比對；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存；(5) 不新增第五份治理 SSOT（索引不是 SSOT，見 0.4 現行規則索引）；(6) 不適用本改寫：`docs/DECISIONS.md`（追加式，以 supersedes／superseded-by 欄查）、`docs/evidence/decisions/*`（客戶裁示逐字存檔，不改）、凍結文件（`docs/v2/CONSTITUTION.md`、57、44 等，只能走合法 amendment）、`CLAUDE.md`／`PROCESS.md`／`EXCEPTIONS.md`（位階在本檔之上，本批不動）、Git 歷史（不改寫）。（舊 (1)(2)「舊內容保留、就地標示」原文逐字見 history 區塊 P2；本檔其餘章節內尚存的劃線舊句屬第二階段，登記 BL-0541。）
 
 ## 第 1 節｜真實性與 SSOT 判定順序
 
@@ -774,14 +797,14 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 📌 **2026-11-03 提示（`DEC-2026-11-03-02` G11；不改下列任何條文）**：客戶 2026-10-26 原字為「不因單一新功能輕易增加第六頁，新功能優先歸入既有五頁的正確職責」（`DEC-2026-10-26-01` 第 (1) 點；注意原字是「不輕易增加」，不是絕對禁止；若讀作絕對禁止是執行組讀法，可被客戶推翻）；New UI2 版面以手機優先（mobile-first）為前提（`docs/v2/79` 第 10 節）。
 
-1. **五頁資訊架構與職責**：🌍 市場與趨勢、⚖️ 資產配置、💼 我的持股、🔍 找基金、⚙️ 設定（順序見 `DEC-2026-10-24-02`）。新功能優先歸入既有五頁，不輕易增第六頁；頁面名稱與主要責任應保持穩定；不以 API／資料源／模型限制或「程式比較好接」改造資訊架構。（→ **2026-10-27 指標**：此順序與五頁名稱已由客戶 `DEC-2026-10-27-02` 定為 `docs/v2/44_fund_ui_ssot.md` 的正式頁序與頁名，44 依該條有限解凍（只限頁序、頁名與 D1 導覽殼直接需要的條文／守衛，見 44 第七節第三小節之十七）；本小節首段「不解凍 44」指本小節自身不構成解凍授權，仍為真。🌍 後續內容見 `DEC-2026-10-27-03`）（→ **2026-10-29 指標**（客戶 Gate 1 方案 A，`DEC-2026-10-29-06`；有意識的政策變更，不是漏刪；本句原文不改）：⚖️ 資產配置併入「💼 我的資產」成為頁內區段，內容頁為 🌍 市場與趨勢、💼 我的資產、🔍 找基金、⚙️ 設定；🤖 AI 投資總結的入口形式待單一最小 Gate（BL-0526）。正式條文 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之二十。）
+1. **五頁資訊架構與職責（現行）**：🌍 市場與趨勢、💼 我的資產、🔍 找基金、🤖 AI 投資總結（Phase 7 前不掛導覽）、⚙️ 設定（順序 `mkt／ast／exp／ai／set`；`DEC-2026-10-29-06`、`DEC-2026-10-29-07`；`docs/v2/80` 第 7 節；程式側 `ui_v3/shell/registry.py::IA_PAGES`）。資產配置與持股能力整合進 💼 為頁內區段，**不是 top-level page**；舊「資產配置」「我的持股」頁名不得作現行頁名。新功能優先歸入既有五頁的正確職責，不因單一新功能輕易增加第六頁（客戶原字；「不輕易」非絕對禁止，絕對禁止為執行組讀法、可被客戶推翻）；頁面名稱與主要責任保持穩定；不以 API／資料源／模型限制或「程式比較好接」改造資訊架構。（`superseded:` `DEC-2026-10-27-02` 舊五頁敘述、`DEC-2026-10-24-02` 舊頁序；舊句逐字見 `docs/evidence/history/2026-11-03_project_rules_and_v2_81_superseded.md` 區塊 P1，NOT CURRENT。）
 2. **domain semantics、data contracts、user classifications、deterministic investment rules** 不隨技術元件更換而改；技術元件（Streamlit、Google Sheet、OAuth provider、外部 API、AI model、storage、前端框架）不是產品 SSOT。
 3. **Missing 語意**（已有，見第 13 節第 2～4 條）：Missing ≠ 0／False／HOLD／中性／正常／安全／未觸發；顏色不得是唯一語意載體。新來源給不出同語意時顯示 Missing／Unavailable，不用「差不多」的值替代。
 4. **可追溯性**：重要資料可追溯來源與時間（已有，第 13 節第 5 條）。
 5. **UI 不承載核心投資邏輯**：投資分類、風險判定、3-3-3、核心／衛星、配息／吃本金、趨勢判讀、配置規則、Missing 語意、Risk Cap 等必須在可測試的 domain／service／rule layer（明確輸入／輸出 contract），UI 只讀結果並呈現。
 6. **資料流**：Raw → Validate → Normalize → Domain／Rule → AI interpretation → UI。Raw 不直接當投資結論。
 7. **AI 非資料真相來源**（已有，第 13 節第 1 條、13.1）：AI 只讀已存在且可追溯的資料、解釋與整合 evidence；不補缺值、不猜數字、不改寫 deterministic rule 結果、不取代驗證或正式 investment semantics、不得因生成結果方便而修改資料層；換模型不改資料與 domain contract。
-8. **⚙️ 設定長期責任與 Active Sheet 原則**：帳號／OAuth、Active Sheet、連線狀態、sync／freshness、diagnostics 由 ⚙️ 管，其他頁不自管 Sheet／credential／connection。Active Sheet ＝ 持倉／保單 workbook；Pending ≠ Active；驗證成功才切換、失敗保留舊 Active；其他頁只消費結果，不猜、不 fallback 到別本（`DEC-2026-10-25-04` J-4）。（→ **2026-10-29 指標**（`DEC-2026-10-29-06`；有意識的政策變更，不是漏刪；本句原文不改）：只改**畫面入口位置** —— Google 帳號控制桌機固定左側、Sheet 選擇放在使用該 Sheet 的頁面、設定頁只留低頻全域功能；Active Sheet 的狀態語意（Pending ≠ Active、驗證成功才切換、失敗保留舊 Active、不猜、不 fallback）與單一狀態機一字不改；OAuth scope／callback／credential／token 不改。正式條文 44 第七節第三小節之二十其三。）
+8. **⚙️ 設定長期責任與 Active Sheet 原則**：帳號／OAuth、Active Sheet、連線狀態、sync／freshness、diagnostics 由 ⚙️ 管，其他頁不自管 Sheet／credential／connection。Active Sheet ＝ 持倉／保單 workbook；Pending ≠ Active；驗證成功才切換、失敗保留舊 Active；其他頁只消費結果，不猜、不 fallback 到別本（`DEC-2026-10-25-04` J-4）。（→ **2026-10-29 指標**（`DEC-2026-10-29-06`；有意識的政策變更，不是漏刪；本句原文不改）：只改**畫面入口位置** —— Google 帳號控制桌機固定左側、Sheet 選擇放在使用該 Sheet 的頁面、設定頁只留低頻全域功能；Active Sheet 的狀態語意（Pending ≠ Active、驗證成功才切換、失敗保留舊 Active、不猜、不 fallback）與單一狀態機一字不改；OAuth scope／callback／credential／token 不改。正式條文 44 第七節第三小節之二十其三。）（→ **2026-11-03 指標**（`DEC-2026-11-03-08`）：完整資料健康度診斷集中於 ⚙️ 設定→資料健康度，其他頁只留與判讀直接相關的 freshness／source 摘要；契約見 `docs/v2/80` 第 11 節；與 frozen 44 的承接待客戶確認，BL-0540。）
 
 **新需求分類 Gate**：先答屬於 A. Data／B. Domain／Rule／C. AI interpretation／D. UI／Interaction／E. Infrastructure／Auth 哪一層，先放對層再實作；不得因「最快」把邏輯塞進 UI。
 
@@ -830,6 +853,15 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 10. **開工前內部自問（不回報客戶）**：真的需要獨立 BL？另一個 PR？第二組 audit？已有 SSOT 可引用？能否在目前 batch 安全完成？是否正在把治理本身變成主要工作？答案顯示流程膨脹時，優先縮減流程。
 
 **邊界**：本規則只落盤，不回頭重整既有 BACKLOG、歷史 evidence 或舊 PR。與 `DEC-2026-10-16-05` 的風險分級同向；高風險項的獨立 audit 要求以本節與該 DEC 的較嚴者為準（文件組讀法，可被客戶推翻）。
+
+### 13.5 長期規則：New UI2 人類 UI 呈現原則（客戶 2026-11-03 正式有效方向，`DEC-2026-11-03-08`；要點轉述，存檔 `docs/evidence/decisions/2026-11-03_canonical_convergence_and_new_ui2_rules.md`）
+
+> 本節只放永久共用的呈現原則；架構契約（Chart SPEC、資料健康度、ViewModel／Digest 分流、OneBrain 定位）在 `docs/v2/80` 第 11 節。**不授權實作、不 amend 44、不改任何 Gate**；各頁具體版面仍須經該頁 wireframe 核准。
+
+1. **人類 UI：簡單但不失判讀能力。** 簡潔、mobile-first、圖表優先、低資訊噪音；第一屏優先回答「狀態／是否需注意／關鍵證據」；不因簡化而失去投資判讀能力。資訊順序：① 狀態／結論 ② 是否需注意／正式 action state（若已有）③ 主要圖表 ④ 關鍵 evidence ⑤ 必要數字 ⑥ 詳細來源、raw data、diagnostics 收合。
+2. **Chart-first。** 能用圖表清楚表達趨勢、相對變化、比較者優先用圖表；不得為美觀創造不存在的語意、硬疊不同單位、使用未核准雙軸、讓圖表自行做 domain calculation、或用圖形掩蓋 Missing。
+3. **工程資訊不得進一般 UI。** 環境變數名、Python exception、traceback、internal reason code、module path 一律不顯示；改用人類可理解語意（例：「利率資料來源尚未設定」之類的語意句；實際字樣以 `shared/ui_semantics/rules.py` 與各頁已核准字樣為準）。開發者診斷層預設收合。🌍 已有機器守衛（`tests/ui_v3/`）；本條為全站通則的唯一權威位置。
+4. **Presentation Compression ≠ Information Loss。** UI 精簡不代表資料精簡：UI 不顯示的資料，不得因此不抓、刪 adapter／provenance／health／deterministic result／未來 OneBrain evidence，或停止測試；完整資料留在資料、domain、evidence 層。
 
 ## 第 14 節｜已裁示的治理衝突（2026-10-16 收斂）~~與尚待程序完成者~~（2026-10-16 全結，`DEC-2026-10-16-14`；有意識的狀態變更，不是漏刪；2026-10-16；決策者：客戶（#8 核准裁示，`DEC-2026-10-16-14`））
 
