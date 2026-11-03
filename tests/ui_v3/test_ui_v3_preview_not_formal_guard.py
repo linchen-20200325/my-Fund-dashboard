@@ -89,6 +89,7 @@ def test_preview_module_has_no_module_level_streamlit_or_fixtures():
 
 
 def test_preview_main_fails_loud_when_no_page_is_registered(monkeypatch):
+    pytest.importorskip("streamlit")   # main() 先 import streamlit；沒有 streamlit 的直譯器（--noconftest 本機）跳過，CI 會跑
     """沒有任何已掛載的頁 → `PreviewNotReady`（負控：在記憶體內換掉登錄表；`st.set_page_config` 之前就拋，不畫任何東西）。"""
     from ui_v3 import app_preview
     from ui_v3.shell import registry
@@ -102,6 +103,7 @@ def test_preview_main_fails_loud_when_no_page_is_registered(monkeypatch):
 
 
 def test_preview_main_fails_loud_when_registered_page_has_no_renderer(monkeypatch):
+    pytest.importorskip("streamlit")   # main() 先 import streamlit；沒有 streamlit 的直譯器（--noconftest 本機）跳過，CI 會跑
     """登錄為已掛載、卻沒有 renderer → NotImplementedError（不畫空殼；負控）。"""
     from ui_v3 import app_preview
     from ui_v3.shell import registry
