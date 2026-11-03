@@ -12,6 +12,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
+from ui_v3.viewmodels.chart_disclosure import (
+    MODE_PAIR,
+    NormalizationDisclosure,
+)
 from ui_v3.viewmodels.common import (
     FactMeta,
     MISSING_TEXT,
@@ -173,13 +177,25 @@ ChartDetail = Union[EvidenceItem, MissingItem, ProvenanceTag]
 
 @dataclass(frozen=True)
 class ChartCard:
-    """圖卡：標題＋≤3 chips＋≤3 series＋period＋detail（收合內容）。缺段斷線不補（由 ChartPoint None 表達）。"""
+    """圖卡：標題＋≤3 chips＋≤3 series＋period＋detail（收合內容）。缺段斷線不補（由 ChartPoint None 表達）。
+
+    歸一化比較圖（BL-0536-H3；81 第 2.3 節 G4）：`normalized=True` ⇔ 帶 `disclosure`（揭露必填，不可只畫線不揭露）。
+    此時另驗：
+    - 有數值點的序列（＝有畫線）數量：無基準日 → 0；`pair` 有基準日 → 2；`single`／`fallback` 有基準日 → 1
+      （退回單序列不得看起來像比較）。
+    - 畫線序列 `meta.status` 必須是 ok（undetermined 帶點也不算比較的一條）。
+    - 每條畫線序列的第一個點＝基準日、值＝基準值 100（一張圖只有一個基準日，不會有兩個不同日期的 100）。
+    - 沒畫線的序列數＝`disclosure.series_issues` 數（每條沒畫線的都要說原因）。
+    圖下各序列資料日由每條 `ChartSeries.meta.as_of` 承載（該序列自己的最後觀測日），本卡不另設日期欄位。
+    """
 
     title: str
     series: Tuple[ChartSeries, ...]
     chips: Tuple[StatusChip, ...] = ()
     period: str = DEFAULT_CHART_PERIOD
     detail: Tuple[ChartDetail, ...] = ()
+    normalized: bool = False
+    disclosure: Optional[NormalizationDisclosure] = None
 
     def __post_init__(self) -> None:
         require_text("title", self.title)
@@ -197,3 +213,28 @@ class ChartCard:
             isinstance(d, (EvidenceItem, MissingItem, ProvenanceTag)) for d in self.detail
         ):
             raise TypeError("detail 只能含 EvidenceItem／MissingItem／ProvenanceTag")
+        if not isinstance(self.normalized, bool):
+            raise TypeError("normalized 必須是 bool")
+        if self.disclosure is not None and not isinstance(self.disclosure, NormalizationDisclosure):
+            raise TypeError("disclosure 必須是 NormalizationDisclosure 或 None")
+        if self.normalized != (self.disclosure is not None):
+            raise ValueError("歸一化比較圖必須帶 disclosure；非歸一化圖不得帶 disclosure")
+        if self.disclosure is not None:
+            self._check_normalized(self.disclosure)
+
+    def _check_normalized(self, d: NormalizationDisclosure) -> None:
+        drawn = [s for s in self.series if any(p.value is not None for p in s.points)]
+        if d.base_date is None:
+            expected = 0
+        else:
+            expected = 2 if d.mode == MODE_PAIR else 1
+        if len(drawn) != expected:
+            raise ValueError(f"mode={d.mode}、base_date={d.base_date} 時應有 {expected} 條畫線序列，收到 {len(drawn)}")
+        for s in drawn:
+            if s.meta.status != STATUS_OK:
+                raise ValueError(f"畫線序列 {s.label!r} 的 status 必須是 ok，收到 {s.meta.status!r}")
+            first = s.points[0]
+            if first.date != d.base_date or first.value != d.base_value:
+                raise ValueError(f"畫線序列 {s.label!r} 必須自基準日 {d.base_date} 起、首點＝{d.base_value}")
+        if len(self.series) - len(drawn) != len(d.series_issues):
+            raise ValueError("沒畫線的序列數必須等於 disclosure.series_issues 數（每條都要說原因）")
