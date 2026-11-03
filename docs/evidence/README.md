@@ -27,5 +27,6 @@
 - 逐字摘錄不改字；含禁詞時在該目錄 README 做撞字登記。
 - `bl0536_shell_h5_2026-11-03/`：Navigation Shell＋H5 390px／1280px 首屏量測，含降級情境前後計數（注入的人造資料，非真實行情；見該目錄 README）。
 - `bl0536_mkt_preview_2026-11-03/`：BL-0536 🌍 Preview rendering 截圖（注入的人造資料，非真實行情；見該目錄 README）。
+- `decisions/2026-11-03_pr1135_text_revision_integration_ruling.md`：客戶 2026-11-03 指示節錄（PR #1135／#1136 收斂與 💼 階段分工；`DEC-2026-11-03-12`）逐字存檔；細節見 `decisions/README.md`。
 - `decisions/2026-11-03_vix_secondary_yield_ruling.md`：客戶 2026-11-03 裁示（Primary 為 VIX 時 Secondary VIX 卡讓位，採 A）逐字存檔；細節見 `decisions/README.md`。
 - `history/`：2026-11-03 Canonical Rule Convergence 批自現行文件**逐字搬出**的歷史內容（**NOT CURRENT**；每區塊 sha256 由 `tests/test_canonical_rule_consistency.py` 機械比對）；`canonical_convergence_2026-11-03/`：同批唯讀盤點報告存檔。細節見各目錄 `README.md`。

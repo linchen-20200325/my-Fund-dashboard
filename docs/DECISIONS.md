@@ -2255,6 +2255,23 @@
 | supersedes／superseded by | supersedes：`DEC-2026-11-03-10` 影響範圍列中上述三個待確認項的「待客戶確認」狀態、`docs/v2/80` 第 17.2 節「首屏預算讀法」的「此讀法未經客戶確認」、第 17.4 節候選字樣表的 pending 狀態與「部分資料缺失（{n}／{m} 項取得）」等暫擬字樣、`ui_v3/viewmodels/preview_wording.py` 的 `shell_*` 暫時字樣（被取代的舊字樣與舊句在 `docs/v2/80` 現行區是整段取代、未留劃線表；原字逐字搬至 `docs/evidence/history/2026-11-03_v2_80_shell_wording_superseded.md` 區塊 S1～S3〔基準 `875b1955`〕，現行區留 `superseded:` 指標；有意識的更正，不是漏刪；決策者：客戶）。superseded by：無。 |
 | provenance | **逐字**（以逐字檔為準）；「方案比較」「影響範圍」「與既有裁示的關係」由執行組單組整理，可被客戶推翻；未經第二組獨立驗證。 |
 
+### DEC-2026-11-03-12｜客戶指示：PR #1135（ChatGPT 提交的 New UI2 文字設計修訂）的收斂整合，與 💼 階段分工
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 以 GitHub PR #1135 的日期為準（#1135 的 GitHub 授權日期顯示 2026-11-04，分支名 `20261104`；本登記於 2026-11-03 落盤） |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文節錄由總管於派工單內逐字轉交，見 `docs/evidence/decisions/2026-11-03_pr1135_text_revision_integration_ruling.md`，節錄逐字） |
+| 決策內容摘要 | **以逐字檔為準，以下為摘要。** (1) 客戶指示專案 AI 處理 PR #1135（ChatGPT 提交的 New UI2 文字設計修訂：`docs/v2/80` 第 7.4 節 🤖 導覽可見但不可點、第 16.1 節 Chart SPEC 位置）。(2) 客戶指示專案 AI 對 #1135 做獨立文件與治理稽核、與 #1136 比較整合順序；兩個有效成果都保留、不讓舊版覆蓋新版；#1136 保持正式字樣的單一 SSOT；不改 frozen、歷史證據、正式資料公式或來源；各 PR 經獨立稽核、CI 與 Auto-Ship Gate 後 normal merge。(3) **下一階段分工**：💼 我的資產「UI × Data × Evidence 詳細設計」先由 ChatGPT 負責設計文字、資料串接契約與正式 GitHub 規格，再由專案 AI 依核准規格實作；專案 AI 現在不自行開始 💼 程式開發，也不另開競爭性設計文件。 |
+| 稽核結論（執行組讀法；總管轉述，獨立稽核 1 組） | **保留**：A＝`docs/v2/80` 第 7.4 節 🤖 導覽「Phase 7 前可見但不可點、不註冊頁面」（原句「runtime 未啟用」保留，字樣改引用 `APPROVED_WORDING["shell_nav_not_open"]`，「不顯示機率或信心」沿用 79 C-2 較嚴原句，不採 #1135 的「未校準」放寬措辭）；B＝第 16.1 節 Chart SPEC 位置（主圖上方或緊鄰、不遮蓋、可與歸一化揭露共用顯示區；補出處 `DEC-2026-11-03-09`、81 第 10.2 節）。**捨棄**：C＝第 17.3 節（已被 #1136 取代）；D＝第 17.4 節字樣表與兩段 blockquote（會在 80 內復活第二份字樣表，違反「正式字樣只存在 `shared/ui_semantics/rules.py::APPROVED_WORDING`」＝`DEC-2026-11-03-11`；其 blockquote 在 #1136 後與事實不符）；E＝`docs/HANDOFF.md` 的 #1135 改動全部（已被 #1136 取代；僅補「現行五頁」列的 🤖 精確句）。 |
+| 舊字樣處理 | #1135 帶入的字樣表與 blockquote 不併入現行文件；整合以 merge commit 保留 #1135 兩個 commit 的歷史與作者署名（衝突解成 main 為準），未改寫任何已推送歷史。`shell_nav_soon`／`shell_nav_not_open` 等正式字樣只在規則表一份。 |
+| 理由／背景 | 客戶 2026-11-03 指示先完成 PR 收斂再往 💼 進行；#1135 與 #1136 同改 `docs/v2/80`、`docs/HANDOFF.md`，需逐段比較取捨，避免舊版覆蓋 #1136 的新版。 |
+| evidence／source | 逐字節錄存檔 `docs/evidence/decisions/2026-11-03_pr1135_text_revision_integration_ruling.md`。落地：`docs/v2/80` 第 7.4、16.1 節；`docs/HANDOFF.md`；`docs/BACKLOG.md` BL-0536。 |
+| 影響範圍 | 只限文件（docs-only）。**不**改資料、來源、公式、門檻、狀態判定、投資語意；**不**修訂 frozen 44／57／CONSTITUTION；**不**改 `services`、`ui`、`ui_v2`、`ui_v3`、`shared`；不開始 💼 程式開發。 |
+| 與既有裁示的關係 | 承接 `DEC-2026-11-03-09`（首屏採 C）、`-10`（Navigation Shell）、`-11`（Shell 定字；正式字樣單一 SSOT）。 |
+| 是否可逆 | 可逆（文件層） |
+| supersedes／superseded by | 無（不 supersede 既有裁示）。 |
+| provenance | 客戶指示為節錄逐字；稽核結論與整合取捨由執行組整理，A／B 保留與 C／D／E 捨棄的取捨可被客戶推翻；79 C-2 判定為執行組讀法，未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。

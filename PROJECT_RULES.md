@@ -52,7 +52,7 @@
 | 🌍 市場與趨勢 | `docs/v2/81`（已裁示線框；字樣＝`shared/ui_semantics/rules.py::APPROVED_WORDING`） | `docs/v2/72` 為 ui_v2 時期，版面僅供 reuse（NG-5），語意仍有效 |
 | 💼 我的資產 | 尚無 New UI2 wireframe（BL-0536-G2） | 現有 `docs/v2/73`、`76` 為 ui_v2 時期，版面須重核，語意仍有效 |
 | 🔍 找基金 | 尚無 New UI2 wireframe（BL-0536-G3） | 現有 `docs/v2/78` 同上 |
-| 🤖 AI 投資總結 | `docs/v2/67` 6.1／8.9、`docs/v2/75`；Phase 7 前不掛導覽 | 輸出「六項」對映待客戶確認（BL-0540） |
+| 🤖 AI 投資總結 | `docs/v2/67` 6.1／8.9、`docs/v2/75`；Phase 7 前導覽可見但不可點，不註冊頁面（`docs/v2/80` 第 7.4 節；舊句見 `docs/evidence/history/2026-11-04_after_1136_handoff_backlog_superseded.md` 區塊 P2，NOT CURRENT） | 輸出「六項」對映待客戶確認（BL-0540） |
 | ⚙️ 設定 | 尚無 New UI2 wireframe（BL-0536-G4） | 現有 `docs/v2/65` 同上；資料健康度見 `docs/v2/80` 第 16 節 |
 
 | 規則 | 唯一權威位置 |
@@ -798,7 +798,7 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 📌 **2026-11-03 提示（`DEC-2026-11-03-02` G11；不改下列任何條文）**：客戶 2026-10-26 原字為「不因單一新功能輕易增加第六頁，新功能優先歸入既有五頁的正確職責」（`DEC-2026-10-26-01` 第 (1) 點；注意原字是「不輕易增加」，不是絕對禁止；若讀作絕對禁止是執行組讀法，可被客戶推翻）；New UI2 版面以手機優先（mobile-first）為前提（`docs/v2/79` 第 10 節）。
 
-1. **五頁資訊架構與職責（現行）**：🌍 市場與趨勢、💼 我的資產、🔍 找基金、🤖 AI 投資總結（Phase 7 前不掛導覽）、⚙️ 設定（順序 `mkt／ast／exp／ai／set`；`DEC-2026-10-29-06`、`DEC-2026-10-29-07`；`docs/v2/80` 第 7 節；程式側 `ui_v3/shell/registry.py::IA_PAGES`）。資產配置與持股能力整合進 💼 為頁內區段，**不是 top-level page**；舊「資產配置」「我的持股」頁名不得作現行頁名。新功能優先歸入既有五頁的正確職責，不因單一新功能輕易增加第六頁（客戶原字；「不輕易」非絕對禁止，絕對禁止為執行組讀法、可被客戶推翻）；頁面名稱與主要責任保持穩定；不以 API／資料源／模型限制或「程式比較好接」改造資訊架構。（`superseded:` `DEC-2026-10-27-02` 舊五頁敘述、`DEC-2026-10-24-02` 舊頁序；舊句逐字見 `docs/evidence/history/2026-11-03_project_rules_and_v2_81_superseded.md` 區塊 P1，NOT CURRENT。）
+1. **五頁資訊架構與職責（現行）**：🌍 市場與趨勢、💼 我的資產、🔍 找基金、🤖 AI 投資總結（Phase 7 前導覽可見但不可點，不註冊頁面；`docs/v2/80` 第 7.4 節）、⚙️ 設定（順序 `mkt／ast／exp／ai／set`；`DEC-2026-10-29-06`、`DEC-2026-10-29-07`；`docs/v2/80` 第 7 節；程式側 `ui_v3/shell/registry.py::IA_PAGES`）。資產配置與持股能力整合進 💼 為頁內區段，**不是 top-level page**；舊「資產配置」「我的持股」頁名不得作現行頁名。新功能優先歸入既有五頁的正確職責，不因單一新功能輕易增加第六頁（客戶原字；「不輕易」非絕對禁止，絕對禁止為執行組讀法、可被客戶推翻）；頁面名稱與主要責任保持穩定；不以 API／資料源／模型限制或「程式比較好接」改造資訊架構。（`superseded:` `DEC-2026-10-27-02` 舊五頁敘述、`DEC-2026-10-24-02` 舊頁序；舊句逐字見 `docs/evidence/history/2026-11-03_project_rules_and_v2_81_superseded.md` 區塊 P1；「Phase 7 前不掛導覽」舊句見 `docs/evidence/history/2026-11-04_after_1136_handoff_backlog_superseded.md` 區塊 P3，NOT CURRENT。）
 2. **domain semantics、data contracts、user classifications、deterministic investment rules** 不隨技術元件更換而改；技術元件（Streamlit、Google Sheet、OAuth provider、外部 API、AI model、storage、前端框架）不是產品 SSOT。
 3. **Missing 語意**（已有，見第 13 節第 2～4 條）：Missing ≠ 0／False／HOLD／中性／正常／安全／未觸發；顏色不得是唯一語意載體。新來源給不出同語意時顯示 Missing／Unavailable，不用「差不多」的值替代。
 4. **可追溯性**：重要資料可追溯來源與時間（已有，第 13 節第 5 條）。

@@ -21,8 +21,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-KNOWN_BASES = ("82ba783f", "d6173220", "875b1955")  # 已知基準清單；區塊 source 的 `@sha` 必須屬於此
-BASE_COMMIT = "82ba783f"  # 預設基準；每個區塊的實際基準記在其 source 的 `@<sha>`（H2、B2 為 d6173220；S1～S3 為 875b1955）
+KNOWN_BASES = ("82ba783f", "d6173220", "875b1955", "f07acd44")  # 已知基準清單；區塊 source 的 `@sha` 必須屬於此
+BASE_COMMIT = "82ba783f"  # 預設基準；每個區塊的實際基準記在其 source 的 `@<sha>`（H2、B2 為 d6173220；S1～S3 為 875b1955；H3～H5、B3 為 f07acd44）
 HANDOFF_MAX_LINES = 120
 BL0536_ROW_MAX_BYTES = 8000
 
@@ -278,3 +278,35 @@ def test_history_guard_negative_control():
     assert block_ok(ok)
     assert not block_ok({**ok, "body": body + "x"})
     assert not block_ok({**ok, "body": "原文一行"})
+
+
+# ---------------------------------------------------------------- DECISIONS 結構
+def decisions_structure_problems(text: str) -> list:
+    """DECISIONS.md 結構：第五節標題恰好 1 個；`### DEC-` 標題的編號不重複。"""
+    lines = text.splitlines()
+    problems = []
+    n5 = [l for l in lines if l.startswith("## 五、歷史索引")]
+    if len(n5) != 1:
+        problems.append(f"「## 五、歷史索引」標題行應恰好 1 個，實際 {len(n5)}")
+    ids = []
+    for l in lines:
+        m = re.match(r"### (DEC-\d{4}-\d{2}-\d{2}-\d+)", l)
+        if m:
+            ids.append(m.group(1))
+    dup = sorted({i for i in ids if ids.count(i) > 1})
+    if dup:
+        problems.append(f"DEC 標題編號重複：{dup}")
+    return problems
+
+
+def test_decisions_md_structure_no_duplicate_headings():
+    assert decisions_structure_problems(_read("docs/DECISIONS.md")) == []
+
+
+def test_decisions_structure_negative_control():
+    good = "## 五、歷史索引（x）\n### DEC-2026-11-03-11｜a\n### DEC-2026-11-03-12｜b\n"
+    assert decisions_structure_problems(good) == []
+    assert decisions_structure_problems(good + "## 五、歷史索引（x）\n")
+    assert decisions_structure_problems(good + "### DEC-2026-11-03-12｜b\n")
+    # 行中引文不算標題行（真實事故：反引號引文被誤取代成標題）
+    assert decisions_structure_problems(good + "- 原文 `## 五、歷史索引（x）` 逐字恢復\n") == []
