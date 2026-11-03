@@ -208,7 +208,7 @@ def test_history_blocks_hash_and_manifest():
             seen += 1
             assert block_ok(b), f"{p.name} 區塊 {b['id']} 與標記的 sha256／bytes 不符（搬移後被改動或遺失）"
             assert b["id"] in readme, f"README 清冊缺區塊 {b['id']}"
-    assert seen >= 10
+    assert seen >= 12
 
 
 def block_base(b: dict) -> str:

@@ -9,7 +9,7 @@
 | `2026-11-03_handoff_pre_convergence.md` | 舊 `docs/HANDOFF.md` 全文 | H1 | `docs/HANDOFF.md` 整檔 |
 | `2026-11-03_backlog_bl0536_row.md` | BL-0536 舊整列 | B1 | `docs/BACKLOG.md` BL-0536 |
 | `2026-11-03_project_rules_and_v2_81_superseded.md` | 13.2 第 1 點舊五頁、0.5 舊 hygiene、81 線框 Q5 A 舊行與主判讀舊字樣 | P1、P2、P3、W1、W2、W3 | `PROJECT_RULES.md`、`docs/v2/81` |
-| `2026-11-03_main_after_82ba783f_superseded.md` | main 在 `82ba783f` 之後新增／改寫、又被本批取代的片段：HANDOFF Resume Checkpoint 兩則（首屏採 C＋用字統一一則、正式字樣落盤一則）、BACKLOG BL-0536 列（`d6173220` 版） | H2、B2 | `docs/HANDOFF.md`、`docs/BACKLOG.md`（基準 commit `d6173220`） |
+| `2026-11-03_main_after_82ba783f_superseded.md` | main 在 `82ba783f` 之後新增／改寫、又被本批取代的片段：HANDOFF Resume Checkpoint 兩則（首屏採 C＋用字統一一則、正式字樣落盤一則）、BACKLOG BL-0536 列（`d6173220` 版）、DECISIONS `-09` 關係列與 81 第 2.1 節 Primary 列的原句 | H2、B2、X1、X2 | `docs/HANDOFF.md`、`docs/BACKLOG.md`（基準 commit `d6173220`） |
 
 **防遺失機制**：每個區塊在 `MOVED-BEGIN` 標記記 `sha256` 與位元組數；`tests/test_canonical_rule_consistency.py` 重算每個區塊的 sha256 比對標記，並在可取得該區塊自己的基準 commit（`source` 的 `@` 後；`82ba783f` 或 `d6173220`）時與該 commit 的原文逐位元組（H1）或逐行（其餘區塊）比對。搬進來的文字**不准改**；要補註寫在區塊外。
 
