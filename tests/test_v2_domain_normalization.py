@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
-"""BL-0536-H1：`services/v2_domain/normalization.py`（🌍 TAIEX vs S&P 500 歸一化比較）的守衛。
+"""BL-0536-H1＋H1b：`services/v2_domain/normalization.py`（🌍 TAIEX vs S&P 500 歸一化比較）的守衛。
 
 規則出處：客戶 `DEC-2026-11-03-01`（逐字 `docs/evidence/decisions/2026-11-03_mkt_wireframe_ruling.md`）；
-`docs/v2/81_new_ui2_wireframe_01_market.md` 第 7 節 Q2-a／b／c A、第 4.1 節情境表；UI-13（基準值 100，`DEC-2026-11-02-07`）。
+`docs/v2/81_new_ui2_wireframe_01_market.md` 第 7 節 Q2-a／b／c A、第 4.1 節情境表；UI-13（基準值 100，`DEC-2026-11-02-07`）；
+H1b：客戶 `DEC-2026-11-03-04` A2／B2／C2（逐字 `docs/evidence/decisions/2026-11-03_normalization_abc_and_min_cost_rule.md`；
+讀法與殘留邊界見 `docs/v2/81` 第 9 節 H1b 註記）。
 
 四組：
 (a) golden：手算的小序列（算式寫在註解裡；刻意挑二進位可精確表示的比值，故用 `==` 比對，不依賴浮點加總）；
 (b) property：本環境與 requirements-dev 皆無 hypothesis → 用固定種子的隨機迴圈；
 (c) 邊界：無共同日、一條空、一條全 None、單點、終點不同、期間不足、重複日期、未排序、非有限值、週末起點；
+    H1b：A2 比較視窗涵蓋、殘留邊界釘住現行行為、B2／C2 退回單序列；
 (d) 分層：AST 只准標準庫（`__future__`／`dataclasses`／`datetime`）＋ `services.v2_domain` 同套件；
     非 docstring 的字串常數不得含中文。另 `tests/test_v2_domain_port.py` 的套件級守衛會自動涵蓋本檔。
 """
@@ -73,7 +76,7 @@ SP500 = [
 
 def test_golden_pair_基準日晚於視窗起點_各自終點不同():
     r = nz.normalize_pair({"taiex": TAIEX, "sp500": SP500}, "3M")
-    assert (r.status, r.mode, r.period) == (nz.STATUS_OK, nz.MODE_PAIR, "3M")
+    assert (r.status, r.mode, r.period, r.fallback_reason) == (nz.STATUS_OK, nz.MODE_PAIR, "3M", None)
     assert r.window_start == "2026-01-13"
     assert r.base_date == "2026-01-14"
     assert r.base_value == 100 == nz.BASE_VALUE
@@ -120,7 +123,8 @@ def test_golden_single_另一條全None也算缺():
 
 
 def test_golden_視窗起點在週末_基準取其後第一個共同日():
-    # 兩條最後一天都是 2026-04-10（五）→ 起點 2026-01-10（六）；01-09 在起點前、01-12（一）是起點後第一個共同日。
+    # A2：兩條最後一天都是 2026-04-10（五）→ 起點 2026-01-10（六，無觀測日）；兩條 01-09 都有值 → 歷史延伸到起點之前
+    # → 涵蓋（不是歷史不足）；01-12（一）是起點後第一個共同有效日 ＝ 基準（不是容忍幾天，是「視窗內第一個共同有效日」）。
     a = [P("2026-01-09", 1.0), P("2026-01-12", 8.0), P("2026-04-10", 10.0)]
     b = [P("2026-01-09", 1.0), P("2026-01-12", 4.0), P("2026-04-10", 2.0)]
     r = nz.normalize_pair({"a": a, "b": b}, "3M")
@@ -148,7 +152,8 @@ def test_golden_基準日恰為比較視窗起點_且不四捨五入():
 # 只在測試裡唯讀 import；L2 本體不得 import 它（見分層守衛正控）。它依賴 pandas（CI 有）：
 # 本環境缺 pandas 時以 importorskip 跳過「只因缺第三方套件」的這三支，不影響其餘測試。
 # 先例語意：窗口＝兩序列共同日期；終點＝最後共同日；起點＝終點往回推 `days` 個日曆日；共同歷史不足時縮成全期。
-# Q2 裁示不同處：(1) 終點各畫到自己最後觀測日（Q2-b A）；(2) 不足就標不足、不縮短（Q2-a A）。
+# Q2 裁示不同處：(1) 終點各畫到自己最後觀測日（Q2-b A）；(2) 不足就標不足、不縮短（Q2-a A）；
+# (3) H1b：先例在沒有共同日時回 None（整張不畫）；H1b（C2）停更時另一條退回單序列照畫、停更那條標原因。
 # 相同處：兩條最後一天相同、`days` 取「3 個月」的日曆日數時，兩者窗口與共同錨日一致，共同日上的歸一化值逐位元相同。
 
 
@@ -201,6 +206,14 @@ def test_先例對照_歷史不足_先例縮成全期_H1標不足():
     assert r.status == nz.STATUS_INSUFFICIENT and all(s.points == () for s in r.series)   # H1：不縮短，標不足
 
 
+def test_先例對照_停更_先例回None_H1b另一條退回單序列():
+    stale = [P("2025-08-01", 1.0), P("2025-10-01", 2.0), P("2025-12-01", 3.0)]
+    assert _rebased(stale, SP500, 90) is None                                     # 先例：無共同日 → 整張不畫
+    r = nz.normalize_pair({"a": stale, "b": SP500}, "3M")
+    assert (r.mode, r.status) == (nz.MODE_FALLBACK, nz.STATUS_OK)                # H1b：sp500 單獨照畫
+    assert by_key(r)["a"].status == nz.STATUS_NO_COMMON_BASE and by_key(r)["a"].points == ()
+
+
 # ═══════════════════════ (c) 邊界 ═══════════════════════
 
 
@@ -208,8 +221,10 @@ def test_無共同日_no_common_base_不出線():
     a = [P("2026-01-09", 1.0), P("2026-01-12", 2.0), P("2026-04-10", 3.0)]
     b = [P("2026-01-09", 1.0), P("2026-01-13", 2.0), P("2026-04-09", 3.0), P("2026-04-10", None)]
     # b 最後有效 04-09 → 起點 01-09；a 起點 01-10；視窗起點 01-10；a 有效 {01-12, 04-10}、b 有效 {01-13, 04-09} → 無交集
+    # 兩條在比較視窗內各有 2 筆有效值（只是日期錯開，不是停更）→ 不退回單序列，兩條都 withheld（C2 只管停更）。
     r = nz.normalize_pair({"a": a, "b": b}, "3M")
-    assert (r.status, r.mode, r.base_date, r.base_value) == (nz.STATUS_NO_COMMON_BASE, nz.MODE_PAIR, None, None)
+    assert (r.status, r.mode, r.base_date, r.base_value, r.fallback_reason) == (
+        nz.STATUS_NO_COMMON_BASE, nz.MODE_PAIR, None, None, None)
     assert all(s.status == nz.SERIES_WITHHELD and s.points == () and s.last_normalized is None for s in r.series)
     assert by_key(r)["b"].last_obs_date == "2026-04-09"   # 不出線仍帶自身資料日
 
@@ -217,8 +232,9 @@ def test_無共同日_no_common_base_不出線():
 def test_只有一個共同日_too_few_common_days_不出線():
     a = [P("2026-01-09", 1.0), P("2026-01-12", 2.0), P("2026-04-10", 3.0)]
     b = [P("2026-01-09", 1.0), P("2026-01-12", 2.0), P("2026-04-09", 3.0)]
+    # 兩條在比較視窗內各有 2 筆有效值（都沒停更）→ 不退回單序列。
     r = nz.normalize_pair({"a": a, "b": b}, "3M")
-    assert (r.status, r.base_date) == (nz.STATUS_TOO_FEW_COMMON_DAYS, None)
+    assert (r.status, r.mode, r.base_date, r.fallback_reason) == (nz.STATUS_TOO_FEW_COMMON_DAYS, nz.MODE_PAIR, None, None)
     assert all(s.status == nz.SERIES_WITHHELD and s.points == () for s in r.series)
 
 
@@ -230,33 +246,138 @@ def test_兩條各有很多點但只共用一天_仍是too_few_common_days():
     assert all(s.status == nz.SERIES_WITHHELD and s.points == () for s in r.series)
 
 
-def test_一條不足_整個比較不足_不縮短():
-    short = [P("2026-01-11", 1.0), P("2026-04-10", 2.0)]   # 起點 01-10，最早 01-11 > 起點
-    r = nz.normalize_pair({"taiex": short, "sp500": SP500}, "3M")
-    assert (r.status, r.mode, r.base_date) == (nz.STATUS_INSUFFICIENT, nz.MODE_PAIR, None)
-    assert by_key(r)["taiex"].status == nz.STATUS_INSUFFICIENT
-    assert by_key(r)["sp500"].status == nz.SERIES_WITHHELD
-    assert all(s.points == () for s in r.series)
+# ─────── H1b（`DEC-2026-11-03-04`）A2：涵蓋按比較視窗判定；B2／C2：退回單序列 ───────
 
 
-def test_待客戶確認A_各自起點落在週末_比較視窗已涵蓋仍判不足():
-    # 現行字面讀法（`docs/v2/81` 第 9 節 (A)，待客戶確認）：a 自 2026-01-12（一）起有資料，自身起點 2026-01-10（六）
-    # → slice_period 判 a 不足；比較視窗起點 01-13（b 的起點）其實兩條都涵蓋，但整個比較仍 insufficient。
-    a = [P("2026-01-12", 1.0), P("2026-01-13", 2.0), P("2026-04-10", 3.0)]
-    b = [P("2026-01-12", 1.0), P("2026-01-13", 2.0), P("2026-04-13", 3.0)]
+def test_A2_各自起點落在週末_比較視窗已涵蓋_改判可比較():
+    # H1 字面讀法（已 superseded）會判 insufficient：a 自 2026-01-12（一）起有資料，自身起點 2026-01-10（六）。
+    # A2：比較視窗起點 W ＝ max(01-10, 01-13) ＝ 01-13（b 的起點）；a 首筆 01-12 ≤ W、b 首筆 01-12 ≤ W → 兩條都涵蓋。
+    # 01-13 兩條都有效 → 基準 01-13；共同有效日 {01-13, 02-02}。a 02-02 4/2*100 = 200、04-10 3/2*100 = 150；
+    # b 02-02 1/2*100 = 50、04-13 3/2*100 = 150。
+    a = [P("2026-01-12", 1.0), P("2026-01-13", 2.0), P("2026-02-02", 4.0), P("2026-04-10", 3.0)]
+    b = [P("2026-01-12", 1.0), P("2026-01-13", 2.0), P("2026-02-02", 1.0), P("2026-04-13", 3.0)]
     r = nz.normalize_pair({"a": a, "b": b}, "3M")
-    assert (r.status, r.window_start) == (nz.STATUS_INSUFFICIENT, "2026-01-13")
-    assert (by_key(r)["a"].status, by_key(r)["b"].status) == (nz.STATUS_INSUFFICIENT, nz.SERIES_WITHHELD)
+    assert (r.status, r.mode, r.window_start, r.base_date, r.fallback_reason) == (
+        nz.STATUS_OK, nz.MODE_PAIR, "2026-01-13", "2026-01-13", None)
+    assert by_key(r)["a"].own_window_start == "2026-01-10"      # 自身起點仍照實回報；涵蓋改看 W
+    assert pts(by_key(r)["a"]) == [("2026-01-13", 100.0), ("2026-02-02", 200.0), ("2026-04-10", 150.0)]
+    assert pts(by_key(r)["b"]) == [("2026-01-13", 100.0), ("2026-02-02", 50.0), ("2026-04-13", 150.0)]
 
 
-def test_待客戶確認C_一條停更超過期間_無共同基準日_兩條都不畫():
-    # 現行字面讀法（第 9 節 (C)，待客戶確認）：a 最後一天 2025-12-01，起點 2025-09-01；b 起點 2026-01-13
-    # → 比較視窗起點 2026-01-13 之後 a 沒有任何點 → no_common_base。
+def test_A2_首筆恰在比較視窗起點當天_涵蓋():
+    # b 最後一天 04-13 → W ＝ 01-13；b 有史以來第一筆恰為 01-13 → 「W 當日或之前有有效觀測」成立 → 涵蓋（邊界取等號）。
+    # 共同有效日 {01-13, 02-02}：a 02-02 4/2*100 = 200、04-10 3/2*100 = 150；b 02-02 1/2*100 = 50、04-13 3/2*100 = 150。
+    a = [P("2026-01-09", 1.0), P("2026-01-13", 2.0), P("2026-02-02", 4.0), P("2026-04-10", 3.0)]
+    b = [P("2026-01-13", 2.0), P("2026-02-02", 1.0), P("2026-04-13", 3.0)]
+    r = nz.normalize_pair({"a": a, "b": b}, "3M")
+    assert (r.status, r.mode, r.window_start, r.base_date, r.fallback_reason) == (
+        nz.STATUS_OK, nz.MODE_PAIR, "2026-01-13", "2026-01-13", None)
+    assert pts(by_key(r)["b"]) == [("2026-01-13", 100.0), ("2026-02-02", 50.0), ("2026-04-13", 150.0)]
+
+
+def test_A2_不設容忍_平日起點晚一天開始仍是真正歷史不足():
+    # b 最後一天 04-13（一）→ W ＝ 01-13（二，平日）。a 首筆 01-14（三）：只晚 1 天，但 W 是平日、W 之前 a 沒有任何觀測
+    # → 單憑資料就是歷史沒涵蓋到 W → insufficient（任何「容忍 1 天」都會把它判成涵蓋，本案即紅）。
+    a = [P("2026-01-14", 1.0), P("2026-01-15", 2.0), P("2026-04-10", 3.0)]
+    r = nz.normalize_pair({"a": a, "b": SP500}, "3M")
+    assert by_key(r)["a"].status == nz.STATUS_INSUFFICIENT
+    assert (r.mode, r.fallback_reason) == (nz.MODE_FALLBACK, nz.STATUS_INSUFFICIENT)
+
+
+def test_A2_殘留邊界_待客戶確認_起點週末而首筆恰為下個交易日_現行判不足():
+    # ⚠️ 殘留邊界（待客戶確認，`docs/v2/81` 第 9 節 H1b 註記）：兩條最後一天都是 04-10（五）→ W ＝ 01-10（六）。
+    # a 有史以來第一筆恰為 01-12（一）＝ W 之後第一個交易日。週末本來就沒有觀測，但單憑資料無法證明 a 的歷史
+    # 「延伸到 W」（要日曆或容忍才能證明；裁示禁止兩者）→ 現行規則判 a insufficient，b 退回單序列。
+    # 本測試釘住現行行為；客戶若另有裁示，改這裡並重跑公式稽核。
+    a = [P("2026-01-12", 8.0), P("2026-02-02", 9.0), P("2026-04-10", 10.0)]
+    b = [P("2026-01-09", 1.0), P("2026-01-12", 4.0), P("2026-04-10", 2.0)]
+    r = nz.normalize_pair({"a": a, "b": b}, "3M")
+    assert (r.status, r.mode, r.fallback_reason) == (nz.STATUS_OK, nz.MODE_FALLBACK, nz.STATUS_INSUFFICIENT)
+    assert by_key(r)["a"].status == nz.STATUS_INSUFFICIENT and by_key(r)["a"].points == ()
+    # b 單獨：自身起點 01-10，視窗內首筆有效 01-12（4.0）→ 01-12 100；04-10 2/4*100 = 50
+    assert (r.window_start, r.base_date) == ("2026-01-10", "2026-01-12")
+    assert pts(by_key(r)["b"]) == [("2026-01-12", 100.0), ("2026-04-10", 50.0)]
+    # 同一個殘留邊界在單序列模式（另一條缺）也一樣判不足（＝ `periods` 已知限制）。
+    assert nz.normalize_pair({"a": a, "b": None}, "3M").status == nz.STATUS_INSUFFICIENT
+
+
+def test_B2_一條真正歷史不足_另一條退回單序列_不足者明確標示():
+    # taiex 首筆 02-02；W ＝ max(taiex 01-10, sp500 01-13) ＝ 01-13；02-02 > W → taiex 真正歷史不足。
+    # sp500 退回單序列：自身視窗起點 01-13、視窗內首筆有效 01-13（40）→ 01-13 100；01-14 100；01-15 None；01-16 75；04-13 125。
+    short = [P("2026-02-02", 1.0), P("2026-04-10", 2.0)]
+    r = nz.normalize_pair({"taiex": short, "sp500": SP500}, "3M")
+    assert (r.status, r.mode, r.fallback_reason, r.missing_keys) == (
+        nz.STATUS_OK, nz.MODE_FALLBACK, nz.STATUS_INSUFFICIENT, ())
+    assert (r.window_start, r.base_date, r.base_value) == ("2026-01-13", "2026-01-13", 100)
+    t, s = by_key(r)["taiex"], by_key(r)["sp500"]
+    assert (t.status, t.points, t.base_raw, t.last_normalized, t.period_change) == (nz.STATUS_INSUFFICIENT, (), None, None, None)
+    assert (t.own_window_start, t.last_obs_date) == ("2026-01-10", "2026-04-10")   # 不足者仍帶自身資料日
+    assert pts(s) == [("2026-01-13", 100.0), ("2026-01-14", 100.0), ("2026-01-15", None),
+                      ("2026-01-16", 75.0), ("2026-04-13", 125.0)]
+    # 被畫那條與「另一條傳 None」時逐欄相同（不足那條的資料不影響它）
+    assert s == by_key(nz.normalize_pair({"taiex": None, "sp500": SP500}, "3M"))["sp500"]
+
+
+def test_B2_不足者是較晚結束那條_被畫那條用自己的視窗_不被比較視窗縮短():
+    # sp_short 最後一天 04-13 → 自身起點 01-13 ＝ W；首筆 03-02 > W → 不足。taiex 退回單序列用**自己的**視窗
+    # （起點 01-10、首筆有效 01-12 ＝ 100），不是比較視窗 W（若誤用 W，基準會變 01-14）。
+    sp_short = [P("2026-03-02", 1.0), P("2026-04-13", 2.0)]
+    r = nz.normalize_pair({"taiex": TAIEX, "sp500": sp_short}, "3M")
+    assert (r.status, r.mode, r.window_start, r.base_date) == (nz.STATUS_OK, nz.MODE_FALLBACK, "2026-01-10", "2026-01-12")
+    assert pts(by_key(r)["taiex"]) == [("2026-01-12", 100.0), ("2026-01-13", None), ("2026-01-14", 200.0),
+                                       ("2026-01-15", 250.0), ("2026-01-16", 150.0), ("2026-04-10", 300.0)]
+    assert by_key(r)["sp500"].status == nz.STATUS_INSUFFICIENT
+
+
+def test_B2_退回那條自己的視窗也不足_兩條都不畫():
+    # a（較晚結束）首筆 03-02 > W ＝ 01-13 → 不足；b 涵蓋 W（首筆 01-12 ≤ 01-13），但退回單序列後以自己的視窗
+    # （起點 01-10（六））判定，首筆 01-12 > 01-10 → 也不足（同上殘留邊界）。兩條都不畫，不縮短冒充。
+    a = [P("2026-03-02", 1.0), P("2026-04-13", 2.0)]
+    b = [P("2026-01-12", 1.0), P("2026-01-13", 2.0), P("2026-04-10", 3.0)]
+    r = nz.normalize_pair({"a": a, "b": b}, "3M")
+    assert (r.status, r.mode, r.fallback_reason, r.base_date) == (
+        nz.STATUS_INSUFFICIENT, nz.MODE_FALLBACK, nz.STATUS_INSUFFICIENT, None)
+    assert all(s.status == nz.STATUS_INSUFFICIENT and s.points == () for s in r.series)
+
+
+def test_C2_一條停更超過期間_另一條退回單序列_停更者標no_common_base():
+    # a 最後一天 2025-12-01（自身起點 2025-09-01）；W ＝ 2026-01-13（sp500 起點）之後 a 沒有任何有效值 → 停更。
+    # sp500 單獨照畫（同 B2 golden 的 sp500）；a 標真正原因 no_common_base；只有一個 100、只在 01-13。
     a = [P("2025-08-01", 1.0), P("2025-10-01", 2.0), P("2025-12-01", 3.0)]
     r = nz.normalize_pair({"a": a, "b": SP500}, "3M")
-    assert (r.status, r.window_start) == (nz.STATUS_NO_COMMON_BASE, "2026-01-13")
+    assert (r.status, r.mode, r.fallback_reason, r.window_start, r.base_date) == (
+        nz.STATUS_OK, nz.MODE_FALLBACK, nz.STATUS_NO_COMMON_BASE, "2026-01-13", "2026-01-13")
+    stale, s = by_key(r)["a"], by_key(r)["b"]
+    assert (stale.status, stale.points, stale.last_obs_date, stale.own_window_start) == (
+        nz.STATUS_NO_COMMON_BASE, (), "2025-12-01", "2025-09-01")
+    assert pts(s)[0] == ("2026-01-13", 100.0) and s.period_change == 25.0
+
+
+def test_C2_停更在比較視窗內只剩一個共同日_too_few_common_days_另一條退回單序列():
+    # a 最後一天 01-14（自身起點 2025-10-14）；W ＝ 01-13；a 在 W 之後只有 01-14 一筆（停在這天）、與 sp500 共用 → 共同日 1 天。
+    a = [P("2025-10-01", 1.0), P("2025-12-01", 2.0), P("2026-01-14", 3.0)]
+    r = nz.normalize_pair({"a": a, "b": SP500}, "3M")
+    assert (r.status, r.mode, r.fallback_reason) == (nz.STATUS_OK, nz.MODE_FALLBACK, nz.STATUS_TOO_FEW_COMMON_DAYS)
+    assert by_key(r)["a"].status == nz.STATUS_TOO_FEW_COMMON_DAYS and by_key(r)["a"].points == ()
+    assert r.base_date == "2026-01-13" and pts(by_key(r)["b"])[0] == ("2026-01-13", 100.0)
+
+
+def test_C2_兩條都停更_不退回單序列_兩條withheld():
+    # 3M：a 最後一天 04-10 → 起點 01-10；b 最後一天 04-09 → 起點 01-09；W ＝ 01-10。
+    # W 之後 a 只有 04-10、b 只有 04-09（兩條都不足 2 筆，原因不只落在一條）→ 共同日 0 → 不退回，兩條 withheld。
+    a = [P("2026-01-01", 1.0), P("2026-04-10", 2.0)]
+    b = [P("2026-01-01", 1.0), P("2026-04-09", 2.0)]
+    r = nz.normalize_pair({"a": a, "b": b}, "3M")
+    assert (r.status, r.mode, r.fallback_reason, r.base_date) == (nz.STATUS_NO_COMMON_BASE, nz.MODE_PAIR, None, None)
     assert all(s.status == nz.SERIES_WITHHELD and s.points == () for s in r.series)
-    assert by_key(r)["a"].last_obs_date == "2025-12-01"
+
+
+def test_C2_停更且唯一一筆不是共同日_no_common_base():
+    # a 在 W 之後只有 01-15 一筆（sp500 該日 None）→ 共同日 0 → no_common_base；a 停更 → sp500 退回單序列。
+    a = [P("2025-10-01", 1.0), P("2026-01-15", 3.0)]
+    r = nz.normalize_pair({"a": a, "b": SP500}, "3M")
+    assert (r.mode, r.fallback_reason, by_key(r)["a"].status) == (
+        nz.MODE_FALLBACK, nz.STATUS_NO_COMMON_BASE, nz.STATUS_NO_COMMON_BASE)
 
 
 def test_沿用限制_非int_float子類的數值當缺口_adapter須先轉float():
@@ -415,18 +536,78 @@ def _cases(n=300, seed=20261103):
     rng = random.Random(seed)
     for _ in range(n):
         anchor = date(2026, 4, 10)
-        a = _random_series(rng, anchor - timedelta(days=rng.randint(0, 6)))
-        b = _random_series(rng, anchor - timedelta(days=rng.randint(0, 6)))
+        lag_a, lag_b = rng.randint(0, 6), rng.randint(0, 6)
+        if rng.random() < 0.15:     # H1b C2：讓其中一條停更（最後一天大幅提早）
+            if rng.random() < 0.5:
+                lag_a += rng.randint(20, 1500)
+            else:
+                lag_b += rng.randint(20, 1500)
+        a = _random_series(rng, anchor - timedelta(days=lag_a))
+        b = _random_series(rng, anchor - timedelta(days=lag_b))
         if rng.random() < 0.1:
             b = None
         yield {"taiex": a, "sp500": b}, rng.choice(periods.PERIODS)
 
 
+def _first_valid(points):
+    valid = [p["obs_date"] for p in points if periods.is_number(p["value_num"])]
+    return min(valid) if valid else None
+
+
+def _check_modes(series, r):
+    """H1b：模式明示、永不出現兩個不同日期的 100、A2 涵蓋判定、B2／C2 退回單序列的結構。"""
+    drawn = [s for s in r.series if s.status == nz.STATUS_OK]
+    # 任何結果：所有被畫的序列基準點都在同一天（永不出現兩個不同日期的 100）
+    assert len({s.points[0].obs_date for s in drawn}) <= 1
+    assert all(s.points[0].value == 100.0 and s.points[0].obs_date == r.base_date for s in drawn)
+    if r.mode == nz.MODE_PAIR:
+        assert r.fallback_reason is None and r.missing_keys == ()
+        assert len(drawn) in (0, 2) and (len(drawn) == 2) == (r.status == nz.STATUS_OK)
+        w = max(s.own_window_start for s in r.series)
+        assert r.window_start == w
+        for s in r.series:   # A2：涵蓋 ⇔ 比較視窗起點當日或之前有有效觀測
+            covered = _first_valid(series[s.key]) <= w
+            assert covered == (s.status != nz.STATUS_INSUFFICIENT)
+        if r.status == nz.STATUS_INSUFFICIENT:   # pair 模式的 insufficient 只在兩條都不足時發生（否則應退回單序列）
+            assert all(s.status == nz.STATUS_INSUFFICIENT for s in r.series)
+        if r.status in (nz.STATUS_NO_COMMON_BASE, nz.STATUS_TOO_FEW_COMMON_DAYS):
+            in_window = [sum(1 for p in series[s.key] if p["obs_date"] >= w and periods.is_number(p["value_num"]))
+                         for s in r.series]
+            assert sum(c < nz.MIN_LINE_POINTS for c in in_window) != 1   # 恰一條停更 → 應退回單序列
+            assert all(s.status == nz.SERIES_WITHHELD for s in r.series)
+    elif r.mode == nz.MODE_FALLBACK:
+        assert r.missing_keys == () and len(drawn) <= 1 and (len(drawn) == 1) == (r.status == nz.STATUS_OK)
+        excluded = [s for s in r.series if s.status == r.fallback_reason]
+        assert r.fallback_reason in (nz.STATUS_INSUFFICIENT, nz.STATUS_NO_COMMON_BASE, nz.STATUS_TOO_FEW_COMMON_DAYS)
+        assert excluded and all(s.points == () for s in excluded)
+        w = max(s.own_window_start for s in r.series)
+        if r.fallback_reason == nz.STATUS_INSUFFICIENT:   # B2：被排除那條的歷史確實沒涵蓋到比較視窗起點
+            assert any(_first_valid(series[s.key]) > w for s in excluded)
+        else:                                             # C2：被排除那條在比較視窗內有效觀測不足 2 筆（停更）
+            assert len(excluded) == 1   # 單序列狀態不會是 no_common_base／too_few_common_days → 被排除者唯一
+            assert sum(1 for p in series[excluded[0].key]
+                       if p["obs_date"] >= w and periods.is_number(p["value_num"])) < nz.MIN_LINE_POINTS
+        # 被畫（或試畫）那條與「另一條傳 None」時逐欄相同（被排除那條的資料不影響它）
+        def alone(key):
+            return nz.normalize_pair({k: (v if k == key else None) for k, v in series.items()}, r.period)
+        kept = [s for s in r.series
+                if by_key(alone(s.key))[s.key] == s and (alone(s.key).status, alone(s.key).base_date) == (
+                    r.status, r.base_date)]
+        assert kept and all(d in kept for d in drawn)
+    elif r.mode == nz.MODE_SINGLE:
+        assert r.fallback_reason is None and len(r.missing_keys) == 1 and len(drawn) <= 1
+    else:
+        assert r.mode == nz.MODE_NONE and not drawn
+
+
 def test_property_不變量():
     seen = {nz.STATUS_OK: 0, nz.STATUS_INSUFFICIENT: 0}
+    modes = {}
     for series, period in _cases():
         r = nz.normalize_pair(series, period)
         seen[r.status] = seen.get(r.status, 0) + 1
+        modes[(r.mode, r.fallback_reason)] = modes.get((r.mode, r.fallback_reason), 0) + 1
+        _check_modes(series, r)
         if r.status != nz.STATUS_OK:
             # 不足／不可畫 → 永不出線
             assert r.base_date is None and r.base_value is None
@@ -461,8 +642,11 @@ def test_property_不變量():
                             and d in b and periods.is_number(b[d]) and d <= min(s.last_obs_date for s in drawn))
             assert common[0] == r.base_date
             assert r.window_start == max(s.own_window_start for s in r.series)
-    # 種子有涵蓋到兩種主要結果（防止 property 空轉）
+    # 種子有涵蓋到主要結果與 H1b 退回路徑（防止 property 空轉）
     assert seen[nz.STATUS_OK] > 50 and seen[nz.STATUS_INSUFFICIENT] > 10, seen
+    assert modes.get((nz.MODE_PAIR, None), 0) > 30, modes
+    assert modes.get((nz.MODE_FALLBACK, nz.STATUS_INSUFFICIENT), 0) > 10, modes
+    assert modes.get((nz.MODE_FALLBACK, nz.STATUS_NO_COMMON_BASE), 0) > 5, modes
 
 
 def test_property_尺度不變():
