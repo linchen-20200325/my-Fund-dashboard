@@ -4,12 +4,14 @@
 > **歷史**：2026-11-03 Canonical Rule Convergence 批把舊版全文（543 行；含檔頭 40 則追加 checkpoint、24 個「第 N 次現況」框、舊下一步）逐字搬到 `docs/evidence/history/2026-11-03_handoff_pre_convergence.md`（**NOT CURRENT，不是現行規則或現況**）。更舊的交接本 `docs/handover_2026_09_26_latest.md` 為歷史紀錄（第 0 節永遠不准刪，客戶 2026-09-28 裁示）。本檔改寫依據：客戶 2026-11-03 指示（`DEC-2026-11-03-08`）；`PROJECT_RULES.md` 6.1.2「覆蓋、不累加」。
 
 > **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
-> - **查詢時點**：2026-11-03；**工作樹基底 main＝`875b1955`**（Merge #1134：Navigation Shell＋H5；含 #1131～#1134）；本批**未重查 GitHub**，接手先 `git fetch origin main`。
-> - **Open／Draft PR**：以 GitHub 為準（本批 Shell 定字與降級首屏收尾批的分支尚未 push、尚未開 PR；由總管處理）。
-> - **唯一下一接手點（單一）**：Shell 定字與降級首屏收尾批（`DEC-2026-11-03-11`）的獨立稽核 → CI → 合併；之後才做 💼 線框草稿（尚未開始，本批不做）。
-> - **本批已落地**：Shell 字樣已正式定字，單一 SSOT 在 `shared/ui_semantics/rules.py` 的 `shell_*` 鍵；Status Bar 與側欄狀態區維持純文字、不放 chip／核心數字元素；全取得不寫「正常」；降級情境第一屏由 7 個名額收斂為 5（方案比較與前後計數見 `docs/v2/81` 第 10.2 節，量測 `docs/evidence/bl0536_shell_h5_2026-11-03/`）。
-> - **仍待驗證（不得宣稱已通過；`docs/BACKLOG.md` BL-0536 逐條）**：iOS／Android 實機、Safari、深色模式、Yahoo／FRED 真實連線、Streamlit 升版後導覽相容性、安全的資料更新入口（更新資料 CTA 停用中；不得為完成 Shell 開新 refresh pipeline）。**待客戶確認**：狀態句內的「n／m 項已取得」不算頁級核心數字的讀法（若整句要算一個名額，降級會是 6，須回 Gate）。其後 wireframe Gate 順序仍是 💼 → 🔍 → ⚙️。
-> - **已裁示、不再待裁**：🌍 首屏採 C 與用字統一（`DEC-2026-11-03-09`）；Shell 字樣、Status Bar 讀法、資料全取得不寫「正常」、降級首屏須 ≤5（`DEC-2026-11-03-11`）。
+> - **查詢時點**：2026-11-03；#1136（Shell 定字與降級首屏）已合併為 `f07acd44`；整合 #1135 的本批 PR 合併後的 main SHA 以 GitHub 為準；本批**未重查 GitHub**，接手先 `git fetch origin main`。
+> - **Open／Draft PR**：以 GitHub 為準（本批整合 #1135 的分支尚未 push、尚未開 PR；由總管處理）。
+> - **唯一下一接手點（單一）**：💼 我的資產：UI × Data × Evidence 詳細設計，由 ChatGPT 負責設計文字、資料串接契約與正式 GitHub 規格，核准後專案 AI 才實作；專案 AI 現不開始 💼 程式開發、也不另開競爭性設計文件（`DEC-2026-11-03-12`）。
+> - **本批已落地**：#1135 的有效成果併入 `docs/v2/80`（第 7.4 節 🤖 導覽可見但不可點、不註冊頁面；第 16.1 節 Chart SPEC 位置）；#1135 的第 17.3／17.4 節與 HANDOFF 改動不併入（正式字樣只在 `shared/ui_semantics/rules.py::APPROVED_WORDING`）。Shell 定字、Status Bar 純文字、降級情境第一屏 ≤5 已隨 #1136 合併（`DEC-2026-11-03-11`；量測 `docs/evidence/bl0536_shell_h5_2026-11-03/`）。
+> - **仍待驗證（不得宣稱已通過；`docs/BACKLOG.md` BL-0536 逐條）**：iOS／Android 實機、Safari、深色模式、Yahoo／FRED 真實連線、Streamlit 升版後導覽相容性、安全的資料更新入口（更新資料 CTA 停用中；不得為完成 Shell 開新 refresh pipeline）。
+> - **待客戶確認（總管讀法，不裁決）**：圖下摘要行逐序列仍各列一項狀態，若稽核把帶 `data-status-key` 的元素都算名額，降級 390px 比較檢視仍為 7；替代方案＝彙總句加逐序列移入展開區（`docs/v2/81` 第 10.2 節）。Status Bar 與側欄狀態句內的「n／m 項已取得」不算頁級核心數字的讀法（若整句算一個名額，降級會是 6，須回 Gate）。
+> - **已裁示、不再待裁**：🌍 首屏採 C 與用字統一（`DEC-2026-11-03-09`）；Shell 字樣、Status Bar 讀法、全取得不寫「正常」、降級首屏須 ≤5（`DEC-2026-11-03-11`）；#1135 文字修訂授權與 💼 階段分工（`DEC-2026-11-03-12`）。
+> - **舊 Checkpoint 全文**（#1136 合併前版本；NOT CURRENT）：`docs/evidence/history/2026-11-04_after_1136_handoff_backlog_superseded.md`（H3）。
 
 ## 1. 必讀順序（新對話或換人接手）
 
@@ -27,9 +29,9 @@
 | 項 | 現況 |
 |---|---|
 | UI 三層邊界 | Old UI read-only；`ui_v2` maintenance-only；`ui_v3`＝New UI2 唯一未來正式（`DEC-2026-11-02-05`、`-06`）。正式 App 現況推定為 Old UI（Streamlit Cloud 設定，repo 內無法查證）；Preview App 平行驗收，尚未 cutover |
-| 現行五頁 | 🌍 市場與趨勢／💼 我的資產／🔍 找基金／🤖 AI 投資總結（Phase 7 前不掛導覽）／⚙️ 設定（`PROJECT_RULES.md` 13.2 第 1 點；程式側 `ui_v3/shell/registry.py`） |
-| 🌍 | wireframe 已裁示（`DEC-2026-11-03-01`）；歸一化 A2／B2／C2、H1b／H2／H3、Preview rendering、九項正式字樣、首屏採 C 與用字統一、Navigation Shell＋H5 已合併（#1125～#1134；`DEC-2026-11-03-07`、`-09`、`-10`）；Shell 定字與降級首屏收尾為本批（`-11`）。詳情看 `docs/BACKLOG.md` BL-0536 與 `docs/v2/81` |
-| 💼／🔍／⚙️／🤖 | wireframe 尚未起草（順序 💼 → 🔍 → ⚙️；🤖 依 Phase 7）；核准前不寫該頁 `ui_v3` 代碼 |
+| 現行五頁 | 🌍 市場與趨勢／💼 我的資產／🔍 找基金／🤖 AI 投資總結（Phase 7 前導覽可見但不可點，不註冊頁面）／⚙️ 設定（`PROJECT_RULES.md` 13.2 第 1 點；程式側 `ui_v3/shell/registry.py`） |
+| 🌍 | wireframe 已裁示（`DEC-2026-11-03-01`）；歸一化 A2／B2／C2、H1b／H2／H3、Preview rendering、九項正式字樣、首屏採 C 與用字統一、Navigation Shell＋H5（#1134）、Shell 定字與降級首屏收尾（#1136；`DEC-2026-11-03-11`）已合併（#1125～#1136；`DEC-2026-11-03-07`、`-09`、`-10`、`-11`）。詳情看 `docs/BACKLOG.md` BL-0536 與 `docs/v2/81` |
+| 💼／🔍／⚙️／🤖 | wireframe 尚未起草（順序 💼 → 🔍 → ⚙️；🤖 依 Phase 7）；💼 先由 ChatGPT 負責設計文字、資料串接契約與正式 GitHub 規格（`DEC-2026-11-03-12`）；核准前不寫該頁 `ui_v3` 代碼 |
 | cutover | 未開始；強制驗收項 BL-0535 |
 | 本機環境 | `ui_v2` 摘要守衛要用 Python 3.11 跑（CI 為 3.11）；`.claude/worktrees` 殘留會讓檔案引用守衛誤紅，需要時在乾淨 worktree 驗 |
 
@@ -73,6 +75,6 @@
 
 ## 5. 本檔沒查證的部分
 
-- main `875b1955` 為工作樹基底，**未重查 GitHub／CI**；#1134 已合併為 git log 所見，CI 結果未查。本批的量測為 Chromium＋注入的人造資料，真實連線、Safari、實機、深色模式未驗；降級名額守衛是 DOM 計數（AppTest 不載入 CSS），可視計數以 Playwright 為準。
+- main `f07acd44`（含 #1136）為工作樹基底，**未重查 GitHub／CI**；#1134、#1136 已合併為 git log 所見，CI 結果未查。本批的量測為 Chromium＋注入的人造資料，真實連線、Safari、實機、深色模式未驗；降級名額守衛是 DOM 計數（AppTest 不載入 CSS），可視計數以 Playwright 為準。
 - 第 3 節 BL-0538～BL-0540 為本批新登記，內容單組寫成、未經第二組驗證。
 - 舊版 HANDOFF 內「未查證」各條（約 60 條，多為 2026-10 月批次紀錄）隨全文搬至歷史檔，**不再是現行聲明**。
