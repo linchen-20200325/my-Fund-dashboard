@@ -47,7 +47,6 @@ CSS = """
 h1{font-size:1.7rem !important;padding:.2rem 0 !important}
 h3{font-size:1.2rem !important}
 .uv3-pending{border-bottom:1px dashed rgba(128,128,128,.8)}
-.uv3-banner{font-size:12px;opacity:.75;margin-bottom:.4rem}
 .uv3-chip{display:inline-block;border-radius:12px;padding:1px 10px;font-size:14px;border:1px solid rgba(128,128,128,.45);
   background:rgba(128,128,128,.12);margin:1px 6px 1px 0;white-space:normal}
 .uv3-tone-red{border-color:#c0392b;background:rgba(192,57,43,.12)}
@@ -317,7 +316,6 @@ def _render(model: MarketPageModel) -> None:
 
     md = lambda html: st.markdown(html, unsafe_allow_html=True)  # noqa: E731
     md(CSS)
-    md(f'<div class="uv3-banner">{W.span("preview_banner")}</div>')
     st.title(PAGE_TITLE)
     md(summary_html(model))
 
