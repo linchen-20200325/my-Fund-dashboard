@@ -30,3 +30,12 @@
 （→ 2026-11-03 Q5 B 刪除上三行的「延遲 N 日」；狀態更新，不是漏刪；改為下一行）
 │ ~~擬：資料新鮮度 台股 延遲 ‹n› 日｜S&P 500 延遲 ‹n› 日 ⬜ 門檻待裁示~~（→ Q5 B，見下一行）│
 <!-- MOVED-END id=W1 -->
+
+## W2｜`docs/v2/81` 主判讀舊字樣（含英文 aggregation rule；被 `DEC-2026-11-03-07` 取代，一般 UI 不再出現英文）
+
+<!-- MOVED-BEGIN id=W2 source=docs/v2/81_new_ui2_wireframe_01_market.md#hero-sentence-old-wording@82ba783f sha256=11f6c549e38931bd76e3fb13b9f7b0a63d0b3267c0d2c230d4dccfb98fd26059 bytes=666 -->
+│  暫無完整市場綜合判定（缺正式    │ [語] DEC-2026-10-27-41
+│  aggregation rule）              │
+| 一句主判讀 | `[語]` | 「暫無完整市場綜合判定（缺正式 aggregation rule）」（`DEC-2026-10-27-41`；79 §5.2；`TEXT_NO_CONCLUSION`）。與 ui_v2 `hero_sentence`（計數句）是兩種已落字寫法，本檔採整句、計數併入「▸ 各項資料狀態」（第 8 節 T2，文件內決定，可推翻） |
+| 主判讀字樣 | 計數句＋「暫無完整市場綜合判定。」 | 整句「暫無完整市場綜合判定（缺正式 aggregation rule）」，計數併入各項資料狀態 | 文件內決定（T2） |
+<!-- MOVED-END id=W2 -->

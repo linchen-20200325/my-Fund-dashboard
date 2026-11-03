@@ -53,13 +53,13 @@
 | 💼 我的資產 | 尚無 New UI2 wireframe（BL-0536-G2） | 現有 `docs/v2/73`、`76` 為 ui_v2 時期，版面須重核，語意仍有效 |
 | 🔍 找基金 | 尚無 New UI2 wireframe（BL-0536-G3） | 現有 `docs/v2/78` 同上 |
 | 🤖 AI 投資總結 | `docs/v2/67` 6.1／8.9、`docs/v2/75`；Phase 7 前不掛導覽 | 輸出「六項」對映待客戶確認（BL-0540） |
-| ⚙️ 設定 | 尚無 New UI2 wireframe（BL-0536-G4） | 現有 `docs/v2/65` 同上；資料健康度見 `docs/v2/80` 第 11 節 |
+| ⚙️ 設定 | 尚無 New UI2 wireframe（BL-0536-G4） | 現有 `docs/v2/65` 同上；資料健康度見 `docs/v2/80` 第 16 節 |
 
 | 規則 | 唯一權威位置 |
 |---|---|
 | 現行五頁與頁名 | 本檔 13.2 第 1 點 |
 | 簡單但不失判讀、資訊順序、chart-first、工程資訊不進一般 UI、Presentation Compression≠Information Loss（客戶 2026-11-03 A、B、E、F） | 本檔 13.5 |
-| Chart SPEC、資料健康度集中 ⚙️、UI ViewModel≠Decision Digest、OneBrain 定位（客戶 2026-11-03 C、D、G、H） | `docs/v2/80` 第 11 節 |
+| Chart SPEC、資料健康度集中 ⚙️、UI ViewModel≠Decision Digest、OneBrain 定位（客戶 2026-11-03 C、D、G、H） | `docs/v2/80` 第 16 節 |
 | 正式 Streamlit 顯示、三代 UI 邊界、cutover | 本檔 13.2「正式 Streamlit 顯示規則」 |
 | 資料／行動語意、Missing | 本檔第 13 節、13.1 |
 | Missing 與狀態字樣 | `shared/ui_semantics/rules.py`（程式）＋ `docs/v2/81` 第 10.1 節（🌍 用法） |
@@ -804,7 +804,7 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 5. **UI 不承載核心投資邏輯**：投資分類、風險判定、3-3-3、核心／衛星、配息／吃本金、趨勢判讀、配置規則、Missing 語意、Risk Cap 等必須在可測試的 domain／service／rule layer（明確輸入／輸出 contract），UI 只讀結果並呈現。
 6. **資料流**：Raw → Validate → Normalize → Domain／Rule → AI interpretation → UI。Raw 不直接當投資結論。
 7. **AI 非資料真相來源**（已有，第 13 節第 1 條、13.1）：AI 只讀已存在且可追溯的資料、解釋與整合 evidence；不補缺值、不猜數字、不改寫 deterministic rule 結果、不取代驗證或正式 investment semantics、不得因生成結果方便而修改資料層；換模型不改資料與 domain contract。
-8. **⚙️ 設定長期責任與 Active Sheet 原則**：帳號／OAuth、Active Sheet、連線狀態、sync／freshness、diagnostics 由 ⚙️ 管，其他頁不自管 Sheet／credential／connection。Active Sheet ＝ 持倉／保單 workbook；Pending ≠ Active；驗證成功才切換、失敗保留舊 Active；其他頁只消費結果，不猜、不 fallback 到別本（`DEC-2026-10-25-04` J-4）。（→ **2026-10-29 指標**（`DEC-2026-10-29-06`；有意識的政策變更，不是漏刪；本句原文不改）：只改**畫面入口位置** —— Google 帳號控制桌機固定左側、Sheet 選擇放在使用該 Sheet 的頁面、設定頁只留低頻全域功能；Active Sheet 的狀態語意（Pending ≠ Active、驗證成功才切換、失敗保留舊 Active、不猜、不 fallback）與單一狀態機一字不改；OAuth scope／callback／credential／token 不改。正式條文 44 第七節第三小節之二十其三。）（→ **2026-11-03 指標**（`DEC-2026-11-03-08`）：完整資料健康度診斷集中於 ⚙️ 設定→資料健康度，其他頁只留與判讀直接相關的 freshness／source 摘要；契約見 `docs/v2/80` 第 11 節；與 frozen 44 的承接待客戶確認，BL-0540。）
+8. **⚙️ 設定長期責任與 Active Sheet 原則**：帳號／OAuth、Active Sheet、連線狀態、sync／freshness、diagnostics 由 ⚙️ 管，其他頁不自管 Sheet／credential／connection。Active Sheet ＝ 持倉／保單 workbook；Pending ≠ Active；驗證成功才切換、失敗保留舊 Active；其他頁只消費結果，不猜、不 fallback 到別本（`DEC-2026-10-25-04` J-4）。（→ **2026-10-29 指標**（`DEC-2026-10-29-06`；有意識的政策變更，不是漏刪；本句原文不改）：只改**畫面入口位置** —— Google 帳號控制桌機固定左側、Sheet 選擇放在使用該 Sheet 的頁面、設定頁只留低頻全域功能；Active Sheet 的狀態語意（Pending ≠ Active、驗證成功才切換、失敗保留舊 Active、不猜、不 fallback）與單一狀態機一字不改；OAuth scope／callback／credential／token 不改。正式條文 44 第七節第三小節之二十其三。）（→ **2026-11-03 指標**（`DEC-2026-11-03-08`）：完整資料健康度診斷集中於 ⚙️ 設定→資料健康度，其他頁只留與判讀直接相關的 freshness／source 摘要；契約見 `docs/v2/80` 第 16 節；與 frozen 44 的承接待客戶確認，BL-0540。）
 
 **新需求分類 Gate**：先答屬於 A. Data／B. Domain／Rule／C. AI interpretation／D. UI／Interaction／E. Infrastructure／Auth 哪一層，先放對層再實作；不得因「最快」把邏輯塞進 UI。
 
@@ -856,7 +856,7 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 ### 13.5 長期規則：New UI2 人類 UI 呈現原則（客戶 2026-11-03 正式有效方向，`DEC-2026-11-03-08`；要點轉述，存檔 `docs/evidence/decisions/2026-11-03_canonical_convergence_and_new_ui2_rules.md`）
 
-> 本節只放永久共用的呈現原則；架構契約（Chart SPEC、資料健康度、ViewModel／Digest 分流、OneBrain 定位）在 `docs/v2/80` 第 11 節。**不授權實作、不 amend 44、不改任何 Gate**；各頁具體版面仍須經該頁 wireframe 核准。
+> 本節只放永久共用的呈現原則；架構契約（Chart SPEC、資料健康度、ViewModel／Digest 分流、OneBrain 定位）在 `docs/v2/80` 第 16 節。**不授權實作、不 amend 44、不改任何 Gate**；各頁具體版面仍須經該頁 wireframe 核准。
 
 1. **人類 UI：簡單但不失判讀能力。** 簡潔、mobile-first、圖表優先、低資訊噪音；第一屏優先回答「狀態／是否需注意／關鍵證據」；不因簡化而失去投資判讀能力。資訊順序：① 狀態／結論 ② 是否需注意／正式 action state（若已有）③ 主要圖表 ④ 關鍵 evidence ⑤ 必要數字 ⑥ 詳細來源、raw data、diagnostics 收合。
 2. **Chart-first。** 能用圖表清楚表達趨勢、相對變化、比較者優先用圖表；不得為美觀創造不存在的語意、硬疊不同單位、使用未核准雙軸、讓圖表自行做 domain calculation、或用圖形掩蓋 Missing。

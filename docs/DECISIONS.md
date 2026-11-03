@@ -2183,27 +2183,28 @@
 | 未採方案與理由 | 無（客戶直接給定字樣；執行組未提替代方案）。 |
 | 理由／背景 | BL-0536 🌍 Preview rendering 批把這些字樣列為「待客戶驗收」；`docs/v2/81` 第 10 節第 1 點原記為暫時字樣、集中在 `preview_wording.py`。 |
 | evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-03_mkt_formal_wording_ruling.md`。落地：`shared/ui_semantics/rules.py`（`APPROVED_WORDING`，純文字正式字樣；狀態符號列 `ENTRIES` 不變）、`ui_v3/viewmodels/preview_wording.py`（改引用規則表，只剩未核准字樣）、`ui_v3/pages/mkt.py`、`tests/ui_v3/`（字樣逐字守衛、工程資訊外漏守衛）、`docs/v2/81` 第 10 節、`docs/BACKLOG.md` BL-0536、`docs/HANDOFF.md`。 |
-| 影響範圍 | 只限 🌍 Preview App 的畫面字樣與其守衛。**不**改資料、來源、公式、門檻、狀態判定或投資語意；**不**新增資料源、依賴；**不**切正式入口；**不**動 Old UI、`ui_v2`、frozen 文件。~~**第 (2) 項（首屏拆兩枚 chip）未落地**~~ → **2026-11-03 客戶已裁示採 C（`DEC-2026-11-03-09`；狀態更新，不是漏刪；決策者：客戶）：兩枚獨立 chip、基準日改純文字揭露行、總數仍 ≤5**；以下為裁示前原文：**第 (2) 項（首屏拆兩枚 chip）未落地**：首屏常態 3 chip＋2 核心數字＝5（81 第 3.1 節 Visual Budget），拆成兩枚 chip 會變 6、超過上限，依客戶本項「超過須停下回報」未實作，已回報待客戶裁示（見 `docs/BACKLOG.md` BL-0536 與 `docs/v2/81` 第 10 節）。 |
+| 影響範圍 | 只限 🌍 Preview App 的畫面字樣與其守衛。**不**改資料、來源、公式、門檻、狀態判定或投資語意；**不**新增資料源、依賴；**不**切正式入口；**不**動 Old UI、`ui_v2`、frozen 文件。**第 (2) 項（首屏拆兩枚 chip）未落地**：首屏常態 3 chip＋2 核心數字＝5（81 第 3.1 節 Visual Budget），拆成兩枚 chip 會變 6、超過上限，依客戶本項「超過須停下回報」未實作，已回報待客戶裁示（見 `docs/BACKLOG.md` BL-0536 與 `docs/v2/81` 第 10 節）。 |
 | 與既有裁示的關係 | 承接 `DEC-2026-11-03-01`（Q1 A：市場狀態與是否需注意共用一枚 chip；Q5 B：首屏僅一枚資料新鮮度 chip）；(2) 與 Q1 A「可共用一枚 chip」的關係＝客戶本次要求視覺上不混為一項，若採兩枚 chip 即與 Q1 A 及首屏預算互動，須另行裁示；`DEC-2026-11-03-04`（歸一化揭露字樣原 pending）。44 之十九其一之一第 2 條不被 amend。 |
 | 是否可逆 | 可逆（presentation 層；客戶可另行裁示） |
 | supersedes／superseded by | supersedes：`docs/v2/81` 第 3.1 節「擬：」字樣與第 10 節第 1 點「暫時字樣」中與上列九項重疊者、`shared/ui_semantics/rules.py` 原 `chart_empty` 的 PENDING 狀態、BL-0536 待客戶驗收字樣項中與上列重疊者（原字保留劃線，有意識的更正，不是漏刪；決策者：客戶）。superseded by：無。 |
 | provenance | **逐字**（以逐字檔為準）；「未採方案與理由」「影響範圍」「與既有裁示的關係」由執行組單組整理，可被客戶推翻；未經第二組獨立驗證。 |
 
-### DEC-2026-11-03-09｜客戶裁示：🌍 首屏採 C（市場狀態／是否需注意拆兩枚獨立 chip、基準日改純文字揭露行）＋用字統一（⛔ 利率資料來源尚未設定、美10Y、美2Y）
+### DEC-2026-11-03-08｜客戶指示：Canonical Rule Convergence／Latest-Rule-Only（現行區只留最新規則）＋New UI2 最新有效規則 A～I
 
 | 欄位 | 內容 |
 |---|---|
 | 日期 | 2026-11-03 |
-| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管於派工單內逐字轉交，見 `docs/evidence/decisions/2026-11-03_mkt_first_screen_C_and_wording_unify_ruling.md`，全文逐字） |
-| 決策內容摘要 | **以逐字檔為準，以下為逐項摘要。** **(1) 首屏採 C**：「市場狀態」與「是否需注意」拆成兩個獨立欄位／兩枚獨立 chip；「基準日」不再佔 chip 預算，改放在圖表附近的純文字揭露行（原有字樣與資料語意不變）；首屏核心數字＋chip 總數仍維持 frozen 44 的 ≤5；不修訂 frozen 44，也不把其他頁的首屏上限放寬到 6；這只是 presentation hierarchy 調整，不是 formula／data semantics 變更。**(2) 用字統一**：正式使用「⛔ 利率資料來源尚未設定」「美10Y」「美2Y」；不再使用「⛔ 尚未設定：利率資料來源」「美 10Y」「美 2Y」；同步更新 current wording SSOT、tests／guards、DECISIONS、BACKLOG、HANDOFF、`docs/v2/81`、evidence；#1132 scope 已涵蓋、直接併入；若碰到 frozen 44 實質語意、formula 或 data semantics，另送 Gate 並停手。 |
-| 未採方案與理由 | 推薦並採用 (C)。未採：(A) 兩枚 chip 並 amend 44 預算為 ≤6（動 frozen 44，成本最高）；(B) 維持一枚共用 chip、兩個欄位名並排（不滿足「不要混成一項」）。方案描述見 `docs/v2/81` 第 10.2 節。 |
-| 理由／背景 | `DEC-2026-11-03-07` 第 (2) 項要求兩者視覺上不混為一項；Visual Budget 原為 3 chip＋2 核心數字＝5，直接拆兩枚會是 4＋2＝6，超過 44 之十九其一之一第 2 條上限，故當時停手回報。本裁示以把基準日移出 chip 清單解決，總數仍為 5。 |
-| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-03_mkt_first_screen_C_and_wording_unify_ruling.md`。落地：`shared/ui_semantics/rules.py`（`NOT_CONFIGURED_RATES_SOURCE_TEXT`、`APPROVED_WORDING` 的 `series_us10y`／`series_us2y`）、`ui_v3/pages/mkt.py`、`ui_v3/viewmodels/preview_wording.py`、`tests/ui_v3/test_ui_v3_first_screen_c_and_wording_unify.py`（首屏計數、舊字樣禁用守衛）、`docs/v2/81` 第 3.1／10 節、`docs/BACKLOG.md` BL-0536、`docs/HANDOFF.md`。 |
-| 影響範圍 | 只限 🌍 Preview App 的首屏呈現層級與畫面字樣。**不**改資料、來源、公式、門檻、狀態判定、投資語意；**不**新增規則（市場狀態、是否需注意在無正式規則時各自 `⬜ 無法判定`）；**不**修訂 frozen 44，`NOT_CONFIGURED_FORM`（44 之十二其二第 1 條句型 `⛔ 尚未設定：<哪一項>`）一字未改，本裁示只核准「🌍 本頁對『利率資料來源』這一項」的完整句字樣；同頁其餘位置仍寫狀態族短句 `⛔ 尚未設定`（44 之七其二第 3 條：哪一項一頁只交代一次，不變）；**不**放寬其他頁首屏上限；不動 Old UI、`ui_v2`、services。先前逐字存檔內的舊寫法（例：`美 10Y`）是當時裁示原文，保留不改。 |
-| 與既有裁示的關係 | 解決 `DEC-2026-11-03-07` 第 (2) 項（原「未落地、待客戶裁示」）；承接 `DEC-2026-11-03-01`（Q1 A 共用一枚 chip 被本裁示取代為兩枚；Q5 B 首屏僅一枚資料新鮮度 chip 不變；D3 (i) 不變）。**編號說明**：分支 `gov-converge` 已使用 `DEC-2026-11-03-08`（另一件文件收斂指示），本筆取 `-09` 以免合併撞號；本分支因此沒有 `-08`，不是漏號。 |
-| 是否可逆 | 可逆（presentation 層；客戶可另行裁示） |
-| supersedes／superseded by | supersedes：`DEC-2026-11-03-07` 第 (2) 項的 Decision Gate 狀態、`docs/v2/81` 第 3.1 節與第 10.2 節「市場狀態／是否需注意共用一枚 chip」「基準日 chip」「待客戶裁示」、`docs/v2/81` 第 10.1 節「待客戶確認是否統一美10Y／美2Y 空格」「利率資料來源暫時字樣」、`ui_v3/viewmodels/preview_wording.py` 的 `status_row_label`／`not_configured_item`／`series_us10y`／`series_us2y` 暫時字樣（原字保留劃線，有意識的更正，不是漏刪；決策者：客戶）。superseded by：無。 |
-| provenance | **逐字**（以逐字檔為準）；「未採方案與理由」「影響範圍」「與既有裁示的關係」由執行組單組整理，可被客戶推翻；未經第二組獨立驗證。 |
+| 決策者 | **客戶**（A～I 規則與收斂指示，要點轉述；客戶對話本身執行組未見，摘要由總管於派工單內轉交，見 `docs/evidence/decisions/2026-11-03_canonical_convergence_and_new_ui2_rules.md`）；**總管讀法（可被客戶推翻）**：G-1 採盤點推薦方案 B（見下） |
+| 決策內容摘要 | **(1) 收斂**：現行規則區只留 CURRENT；被最新裁示取代的舊條文逐字移到 `docs/evidence/history/`（標 NOT CURRENT），現行區只留 `superseded:` 指標；歷史 DEC、原始 evidence、merged PR evidence 不刪、不改寫 Git 歷史；一條規則只有一個權威位置；frozen／append-only 文件不直接破壞，走合法 amendment／索引。**(2) New UI2 規則 A～I**（簡單不失判讀、chart-first、Chart SPEC、資料健康度集中 ⚙️、工程資訊不進一般 UI、Presentation Compression≠Information Loss、UI ViewModel≠Decision Digest、OneBrain 定位、五頁 IA）：逐項摘要見存檔檔；落地位置——A、B、E、F＝`PROJECT_RULES.md` 13.5；I＝13.2 第 1 點；C、D、G、H＝`docs/v2/80` 第 16 節；規則→權威位置索引＝`PROJECT_RULES.md` 0.4。 |
+| 本批處置（總管讀法，待客戶確認，BL-0538） | G-1：改寫 `PROJECT_RULES.md` 0.5 hygiene (1)(2) 為「舊句移 history＋現行區留指標＋sha256 機械比對」；`DECISIONS.md` 維持追加式；`CLAUDE.md`、`PROCESS.md`、`EXCEPTIONS.md`、frozen 44／57／CONSTITUTION 不動。G-4：0.4 新增「頁面→現行規格」索引（索引不是第五份 SSOT）。G-2、G-3、G-5 不自行裁決，登記 BL-0540；首屏拆 chip 登記 BL-0539；G-6 根目錄 README 不建。 |
+| 未採方案與理由 | 全面真刪（違反 `CLAUDE.md` §-1.5 體例與「不得刪稽核證據」，不可逆）；維持疊層追加（不達成客戶目標）。 |
+| 理由／背景 | 唯讀盤點發現疊層追加寫法使現行區混有舊規則：舊 HANDOFF 檔頭 40 則追加 checkpoint、`PROJECT_RULES.md` 13.2 以現行口吻寫舊五頁、BL-0536 單列約 35 KB 等（`docs/evidence/canonical_convergence_2026-11-03/`，單組、未經第二組驗證）。 |
+| evidence／source | 存檔 `docs/evidence/decisions/2026-11-03_canonical_convergence_and_new_ui2_rules.md`；搬出內容 `docs/evidence/history/`（區塊 H1、B1、P1、P2、W1、W2；基準 commit `82ba783f`）；機械守衛 `tests/test_canonical_rule_consistency.py`。 |
+| 影響範圍 | 文件與測試：`PROJECT_RULES.md`、`docs/HANDOFF.md`（覆蓋重寫）、`docs/BACKLOG.md`（BL-0536 瘦身、BL-0538～BL-0541）、`docs/v2/80` 第 16 節、`docs/v2/81`（標題與線框舊字樣）、`docs/evidence/`。**不**改 production code、公式、資料語意、來源、門檻；不動 Old UI／`ui_v2`／`ui_v3` 行為；不新增 dependency；不開始 OneBrain 實作；不 cutover。 |
+| 與既有裁示的關係 | 取代的現行表述（舊句已搬 history，DEC 本文不動）：`DEC-2026-10-27-02` 與 `DEC-2026-10-24-02` 的舊頁序頁名（現行＝`DEC-2026-10-29-06`、`-07`）；`PROJECT_RULES.md` 0.5 舊 hygiene (1)(2)；`docs/v2/81` 線框 Q5 A 舊行與英文 aggregation rule 主判讀舊字樣（現行＝`DEC-2026-11-03-01`、`-07`）。引用 57 路徑不變：`docs/v2/57_amendment_8_directional_judgment.md`。 |
+| 是否可逆 | 可逆（搬出內容逐字、有 sha256 清冊，可還原） |
+| supersedes／superseded by | supersedes：見上列「取代的現行表述」。superseded by：無。 |
+| provenance | A～I 與收斂指示＝**要點轉述**（客戶）；G-1 採 B 與 G-4 索引讀法＝**總管裁決，可被客戶推翻**；落地內容由治理文件組單組寫成，未經第二組獨立驗證（治理規則等級須至少 1 組獨立稽核，`DEC-2026-10-16-05`）。 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
