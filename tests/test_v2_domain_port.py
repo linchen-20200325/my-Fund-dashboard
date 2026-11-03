@@ -689,7 +689,7 @@ def _domain_files():
 def test_v2_domain_母體不是空的():
     names = {p.name for p in _domain_files()}
     assert {"__init__.py", "nav_metrics.py", "holdings.py", "deviation.py", "rule_filter.py", "periods.py",
-            "freshness.py", "normalization.py"} <= names, names
+            "freshness.py", "normalization.py", "market_summary.py"} <= names, names
 
 
 def test_v2_domain只import白名單_不碰streamlit_ui_網路_檔案_也不帶中文畫面字():
