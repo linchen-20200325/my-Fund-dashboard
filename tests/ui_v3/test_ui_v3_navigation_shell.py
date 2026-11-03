@@ -59,9 +59,17 @@ def test_split_title_does_not_guess():
     assert nav.split_title("ab 設定") == ("", "ab 設定")
 
 
-def test_short_label_keys_exist_for_every_page_and_are_pending():
+def test_short_label_keys_exist_for_every_page_and_are_approved_in_the_single_ssot():
+    """客戶 2026-11-03 裁示第四項：Shell 字樣已正式核准，只住規則表；暫時字樣表不得再有同鍵（不建立第二套字樣表）。"""
     for item in nav.nav_items():
-        assert item.short_key in W.PREVIEW_PENDING_WORDING and not W.is_approved(item.short_key)
+        assert W.is_approved(item.short_key) and item.short_key not in W.PREVIEW_PENDING_WORDING
+        assert item.soon_key in rules.APPROVED_WORDING and item.soon_key not in W.PREVIEW_PENDING_WORDING
+    assert [W.text(i.short_key) for i in nav.nav_items()] == ["市場", "資產", "找基金", "AI", "設定"]
+
+
+def test_not_yet_open_label_is_not_open_for_ai_and_under_development_for_the_rest():
+    labels = {i.slug: W.text(i.soon_key) for i in nav.nav_items()}
+    assert labels == {"mkt": "開發中", "ast": "開發中", "exp": "開發中", "ai": "尚未開放", "set": "開發中"}
 
 
 # ───────────────────────────── Status Bar／側欄／CTA 的純字串 ─────────────────────────────
@@ -71,6 +79,7 @@ def test_status_bar_when_all_primary_data_present_never_says_normal_or_complete(
     html = chrome.status_bar_html(status(), today=date(2026, 11, 3))
     text = re.sub(r"<[^>]+>", " ", html)
     assert "PREVIEW" in text and "更新：14:00" in text
+    assert "uv3-chip" not in html and "data-pending-wording" not in html
     assert "正常" not in text and "資料齊" not in text           # rules.entry("ok") 刻意無字
     assert rules.entry("ok").wording is None
     assert "部分" not in text and "缺失" not in text
@@ -79,19 +88,48 @@ def test_status_bar_when_all_primary_data_present_never_says_normal_or_complete(
 def test_status_bar_partial_none_and_failed_note():
     from ui_v3.pages import chrome
     partial = re.sub(r"<[^>]+>", " ", chrome.status_bar_html(status(LEVEL_PARTIAL, 3, 5, 0), today=date(2026, 11, 3)))
-    assert "部分資料缺失（3／5 項取得）" in partial and rules.entry("missing").symbol in partial and "取數失敗" not in partial
+    assert "部分資料未取得（3／5 項已取得）" in partial and rules.entry("missing").symbol in partial and "取數失敗" not in partial
     failed = re.sub(r"<[^>]+>", " ", chrome.status_bar_html(status(LEVEL_PARTIAL, 3, 5, 2), today=date(2026, 11, 3)))
     assert "其中 2 項取數失敗" in failed
     none = re.sub(r"<[^>]+>", " ", chrome.status_bar_html(status(LEVEL_NONE, 0, 5, 0, fetched=None), today=date(2026, 11, 3)))
-    assert "主要資料缺失（0／5 項取得）" in none
+    assert "0／5 項已取得" in none and "部分資料未取得" not in none and "主要資料" not in none     # 一項也沒取得：用已核准的計數字樣，不另造句型
 
 
-def test_missing_fetch_time_shows_missing_chip_not_a_guess():
+def test_missing_fetch_time_shows_missing_text_not_a_guess_and_never_a_chip():
     from ui_v3.pages import chrome
     html = chrome.status_bar_html(status(fetched=None), today=date(2026, 11, 3))
     assert 'data-status-key="missing"' in html and rules.entry("missing").wording in html
+    assert "uv3-chip" not in html                                  # 客戶裁示第一項：Status Bar 不放 chip 形式元素（放了就得計入首屏預算）
     assert not re.search(r"\d{2}:\d{2}", html)                   # 沒有取得時間就沒有時間，不補現在時間
-    assert 'data-status-key="missing"' in chrome.sidebar_status_html(status(fetched=None))
+    side = chrome.sidebar_status_html(status(fetched=None))
+    assert 'data-status-key="missing"' in side and "uv3-chip" not in side
+
+
+@pytest.mark.parametrize("st", [status(), status(LEVEL_PARTIAL, 3, 5, 0), status(LEVEL_PARTIAL, 3, 5, 2), status(LEVEL_NONE, 0, 5, 0, fetched=None),
+                                status(fetched=None)])
+def test_shell_chrome_has_no_chip_form_elements_or_core_number_elements(st):
+    """客戶 2026-11-03 裁示第一項：Status Bar（與側欄狀態區）若放資料狀態 chip 或核心數字就不能以位於 Shell 排除計數。
+    本批的做法是兩處都不放：純文字一行，沒有 `uv3-chip`、沒有 `uv3-evidence`（頁級核心數字元素）。"""
+    from ui_v3.pages import chrome
+    for html in (chrome.status_bar_html(st, today=date(2026, 11, 3)), chrome.sidebar_status_html(st)):
+        assert "uv3-chip" not in html and "uv3-evidence" not in html, html
+
+
+def test_status_counts_cover_only_the_registered_items_actually_checked_and_never_claim_system_wide_health():
+    """客戶裁示第四項：分母必須是明確、已登錄且本次檢查涵蓋的項目；文字不得暗示涵蓋超過實際檢查的五條主要序列。"""
+    from ui_v3.adapters import shell_status
+    from ui_v3.pages import chrome
+    model = _model()
+    st = shell_status.from_market_model(model)
+    assert st.total == len(model.statuses) == 5            # 分母＝本次檢查涵蓋的已登錄項目（五條主要序列），不是常數、不是全系統
+    for level_status in (status(LEVEL_PARTIAL, 3, 5, 2), status(LEVEL_NONE, 0, 5, 0), status()):
+        text = re.sub(r"<[^>]+>", " ", chrome.status_bar_html(level_status) + chrome.sidebar_status_html(level_status))
+        for overreach in ("全系統", "全站", "整體", "所有資料", "全部資料", "主要資料", "系統健康", "健康度"):
+            assert overreach not in text, overreach
+    # 負控（記憶體內現編）：model 多一項已登錄項目，分母必須跟著變
+    from dataclasses import replace
+    bigger = replace(model, statuses=model.statuses + (model.statuses[0],))
+    assert shell_status.from_market_model(bigger).total == 6
 
 
 def test_format_taipei_rules():
@@ -110,13 +148,13 @@ def test_disabled_nav_items_are_not_links_and_say_under_development():
             continue
         for html in (chrome.disabled_side_html(item), chrome.disabled_bottom_html(item)):
             assert 'aria-disabled="true"' in html and "<a " not in html and "href" not in html
-            assert W.text("shell_nav_soon") in html and item.title in html
+            assert W.text(item.soon_key) in html and item.title in html
 
 
 def test_sidebar_status_block_has_counts_and_full_fetch_time():
     from ui_v3.pages import chrome
     text = re.sub(r"<[^>]+>", " ", chrome.sidebar_status_html(status()))
-    assert "5／5 項取得" in text and "2026-11-03 14:00" in text and "正常" not in text
+    assert "5／5 項已取得" in text and "2026-11-03 14:00" in text and "正常" not in text
 
 
 # ───────────────────────────── view model 驗證 ─────────────────────────────
@@ -238,14 +276,26 @@ def test_sidebar_has_no_collapse_control_and_no_second_nav_on_desktop():
 
 # ───────────────────────────── 字樣 ─────────────────────────────
 
-def test_all_shell_wording_is_pending_and_never_overlaps_approved():
-    keys = [k for k in W.PREVIEW_PENDING_WORDING if k.startswith("shell_")]
-    assert len(keys) >= 15
-    for key in keys:
-        assert not W.is_approved(key)
-        assert W.PREVIEW_PENDING_WORDING[key].status == "pending"
-    approved = {a.text for a in rules.APPROVED_WORDING.values()}
-    assert not (approved & {W.PREVIEW_PENDING_WORDING[k].text for k in keys})
+def test_shell_wording_lives_only_in_the_rules_table_and_matches_the_client_ruling_verbatim():
+    """單一 SSOT：`shell_*` 只在規則表；`preview_wording` 不留任何 Shell 鍵（舊暫擬定義已退役）。逐字出處守衛在 `test_ui_v3_semantics_rules`。"""
+    shell_keys = [k for k in rules.APPROVED_WORDING if k.startswith("shell_")]
+    assert len(shell_keys) == 19
+    assert not [k for k in W.PREVIEW_PENDING_WORDING if k.startswith("shell_")]
+    evidence = (Path(__file__).resolve().parents[2] / rules.EVIDENCE_SHELL_RULING).read_text(encoding="utf-8")
+    for key in shell_keys:
+        item = rules.approved(key)
+        assert item.ruling_text in evidence and item.source == rules.SHELL_RULING_SOURCE, key
+    # 客戶裁示第四項列舉的整串（順序與分隔照裁示逐字）
+    assert "基金投資儀表板／市場、資產、找基金、AI、設定（短標）／開發中／🤖：尚未開放／PREVIEW／Preview｜非正式頁面／更新：{時間}／資料狀態／最後更新時間／更新資料／預覽版尚未開放更新資料／部分資料未取得（{n}／{m} 項已取得）／其中 {n} 項取數失敗／{n}／{m} 項已取得／主要導覽" in evidence
+
+
+def test_old_provisional_shell_wording_is_banned_everywhere_in_ui_v3_sources():
+    """舊暫擬字樣（「部分資料缺失」「項取得」「主要資料缺失」）退役；被禁字串在測試內拼接，不以字面落進任何檔案。"""
+    banned = ("部分資料" + "缺失", "項" + "取得）", "} 項" + "取得", "主要資料" + "缺失")
+    root = Path(__file__).resolve().parents[2]
+    for path in list((root / "ui_v3").rglob("*.py")) + [root / "shared" / "ui_semantics" / "rules.py"]:
+        text = path.read_text(encoding="utf-8").replace("項已取得", "")
+        assert not [b for b in banned if b in text], (path.name, [b for b in banned if b in text])
 
 
 # ───────────────────────────── 整頁（AppTest） ─────────────────────────────
@@ -301,11 +351,11 @@ def test_app_has_exactly_one_navigable_page_and_no_empty_shell_pages(monkeypatch
 
 def test_app_status_for_missing_failure_and_not_configured(monkeypatch):
     at = run(monkeypatch, view=dict(tw="missing"))
-    assert "部分資料缺失（4／5 項取得）" in main_text(at) and "取數失敗" not in main_text(at).split('data-shell="status-bar"')[1].split("</div>")[0]
+    assert "部分資料未取得（4／5 項已取得）" in main_text(at) and "取數失敗" not in main_text(at).split('data-shell="status-bar"')[1].split("</div>")[0]
     at = run(monkeypatch, view=dict(us="error"))
     assert "取數失敗" in main_text(at).split('data-shell="status-bar"')[1].split("</div>")[0]
     at = run(monkeypatch, view=dict(tw="missing", us="missing"))
-    assert not at.exception and "部分資料缺失" in main_text(at)
+    assert not at.exception and "部分資料未取得" in main_text(at)
 
 
 def test_shell_visible_text_has_no_engineering_leak(monkeypatch):

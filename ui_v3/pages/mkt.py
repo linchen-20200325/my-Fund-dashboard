@@ -51,6 +51,8 @@ h3{font-size:1.2rem !important}
   background:rgba(128,128,128,.12);margin:1px 6px 1px 0;white-space:normal}
 .uv3-tone-red{border-color:#c0392b;background:rgba(192,57,43,.12)}
 .uv3-tone-yellow{border-color:#b7791f;background:rgba(183,121,31,.14)}
+.uv3-st{white-space:normal}
+.uv3-st-red{font-weight:700}
 .uv3-row{margin:.25rem 0;line-height:1.55}
 .uv3-label{font-size:13px;opacity:.75;margin-right:6px}
 .uv3-note{font-size:13px;opacity:.85;line-height:1.5;margin:.15rem 0}
@@ -70,6 +72,16 @@ def chip(key: str, label: Optional[str] = None, *, label_html: Optional[str] = N
     entry = rules.entry(key)
     inner = label_html if label_html is not None else escape(label if label is not None else entry.wording)
     return f'<span class="uv3-chip uv3-tone-{entry.tone}" data-status-key="{escape(key)}">{inner}</span>'
+
+
+def plain_status(key: str, label: Optional[str] = None, *, label_html: Optional[str] = None) -> str:
+    """規則表一列 → **純文字**狀態（符號＋字樣，與 `chip()` 同字、同 `data-status-key`，但**不是 chip 形式元素**）。
+
+    用在首屏預算之外的逐序列狀態摘要（客戶 2026-11-03 裁示第三項；`docs/v2/81` 第 10.2 節）：頁級必要狀態仍是 chip，
+    逐序列的重複狀態改成同一行的文字，原因與狀態字樣一字不少。"""
+    entry = rules.entry(key)
+    inner = label_html if label_html is not None else escape(label if label is not None else entry.wording)
+    return f'<span class="uv3-st uv3-st-{entry.tone}" data-status-key="{escape(key)}">{inner}</span>'
 
 
 def failed_text(label: str) -> str:
@@ -103,27 +115,29 @@ def reason_span(code: Optional[str]) -> str:
 _NC_STATE: ContextVar[Optional[dict]] = ContextVar("uv3_mkt_not_configured_state", default=None)
 
 
-def _not_configured_chip() -> str:
+def _not_configured_chip(render=chip) -> str:
     state = _NC_STATE.get()
     if state is not None and state["seen"]:
-        return chip("not_configured")
+        return render("not_configured")
     if state is not None:
         state["seen"] = True
-    return chip("not_configured", label_html=not_configured_html())
+    return render("not_configured", label_html=not_configured_html())
 
 
-def status_html(status: str, reason: Optional[str], label_key: str) -> str:
-    """非 ok 的狀態 → HTML。缺資料／取數失敗／尚未設定／無法判定各自獨立，不互相冒充。"""
+def status_html(status: str, reason: Optional[str], label_key: str, *, plain: bool = False) -> str:
+    """非 ok 的狀態 → HTML。缺資料／取數失敗／尚未設定／無法判定各自獨立，不互相冒充。
+    `plain=True` 輸出純文字狀態（字樣與符號相同、不是 chip 形式元素），只給逐序列狀態摘要用。"""
+    render = plain_status if plain else chip
     label = W.text(label_key)
     if status == STATUS_MISSING:
-        return chip("missing")
+        return render("missing")
     if status == STATUS_FAILED:
         if reason == "not_configured":
-            return _not_configured_chip()
-        return chip("fetch_failed", failed_text(label))
+            return _not_configured_chip(render)
+        return render("fetch_failed", failed_text(label))
     if status == STATUS_UNDETERMINED:
         extra = W.span("insufficient") if reason == "insufficient" else reason_span(reason)
-        return chip("undetermined") + extra
+        return render("undetermined") + extra
     raise ValueError(f"status_html 只處理非 ok 狀態：{status!r}")
 
 
@@ -155,7 +169,7 @@ def elapsed_html(label: str, as_of: Optional[str], elapsed: Optional[int]) -> st
         return W.span("data_date_no_elapsed", label=label, date=as_of)
     if elapsed < 0:
         return (W.span("data_date_no_elapsed", label=label, date=as_of) + " "
-                + f'<span class="uv3-chip uv3-tone-grey" data-status-key="not_applicable">'
+                + f'<span class="uv3-st" data-status-key="not_applicable">'
                   f'{escape(rules.entry("not_applicable").wording)}{W.span("colon")}</span>' + W.span("negative_elapsed_suffix"))
     return W.span("data_date_line", label=label, date=as_of, days=elapsed)
 
@@ -206,7 +220,7 @@ def _reason_phrase(code: Optional[str]) -> str:
 
 
 def note_html(note: SeriesNote) -> str:
-    """圖下一條序列：資料日一行，或（沒有資料日時）該序列的狀態。"""
+    """圖下一條序列：資料日一行，或（沒有資料日時）該序列的狀態。（單條形式；頁面實際用 `primary_notes_html` 把非 ok 狀態收成一行摘要。）"""
     label = _label_of(note.key)
     if note.status == STATUS_OK or note.as_of is not None:
         line = elapsed_html(label, note.as_of, note.elapsed_days)
@@ -214,6 +228,25 @@ def note_html(note: SeriesNote) -> str:
             line += " " + status_html(note.status, note.reason_code, _label_key_of(note.key))
         return f'<div class="uv3-row">{line}</div>'
     return f'<div class="uv3-row"><span class="uv3-label">{escape(label)}</span>{status_html(note.status, note.reason_code, _label_key_of(note.key))}</div>'
+
+
+def primary_notes_html(notes) -> list:
+    """圖下逐序列資訊（HTML 片段清單）：有資料日的序列各一行資料日（純文字）；**所有非 ok 的逐序列狀態收成一行摘要**
+    （`data-summary="series-status"`，純文字、每項＝序列名＋該序列自己的狀態與原因，缺資料／取數失敗／尚未設定各自字樣不合併、
+    不寫「正常」）。降級時首屏的 chip 形式元素因此只剩頁級的 5 個名額（客戶 2026-11-03 裁示第三項；`docs/v2/81` 第 10.2 節）；
+    各序列來源與取得時間仍在 `▸ 來源與限制`、全量狀態仍在 `▸ 各項資料狀態`。"""
+    dates, pending = [], []
+    for note in notes:
+        label = _label_of(note.key)
+        if note.status == STATUS_OK or note.as_of is not None:
+            dates.append(f'<div class="uv3-row">{elapsed_html(label, note.as_of, note.elapsed_days)}</div>')
+        if note.status != STATUS_OK:
+            pending.append(f'<span class="uv3-label">{escape(label)}</span>'
+                           f'{status_html(note.status, note.reason_code, _label_key_of(note.key), plain=True)}')
+    out = []
+    if pending:
+        out.append(f'<div class="uv3-row" data-summary="series-status">{W.span("separator").join(pending)}</div>')
+    return out + dates
 
 
 def _label_key_of(key: str) -> str:
@@ -332,8 +365,8 @@ def _render(model: MarketPageModel) -> None:
         md(chart)
     else:
         md(f'<div class="uv3-row">{W.span("chart_empty")}</div>')
-    for note in model.primary_notes:
-        md(note_html(note))
+    for html in primary_notes_html(model.primary_notes):
+        md(html)
     with st.expander(W.text("source_limits_title")):
         md(source_limits_html(model))
 

@@ -204,6 +204,8 @@ MISSING_TEXT = ENTRIES["missing"].wording
 # `text`＝程式用的模板（`{欄位}` 由呼叫端代入）；`ruling_text`＝客戶裁示裡逐字出現的那一段（守衛逐字比對出處文件）。
 EVIDENCE_WORDING_RULING = "docs/evidence/decisions/2026-11-03_mkt_formal_wording_ruling.md"
 EVIDENCE_FIRST_SCREEN_RULING = "docs/evidence/decisions/2026-11-03_mkt_first_screen_C_and_wording_unify_ruling.md"
+EVIDENCE_SHELL_RULING = "docs/evidence/decisions/2026-11-03_shell_wording_and_degraded_first_screen_ruling.md"
+SHELL_RULING_SOURCE = "DEC-2026-11-03-11（客戶 2026-11-03 Shell 驗收裁示第四項定字；逐字存檔見 EVIDENCE_SHELL_RULING）"
 FIRST_SCREEN_RULING_SOURCE = "DEC-2026-11-03-09（客戶 2026-11-03 裁示用字統一；逐字存檔見 EVIDENCE_FIRST_SCREEN_RULING）"
 WORDING_RULING_SOURCE = "DEC-2026-11-03-07（客戶 2026-11-03 裁示；逐字存檔見 EVIDENCE_WORDING_RULING）"
 
@@ -225,6 +227,12 @@ class ApprovedWording:
 
 def _a(key: str, text: str, ruling_text: str = "") -> ApprovedWording:
     return ApprovedWording(key, text, ruling_text or text)
+
+
+def _shell(key: str, text: str, ruling_text: str = "") -> ApprovedWording:
+    """全站 Navigation Shell 的正式字樣（客戶 2026-11-03 裁示第四項；`DEC-2026-11-03-11`）。"""
+    return ApprovedWording(key, text, ruling_text or text, source=SHELL_RULING_SOURCE,
+                           doc_refs=(DOC_DECISIONS, EVIDENCE_SHELL_RULING))
 
 
 def _a44(key: str, text: str) -> ApprovedWording:
@@ -265,6 +273,26 @@ _APPROVED_LIST = (
     _a44("fact_coincident", "同時指標"),
     _a44("fact_policy_rate", "政策利率"),
     _a44("fact_fx", "新臺幣對美元匯率"),
+    # 全站 Navigation Shell（客戶 2026-11-03 裁示第四項；`DEC-2026-11-03-11`）：正式用字只在這裡一份，`preview_wording.py` 不再留 Shell 字樣。
+    _shell("shell_app_title", "基金投資儀表板"),
+    _shell("shell_nav_short_mkt", "市場"),
+    _shell("shell_nav_short_ast", "資產"),
+    _shell("shell_nav_short_exp", "找基金"),
+    _shell("shell_nav_short_ai", "AI"),
+    _shell("shell_nav_short_set", "設定"),
+    _shell("shell_nav_aria", "主要導覽"),
+    _shell("shell_nav_soon", "開發中"),
+    _shell("shell_nav_not_open", "尚未開放", "🤖：尚未開放"),   # 只用在 🤖（Phase 7 前不可進）；其餘未掛載頁用「開發中」
+    _shell("shell_preview_tag", "PREVIEW"),
+    _shell("shell_preview_tip", "Preview｜非正式頁面"),
+    _shell("shell_updated", "更新：{time}", "更新：{時間}"),
+    _shell("shell_data_status_label", "資料狀態"),
+    _shell("shell_updated_label", "最後更新時間"),
+    _shell("shell_refresh_cta", "更新資料"),
+    _shell("shell_refresh_unavailable", "預覽版尚未開放更新資料"),
+    _shell("shell_status_partial", "部分資料未取得（{ok}／{total} 項已取得）", "部分資料未取得（{n}／{m} 項已取得）"),
+    _shell("shell_status_failed_note", "其中 {n} 項取數失敗"),
+    _shell("shell_status_counts", "{ok}／{total} 項已取得", "{n}／{m} 項已取得"),
 )
 APPROVED_WORDING: Mapping[str, ApprovedWording] = MappingProxyType({a.key: a for a in _APPROVED_LIST})
 # 重複鍵檢查在守衛測試（模組層不得有 if；import 零副作用）。
