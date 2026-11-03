@@ -4,8 +4,8 @@
 > **歷史**：2026-11-03 Canonical Rule Convergence 批把舊版全文（543 行；含檔頭 40 則追加 checkpoint、24 個「第 N 次現況」框、舊下一步）逐字搬到 `docs/evidence/history/2026-11-03_handoff_pre_convergence.md`（**NOT CURRENT，不是現行規則或現況**）。更舊的交接本 `docs/handover_2026_09_26_latest.md` 為歷史紀錄（第 0 節永遠不准刪，客戶 2026-09-28 裁示）。本檔改寫依據：客戶 2026-11-03 指示（`DEC-2026-11-03-08`）；`PROJECT_RULES.md` 6.1.2「覆蓋、不累加」。
 
 > **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
-> - **查詢時點**：2026-11-03；#1136（Shell 定字與降級首屏）已合併為 `f07acd44`；整合 #1135 的本批 PR 合併後的 main SHA 以 GitHub 為準；本批**未重查 GitHub**，接手先 `git fetch origin main`。
-> - **Open／Draft PR**：以 GitHub 為準（本批整合 #1135 的分支尚未 push、尚未開 PR；由總管處理）。
+> - **查詢時點**：2026-11-03；#1136（Shell 定字與降級首屏）已合併為 `f07acd44`；main 現況與 Open／Draft PR 以 GitHub 為準；本批**未重查 GitHub**，接手先 `git fetch origin main`。
+> - **Open／Draft PR**：以 GitHub 為準；接手先 `git fetch origin main` 並查 `gh pr list`。
 > - **唯一下一接手點（單一）**：💼 我的資產：UI × Data × Evidence 詳細設計，由 ChatGPT 負責設計文字、資料串接契約與正式 GitHub 規格，核准後專案 AI 才實作；專案 AI 現不開始 💼 程式開發、也不另開競爭性設計文件（`DEC-2026-11-03-12`）。
 > - **本批已落地**：#1135 的有效成果併入 `docs/v2/80`（第 7.4 節 🤖 導覽可見但不可點、不註冊頁面；第 16.1 節 Chart SPEC 位置）；#1135 的第 17.3／17.4 節與 HANDOFF 改動不併入（正式字樣只在 `shared/ui_semantics/rules.py::APPROVED_WORDING`）。Shell 定字、Status Bar 純文字、降級情境第一屏 ≤5 已隨 #1136 合併（`DEC-2026-11-03-11`；量測 `docs/evidence/bl0536_shell_h5_2026-11-03/`）。
 > - **仍待驗證（不得宣稱已通過；`docs/BACKLOG.md` BL-0536 逐條）**：iOS／Android 實機、Safari、深色模式、Yahoo／FRED 真實連線、Streamlit 升版後導覽相容性、安全的資料更新入口（更新資料 CTA 停用中；不得為完成 Shell 開新 refresh pipeline）。
