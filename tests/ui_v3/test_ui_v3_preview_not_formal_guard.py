@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 import os
+import pathlib
 import subprocess
 import sys
 
@@ -130,3 +131,24 @@ def test_negative_control_reference_detector_turns_red(source):
 
 def test_negative_control_unrelated_source_not_flagged():
     assert references_ui_v3("import ui_v2.shell\nx = 'ui_v2/app_preview.py'") == []
+
+
+def has_root_pages_dir(root) -> bool:
+    """根目錄是否有 `pages/` 目錄（啟發式偵測器；真測試與負控共用同一個函式）。"""
+    return (pathlib.Path(root) / "pages").is_dir()
+
+
+def test_heuristic_no_root_pages_directory():
+    """啟發式守衛（BL-0537 相關；`DEC-2026-11-03-02`）：根目錄不得出現 `pages/` 目錄。
+
+    Streamlit 會把根目錄 `pages/` 內的檔案自動長成多頁導覽；若有人把 preview 或舊版頁放進去，
+    就會在不經 entrypoint 註冊的情況下被暴露。⚠️ 這只是啟發式：它不證明沒有其他暴露路徑
+    （例如 `st.navigation`／`st.Page` 的明確註冊，或 `.streamlit/` 設定），也不是 BL-0535 的 cutover 守衛。
+    """
+    assert not has_root_pages_dir(lib.ROOT), "根目錄出現 pages/：Streamlit 會自動把它長成導覽，需客戶裁示後才可新增"
+
+
+def test_negative_control_root_pages_detector(tmp_path):
+    assert has_root_pages_dir(tmp_path) is False
+    (tmp_path / "pages").mkdir()
+    assert has_root_pages_dir(tmp_path) is True

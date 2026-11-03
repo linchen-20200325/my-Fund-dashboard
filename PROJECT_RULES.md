@@ -282,6 +282,7 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 - `docs/HANDOFF.md` 只指向本節，不複製整段。
 
 📌 **2026-11-02 指標（客戶永久裁示，`DEC-2026-11-02-04`；同向收緊，上列條文一字未改）**：另點名不得回報 —— CI 還在跑／跑多久、writer 還在處理、untracked file 為何尚未 commit、下一步準備做什麼、沒有新決策價值的中間狀態；第 1 點第 2 類讀作「真 blocker／CI 真錯誤」，第 4 類完成回報須**已做 GitHub final verification**。Model／模式／Effort 切換改依 5.1 第 11 點 Hard-Stop。
+📌 **2026-11-03 指標（客戶 2026-11-02 明示、`DEC-2026-11-03-02` 補落盤；同向收緊，上列條文一字未改）**：Gate 已送出後保持靜默 —— 不再重複回報「沒有東西要 push／我已停手／等你回覆」；一次 Gate 回報後靜默（逐字見 `docs/evidence/decisions/2026-11-03_mkt_wireframe_ruling.md`「同批補錄」(b)）。**第一則 Gate 回報仍須顯式**（6.1.3、5.1 第 11 點）。
 
 ## 第 4 節｜Stop／Decision Gate
 
@@ -459,6 +460,7 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
    - **收尾先於 Gate（執行組讀法，可被客戶推翻）**：本批安全收尾（merge、post-merge verification、SSOT 同步）在送出 Gate 訊息之前完成；Gate 訊息送出後，到客戶回覆前不做任何工作（與第 10 點「等待期間……既有安全收尾」bullet 的張力，已在該處加指標）。
    - **「模式」**（執行組讀法）＝需由客戶手動切換的 permission／plan／fast 等模式。
    - **稽核檢查項**：本批結尾若建議切換 Model／模式／Effort，Gate 訊息必須是本批最後一則、其後無任何工具動作或下一階段工作；聊天中無進度敘述（CI 等待、writer 狀態、untracked 解釋、下一步預告）。
+   - **Gate 後靜默（客戶 2026-11-02 明示，`DEC-2026-11-03-02`）**：第一則 Gate 回報必須顯式、寫清楚等什麼；送出後保持靜默，不再重複回報「沒有東西要 push／我已停手／等你回覆」。6.1.3 第 4 點「只說等待回覆不說等什麼」的禁令只約束第一則回報，與本條不衝突（執行組讀法，可被客戶推翻）。
 
 **衝突檢查結果（2026-10-17）**
 
@@ -692,6 +694,8 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 4. **GitHub 為跨對話 SSOT；聊天記憶只能作輔助**（客戶原話）。
 5. **與既有規則的關係**：與 12.1（新裁示同批落盤，`DEC-2026-10-24-05`）、6.1.1（Stateless AI Handoff／GitHub = Project Memory，`DEC-2026-10-24-07`）同向；本節把射程明確擴及協作助手與客戶的討論。不另建第二套 memory（12.1 第 4 點）；尚未形成正式裁示的討論不得假裝成 Decision（12.1 第 5 點）。不構成動工授權（`CLAUDE.md` §-1）。
 
+📌 **2026-11-03 指標（`DEC-2026-11-02-01` 的 Progress Integrity Guard；`DEC-2026-11-03-02`；有意識的補指標，不是漏刪）**：客戶 2026-11-02 要求的 Progress Integrity Guard（本輪結束前核對 DECISIONS／BACKLOG／HANDOFF／proposal 的 pending／completed 與 GitHub 一致；已完成不得仍標 pending、未完成不得誤寫 closed；superseded 規格標來源與取代範圍；不得依聊天記憶補狀態；排程 commit 推進 main 要更新 handoff verified SHA；PR 合併後再做一次 post-merge GitHub Verification）條文本體在 `docs/DECISIONS.md` `DEC-2026-11-02-01`，本節僅加指標，不複製；12.1、12.2 同向。
+
 ### 12.3 長期規則：Public Repository Personal Name Redaction Rule（客戶 2026-10-27 正式 Privacy Requirement，`DEC-2026-10-27-20`，永久）
 
 > **出處**：客戶 2026-10-27 正式裁示，逐字存檔 `docs/evidence/decisions/2026-10-27_vnext_gate_rulings.md` 第十一、十二節；決策者：**客戶**。位階同第 3 節 3.1。
@@ -749,6 +753,8 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 **問：五年後即使資料源、AI 模型、OAuth 或前端框架換掉，哪些必須維持？答：**
 
+📌 **2026-11-03 提示（`DEC-2026-11-03-02` G11；不改下列任何條文）**：客戶 2026-10-26 原字為「不因單一新功能輕易增加第六頁，新功能優先歸入既有五頁的正確職責」（`DEC-2026-10-26-01` 第 (1) 點；注意原字是「不輕易增加」，不是絕對禁止；若讀作絕對禁止是執行組讀法，可被客戶推翻）；New UI2 版面以手機優先（mobile-first）為前提（`docs/v2/79` 第 10 節）。
+
 1. **五頁資訊架構與職責**：🌍 市場與趨勢、⚖️ 資產配置、💼 我的持股、🔍 找基金、⚙️ 設定（順序見 `DEC-2026-10-24-02`）。新功能優先歸入既有五頁，不輕易增第六頁；頁面名稱與主要責任應保持穩定；不以 API／資料源／模型限制或「程式比較好接」改造資訊架構。（→ **2026-10-27 指標**：此順序與五頁名稱已由客戶 `DEC-2026-10-27-02` 定為 `docs/v2/44_fund_ui_ssot.md` 的正式頁序與頁名，44 依該條有限解凍（只限頁序、頁名與 D1 導覽殼直接需要的條文／守衛，見 44 第七節第三小節之十七）；本小節首段「不解凍 44」指本小節自身不構成解凍授權，仍為真。🌍 後續內容見 `DEC-2026-10-27-03`）（→ **2026-10-29 指標**（客戶 Gate 1 方案 A，`DEC-2026-10-29-06`；有意識的政策變更，不是漏刪；本句原文不改）：⚖️ 資產配置併入「💼 我的資產」成為頁內區段，內容頁為 🌍 市場與趨勢、💼 我的資產、🔍 找基金、⚙️ 設定；🤖 AI 投資總結的入口形式待單一最小 Gate（BL-0526）。正式條文 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之二十。）
 2. **domain semantics、data contracts、user classifications、deterministic investment rules** 不隨技術元件更換而改；技術元件（Streamlit、Google Sheet、OAuth provider、外部 API、AI model、storage、前端框架）不是產品 SSOT。
 3. **Missing 語意**（已有，見第 13 節第 2～4 條）：Missing ≠ 0／False／HOLD／中性／正常／安全／未觸發；顏色不得是唯一語意載體。新來源給不出同語意時顯示 Missing／Unavailable，不用「差不多」的值替代。
@@ -771,7 +777,7 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 1. **正式 Streamlit 對使用者只顯示目前最新正式 UI。保留程式 ≠ 對使用者公開。** New UI2 驗收通過並正式切換後，正式 Streamlit 只顯示 `ui_v3`；Old UI 與 `ui_v2` 不出現在正式導覽／entrypoint；不提供一般使用者舊 UI 切換入口，也不提供首頁「舊版／新版」切換器。
 2. **三代 UI 邊界**：Old UI＝不修改、不新增功能、不公開到正式 Streamlit、只作 logic／capability reference，repo 保留 read-only；`ui_v2`＝maintenance-only、不新增新版面、不公開到正式 Streamlit、只保留 rollback／reuse 能力；`ui_v3`＝New UI2、未來唯一正式 Presentation Layer、正式 cutover 後唯一出現在 Streamlit 對使用者的 UI。Old UI 與 `ui_v2` 不先刪除。
 3. **Preview／Cutover**：切換前以獨立 Preview App 平行驗收，正式 App 維持目前版本、Preview 不影響正式使用者；驗收後才把正式 entrypoint 切到 `ui_v3`，repo 保留 rollback 能力，rollback 僅維運用途、不做一般使用者切換功能。若可在不破壞部署與 OAuth／redirect contract 下維持原正式 URL，優先維持；不得為 New UI2 任意改正式 URL。若維持 URL／OAuth 需要修改 Old UI `app.py`，屆時停下走第 4 節 Stop／Decision Gate（執行組讀法，可被客戶推翻）。
-4. **稽核檢查項**：(a) **cutover PR**（切正式預設的那一批）必須附 BL-0535 守衛測試綠燈（正式 entrypoint 只註冊 `ui_v3` 頁、不 import／不連結 Old UI 樹或 `ui_v2` 頁、無新舊切換 widget）＋ Streamlit Cloud main file 設定與 URL／OAuth redirect 未變的可驗證紀錄；缺任一項不得切換、不得 merge。（執行組讀法，可被客戶推翻：客戶原文要求「測試或可驗證證據」，URL 只是「優先維持、不任意改」；本條把兩者都列為必備是從嚴；若 URL／OAuth 必須改變，依 BL-0535 停下走第 4 節 Stop／Decision Gate，不得自行改。）~~(b) **cutover 前任何 PR** 不得在正式 entrypoint 新增舊版／新版切換器，也不得把 `ui_v2` 或 Old UI 暴露到任何正式入口；Preview App 入口不算正式入口，但不得被設成正式 App 的 main file。~~ → (b) **cutover 前任何 PR** 不得在正式 entrypoint 新增舊版／新版切換器，也不得把 `ui_v2` **新增**暴露到正式入口；正式切換前正式 App 仍維持目前版本（現況推定為 Old UI（Streamlit Cloud 設定，repo 內無法查證）），照現況維持為正式 App 直到 cutover。Preview App 入口不算正式入口；「Preview App 不得被設成正式 App 的 main file」為執行組推論（可被客戶推翻）。（2026-11-02 更正，有意識的更正，不是漏刪；決策者：AI 總管；理由：獨立稽核指出）舊句與客戶「正式切換前……正式 App 仍維持目前版本」牴觸。⚠️ BL-0535 守衛在 `ui_v3` 存在前無法建立；在此之前 (a) 不可能滿足，不得宣稱已有守衛。
+4. **稽核檢查項**：(a) **cutover PR**（切正式預設的那一批）必須附 BL-0535 守衛測試綠燈（正式 entrypoint 只註冊 `ui_v3` 頁、不 import／不連結 Old UI 樹或 `ui_v2` 頁、無新舊切換 widget）＋ Streamlit Cloud main file 設定與 URL／OAuth redirect 未變的可驗證紀錄；缺任一項不得切換、不得 merge。（執行組讀法，可被客戶推翻：客戶原文要求「測試或可驗證證據」，URL 只是「優先維持、不任意改」；本條把兩者都列為必備是從嚴；若 URL／OAuth 必須改變，依 BL-0535 停下走第 4 節 Stop／Decision Gate，不得自行改。）~~(b) **cutover 前任何 PR** 不得在正式 entrypoint 新增舊版／新版切換器，也不得把 `ui_v2` 或 Old UI 暴露到任何正式入口；Preview App 入口不算正式入口，但不得被設成正式 App 的 main file。~~ → (b) **cutover 前任何 PR** 不得在正式 entrypoint 新增舊版／新版切換器，也不得把 `ui_v2` **新增**暴露到正式入口；正式切換前正式 App 仍維持目前版本（現況推定為 Old UI（Streamlit Cloud 設定，repo 內無法查證）），照現況維持為正式 App 直到 cutover。Preview App 入口不算正式入口；「Preview App 不得被設成正式 App 的 main file」為執行組推論（可被客戶推翻）。（2026-11-02 更正，有意識的更正，不是漏刪；決策者：AI 總管；理由：獨立稽核指出）舊句與客戶「正式切換前……正式 App 仍維持目前版本」牴觸。~~⚠️ BL-0535 守衛在 `ui_v3` 存在前無法建立；在此之前 (a) 不可能滿足，不得宣稱已有守衛。~~ → **2026-11-03 更新（有意識的更正，不是漏刪；決策者：AI 總管；`DEC-2026-11-03-02` G5）**：`ui_v3` 已存在；cutover 前的部分守衛已存在——`tests/ui_v3/test_ui_v3_preview_not_formal_guard.py`（正式入口候選不得引用 `ui_v3`）與頁序登錄守衛（`tests/ui_v3/test_ui_v3_page_registry_guard.py`）。**真正的 cutover 後守衛（正式 entrypoint 只註冊 `ui_v3` 頁、無切換器）在 cutover 之前仍無法存在，不得宣稱已有。**舊句「`ui_v3` 存在前無法建立」的用意仍然成立，被權衡掉的只是前提（`ui_v3` 現已存在）。
 
 ### 13.3 長期規則：Cross-View Data Consistency Gate（客戶 2026-10-28 新增正式高優先需求，`DEC-2026-10-28-01`，永久）
 

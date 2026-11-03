@@ -387,3 +387,15 @@ AI sentence → Digest fields → Rule Result → Rule ID → Canonical Data →
 1. 本節由單組轉錄（文件組依 79 第 2、6～9 節）；本批已經 1 組獨立稽核（含 delta 複驗），無剩餘 blocker（總管回報）。屬 AI decision semantics 等級（`DEC-2026-10-16-05`）。
 2. 轉錄範圍的取捨（只收 UI-1、UI-6、UI-7、UI-8、UI-9、UI-14；UI-2～UI-5、UI-10、UI-12、UI-13、UI-15 不收）是總管派工單的範圍、文件組照辦，可被客戶推翻。79 第 3 節概念鏈未綁任何 UI 題，本節未收。
 3. 第 8.5 節依 79 第 2 節 C-4「建議落點：67 第 5 節增補」，為不改第 5 節原文而住在本節；第 5.3 節末已加一行指標，讀第 5.3 節時須併讀第 8.5 節。
+
+### 8.11 UI-15 的 Digest／OneBrain 邊界（UI-15 A；79 第 17.2、17.4、17.6、17.10 節；2026-11-03 補錄，`DEC-2026-11-03-02` G7）
+
+> 本節是 Prior-Ruling Audit 補錄：8.10 第 2 點原把 UI-15 排除在轉錄範圍外，致使 UI-15 的 Digest／OneBrain 邊界只住在 79 第 17 節。以下由 79 原文轉錄，不新增語意；字句有出入時以 79 第 17 節為準。UI-15 A 只凍結 ownership／semantic boundary／migration contract，不授權 production migration（`DEC-2026-11-02-07` 讀法 (d)）。
+
+1. **Delivery metadata 必須 Excluded**（79 第 17.10 節）：LINE 是否已送達／已讀（delivery status）、notification retry count、Flex／PNG renderer metadata、delivery channel health、test notification state、UI widget state、Old UI presentation metadata，不得進投資 Decision Digest／OneBrain fingerprint；它們屬 notification infrastructure／audit，不得污染投資推理 fingerprint。
+2. **Objective facts 可作 Digest 候選輸入**（79 第 17.10 節）：若未來 Dividend Event 會影響 cash-flow reasoning，record date、ex-dividend date、confirmed／scheduled／estimated state、payment date、Missing、provenance、revision 可以是 Decision Digest 候選輸入；是否納入 Required／Optional 隨 Digest schema Gate。
+3. **Notification Preference 不是 Investment Rule**（79 第 17.2 節）：⚙️ 擁有通知偏好／delivery health／audit，但不得因此取得 Risk Cap 編輯權、action rule 編輯權、threshold 編輯權。
+4. **legacy `is_actual` 不等於 `confirmed`**（79 第 17.2、17.4 節）：`is_actual` 只證明既有資料內有實際紀錄；沒有可追溯 authority／announcement provenance 時，不足以宣稱「官方已確認」；`estimated` 不得被寫成 `confirmed`。
+5. **估算引擎的 `confidence` 不是 LLM 信心或機率**（79 第 17.6 節，C-2 對齊）：現行 `services/dividend_calendar.py` 的 `confidence` 是 deterministic 內部 gating evidence；Final UI 不得把它當成未校準成功機率或 AI 信心值；`evidence_count`、error window、estimation method 可作 objective evidence，不得轉譯成未經 calibration 的「成功率」。
+
+⚠️ 本節屬 AI decision semantics 等級（`DEC-2026-10-16-05`）：由執行組單組轉錄，須至少 1 組真正獨立稽核後才視為已驗；本節未經第二組驗證。

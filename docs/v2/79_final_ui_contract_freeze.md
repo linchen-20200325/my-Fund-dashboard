@@ -494,6 +494,8 @@ runtime 未啟用時：整區只顯示「AI 分析暫不可用／無法判定」
 
 【F-轉述】「Mobile Visual Budget」在程式中無具名常數；本檔不新增常數。
 
+> 📌 **2026-11-03 調和指標（`DEC-2026-11-03-02` G9；不改上表任何一格；執行組讀法，可被客戶推翻）**：客戶對 🌍 裁示的首屏四件事（目前狀態／是否需注意／重要依據／資料新鮮度，`DEC-2026-11-03-01`）讀作摘要區的**問題集**（首屏要回答什麼）；本表的順序是**版面順序**（由上而下怎麼排）。兩者可並存：摘要區回答四件事後接 Primary；「最重要數字」在 🌍 由「重要依據」（期間漲跌）承接，資料新鮮度只放一枚 chip（Q5 B）。四件事對其他頁是 wireframe 的工作預設，各頁線框仍各自送客戶核准。
+
 ---
 
 ## 11. Missing Contract（依據既有條文；不新增詞）
@@ -870,6 +872,8 @@ Unavailable
 - preference 只控制「是否通知／怎麼通知」，**Notification preference ≠ 投資規則**。
 
 ### 17.10 Decision Digest／OneBrain boundary
+
+> 📌 **2026-11-03 指標（`DEC-2026-11-03-02` G7）**：本節 delivery metadata 排除規則與相關邊界已轉錄到 `docs/v2/67` 第 8.11 節（本節原文不改）。
 
 若未來 Dividend Event 會影響 cash-flow reasoning，**objective facts** 可以是 Decision Digest 候選輸入：record date、ex-dividend date、confirmed／scheduled／estimated state、payment date、Missing、provenance、revision。是否納入 Required／Optional 仍隨 Digest schema Gate。
 
