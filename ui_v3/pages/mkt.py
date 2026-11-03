@@ -1,0 +1,340 @@
+# -*- coding: utf-8 -*-
+"""🌍 市場與趨勢頁（Preview；BL-0536 rendering 批；線框 `docs/v2/81`）。頁只吃 `MarketPageModel`，不取數、不計算領域值。
+
+- `streamlit` 只在函式內 import（import `ui_v3` 時不得載入 Streamlit；守衛 `test_ui_v3_preview_not_formal_guard`）。
+- 已核准字樣一律取規則表 `shared/ui_semantics/rules.py`；尚未核准的字樣一律取 `viewmodels/preview_wording.py` 並以
+  `pending_span()` 輸出（`data-pending-wording` 屬性＋虛線底線，機器與人眼都可辨識）。這裡**不發明任何字樣**。
+- 顏色不是唯一訊息：每個狀態 chip 都是「符號＋文字」；`tone` 只決定一個很淡的底色。⚠️ 色碼是 **Preview 暫用的樣式值**，
+  不是 design token（`design/tokens.py` 值未定，視覺值待客戶驗收後重建）。
+- 沒有任何方向詞、好壞詞、方向色、目標價線、threshold／band；首屏只放事實與 `⬜ 無法判定`／`⬜ 門檻待裁示` 兩枚規則表 chip＋基準 chip。
+"""
+from __future__ import annotations
+
+from html import escape
+from typing import Optional
+
+from shared.ui_semantics import rules
+from ui_v3.pages import chart_svg
+from ui_v3.shell.registry import IA_PAGES
+from ui_v3.viewmodels import preview_wording as W
+from ui_v3.viewmodels.common import STATUS_FAILED, STATUS_MISSING, STATUS_OK, STATUS_UNDETERMINED
+from ui_v3.viewmodels.components import ChartCard
+from ui_v3.viewmodels.market_page import (
+    DEFAULT_PRIMARY_VIEW,
+    DEFAULT_RATES_KEY,
+    PRIMARY_VIEWS,
+    RATES_KEYS,
+    VIEW_COMPARE,
+    DomainStatus,
+    EvidenceFact,
+    MarketPageModel,
+    SecondaryCard,
+    SeriesNote,
+)
+
+PAGE_TITLE = next(p.title for p in IA_PAGES if p.slug == "mkt")
+DEFAULT_PERIOD = "1Y"
+PERIODS = ("3M", "6M", "1Y", "3Y")
+KEY_PERIOD, KEY_VIEW, KEY_RATES = "uv3_mkt_period", "uv3_mkt_view", "uv3_mkt_rates"
+_VIEW_LABEL_KEY = {"compare": "view_compare", "vix": "view_vix", "us10y": "view_us10y", "us2y": "view_us2y"}
+NOT_CONFIGURED_ITEM = "FRED_API_KEY"   # 「⛔ 尚未設定：<哪一項>」的哪一項＝設定名稱本身（不翻譯）
+
+# Preview 暫用樣式（不是 design token）。
+CSS = """
+<style>
+.block-container{max-width:1100px;padding-left:16px;padding-right:16px;padding-top:1.4rem}
+.uv3-pending{border-bottom:1px dashed rgba(128,128,128,.8)}
+.uv3-banner{font-size:12px;opacity:.75;margin-bottom:.4rem}
+.uv3-chip{display:inline-block;border-radius:12px;padding:1px 10px;font-size:14px;border:1px solid rgba(128,128,128,.45);
+  background:rgba(128,128,128,.12);margin:1px 6px 1px 0;white-space:normal}
+.uv3-tone-red{border-color:#c0392b;background:rgba(192,57,43,.12)}
+.uv3-tone-yellow{border-color:#b7791f;background:rgba(183,121,31,.14)}
+.uv3-row{margin:.25rem 0;line-height:1.55}
+.uv3-label{font-size:13px;opacity:.75;margin-right:6px}
+.uv3-note{font-size:13px;opacity:.85;line-height:1.5;margin:.15rem 0}
+.uv3-card{border:1px solid rgba(128,128,128,.35);border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.uv3-card h4{margin:0 0 4px 0;font-size:15px}
+.uv3-metric{font-size:20px;margin:2px 0}
+.uv3-chart{width:100%;max-width:720px;height:auto;display:block}
+.uv3-spark{width:160px;height:40px;display:block;margin:4px 0}
+</style>
+"""
+
+
+# ───────────────────────────── 小工具（純字串） ─────────────────────────────
+
+def chip(key: str, label: Optional[str] = None) -> str:
+    """規則表一列 → chip HTML（符號＋字樣；`label` 只用在 fetch_failed／not_configured 的組合形式）。"""
+    entry = rules.entry(key)
+    wording = label if label is not None else entry.wording
+    return f'<span class="uv3-chip uv3-tone-{entry.tone}" data-status-key="{escape(key)}">{escape(wording)}</span>'
+
+
+def failed_text(label: str) -> str:
+    return rules.FETCH_FAILED_SCREEN_FORM.replace("<中文資料類>", label)
+
+
+def not_configured_text() -> str:
+    return rules.NOT_CONFIGURED_FORM.replace("<哪一項>", NOT_CONFIGURED_ITEM)
+
+
+_REASON_WORDING = {
+    "missing": "reason_missing", "insufficient": "reason_insufficient", "no_common_base": "reason_no_common",
+    "too_few_common_days": "reason_few_common", "too_few_points": "reason_few_points",
+}
+
+
+def reason_span(code: Optional[str]) -> str:
+    key = _REASON_WORDING.get(code or "")
+    return W.pending_span(key) if key else f'<code>{escape(str(code))}</code>'
+
+
+def status_html(status: str, reason: Optional[str], label_key: str) -> str:
+    """非 ok 的狀態 → HTML。缺資料／取數失敗／尚未設定／無法判定各自獨立，不互相冒充。"""
+    label = W.text(label_key)
+    if status == STATUS_MISSING:
+        return chip("missing")
+    if status == STATUS_FAILED:
+        if reason == "not_configured":
+            return chip("not_configured", not_configured_text())
+        return chip("fetch_failed", failed_text(label))
+    if status == STATUS_UNDETERMINED:
+        extra = W.pending_span("insufficient") if reason == "insufficient" else reason_span(reason)
+        return chip("undetermined") + extra
+    raise ValueError(f"status_html 只處理非 ok 狀態：{status!r}")
+
+
+def fmt_change(value: float) -> str:
+    return f"{value:+.2f}%"
+
+
+def fmt_value(value: float, unit: Optional[str]) -> str:
+    suffix = "" if unit in (None, "", "index") else unit
+    return f"{value:,.2f}{suffix}"
+
+
+def elapsed_html(label: str, as_of: Optional[str], elapsed: Optional[int]) -> str:
+    """圖下資料日一行：日期與經過天數只在圖卡出現；負值＝不適用（取得時間早於觀測日），不得顯示「-N 日」、不得當成新。"""
+    if as_of is None:
+        return ""
+    if elapsed is None:
+        return W.pending_span("data_date_no_elapsed", label=label, date=as_of)
+    if elapsed < 0:
+        return (W.pending_span("data_date_no_elapsed", label=label, date=as_of) + " "
+                + f'<span class="uv3-chip uv3-tone-grey" data-status-key="not_applicable">'
+                  f'{escape(rules.entry("not_applicable").wording)}：</span>' + W.pending_span("negative_elapsed_suffix"))
+    return W.pending_span("data_date_line", label=label, date=as_of, days=elapsed)
+
+
+def _label_of(key: str) -> str:
+    return W.text(_label_key_of(key))
+
+
+def primary_chart_html(model: MarketPageModel) -> Optional[str]:
+    """Primary 圖。沒有任何畫線序列 → None（呼叫端改顯示空狀態，不畫空座標軸）。"""
+    card: ChartCard = model.primary_card
+    lines = []
+    for index, series in enumerate(card.series):
+        points = tuple((p.date, p.value) for p in series.points)
+        if not any(v is not None for _d, v in points):
+            continue
+        last = [v for _d, v in points if v is not None][-1]
+        text = f"{series.label} {last:.1f}" if card.normalized else f"{series.label} {fmt_value(last, model.primary_unit)}"
+        lines.append(chart_svg.Line(points, dashed=index % 2 == 1, end_label=text))
+    if not lines:
+        return None
+    return chart_svg.line_chart_svg(lines, aria_label=f"{card.title}（{model.period}）")
+
+
+def disclosure_notes(model: MarketPageModel) -> list:
+    """歸一化揭露與非比較說明（HTML 片段清單）。只在比較檢視。"""
+    card = model.primary_card
+    d = card.disclosure
+    if d is None:
+        return []
+    notes = []
+    if d.base_date is not None:
+        notes.append(f'<span class="uv3-chip" data-status-key="neutral">{W.pending_span("base_chip", date=d.base_date, base=d.base_value)}</span>')
+    notes.append(f'<div class="uv3-note">{W.pending_span("frequency_line")}</div>')
+    issues = {i.series_key: i.reason_code for i in d.series_issues}
+    if d.mode == "pair" and d.base_date is None:   # 兩條都有資料但整張不可畫：真正原因只在比較層狀態
+        notes.append(f'<div class="uv3-note">{W.pending_span("window_withheld_note", code=d.status)}</div>')
+    elif d.mode in ("single", "fallback"):
+        reason = _reason_phrase(next(iter(issues.values()), None) if d.mode == "single" else d.fallback_reason)
+        key = "single_chart_note" if d.mode == "single" else "fallback_note"
+        notes.append(f'<div class="uv3-note">{W.pending_span(key, reason=W.text(reason))}</div>')
+    return notes
+
+
+def _reason_phrase(code: Optional[str]) -> str:
+    return {"missing": "reason_missing", "fetch_failed": "reason_missing", "not_configured": "reason_missing",
+            "insufficient": "reason_insufficient", "no_common_base": "reason_no_common",
+            "too_few_common_days": "reason_few_common", "too_few_points": "reason_few_points"}.get(code or "", "reason_stopped")
+
+
+def note_html(note: SeriesNote) -> str:
+    """圖下一條序列：資料日一行，或（沒有資料日時）該序列的狀態。"""
+    label = _label_of(note.key)
+    if note.status == STATUS_OK or note.as_of is not None:
+        line = elapsed_html(label, note.as_of, note.elapsed_days)
+        if note.status != STATUS_OK:   # 有資料日但沒畫線：資料日照實顯示，另標原因
+            line += " " + status_html(note.status, note.reason_code, _label_key_of(note.key))
+        return f'<div class="uv3-row">{line}</div>'
+    return f'<div class="uv3-row"><span class="uv3-label">{escape(label)}</span>{status_html(note.status, note.reason_code, _label_key_of(note.key))}</div>'
+
+
+def _label_key_of(key: str) -> str:
+    return {"taiex": "series_taiex", "sp500": "series_sp500", "vix": "series_vix", "us10y": "series_us10y",
+            "us2y": "series_us2y"}[key]
+
+
+# ───────────────────────────── 頁面區塊 ─────────────────────────────
+
+def summary_html(model: MarketPageModel) -> str:
+    rows = [
+        f'<div class="uv3-row"><span class="uv3-label">{W.pending_span("status_row_label")}</span>{chip("undetermined")}'
+        f'<span>{W.pending_span("hero_sentence")}</span></div>',
+    ]
+    items = []
+    for change in model.evidence_changes:
+        label_key = _label_key_of(change.key)
+        label = escape(W.text(label_key))
+        if change.status == STATUS_OK:
+            items.append(f'<span class="uv3-evidence" data-key="{escape(change.key)}">{W.pending_span(label_key)} '
+                         f'近{escape(model.period)} {escape(fmt_change(change.period_change))}</span>')
+        else:
+            items.append(f'<span class="uv3-evidence" data-key="{escape(change.key)}">{label} '
+                         f'{status_html(change.status, change.reason_code, label_key)}</span>')
+    note = ""
+    if not model.evidence_comparable and any(c.status == STATUS_OK for c in model.evidence_changes):
+        note = f'<div class="uv3-note">{W.pending_span("evidence_single_note")}</div>'
+    rows.append(f'<div class="uv3-row"><span class="uv3-label">{W.pending_span("evidence_label")}</span>'
+                f'{" ｜ ".join(items)}</div>{note}')
+    rows.append(f'<div class="uv3-row"><span class="uv3-label">{W.pending_span("freshness_label")}</span>{chip("threshold_pending")}</div>')
+    return "".join(rows)
+
+
+def secondary_html(card: SecondaryCard, title_key: str, sub_label_key: Optional[str] = None) -> str:
+    title = W.pending_span(title_key)
+    sub = f" ｜ {W.pending_span(sub_label_key)}" if sub_label_key else ""
+    head = f'<div class="uv3-card" data-card="{escape(card.key)}"><h4>{title}{sub}</h4>'
+    label_key = sub_label_key or "series_vix"
+    if card.status != STATUS_OK:
+        return head + status_html(card.status, card.reason_code, label_key) + "</div>"
+    body = f'<div class="uv3-metric">{escape(fmt_value(card.value, card.unit))}</div>'
+    body += f'<div class="uv3-note">{elapsed_html(W.text(label_key), card.as_of, card.elapsed_days)}</div>'
+    if card.spark:
+        body += chart_svg.spark_svg(tuple((p.date, p.value) for p in card.spark), aria_label=f"{W.text(title_key)} {W.text('secondary_spark_caption')}")
+        body += f'<div class="uv3-note">{W.pending_span("secondary_spark_caption")}</div>'
+    elif card.spark_status == "insufficient":
+        body += f'<div class="uv3-note">{W.pending_span("secondary_spark_caption")}：{W.pending_span("insufficient")}</div>'
+    return head + body + "</div>"
+
+
+def fact_html(fact: EvidenceFact) -> str:
+    label = W.pending_span(fact.label_key)
+    if fact.status == STATUS_OK:
+        return (f'<div class="uv3-row">{label} {escape(fmt_value(fact.value, fact.unit))}'
+                f' <span class="uv3-note">{escape(fact.as_of)}</span></div>')
+    return f'<div class="uv3-row">{label} {status_html(fact.status, fact.reason_code, fact.label_key)}</div>'
+
+
+def status_row_html(row: DomainStatus) -> str:
+    label = escape(W.text(row.label_key))
+    if row.status == STATUS_OK:
+        return (f'<div class="uv3-row">{label}：取得 ｜ 來源 {escape(row.source or "—")} ｜ 資料日 {escape(row.as_of or "—")}</div>')
+    return f'<div class="uv3-row">{label}：{status_html(row.status, row.reason_code, row.label_key)}</div>'
+
+
+# ───────────────────────────── 進入點 ─────────────────────────────
+
+def selected_controls() -> tuple:
+    """讀（並在第一次設定預設）目前選的 `(period, view, rates_key)`。controls 的 widget 稍後以同一組 key 畫出。"""
+    import streamlit as st
+
+    st.session_state.setdefault(KEY_PERIOD, DEFAULT_PERIOD)
+    st.session_state.setdefault(KEY_VIEW, DEFAULT_PRIMARY_VIEW)
+    st.session_state.setdefault(KEY_RATES, DEFAULT_RATES_KEY)
+    period, view, rates = st.session_state[KEY_PERIOD], st.session_state[KEY_VIEW], st.session_state[KEY_RATES]
+    return (period if period in PERIODS else DEFAULT_PERIOD, view if view in PRIMARY_VIEWS else DEFAULT_PRIMARY_VIEW,
+            rates if rates in RATES_KEYS else DEFAULT_RATES_KEY)
+
+
+def render(model: MarketPageModel) -> None:
+    import streamlit as st
+
+    md = lambda html: st.markdown(html, unsafe_allow_html=True)  # noqa: E731
+    md(CSS)
+    md(f'<div class="uv3-banner">{W.pending_span("preview_banner")}</div>')
+    st.title(PAGE_TITLE)
+    md(summary_html(model))
+
+    st.divider()
+    card = model.primary_card
+    md(f'<h3>{W.pending_span("title_compare") if model.view == VIEW_COMPARE else escape(card.title)}</h3>')
+    st.radio(W.text("view_label"), PRIMARY_VIEWS, key=KEY_VIEW, horizontal=True,
+             format_func=lambda v: W.text(_VIEW_LABEL_KEY[v]))
+    st.radio(W.text("period_label"), PERIODS, key=KEY_PERIOD, horizontal=True)
+    for note in disclosure_notes(model):
+        md(note)
+    chart = primary_chart_html(model)
+    if chart is not None:
+        md(chart)
+    else:
+        md(f'<div class="uv3-row">{W.pending_span("chart_empty")}</div>')
+    for note in model.primary_notes:
+        md(note_html(note))
+    with st.expander(W.text("source_limits_title")):
+        md(source_limits_html(model))
+
+    st.divider()
+    columns = st.columns(len(model.secondary))
+    for column, secondary in zip(columns, model.secondary):
+        with column:
+            if secondary.key == "vix":
+                md(secondary_html(secondary, "secondary_vix_title"))
+            else:
+                st.radio(W.text("secondary_rates_title"), RATES_KEYS, key=KEY_RATES, horizontal=True,
+                         format_func=lambda k: W.text(_RATES_LABEL[k]))
+                md(secondary_html(secondary, "secondary_rates_title", _RATES_LABEL[secondary.key]))
+    st.divider()
+    md(f'<div class="uv3-note">{W.pending_span("evidence_no_rule_note")}</div>')
+    for column, evidence in zip(st.columns(len(model.evidence_cards)), model.evidence_cards):
+        with column:
+            md(f'<div class="uv3-card" data-card="{escape(evidence.code)}"><h4>{W.pending_span(evidence.title_key)}</h4>'
+               + "".join(fact_html(f) for f in evidence.facts) + "</div>")
+    with st.expander(W.text("missing_group_title", n=len(model.missing))):
+        md("".join(f'<div class="uv3-row">{escape(W.text(m.label_key))} {status_html(m.status, m.reason_code, m.label_key)}</div>'
+                   for m in model.missing))
+    with st.expander(W.text("status_group_title")):
+        md("".join(status_row_html(s) for s in model.statuses))
+
+
+_RATES_LABEL = {"term_spread_pct": "rates_term_spread", "credit_spread_pct": "rates_credit_spread",
+                "policy_rate_pct": "rates_policy_rate"}
+
+
+def source_limits_html(model: MarketPageModel) -> str:
+    """▸ 來源與限制（層 3）：取得時間、來源、限制。失敗原文不在任何一般畫面（44 P0-①）。"""
+    parts = []
+    for note in model.primary_notes:
+        label = _label_of(note.key)
+        if note.source:
+            parts.append(f'<div class="uv3-note">{W.pending_span("source_line", label=label, source=note.source)}</div>')
+        if note.fetched_at:
+            parts.append(f'<div class="uv3-note">{W.pending_span("fetched_at_line", label=label, stamp=_taipei(note.fetched_at))}</div>')
+    parts.append(f'<div class="uv3-note">{W.pending_span("limits_taiex")}</div>')
+    parts.append(f'<div class="uv3-note">{W.pending_span("limits_obs_date")}</div>')
+    parts.append(f'<div class="uv3-note">{W.pending_span("rates_obs_note")}</div>')
+    return "".join(parts)
+
+
+def _taipei(stamp: str) -> str:
+    """ISO 取得時間 → 台北時間字串（只換時區與格式；無時區就原樣輸出，不猜）。"""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    if moment.tzinfo is None:
+        return stamp
+    return moment.astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d %H:%M")
