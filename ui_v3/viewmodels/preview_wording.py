@@ -68,7 +68,6 @@ _LIST = (
     _w("not_configured_item", "利率資料來源", _SRC_EXEC + "；取代原先顯示環境變數名；「⛔ 尚未設定：<哪一項>」形式取規則表"),
     _w("reason_fetch_failed", "取數失敗", _SRC_EXEC + "；取數失敗≠缺資料，不併入「缺資料」"),
     _w("reason_not_configured", "尚未設定", _SRC_EXEC),
-    _w("reason_stopped", "在此視窗內已停更", _SRC_EXEC),
     _w("reason_no_common", "沒有共同有效觀測日", _SRC_EXEC),
     _w("reason_few_common", "共同有效觀測日不足", _SRC_EXEC),
     _w("reason_few_points", "有效點數不足", _SRC_EXEC),

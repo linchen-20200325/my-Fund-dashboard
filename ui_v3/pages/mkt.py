@@ -94,6 +94,18 @@ def reason_span(code: Optional[str]) -> str:
     return W.span(_REASON_WORDING.get(code or "", "reason_unknown"))
 
 
+# 「尚未設定：<哪一項>」的「哪一項」一頁只交代一次（44 之七其二第 3 條）：render() 期間第一次出現寫完整句，其餘位置只寫狀態族
+# `⛔ 尚未設定`。`active` 只在 render() 內為真；render() 以外直接呼叫輔助函式時一律寫完整句（不影響單元測試與其他呼叫端）。
+_NC_STATE = {"active": False, "seen": False}
+
+
+def _not_configured_chip() -> str:
+    if _NC_STATE["active"] and _NC_STATE["seen"]:
+        return chip("not_configured")
+    _NC_STATE["seen"] = True
+    return chip("not_configured", label_html=not_configured_html())
+
+
 def status_html(status: str, reason: Optional[str], label_key: str) -> str:
     """非 ok 的狀態 → HTML。缺資料／取數失敗／尚未設定／無法判定各自獨立，不互相冒充。"""
     label = W.text(label_key)
@@ -101,7 +113,7 @@ def status_html(status: str, reason: Optional[str], label_key: str) -> str:
         return chip("missing")
     if status == STATUS_FAILED:
         if reason == "not_configured":
-            return chip("not_configured", label_html=not_configured_html())
+            return _not_configured_chip()
         return chip("fetch_failed", failed_text(label))
     if status == STATUS_UNDETERMINED:
         extra = W.span("insufficient") if reason == "insufficient" else reason_span(reason)
@@ -119,8 +131,14 @@ def fmt_value(value: float, unit: Optional[str], decimals: int = 2) -> str:
 
 
 # 依據卡各指標的小數位數（44 第三節 3.1 規則欄：波動度指數 1 位、信用利差 2 位、政策利率 2 位、新臺幣對美元匯率 3 位）。
-# 領先／同時指標的位數 44 沒有定（47 Q-13）：不替它挑，預設值只會用在它真的有值時；目前兩鍵皆 Missing。
+# 領先／同時指標的位數 44 沒有定（47 Q-13）：不替它挑＝不套用 2 位預設，有值時照原值轉字串、不四捨五入（`_raw_value`）；目前兩鍵皆 Missing。
 _FACT_DECIMALS = {"fact_vix": 1, "fact_credit_spread": 2, "fact_policy_rate": 2, "fact_fx": 3}
+
+
+def _raw_value(value: float, unit: Optional[str]) -> str:
+    """位數未裁示的指標：照原值轉字串（不四捨五入、不補位數、不加千分位）。"""
+    suffix = "" if unit in (None, "", "index") else unit
+    return f"{value}{suffix}"
 
 
 def elapsed_html(label: str, as_of: Optional[str], elapsed: Optional[int]) -> str:
@@ -178,7 +196,7 @@ def disclosure_notes(model: MarketPageModel) -> list:
 def _reason_phrase(code: Optional[str]) -> str:
     return {"missing": "reason_missing", "fetch_failed": "reason_fetch_failed", "not_configured": "reason_not_configured",
             "insufficient": "insufficient", "no_common_base": "reason_no_common",
-            "too_few_common_days": "reason_few_common", "too_few_points": "reason_few_points"}.get(code or "", "reason_stopped")
+            "too_few_common_days": "reason_few_common", "too_few_points": "reason_few_points"}.get(code or "", "reason_unknown")
 
 
 def note_html(note: SeriesNote) -> str:
@@ -240,10 +258,16 @@ def secondary_html(card: SecondaryCard, title_key: str, sub_label_key: Optional[
     return head + body + "</div>"
 
 
+def _fact_value_text(fact: EvidenceFact) -> str:
+    if fact.label_key in _FACT_DECIMALS:
+        return fmt_value(fact.value, fact.unit, _FACT_DECIMALS[fact.label_key])
+    return _raw_value(fact.value, fact.unit)
+
+
 def fact_html(fact: EvidenceFact) -> str:
     label = W.span(fact.label_key)
     if fact.status == STATUS_OK:
-        return (f'<div class="uv3-row">{label} {escape(fmt_value(fact.value, fact.unit, _FACT_DECIMALS.get(fact.label_key, 2)))}'
+        return (f'<div class="uv3-row">{label} {escape(_fact_value_text(fact))}'
                 f' <span class="uv3-note">{escape(fact.as_of)}</span></div>')
     return f'<div class="uv3-row">{label} {status_html(fact.status, fact.reason_code, fact.label_key)}</div>'
 
@@ -270,6 +294,14 @@ def selected_controls() -> tuple:
 
 
 def render(model: MarketPageModel) -> None:
+    _NC_STATE.update(active=True, seen=False)
+    try:
+        _render(model)
+    finally:
+        _NC_STATE["active"] = False
+
+
+def _render(model: MarketPageModel) -> None:
     import streamlit as st
 
     md = lambda html: st.markdown(html, unsafe_allow_html=True)  # noqa: E731
