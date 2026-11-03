@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """adapters 層 —— **唯一**允許 import `services.v2_tables`／`services.v2_domain` 的位置（80 第 2、4.2 節）。
 
-本批只有這份說明（stub）：**零 import、零函式、不接任何真資料**。
+~~本批只有這份說明（stub）：**零 import、零函式、不接任何真資料**。~~
+→ BL-0536-H3（2026-11-03）起本層有第一個模組 `market_chart.py`：純對照函式（`NormalizedComparison` → 歸一化 `ChartCard`），
+無 I/O、不取數、不 import streamlit；本 `__init__` 仍只有這份說明、零 import（狀態更新，不是漏刪）。
 
 日後（逐頁 wireframe 核准後的批次）的契約：
 - adapters 呼叫下層（`services.v2_tables.*`、`services/v2_domain`），注入 session state，遮蔽失敗原文；

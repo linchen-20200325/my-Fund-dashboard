@@ -112,10 +112,35 @@ def test_importing_ui_v3_does_not_import_streamlit_or_old_tree():
                           cwd=str(lib.ROOT), env={"PYTHONPATH": str(lib.ROOT)}, timeout=60)
     assert proc.returncode == 0, proc.stderr
     # 批 2b：viewmodels 讀 shared.ui_semantics（明列白名單）；import 它會連帶載入 `shared` 套件本身（其 __init__ 只有 docstring）。
-    # 白名單逐一列名，任何其他 shared 模組或舊樹模組照舊是紅。
-    allowed = {"shared", "shared.ui_semantics", "shared.ui_semantics.rules"}
-    bad = [n for n in proc.stdout.strip().removeprefix("BAD:").split(",") if n and n not in allowed]
+    # 白名單逐一列名，任何其他 shared 模組或舊樹模組照舊是紅（H3 起另開 services.v2_domain 子樹，見 `runtime_disallowed`）。
+    bad = runtime_disallowed(proc.stdout.strip().removeprefix("BAD:").split(","))
     assert proc.stdout.startswith("BAD:") and not bad, proc.stdout
+
+
+_RUNTIME_ALLOWED = frozenset({"shared", "shared.ui_semantics", "shared.ui_semantics.rules", "services", "services.v2_domain"})
+
+
+def runtime_disallowed(names):
+    """import 全部 ui_v3 後 sys.modules 裡不准出現的模組名。
+
+    BL-0536-H3：`ui_v3/adapters/market_chart.py` 是第一個真的 import 下層的 adapter（靜態守衛本來就准 adapters import
+    `services.v2_domain`）。執行期白名單只多開 `services` 套件本身與 `services.v2_domain` 子樹（純 L2、只用標準庫，
+    由 `tests/test_v2_domain_port.py` 守）；其他 services 模組（含 `services.v2_tables`）與舊樹模組照舊是紅。
+    """
+    return [n for n in names if n and n not in _RUNTIME_ALLOWED and not n.startswith("services.v2_domain.")]
+
+
+@pytest.mark.parametrize("name", [
+    "streamlit", "ui.tab1", "ui_v2", "services.v2_tables", "services.v2_tables.market_view", "services.fund_service",
+    "services.v2_domainx", "repositories.macro", "shared.colors", "infra.proxy",
+])
+def test_negative_control_runtime_allowlist_turns_red(name):
+    assert runtime_disallowed([name]) == [name]
+
+
+def test_runtime_allowlist_accepts_v2_domain_and_ui_semantics():
+    assert runtime_disallowed(["services", "services.v2_domain", "services.v2_domain.normalization",
+                               "shared", "shared.ui_semantics.rules", ""]) == []
 
 
 @pytest.mark.parametrize("source", [

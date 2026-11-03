@@ -8,6 +8,12 @@ from ui_v3.viewmodels.action_slot import (  # noqa: F401
     ACTION_VOCABULARY,
     ActionSlot,
 )
+from ui_v3.viewmodels.chart_disclosure import (  # noqa: F401
+    NORMALIZATION_BASE_VALUE,
+    NORMALIZATION_MODES,
+    NormalizationDisclosure,
+    SeriesIssue,
+)
 from ui_v3.viewmodels.common import (  # noqa: F401
     MISSING_TEXT,
     STATUSES,
