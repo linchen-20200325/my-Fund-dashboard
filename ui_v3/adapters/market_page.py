@@ -2,7 +2,7 @@
 """🌍 頁 adapter：既有正式資料層結果 → `MarketPageModel`（BL-0536 rendering 批）。
 
 資料來源（**不新增資料源、不新增 L1、不新增公式**）：
-- `services.v2_tables.market_view.build_market_view`（VIX／TAIEX／S&P 500／美 10Y／美 2Y 的日頻序列；Yahoo 5y、FRED 1500 筆）；
+- `services.v2_tables.market_view.build_market_view`（VIX／TAIEX／S&P 500／美10Y／美2Y 的日頻序列；Yahoo 5y、FRED 1500 筆）；
 - `services.v2_tables.market_indicator.build_market_indicator_table`（B 線：信用利差、期限利差、政策利率等，與 ui_v2 同一條讀法）。
 兩者都是 L2，且由它們自己去呼叫既有 L1（`repositories/macro/yf.py`、`fred.py`）；本檔不直接 import L1（分層守衛不開洞）。
 `load()` 內才 import（lazy）：import `ui_v3` 時不得連帶載入 pandas／L1（`test_ui_v3_preview_not_formal_guard` 的執行期白名單）。
@@ -198,7 +198,7 @@ def _evidence_changes(comparison, card: ChartCard) -> tuple:
 
 
 def _single_primary(domain: dict, key: str, period: str, tz) -> tuple:
-    """VIX／美 10Y／美 2Y 單序列檢視 → `(ChartCard, (SeriesNote,), unit)`。同一組期間切換；缺／失敗／期間不足都不畫假線。"""
+    """VIX／美10Y／美2Y 單序列檢視 → `(ChartCard, (SeriesNote,), unit)`。同一組期間切換；缺／失敗／期間不足都不畫假線。"""
     label = W.text(_SERIES_LABEL_KEY[key])
     status, reason = domain_state(domain)
     unit = domain.get("value_unit")
@@ -288,13 +288,16 @@ def _fact_from_indicator(table: dict, key: str, label_key: str) -> EvidenceFact:
 
 
 def _evidence_cards(table: dict) -> tuple:
-    ndc = _indicator_series(table, "leading_index")
-    ndc_fact = (EvidenceFact("fact_ndc", ndc["status"], ndc["reason"], None, None, None) if ndc["status"] != STATUS_OK
-                else _fact_from_indicator(table, "leading_index", "fact_ndc"))
+    """依據卡 MKT-1～MKT-3：鍵與標籤依 44 3.1 各塊「來源」欄（72 第 3 節表同）；沒有正式資料的鍵就是 Missing，不補欄位。
+
+    MKT-1＝`vol_index`＋`credit_spread_pct`；MKT-2＝`leading_index`＋`coincident_index`（兩鍵目前 pending → ◇ 資料未備）；
+    MKT-3＝`policy_rate_pct`＋`fx_twd_per_usd`（匯率閘門未開 → ◇ 資料未備）。
+    """
     return (
         EvidenceCard("MKT-1", "evidence_card_1", (_fact_from_indicator(table, "vol_index", "fact_vix"),
                                                    _fact_from_indicator(table, RATES_CREDIT, "fact_credit_spread"))),
-        EvidenceCard("MKT-2", "evidence_card_2", (ndc_fact,)),
+        EvidenceCard("MKT-2", "evidence_card_2", (_fact_from_indicator(table, "leading_index", "fact_leading"),
+                                                   _fact_from_indicator(table, "coincident_index", "fact_coincident"))),
         EvidenceCard("MKT-3", "evidence_card_3", (_fact_from_indicator(table, RATES_POLICY, "fact_policy_rate"),
                                                    _fact_from_indicator(table, "fx_twd_per_usd", "fact_fx"))),
     )

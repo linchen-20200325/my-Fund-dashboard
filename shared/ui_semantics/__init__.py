@@ -18,6 +18,9 @@ NG-4 A（`DEC-2026-11-02-05`：保留既有狀態符號、顏色語意與正式�
 from shared.ui_semantics.rules import (  # noqa: F401
     ACTION_UNDETERMINED_FORM,
     ACTION_WORDS,
+    APPROVED_WORDING,
+    ApprovedWording,
+    approved,
     BETA_LEVELS,
     BETA_QUOTE,
     CHIP_KIND_TO_KEY,
@@ -26,6 +29,7 @@ from shared.ui_semantics.rules import (  # noqa: F401
     FETCH_FAILED_SCREEN_FORM,
     MISSING_TEXT,
     NOT_CONFIGURED_FORM,
+    NOT_CONFIGURED_RATES_SOURCE_TEXT,
     PENDING_WORDING,
     PrecedenceLevel,
     REASON_NOT_CONFIGURED,

@@ -2173,6 +2173,38 @@
 | supersedes／superseded by | supersedes：`docs/v2/81` 第 3.1／10 節、BL-0536、`DEC-2026-11-03-01` 讀法中「VIX 讓位為執行組讀法、客戶未裁示」的狀態（原字保留，有意識的更正，不是漏刪；決策者：客戶）。resolves：`DEC-2026-11-03-03` 讀法 (c)、`DEC-2026-11-03-04` 的「VIX 讓位另送 Decision Gate」。superseded by：無。 |
 | provenance | **逐字**（以逐字檔為準）；「未採方案與理由」「影響範圍」「與既有裁示的關係」由執行組單組整理，可被客戶推翻；未經第二組獨立驗證。 |
 
+### DEC-2026-11-03-07｜客戶裁示：🌍 市場與趨勢正式字樣九項、首屏「市場狀態」與「是否需注意」不混成一項、一般 UI 不外漏工程資訊
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-03 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管於派工單內逐字轉交，見 `docs/evidence/decisions/2026-11-03_mkt_formal_wording_ruling.md`，全文逐字） |
+| 決策內容摘要 | **以逐字檔為準。** **(1) 正式字樣（不再標 preview pending）**：資料不足＝「資料不足」；整張圖無可畫資料＝「此圖目前沒有可畫的資料」；歸一化揭露＝「基準日 {日}＝100；頻率：日｜缺值不補、斷線」（較先前暫用的「頻率 日」多一個冒號）；檢視標籤＝比較／VIX／美10Y／美2Y（無空格）；首屏欄位＝市場狀態／是否需注意／重要依據／資料新鮮度；主判讀＝「暫無完整市場綜合判定（尚未建立正式綜合判定規則）」（一般 UI 不得再出現英文 aggregation rule）；資料日＝「{序列} 資料日 YYYY-MM-DD（經過 N 日）」（日期格式維持 YYYY-MM-DD）；單序列 fallback＝「目前僅顯示可用序列；另一序列{原因}，暫不進行比較。」（不得暗示仍有雙序列可比性）；其他沿用「原因未明」「來源資料無法使用」「沒有觀測值」；Missing 語意不變（不補 0、不補 safe／neutral／HOLD；unavailable ≠ neutral；not evaluated ≠ safe）。**(2)** 首屏「市場狀態」與「是否需注意」不要混成一項；mobile-first 下重新檢查資訊層級；遵守首屏資訊密度、不放寬 frozen 44，超過上限須停下回報。**(3)** 一般 UI 不得外漏工程內部資訊（環境變數名、exception class／訊息、Python symbol、內部 reason code、模組路徑、traceback、provider 實作細節）；技術細節只留在 log／diagnostics／evidence。 |
+| 未採方案與理由 | 無（客戶直接給定字樣；執行組未提替代方案）。 |
+| 理由／背景 | BL-0536 🌍 Preview rendering 批把這些字樣列為「待客戶驗收」；`docs/v2/81` 第 10 節第 1 點原記為暫時字樣、集中在 `preview_wording.py`。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-03_mkt_formal_wording_ruling.md`。落地：`shared/ui_semantics/rules.py`（`APPROVED_WORDING`，純文字正式字樣；狀態符號列 `ENTRIES` 不變）、`ui_v3/viewmodels/preview_wording.py`（改引用規則表，只剩未核准字樣）、`ui_v3/pages/mkt.py`、`tests/ui_v3/`（字樣逐字守衛、工程資訊外漏守衛）、`docs/v2/81` 第 10 節、`docs/BACKLOG.md` BL-0536、`docs/HANDOFF.md`。 |
+| 影響範圍 | 只限 🌍 Preview App 的畫面字樣與其守衛。**不**改資料、來源、公式、門檻、狀態判定或投資語意；**不**新增資料源、依賴；**不**切正式入口；**不**動 Old UI、`ui_v2`、frozen 文件。~~**第 (2) 項（首屏拆兩枚 chip）未落地**~~ → **2026-11-03 客戶已裁示採 C（`DEC-2026-11-03-09`；狀態更新，不是漏刪；決策者：客戶）：兩枚獨立 chip、基準日改純文字揭露行、總數仍 ≤5**；以下為裁示前原文：**第 (2) 項（首屏拆兩枚 chip）未落地**：首屏常態 3 chip＋2 核心數字＝5（81 第 3.1 節 Visual Budget），拆成兩枚 chip 會變 6、超過上限，依客戶本項「超過須停下回報」未實作，已回報待客戶裁示（見 `docs/BACKLOG.md` BL-0536 與 `docs/v2/81` 第 10 節）。 |
+| 與既有裁示的關係 | 承接 `DEC-2026-11-03-01`（Q1 A：市場狀態與是否需注意共用一枚 chip；Q5 B：首屏僅一枚資料新鮮度 chip）；(2) 與 Q1 A「可共用一枚 chip」的關係＝客戶本次要求視覺上不混為一項，若採兩枚 chip 即與 Q1 A 及首屏預算互動，須另行裁示；`DEC-2026-11-03-04`（歸一化揭露字樣原 pending）。44 之十九其一之一第 2 條不被 amend。 |
+| 是否可逆 | 可逆（presentation 層；客戶可另行裁示） |
+| supersedes／superseded by | supersedes：`docs/v2/81` 第 3.1 節「擬：」字樣與第 10 節第 1 點「暫時字樣」中與上列九項重疊者、`shared/ui_semantics/rules.py` 原 `chart_empty` 的 PENDING 狀態、BL-0536 待客戶驗收字樣項中與上列重疊者（原字保留劃線，有意識的更正，不是漏刪；決策者：客戶）。superseded by：無。 |
+| provenance | **逐字**（以逐字檔為準）；「未採方案與理由」「影響範圍」「與既有裁示的關係」由執行組單組整理，可被客戶推翻；未經第二組獨立驗證。 |
+
+### DEC-2026-11-03-09｜客戶裁示：🌍 首屏採 C（市場狀態／是否需注意拆兩枚獨立 chip、基準日改純文字揭露行）＋用字統一（⛔ 利率資料來源尚未設定、美10Y、美2Y）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-03 |
+| 決策者 | **客戶**（客戶對話本身執行組未見；原文由總管於派工單內逐字轉交，見 `docs/evidence/decisions/2026-11-03_mkt_first_screen_C_and_wording_unify_ruling.md`，全文逐字） |
+| 決策內容摘要 | **以逐字檔為準，以下為逐項摘要。** **(1) 首屏採 C**：「市場狀態」與「是否需注意」拆成兩個獨立欄位／兩枚獨立 chip；「基準日」不再佔 chip 預算，改放在圖表附近的純文字揭露行（原有字樣與資料語意不變）；首屏核心數字＋chip 總數仍維持 frozen 44 的 ≤5；不修訂 frozen 44，也不把其他頁的首屏上限放寬到 6；這只是 presentation hierarchy 調整，不是 formula／data semantics 變更。**(2) 用字統一**：正式使用「⛔ 利率資料來源尚未設定」「美10Y」「美2Y」；不再使用「⛔ 尚未設定：利率資料來源」「美 10Y」「美 2Y」；同步更新 current wording SSOT、tests／guards、DECISIONS、BACKLOG、HANDOFF、`docs/v2/81`、evidence；#1132 scope 已涵蓋、直接併入；若碰到 frozen 44 實質語意、formula 或 data semantics，另送 Gate 並停手。 |
+| 未採方案與理由 | 推薦並採用 (C)。未採：(A) 兩枚 chip 並 amend 44 預算為 ≤6（動 frozen 44，成本最高）；(B) 維持一枚共用 chip、兩個欄位名並排（不滿足「不要混成一項」）。方案描述見 `docs/v2/81` 第 10.2 節。 |
+| 理由／背景 | `DEC-2026-11-03-07` 第 (2) 項要求兩者視覺上不混為一項；Visual Budget 原為 3 chip＋2 核心數字＝5，直接拆兩枚會是 4＋2＝6，超過 44 之十九其一之一第 2 條上限，故當時停手回報。本裁示以把基準日移出 chip 清單解決，總數仍為 5。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-03_mkt_first_screen_C_and_wording_unify_ruling.md`。落地：`shared/ui_semantics/rules.py`（`NOT_CONFIGURED_RATES_SOURCE_TEXT`、`APPROVED_WORDING` 的 `series_us10y`／`series_us2y`）、`ui_v3/pages/mkt.py`、`ui_v3/viewmodels/preview_wording.py`、`tests/ui_v3/test_ui_v3_first_screen_c_and_wording_unify.py`（首屏計數、舊字樣禁用守衛）、`docs/v2/81` 第 3.1／10 節、`docs/BACKLOG.md` BL-0536、`docs/HANDOFF.md`。 |
+| 影響範圍 | 只限 🌍 Preview App 的首屏呈現層級與畫面字樣。**不**改資料、來源、公式、門檻、狀態判定、投資語意；**不**新增規則（市場狀態、是否需注意在無正式規則時各自 `⬜ 無法判定`）；**不**修訂 frozen 44，`NOT_CONFIGURED_FORM`（44 之十二其二第 1 條句型 `⛔ 尚未設定：<哪一項>`）一字未改，本裁示只核准「🌍 本頁對『利率資料來源』這一項」的完整句字樣；同頁其餘位置仍寫狀態族短句 `⛔ 尚未設定`（44 之七其二第 3 條：哪一項一頁只交代一次，不變）；**不**放寬其他頁首屏上限；不動 Old UI、`ui_v2`、services。先前逐字存檔內的舊寫法（例：`美 10Y`）是當時裁示原文，保留不改。 |
+| 與既有裁示的關係 | 解決 `DEC-2026-11-03-07` 第 (2) 項（原「未落地、待客戶裁示」）；承接 `DEC-2026-11-03-01`（Q1 A 共用一枚 chip 被本裁示取代為兩枚；Q5 B 首屏僅一枚資料新鮮度 chip 不變；D3 (i) 不變）。**編號說明**：分支 `gov-converge` 已使用 `DEC-2026-11-03-08`（另一件文件收斂指示），本筆取 `-09` 以免合併撞號；本分支因此沒有 `-08`，不是漏號。 |
+| 是否可逆 | 可逆（presentation 層；客戶可另行裁示） |
+| supersedes／superseded by | supersedes：`DEC-2026-11-03-07` 第 (2) 項的 Decision Gate 狀態、`docs/v2/81` 第 3.1 節與第 10.2 節「市場狀態／是否需注意共用一枚 chip」「基準日 chip」「待客戶裁示」、`docs/v2/81` 第 10.1 節「待客戶確認是否統一美10Y／美2Y 空格」「利率資料來源暫時字樣」、`ui_v3/viewmodels/preview_wording.py` 的 `status_row_label`／`not_configured_item`／`series_us10y`／`series_us2y` 暫時字樣（原字保留劃線，有意識的更正，不是漏刪；決策者：客戶）。superseded by：無。 |
+| provenance | **逐字**（以逐字檔為準）；「未採方案與理由」「影響範圍」「與既有裁示的關係」由執行組單組整理，可被客戶推翻；未經第二組獨立驗證。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -2285,6 +2317,7 @@
 - 第四節 `DEC-2026-11-03-03`：原文沒有另存逐字檔，引於該筆摘要欄，係總管在派工對話中的轉錄（第一句與帶「」者為客戶原字；兩段條列是否逐字無法核對）；執行組未見客戶對話本身；讀法 (a)～(d) 由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-11-03-04`、`-05`：原文逐字落盤於 `docs/evidence/decisions/2026-11-03_normalization_abc_and_min_cost_rule.md`（總管逐字轉存；執行組未見客戶對話本身，已以 Python 核對圍欄與轉存檔逐位元組相同）；`-04` 讀法 (a)～(c) 與 `-05` 摘要由執行組單組寫成；H1b 排在 H2 之前為總管派工所定、執行組記錄（可被客戶推翻），可被客戶推翻；未經第二組驗證。
 - 第四節 `DEC-2026-11-03-06`：原文逐字落盤於 `docs/evidence/decisions/2026-11-03_vix_secondary_yield_ruling.md`（總管逐字轉交；執行組未見客戶對話本身）；三方案表、未採理由、影響範圍與關係欄由執行組單組寫成，可被客戶推翻；未經第二組驗證。
+- 第四節 `DEC-2026-11-03-07`：原文逐字落盤於 `docs/evidence/decisions/2026-11-03_mkt_formal_wording_ruling.md`（總管於派工單內逐字轉交；實作組未見客戶對話本身，無另一份原文可做逐位元組比對）；「未採方案」「影響範圍」「與既有裁示的關係」為實作組整理，可被客戶推翻；由實作組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-01`、`-02` 兩筆的客戶原話 repo 內沒有；內容依總管派工單與交接本轉述，本組未見原文。
 - 第四節 `DEC-2026-10-16-03`～`-13`：原文已落盤於 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔逐位元組相同）。各筆中標「總管讀法」「總管整理」者不是客戶裁示；「supersedes」欄的例示由文件實作組判讀，不宣稱窮舉，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-14`：原文已落盤於 `docs/evidence/decisions/2026-10-16_proposal8_approval.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔圍欄還原後逐位元組相同）。該筆中標「總管判定」「總管設計基準」者不是客戶裁示；「supersedes」欄的條文清單以 57 為準，由文件實作組整理，未經第二組驗證。

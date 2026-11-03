@@ -133,17 +133,12 @@ def test_every_entry_level_and_constant_carries_a_source_citation():
         assert cite.search(text), text
 
 
-def test_pending_wording_list_is_explicit_and_never_presentable():
-    """字樣未核准者：只准這幾列，且每列寫明缺口出處；任何 `entry_for_*` 都交不出它們。"""
-    assert {e.key for e in rules.pending_entries()} == {"chart_empty"}
-    for e in rules.pending_entries():
-        assert e.gap.strip() and e.symbol is None and e.tone is None
-        with pytest.raises(LookupError):
-            rules.entry(e.key)
-        assert rules.entry(e.key, allow_pending=True) is e
-    chart_gap = rules.entry("chart_empty", allow_pending=True).gap
-    assert "New UI2 圖卡線框" in chart_gap and "之十八其三第 2 條" in chart_gap and "未指定" not in chart_gap
-    assert "整張圖沒有資料時改用空狀態元件的模板" in _doc(rules.DOC_44)
+def test_pending_mechanism_still_blocks_unapproved_wording_and_beta_gaps_stay_explicit():
+    """狀態列已無 PENDING（`chart_empty` 於 2026-11-03 客戶裁示後移進 `APPROVED_WORDING`）；
+    但 PENDING 機制本身仍要擋住日後的未核准字樣，且 β 頁級字樣缺口仍明列。"""
+    assert rules.pending_entries() == ()
+    pending = rules.SemanticEntry("x", None, rules.PENDING_WORDING, None, "79 §11", gap="缺口出處")   # 機制仍可用
+    assert pending.is_pending
     unworded = [lvl for lvl in rules.BETA_LEVELS if lvl.entry_key is None]
     assert {lvl.key for lvl in unworded} == {"no_holding", "partial", "normal"}
     assert all("wireframe Gate" in lvl.wording_gap for lvl in unworded)
@@ -151,7 +146,55 @@ def test_pending_wording_list_is_explicit_and_never_presentable():
         rules.PrecedenceLevel("x", "x", None)
     reachable = set(rules.STATUS_TO_KEY.values()) | set(rules.CHIP_KIND_TO_KEY.values()) | {
         k for k in rules.FRESHNESS_TO_KEY.values() if k}
-    assert not reachable & {e.key for e in rules.pending_entries()}
+    assert reachable <= set(rules.ENTRIES)
+    assert "整張圖沒有資料時改用空狀態元件的模板" in _doc(rules.DOC_44)   # 之前 gap 所引的 44 原文仍在（不得被誤讀為已被 44 取代）
+
+
+# ─────────────── 1b. 純文字正式字樣（客戶 2026-11-03；DEC-2026-11-03-07） ───────────────
+@pytest.mark.parametrize("item", list(rules.APPROVED_WORDING.values()), ids=lambda a: a.key)
+def test_every_approved_plain_wording_appears_verbatim_in_each_cited_doc(item):
+    assert item.doc_refs and item.source.strip()
+    for rel in item.doc_refs:
+        assert item.ruling_text in _doc(rel), f"{item.key}: {item.ruling_text!r} 不在 {rel}"
+
+
+def test_customer_ruling_wording_is_in_decisions_and_evidence_and_44_wording_is_in_44():
+    from_44 = {k for k, a in rules.APPROVED_WORDING.items() if a.doc_refs == (rules.DOC_44,)}
+    assert from_44 == {"fact_vix", "fact_credit_spread", "fact_leading", "fact_coincident", "fact_policy_rate", "fact_fx"}
+    for key, item in rules.APPROVED_WORDING.items():
+        if key not in from_44:
+            assert rules.EVIDENCE_WORDING_RULING in item.doc_refs and rules.DOC_DECISIONS in item.doc_refs, key
+
+
+def test_approved_plain_wording_view_labels_and_first_screen_fields_match_the_ruling_lines():
+    evidence = _doc(rules.EVIDENCE_WORDING_RULING)
+    views = "／".join(rules.approved(k).text for k in ("view_compare", "view_vix", "view_us10y", "view_us2y"))
+    fields = "／".join(rules.approved(k).text for k in ("field_market_state", "field_attention", "evidence_label",
+                                                       "freshness_label"))
+    assert f"| 檢視標籤 | {views} |" in evidence and views == "比較／VIX／美10Y／美2Y"   # 無空格
+    assert f"| 首屏欄位 | {fields} |" in evidence
+    full = f"{rules.approved('base_chip').ruling_text}；{rules.approved('frequency_line').text}"
+    assert f"「{full}」" in evidence   # 歸一化揭露整句＝兩段以「；」相連
+    assert "頻率：日" in rules.approved("frequency_line").text and "頻率 日" not in rules.approved("frequency_line").text
+
+
+def test_approved_plain_wording_has_no_engineering_terms_and_no_symbols():
+    for item in rules.APPROVED_WORDING.values():
+        assert not re.search(r"aggregation rule|[A-Z]+_[A-Z_]+|Traceback|Exception", item.text), item.key
+        assert not any(sym in item.text for sym in APPROVED_SYMBOLS), item.key   # 符號只屬狀態列
+    assert "aggregation rule" not in rules.approved("hero_sentence").text
+
+
+def test_approved_wording_keys_do_not_collide_with_state_entry_keys_and_table_is_read_only():
+    assert not set(rules.APPROVED_WORDING) & set(rules.ENTRIES)
+    with pytest.raises(TypeError):
+        rules.APPROVED_WORDING["x"] = None
+    with pytest.raises(KeyError):
+        rules.approved("nope")
+    with pytest.raises(ValueError):
+        rules.ApprovedWording("x", " ", "y")
+    with pytest.raises(ValueError):
+        rules.ApprovedWording("x", "t", "t", doc_refs=())
 
 
 def test_rules_table_is_read_only_at_runtime():
