@@ -195,6 +195,16 @@ def test_primary_vix_hides_secondary_vix_card_and_primary_is_single_series():
     assert [c.key for c in model.evidence_changes] == ["taiex", "sp500"] and model.evidence_comparable
 
 
+def test_vix_yield_ruling_secondary_count_follows_primary_view_and_never_backfills():
+    """客戶裁示 DEC-2026-11-03-06：Primary＝VIX 時 VIX 卡讓位；切回比較／美10Y／美2Y 恢復；不補卡、張數隨檢視變。"""
+    by_view = {v: [c.key for c in build(primary_view=v).secondary] for v in ("compare", "vix", "us10y", "us2y")}
+    assert by_view["vix"] == ["term_spread_pct"]                                   # 讓位後只剩利率與信用，沒有補入其他卡
+    for v in ("compare", "us10y", "us2y"):
+        assert by_view[v] == ["vix", "term_spread_pct"]                            # 恢復顯示
+    assert len(by_view["vix"]) < len(by_view["compare"])                           # 張數可隨檢視變化
+    assert "sp500" not in {k for ks in by_view.values() for k in ks}               # 也沒有補回已移除的 S&P 卡
+
+
 @pytest.mark.parametrize("view_key,unit", [("us10y", "%"), ("us2y", "%")])
 def test_yield_views_are_single_series_in_percent(view_key, unit):
     model = build(primary_view=view_key)

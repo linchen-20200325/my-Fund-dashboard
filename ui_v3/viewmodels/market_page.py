@@ -191,7 +191,7 @@ class MarketPageModel:
       只有兩條在同一基準日比較時 `evidence_comparable` 才為 True；單序列／退回單序列的漲跌不是比較。
     - `primary_card`：歸一化比較圖卡（`view == compare`）或單序列圖卡；`primary_notes`：圖下各序列資料日一行。
     - `primary_unit`：單序列檢視的單位（比較檢視為 None）。
-    - `secondary`：至多 2 張（VIX 在 Primary 為 VIX 時讓位——執行組讀法，可被客戶推翻）。
+    - `secondary`：至多 2 張（VIX 在 Primary 為 VIX 時讓位——客戶裁示 DEC-2026-11-03-06：presentation 去重，切回其他檢視恢復，不補卡、張數可變）。
     - `freshness_state`：恆為 `undetermined`（門檻未裁示；首屏只一枚 chip）。
     """
 
@@ -224,7 +224,7 @@ class MarketPageModel:
         if len(self.secondary) > 2:
             raise ValueError("Secondary 至多 2 張（S&P 卡已移除，Q3 A）")
         if self.view == VIEW_VIX and any(c.key == VIEW_VIX for c in self.secondary):
-            raise ValueError("Primary 檢視為 VIX 時 VIX 卡必須讓位（D1：Secondary 不複製 Primary）")
+            raise ValueError("Primary 檢視為 VIX 時 VIX 卡必須讓位（D1：Secondary 不複製 Primary；客戶裁示 DEC-2026-11-03-06）")
         if (self.view == VIEW_COMPARE) != self.primary_card.normalized:
             raise ValueError("只有比較檢視是歸一化圖卡")
         if self.evidence_comparable and self.comparison_mode != "pair":

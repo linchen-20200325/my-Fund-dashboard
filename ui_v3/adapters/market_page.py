@@ -312,7 +312,7 @@ def build_market_page(view: dict, table: dict, *, period: str, primary_view: str
 
     - 首屏「重要依據」與圖同一個 `NormalizedComparison`（基準、視窗、期間相同；不另算）。
     - `primary_view == compare` → 歸一化比較圖卡；其餘 → 單序列圖卡（同一組期間）。
-    - Primary 為 VIX 時 Secondary 的 VIX 卡讓位（D1；執行組讀法，可被客戶推翻）。
+    - Primary 為 VIX 時 Secondary 的 VIX 卡讓位（D1；客戶裁示 DEC-2026-11-03-06）；切回其他檢視恢復，不補入其他卡。
     """
     if period not in periods.PERIODS:
         raise ValueError(f"period must be one of {periods.PERIODS}: {period!r}")
