@@ -77,6 +77,9 @@ _LIST = (
     _w("window_withheld_note", "兩條序列在這個期間內無法在同一基準日比較（原因代碼：{code}）", _SRC_EXEC),
     _w("reason_missing", "缺資料", _SRC_EXEC),
     _w("reason_insufficient", "資料不足", _SRC_EXEC),
+    _w("reason_no_source", "來源資料無法使用", _SRC_EXEC),
+    _w("reason_no_observation", "沒有觀測值", _SRC_EXEC),
+    _w("reason_unknown", "原因未明", _SRC_EXEC + "；未知／內部原因代碼一律顯示此字樣，不輸出原始代碼"),
     _w("reason_stopped", "在此視窗內已停更", _SRC_EXEC),
     _w("reason_no_common", "沒有共同有效觀測日", _SRC_EXEC),
     _w("reason_few_common", "共同有效觀測日不足", _SRC_EXEC),
@@ -116,6 +119,13 @@ _LIST = (
     _w("missing_msci_em", "MSCI EM", _SRC_UIV2),
     _w("missing_eps_pe", "EPS×PE 情境", _SRC_UIV2),
     _w("missing_implied_earnings", "implied trailing 盈餘", _SRC_UIV2),
+    # 版面連接字樣（原硬寫在頁面程式內）
+    _w("colon", "：", _SRC_EXEC),
+    _w("separator", " ｜ ", _SRC_EXEC),
+    _w("label_colon", "{label}：", _SRC_EXEC),
+    _w("evidence_period_change", "近{period} {change}", _SRC_EXEC),
+    _w("chart_aria", "{title}（{period}）", _SRC_EXEC),
+    _w("status_ok_row", "{label}：取得 ｜ 來源 {source} ｜ 資料日 {date}", _SRC_EXEC),
     # 頁級
     _w("preview_banner", "Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字", _SRC_EXEC),
 )

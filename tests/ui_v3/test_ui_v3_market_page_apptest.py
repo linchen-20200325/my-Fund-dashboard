@@ -92,7 +92,7 @@ def test_negative_elapsed_days_render_as_not_applicable_not_negative_days(monkey
         if d["domain"] == "taiex":
             d["fetched_at"] = "2026-10-30T02:00:00+00:00"
     text = plain(page_text(run(monkeypatch, v)))
-    assert re.search(r"⬜ 不適用：\s*取得時間早於觀測日", text)
+    assert re.search(r"⬜ 不適用\s*：\s*取得時間早於觀測日", text)
     assert "-3 日" not in text and "經過 -" not in text
 
 

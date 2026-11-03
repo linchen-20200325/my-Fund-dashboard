@@ -75,3 +75,51 @@ def test_pending_wording_module_is_pure_data_no_streamlit_no_services():
     mods = {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | \
            {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     assert not any(re.match(r"(streamlit|services|shared|ui_v2|ui)\b", m) for m in mods), mods
+
+
+# ───────── mkt.py 不得硬寫畫面中文字樣（BL-0536 稽核 non-blocker 2/3） ─────────
+
+_CJK = re.compile(r"[　-鿿＀-￯]")
+# 明確白名單：規則表的代入佔位符（取代用）與一則內部 raise 訊息（不上畫面）。
+_CJK_LITERAL_WHITELIST = frozenset({"<中文資料類>", "<哪一項>", "status_html 只處理非 ok 狀態："})
+
+
+def _hardcoded_cjk_literals(source: str) -> list:
+    import ast
+    tree = ast.parse(source)
+    docstrings = {id(n.body[0].value) for n in ast.walk(tree)
+                  if isinstance(n, (ast.Module, ast.FunctionDef, ast.ClassDef)) and n.body
+                  and isinstance(n.body[0], ast.Expr) and isinstance(getattr(n.body[0], "value", None), ast.Constant)}
+    return [n.value for n in ast.walk(tree)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docstrings
+            and _CJK.search(n.value) and n.value not in _CJK_LITERAL_WHITELIST]
+
+
+def test_mkt_page_has_no_hardcoded_cjk_screen_wording():
+    from pathlib import Path
+    src = Path(__file__).resolve().parents[2].joinpath("ui_v3", "pages", "mkt.py").read_text(encoding="utf-8")
+    assert _hardcoded_cjk_literals(src) == []
+
+
+def test_hardcoded_cjk_scan_negative_control_turns_red():
+    """負控：造一段含硬寫中文的副本，掃描必須抓到（證明守衛不是空掃）。"""
+    bad = 'def f(x):\n    """文件字串不算"""\n    return f"{x}：取得 ｜ 來源"\n'
+    assert _hardcoded_cjk_literals(bad) != []
+    assert _hardcoded_cjk_literals('def f():\n    """只有文件字串"""\n    return 1  # 註解中文\n') == []
+
+
+def test_reason_span_unknown_code_never_leaks_raw_code():
+    from ui_v3.pages import mkt
+    for code in ("no_source_zzz", "some_internal_code", None, ""):
+        html = mkt.reason_span(code)
+        assert "<code>" not in html and "some_internal_code" not in html and "no_source_zzz" not in html
+        assert 'data-pending-wording="reason_unknown"' in html
+
+
+def test_reason_span_known_codes_have_own_pending_wording():
+    from ui_v3.pages import mkt
+    for code, key in mkt._REASON_WORDING.items():
+        assert key in W.PREVIEW_PENDING_WORDING
+        html = mkt.reason_span(code)
+        assert f'data-pending-wording="{key}"' in html and "<code>" not in html
+    assert {"no_source", "no_observation"} <= set(mkt._REASON_WORDING)

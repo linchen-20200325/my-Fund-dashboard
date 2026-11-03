@@ -84,12 +84,13 @@ def not_configured_text() -> str:
 _REASON_WORDING = {
     "missing": "reason_missing", "insufficient": "reason_insufficient", "no_common_base": "reason_no_common",
     "too_few_common_days": "reason_few_common", "too_few_points": "reason_few_points",
+    "no_source": "reason_no_source", "no_observation": "reason_no_observation",
 }
 
 
 def reason_span(code: Optional[str]) -> str:
-    key = _REASON_WORDING.get(code or "")
-    return W.pending_span(key) if key else f'<code>{escape(str(code))}</code>'
+    """原因代碼 → 暫時字樣。未知代碼一律走 `reason_unknown`；內部代碼不上畫面。"""
+    return W.pending_span(_REASON_WORDING.get(code or "", "reason_unknown"))
 
 
 def status_html(status: str, reason: Optional[str], label_key: str) -> str:
@@ -125,7 +126,7 @@ def elapsed_html(label: str, as_of: Optional[str], elapsed: Optional[int]) -> st
     if elapsed < 0:
         return (W.pending_span("data_date_no_elapsed", label=label, date=as_of) + " "
                 + f'<span class="uv3-chip uv3-tone-grey" data-status-key="not_applicable">'
-                  f'{escape(rules.entry("not_applicable").wording)}：</span>' + W.pending_span("negative_elapsed_suffix"))
+                  f'{escape(rules.entry("not_applicable").wording)}{W.pending_span("colon")}</span>' + W.pending_span("negative_elapsed_suffix"))
     return W.pending_span("data_date_line", label=label, date=as_of, days=elapsed)
 
 
@@ -146,7 +147,7 @@ def primary_chart_html(model: MarketPageModel) -> Optional[str]:
         lines.append(chart_svg.Line(points, dashed=index % 2 == 1, end_label=text))
     if not lines:
         return None
-    return chart_svg.line_chart_svg(lines, aria_label=f"{card.title}（{model.period}）")
+    return chart_svg.line_chart_svg(lines, aria_label=W.text("chart_aria", title=card.title, period=model.period))
 
 
 def disclosure_notes(model: MarketPageModel) -> list:
@@ -204,7 +205,7 @@ def summary_html(model: MarketPageModel) -> str:
         label = escape(W.text(label_key))
         if change.status == STATUS_OK:
             items.append(f'<span class="uv3-evidence" data-key="{escape(change.key)}">{W.pending_span(label_key)} '
-                         f'近{escape(model.period)} {escape(fmt_change(change.period_change))}</span>')
+                         f'{W.pending_span("evidence_period_change", period=model.period, change=fmt_change(change.period_change))}</span>')
         else:
             items.append(f'<span class="uv3-evidence" data-key="{escape(change.key)}">{label} '
                          f'{status_html(change.status, change.reason_code, label_key)}</span>')
@@ -212,14 +213,14 @@ def summary_html(model: MarketPageModel) -> str:
     if not model.evidence_comparable and any(c.status == STATUS_OK for c in model.evidence_changes):
         note = f'<div class="uv3-note">{W.pending_span("evidence_single_note")}</div>'
     rows.append(f'<div class="uv3-row"><span class="uv3-label">{W.pending_span("evidence_label")}</span>'
-                f'{" ｜ ".join(items)}</div>{note}')
+                f'{W.pending_span("separator").join(items)}</div>{note}')
     rows.append(f'<div class="uv3-row"><span class="uv3-label">{W.pending_span("freshness_label")}</span>{chip("threshold_pending")}</div>')
     return "".join(rows)
 
 
 def secondary_html(card: SecondaryCard, title_key: str, sub_label_key: Optional[str] = None) -> str:
     title = W.pending_span(title_key)
-    sub = f" ｜ {W.pending_span(sub_label_key)}" if sub_label_key else ""
+    sub = f"{W.pending_span('separator')}{W.pending_span(sub_label_key)}" if sub_label_key else ""
     head = f'<div class="uv3-card" data-card="{escape(card.key)}"><h4>{title}{sub}</h4>'
     label_key = sub_label_key or "series_vix"
     if card.status != STATUS_OK:
@@ -230,7 +231,7 @@ def secondary_html(card: SecondaryCard, title_key: str, sub_label_key: Optional[
         body += chart_svg.spark_svg(tuple((p.date, p.value) for p in card.spark), aria_label=f"{W.text(title_key)} {W.text('secondary_spark_caption')}")
         body += f'<div class="uv3-note">{W.pending_span("secondary_spark_caption")}</div>'
     elif card.spark_status == "insufficient":
-        body += f'<div class="uv3-note">{W.pending_span("secondary_spark_caption")}：{W.pending_span("insufficient")}</div>'
+        body += f'<div class="uv3-note">{W.pending_span("secondary_spark_caption")}{W.pending_span("colon")}{W.pending_span("insufficient")}</div>'
     return head + body + "</div>"
 
 
@@ -243,10 +244,10 @@ def fact_html(fact: EvidenceFact) -> str:
 
 
 def status_row_html(row: DomainStatus) -> str:
-    label = escape(W.text(row.label_key))
+    label = W.text(row.label_key)
     if row.status == STATUS_OK:
-        return (f'<div class="uv3-row">{label}：取得 ｜ 來源 {escape(row.source or "—")} ｜ 資料日 {escape(row.as_of or "—")}</div>')
-    return f'<div class="uv3-row">{label}：{status_html(row.status, row.reason_code, row.label_key)}</div>'
+        return f'<div class="uv3-row">{W.pending_span("status_ok_row", label=label, source=row.source or "—", date=row.as_of or "—")}</div>'
+    return f'<div class="uv3-row">{W.pending_span("label_colon", label=label)}{status_html(row.status, row.reason_code, row.label_key)}</div>'
 
 
 # ───────────────────────────── 進入點 ─────────────────────────────
