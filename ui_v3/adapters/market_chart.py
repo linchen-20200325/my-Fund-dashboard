@@ -9,8 +9,10 @@
 1. 每條輸入序列一條 `ChartSeries`，依 L2 順序；有線的帶歸一化點（None 缺口照留、斷線不補），沒線的不帶任何數值點。
 2. `ChartSeries.meta.as_of`＝該序列自己的 `last_obs_date`（圖下資料日一行；Q2-b A），沒畫線但有資料的也照實帶；
    `freshness_state` 恆為 `undetermined`（門檻未裁示，H2 `FRESHNESS_THRESHOLD_PENDING` 的 view model 詞彙）。
-3. 沒線的序列 → `disclosure.series_issues`（序列鍵＋原因代碼，L2 狀態原樣）；完全沒有資料的（`missing`／取數失敗）另放
-   `MissingItem` 進 `detail`（呈現恆為 `◇ 資料未備`，原因代碼區分）。
+3. 沒線的序列 → `disclosure.series_issues`（序列鍵＋原因代碼，L2 狀態原樣）；~~完全沒有資料的（`missing`／取數失敗）另放
+   `MissingItem` 進 `detail`（呈現恆為 `◇ 資料未備`，原因代碼區分）。~~ → 只有 `status == "missing"`（缺資料）另放 `MissingItem`
+   （呈現恆為 `◇ 資料未備`）；取數失敗**不放**（81 第 4.1 節 S6 要 `⛔ 取數失敗`，與 `◇ 資料未備` 不同），只靠該序列
+   `meta.status == "failed"`＋`reason_code == "fetch_failed"`（H3 獨立稽核 B1，2026-11-03；更正，不是漏刪）。
 4. 取數失敗與缺資料分開（H2 稽核後 adapter 要求 (3)；81 第 4.1 節 S6）：呼叫端以 `failed_keys` 指明哪幾條是取數失敗，
    那幾條 `status == "failed"`、原因 `fetch_failed`；`failed_keys` 只能指向 L2 判為 `missing` 的序列，否則大聲失敗。
 5. 有資料但不畫的（`insufficient`／`withheld`／`no_common_base`／`too_few_common_days`／`too_few_points`）→
@@ -89,7 +91,7 @@ def build_comparison_card(comparison: NormalizedComparison, *, title: str, label
         series.append(chart_series)
         if issue is not None:
             issues.append(issue)
-            if chart_series.meta.is_missing:
+            if chart_series.meta.status == STATUS_MISSING:   # 只有缺資料；取數失敗不放（見模組 docstring 第 3、4 點）
                 detail.append(MissingItem(labels[result.key], issue.reason_code))
 
     disclosure = NormalizationDisclosure(

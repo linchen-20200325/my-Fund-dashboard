@@ -183,6 +183,7 @@ class ChartCard:
     此時另驗：
     - 有數值點的序列（＝有畫線）數量：無基準日 → 0；`pair` 有基準日 → 2；`single`／`fallback` 有基準日 → 1
       （退回單序列不得看起來像比較）。
+    - 畫線序列 `meta.status` 必須是 ok（undetermined 帶點也不算比較的一條）。
     - 每條畫線序列的第一個點＝基準日、值＝基準值 100（一張圖只有一個基準日，不會有兩個不同日期的 100）。
     - 沒畫線的序列數＝`disclosure.series_issues` 數（每條沒畫線的都要說原因）。
     圖下各序列資料日由每條 `ChartSeries.meta.as_of` 承載（該序列自己的最後觀測日），本卡不另設日期欄位。
@@ -230,6 +231,8 @@ class ChartCard:
         if len(drawn) != expected:
             raise ValueError(f"mode={d.mode}、base_date={d.base_date} 時應有 {expected} 條畫線序列，收到 {len(drawn)}")
         for s in drawn:
+            if s.meta.status != STATUS_OK:
+                raise ValueError(f"畫線序列 {s.label!r} 的 status 必須是 ok，收到 {s.meta.status!r}")
             first = s.points[0]
             if first.date != d.base_date or first.value != d.base_value:
                 raise ValueError(f"畫線序列 {s.label!r} 必須自基準日 {d.base_date} 起、首點＝{d.base_value}")

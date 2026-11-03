@@ -89,7 +89,8 @@ def test_golden_single_fetch_failed_is_not_missing():
     _, card = card_for(TAIEX, None, failed_keys={"sp500"})
     assert summary(card)[1] == ("LABEL_S", "failed", "fetch_failed", None, 0)
     assert [(i.series_key, i.reason_code) for i in card.disclosure.series_issues] == [("sp500", "fetch_failed")]
-    assert card.detail == (MissingItem("LABEL_S", "fetch_failed"),)
+    # 取數失敗不放 MissingItem（MissingItem 呈現固定 `◇ 資料未備`；81 S6 要 `⛔ 取數失敗`）——H3 稽核 B1
+    assert card.detail == ()
     assert mc.REASON_FETCH_FAILED == rules.STATUS_TO_KEY["failed"] == "fetch_failed"
 
 
@@ -142,7 +143,39 @@ def test_golden_none_both_missing():
     d = card.disclosure
     assert (d.mode, d.status, d.base_date, d.base_value, d.window_start) == ("none", "both_missing", None, None, None)
     assert summary(card) == [("LABEL_T", "failed", "fetch_failed", None, 0), ("LABEL_S", "missing", "missing", None, 0)]
-    assert card.detail == (MissingItem("LABEL_T", "fetch_failed"), MissingItem("LABEL_S", "missing"))
+    assert card.detail == (MissingItem("LABEL_S", "missing"),)   # 取數失敗那條不放 MissingItem（B1）
+
+
+@pytest.mark.parametrize("taiex,sp500", [(None, None), (TAIEX, None), (None, SP500)])
+def test_fetch_failed_never_gets_missing_item_and_stays_distinguishable_from_missing(taiex, sp500):
+    """B1：MissingItem 呈現固定 `◇ 資料未備`，取數失敗不得經由它變成「資料未備」；兩者在 series meta 上可分。"""
+    keys = [k for k, v in (("taiex", taiex), ("sp500", sp500)) if v is None]
+    for failed in ([], keys[:1], keys):
+        _, card = card_for(taiex, sp500, failed_keys=set(failed))
+        by_label = {s.label: s for s in card.series}
+        missing_labels = {d.what for d in card.detail if isinstance(d, MissingItem)}
+        for key in keys:
+            meta = by_label[LABELS[key]].meta
+            if key in failed:
+                assert (meta.status, meta.reason_code) == ("failed", "fetch_failed")
+                assert LABELS[key] not in missing_labels
+            else:
+                assert (meta.status, meta.reason_code) == ("missing", "missing")
+                assert LABELS[key] in missing_labels
+        assert all(d.reason_code != "fetch_failed" for d in card.detail if isinstance(d, MissingItem))
+
+
+def test_insufficient_and_withheld_reason_codes_preserved_for_renderer():
+    """N1：renderer 需要的資訊在 view model 裡 —— `insufficient` 原因代碼留在 series meta 與 series_issues
+    （資料不足字樣 PENDING，不能只靠 entry_for_status 的 ⬜ 無法判定）；`withheld` 的真正原因在 disclosure.status。"""
+    _, fb = card_for([P("2026-02-02", 1.0), P("2026-04-10", 2.0)], SP500)
+    assert fb.series[0].meta.reason_code == "insufficient"
+    assert ("taiex", "insufficient") in [(i.series_key, i.reason_code) for i in fb.disclosure.series_issues]
+    a = [P("2026-01-09", 1.0), P("2026-01-12", 2.0), P("2026-04-10", 3.0)]
+    b = [P("2026-01-09", 1.0), P("2026-01-12", 2.0), P("2026-04-09", 3.0)]
+    _, wh = card_for(a, b)
+    assert {s.meta.reason_code for s in wh.series} == {"withheld"}
+    assert wh.disclosure.status == "too_few_common_days"   # 真正原因只在這裡
 
 
 # ═══════════ 契約 ═══════════

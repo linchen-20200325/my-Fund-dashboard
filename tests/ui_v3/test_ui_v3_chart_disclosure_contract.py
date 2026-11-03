@@ -93,10 +93,25 @@ def test_base_date_present_iff_status_ok():
     assert d.base_date is None and d.base_value is None and not d.comparable
 
 
-@pytest.mark.parametrize("bad", [None, 0, 1, 99, 100.5, True, "100"])
+@pytest.mark.parametrize("bad", [None, 0, 1, 99, 100.5, 100.0001, 99.9999, True, "100"])
 def test_base_value_must_be_exactly_100_when_drawn(bad):
     with pytest.raises(ValueError):
         D(base_value=bad)
+
+
+def test_non_ok_status_with_base_date_rejected_even_when_everything_else_looks_drawn():
+    """N2：status ok ⇔ base_date；single＋insufficient 卻帶基準日與 100 → 拒絕。"""
+    with pytest.raises(ValueError):
+        D(mode="single", status="insufficient", base_date=BASE, base_value=100,
+          series_issues=(SeriesIssue("b", "missing"),))
+
+
+def test_drawn_series_must_have_status_ok():
+    """N4：畫線（有數值點）的序列 status 必須是 ok。"""
+    pts = drawn("b").points
+    odd = ChartSeries("b", FactMeta(status="undetermined", reason_code="x"), pts)
+    with pytest.raises(ValueError):
+        ChartCard("t", (drawn("a"), odd), normalized=True, disclosure=D())
 
 
 def test_base_value_must_be_none_without_base_date():
