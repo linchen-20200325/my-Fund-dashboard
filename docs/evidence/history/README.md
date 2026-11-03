@@ -13,4 +13,6 @@
 
 **防遺失機制**：每個區塊在 `MOVED-BEGIN` 標記記 `sha256` 與位元組數；`tests/test_canonical_rule_consistency.py` 重算每個區塊的 sha256 比對標記，並在可取得該區塊自己的基準 commit（`source` 的 `@` 後；`82ba783f` 或 `d6173220`）時與該 commit 的原文逐位元組（H1）或逐行（其餘區塊）比對。搬進來的文字**不准改**；要補註寫在區塊外。
 
+**CI 限制**：CI 的 checkout 是淺 clone，基準 commit 取不到，base 逐位元組／逐行比對在 CI 會 skip；硬性項目仍驗（單一接手點、舊頁名、殘留字樣、sha256 自洽、清冊登記、區塊數、已知基準清單）。完整比對需本機完整歷史。
+
 **基準 commit 注意**：基準 commit（`82ba783f`、`d6173220`）若因 squash merge 而不可得，守衛的逐位元組比對會 skip，僅剩 sha256 自洽檢查；因此本專案合併一律用一般 merge commit（保留 SHA）。

@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+KNOWN_BASES = ("82ba783f", "d6173220")  # 已知基準清單；區塊 source 的 `@sha` 必須屬於此
 BASE_COMMIT = "82ba783f"  # 預設基準；每個區塊的實際基準記在其 source 的 `@<sha>`（H2、B2 為 d6173220）
 HANDOFF_MAX_LINES = 120
 BL0536_ROW_MAX_BYTES = 8000
@@ -215,6 +216,26 @@ def block_base(b: dict) -> str:
     """區塊自己的基準 commit：source 的 `@<sha>`；沒寫才退回預設基準。"""
     m = re.search(r"@([0-9a-f]{7,40})$", b["source"])
     return m.group(1) if m else BASE_COMMIT
+
+
+def base_known(sha: str) -> bool:
+    """`@sha` 是否屬已知基準（完整 sha 或前綴皆可，至少 7 碼）。"""
+    return len(sha) >= 7 and any(k.startswith(sha) or sha.startswith(k) for k in KNOWN_BASES)
+
+
+def test_history_block_bases_are_known():
+    for p in HISTORY:
+        for b in parse_blocks(p.read_text(encoding="utf-8")):
+            sha = block_base(b)
+            assert base_known(sha), f"{p.name} 區塊 {b['id']} 的基準 @{sha} 不在已知基準清單 {KNOWN_BASES}"
+
+
+def test_base_known_negative_control():
+    assert base_known("82ba783f") and base_known("d6173220")
+    assert base_known("d6173220" + "0" * 32)
+    assert not base_known("deadbee")
+    assert not base_known("ffffffff")
+    assert not base_known("82ba78")
 
 
 def _git_show(path: str, commit: str = BASE_COMMIT):
