@@ -73,6 +73,25 @@ def test_handoff_is_not_accumulating():
     assert n <= HANDOFF_MAX_LINES, f"HANDOFF 應覆蓋、不累加（{n} 行）"
 
 
+_PARALLEL_RE = re.compile(r"\(\d\)|（\d）|(?:^|\s)\d[.、)]\s")
+
+
+def has_parallel_numbering(line: str) -> bool:
+    return bool(_PARALLEL_RE.search(line))
+
+
+def test_handoff_next_point_is_one_sentence_not_parallel_list():
+    lines = [l for l in _read("docs/HANDOFF.md").splitlines() if "唯一下一接手點" in strip_struck(l)]
+    assert len(lines) == 1
+    assert not has_parallel_numbering(lines[0]), "唯一下一接手點不得用 (1)(2) 或 1. 2. 並列"
+
+
+def test_parallel_numbering_negative_control():
+    assert has_parallel_numbering("唯一下一接手點：(1) 甲 (2) 乙")
+    assert has_parallel_numbering("唯一下一接手點：1. 甲 2. 乙")
+    assert not has_parallel_numbering("唯一下一接手點：先完成甲批的 CI 與合併")
+
+
 def test_handoff_guard_negative_control():
     fake = "唯一下一接手點 A\n唯一下一接手點 B\n~~唯一下一接手點 C~~"
     assert count_unstruck(fake, "唯一下一接手點") == 2
@@ -107,8 +126,30 @@ def test_132_point1_has_no_old_top_level_pages():
     assert "💼 我的持股" not in line
 
 
+OLD_PAGE_NAMES = ("⚖️", "💼 我的持股")
+_EXEMPT = ("superseded", "NOT CURRENT", "~~", "歷史")
+
+
+def old_page_hits(text: str) -> list:
+    """整檔掃舊頁名；排除含 superseded／NOT CURRENT／劃線／歷史標記的行。"""
+    hits = []
+    for n, line in enumerate(text.splitlines(), 1):
+        if any(x in line for x in _EXEMPT):
+            continue
+        if any(o in line for o in OLD_PAGE_NAMES):
+            hits.append(n)
+    return hits
+
+
+@pytest.mark.parametrize("rel", ["PROJECT_RULES.md", "docs/HANDOFF.md"])
+def test_current_files_have_no_unmarked_old_page_names(rel):
+    assert old_page_hits(_read(rel)) == [], f"{rel} 有未標 superseded 的舊頁名行"
+
+
 def test_page_name_guard_negative_control():
     assert "⚖️ 資產配置" in strip_struck("🌍 市場與趨勢、⚖️ 資產配置、💼 我的持股")
+    assert old_page_hits("新五頁 🌍 → ⚖️資產配置 → 💼 我的持股") == [1]
+    assert old_page_hits("舊頁序 ⚖️資產配置（superseded: DEC）") == []
 
 
 # ---------------------------------------------------------------- 3 現行區殘留
@@ -167,7 +208,7 @@ def test_history_blocks_hash_and_manifest():
             seen += 1
             assert block_ok(b), f"{p.name} 區塊 {b['id']} 與標記的 sha256／bytes 不符（搬移後被改動或遺失）"
             assert b["id"] in readme, f"README 清冊缺區塊 {b['id']}"
-    assert seen >= 6
+    assert seen >= 8
 
 
 def _git_show(path: str):
