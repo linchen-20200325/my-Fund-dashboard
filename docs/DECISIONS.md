@@ -2232,7 +2232,7 @@
 | 未採方案與理由 | Route A（原生 sidebar navigation）：要讓未完成頁可見就得建空殼頁。Route B（完全自製 router）：自管 URL／session、改動最大、不可逆性低。 |
 | 理由／背景 | `PROJECT_RULES.md` 9.2 Minimum-Cost Correct Path；`docs/v2/80` 第 7、16 節。 |
 | evidence／source | `docs/v2/80` 第 17 節；`ui_v3/shell/nav.py`、`ui_v3/pages/chrome.py`、`ui_v3/adapters/shell_status.py`、`ui_v3/viewmodels/shell.py`；`tests/ui_v3/test_ui_v3_navigation_shell.py`；`docs/evidence/bl0536_shell_h5_2026-11-03/`（注入的人造資料量測）。 |
-| 影響範圍 | 只限 Preview App 的導覽與頁首／側欄資料狀態呈現。**不**改資料、來源、公式、門檻、狀態判定；**不** cutover、**不**動 Old UI、`ui_v2`、frozen 文件；**不**新增 dependency；**不**自創 refresh pipeline。需客戶定字：Shell pending 字樣（候選與推薦見 `docs/v2/80` 第 17.4 節）；需客戶確認：Status Bar 不計入首屏 chip／數字預算的讀法（80 第 17.2 節）、資料全取得時不寫「正常」（與客戶範例「主要資料正常」的差異）。 |
+| 影響範圍 | 只限 Preview App 的導覽與頁首／側欄資料狀態呈現。**不**改資料、來源、公式、門檻、狀態判定；**不** cutover、**不**動 Old UI、`ui_v2`、frozen 文件；**不**新增 dependency；**不**自創 refresh pipeline。需客戶定字：Shell pending 字樣（候選與推薦見 `docs/v2/80` 第 17.4 節）；需客戶確認：Status Bar 不計入首屏 chip／數字預算的讀法（80 第 17.2 節）、資料全取得時不寫「正常」（與客戶範例「主要資料正常」的差異）。降級情境（資料缺失／取數失敗）的首屏 chip 形式元素較多，是否另需預算規則，待客戶確認（總管讀法，不裁決）。 |
 | 與既有裁示的關係 | 承接 `DEC-2026-11-02-05`（NG-1～NG-5）、`DEC-2026-11-03-08`（共用呈現規則）、`DEC-2026-11-03-09`（首屏採 C，頁本體預算 5 不變）。 |
 | 是否可逆 | 可逆（presentation 層；拿掉 `chrome` 呼叫即回到隱藏導覽） |
 | supersedes／superseded by | 無 |

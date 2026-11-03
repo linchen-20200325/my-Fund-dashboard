@@ -638,8 +638,8 @@ Data／Sources → Validation／Normalization → Domain／Deterministic Logic �
 
 ### 17.3 更新資料 CTA：盤點結果與選擇
 
-盤點到的既有路徑：(a) `infra.cache.global_refresh_all`（Old UI 側欄「全域刷新」：清全部 TTL／`st.cache_data`／磁碟快取，並**一併清掉來源退避**，且清 session state）；(b) 舊 B 線 `ui_v2/mkt/live.py` 的「重新取數」按鈕在 `ui_v2` 自己就是停用（原因文案「重新取數尚未接上」，冷卻中則寫來源冷卻秒數）；(c) `services.v2_tables.market_indicator.source_cooldowns()` 只回報冷卻狀態，不提供清除。
-選擇：**不可用＋一句原因**（「預覽版尚未開放更新資料」，pending 字樣）。理由：(a) 在 `ui_v3` 分層守衛下 adapters 只能 import `services.v2_tables`／`services.v2_domain`，不能碰 `infra`；且它會清掉退避，違反「失敗時退避、不連續轟炸來源」；要安全接上需要新增一個尊重冷卻、只清市場資料快取的 L2 函式——那是新的 refresh pipeline，不在本批授權內。`ShellStatus.refresh_available` 目前恆為 False（原因代碼 `refresh_not_wired`），日後有安全入口時由 adapter 改成 True 並接上；手機沒有 CTA（Status Bar 保持極薄），位置待 ⚙️ 線框。
+盤點到的既有路徑：(a) `infra.cache.global_refresh_all`（Old UI 側欄「全域刷新」：清全部 TTL／`st.cache_data`／磁碟快取，並**一併清掉來源退避**，且清 session state）；(b) 舊 B 線 `ui_v2/mkt/live.py` 的「重新取數」按鈕在 `ui_v2` 自己就是停用（原因文案「重新取數尚未接上」，冷卻中則寫來源冷卻秒數）；(c) `services.v2_tables.market_indicator.source_cooldowns()` 只回報冷卻狀態，不提供清除。(d) 既有 `services.macro.clear_tab1_macro_caches(session_state=None)`（Tab1「強制重抓」的正式 L2 路徑）：只清 Tab1 快取與一個 dataset 的退避；是否清得到 `ui_v3` 市場頁用的快取未驗；且 adapters 分層守衛不許 import `services.macro`，直接接上須放寬守衛。
+選擇：**不可用＋一句原因**（「預覽版尚未開放更新資料」，pending 字樣）。理由：(a) 在 `ui_v3` 分層守衛下 adapters 只能 import `services.v2_tables`／`services.v2_domain`，不能碰 `infra`；且它會清掉退避，違反「失敗時退避、不連續轟炸來源」；現有路徑都無法在不新增 L2 函式或放寬分層守衛下安全接上；新增或放寬都屬新的 refresh pipeline 或分層變更，不在本批授權內。`ShellStatus.refresh_available` 目前恆為 False（原因代碼 `refresh_not_wired`），日後有安全入口時由 adapter 改成 True 並接上；手機沒有 CTA（Status Bar 保持極薄），位置待 ⚙️ 線框。
 
 ### 17.4 候選字樣與推薦（Shell 新字樣全部為 pending；定字後搬進 `shared/ui_semantics/rules.py`）
 
@@ -669,6 +669,8 @@ Playwright chromium、`deviceScaleFactor` 2；腳本與原始數字在 `docs/evi
 | 首屏 chip＋核心數字 | 3 chip＋2 數字＝5（不含 Status Bar） | 同 |
 | 頁尾捲到底 | 頁尾底緣 y 776，在底部列頂緣 783 之上，未被遮住 | — |
 | 側欄不裁切主內容 | — | 主內容區自 x 300 起，無水平溢出 |
+
+⚠️ 首屏 chip＋核心數字計為 5 僅指常態（complete）。降級情境（`measurements.jsonl`：both_missing 390px 為 7 chip＋2 數字、failed 1280px 為 4 chip＋2 數字）整個第一屏的 chip 形式元素較多，其中包含 Primary 圖區的狀態 chip；這是 🌍 頁本體既有行為（#1132 之前即存在，非 Shell 引入）；摘要區（第一個標題之前）計數仍恆為 5。降級情境是否另需預算規則，待客戶確認（登記 BACKLOG BL-0536 列的待確認項；總管讀法，不裁決）。
 
 結論：未發現首屏預算或資訊密度的實質衝突，沒有放寬 frozen 44。量測限制：真實 Yahoo／FRED 未連線；只量了 Chromium；沒有實機 iOS／Android 瀏覽器（safe-area 與動態網址列為 CSS `env()` 推論，未實機驗）；未驗深色模式的底部列；首屏「可見」以座標判定，不是人眼評審。
 

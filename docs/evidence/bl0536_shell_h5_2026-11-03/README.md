@@ -8,6 +8,6 @@
 | 量測日／基底 | 2026-11-03；工作樹基底 main `3b40cbfb`＋Navigation Shell 批未提交變更（提交後以該批 commit 為準） |
 | 原始數字 | `measurements.jsonl`（每行一個情境：`scrollWidth`／`clientWidth`、底部導覽與側欄是否顯示及座標、導覽項高度、Status Bar 文字、首屏可視高度、首屏 chip 與核心數字個數、Primary 圖座標；390 常態另含捲到底後頁尾與底部導覽的座標） |
 | 截圖 | `m_normal`、`m_partial`、`m_nokey`、`m_both_missing`（390×844）；`t768_normal`（768，仍是手機版面）、`t769_normal`（769，桌機版面）；`d_normal`、`d_failed`（1280×800） |
-| 結論 | 見 `docs/v2/80` 第 17.5 節：390 與 1280（另 768、769）皆無橫向捲動；四項首屏資訊與 Primary 圖起點可見；底部導覽不遮內容；首屏 3 chip＋2 數字＝5（不含 Status Bar，該讀法待客戶確認） |
+| 結論 | 見 `docs/v2/80` 第 17.5 節：390 與 1280（另 768、769）皆無橫向捲動；四項首屏資訊與 Primary 圖起點可見；底部導覽不遮內容；首屏 3 chip＋2 數字＝5（不含 Status Bar，該讀法待客戶確認）。**5 僅指常態（complete）**；降級情境（both_missing 390px 為 7 chip＋2 數字、failed 1280px 為 4 chip＋2 數字）整個第一屏的 chip 形式元素較多，含 Primary 圖區的狀態 chip，這是 🌍 頁本體既有行為（#1132 之前即存在，非 Shell 引入）；摘要區（第一個標題之前）計數仍恆為 5；降級情境是否另需預算規則待客戶確認（總管讀法，不裁決） |
 | 限制 | 只量 Chromium；沒有實機 iOS／Android；深色模式底部列未驗；`partial` 情境是 S&P 歷史不足，Status Bar 資料狀態維持原樣（資料狀態只算主要序列的取得與否） |
 | 重現 | 在 repo 根目錄 `streamlit run docs/evidence/bl0536_shell_h5_2026-11-03/launch_injected_data.py --server.port 8599 --server.headless true`，再 `node measure.js <scenario> <width> <height> <out.png> [scroll]`（Playwright 路徑見腳本第一行） |
