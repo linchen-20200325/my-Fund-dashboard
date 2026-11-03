@@ -4,10 +4,10 @@
 > **歷史**：2026-11-03 Canonical Rule Convergence 批把舊版全文（543 行；含檔頭 40 則追加 checkpoint、24 個「第 N 次現況」框、舊下一步）逐字搬到 `docs/evidence/history/2026-11-03_handoff_pre_convergence.md`（**NOT CURRENT，不是現行規則或現況**）。更舊的交接本 `docs/handover_2026_09_26_latest.md` 為歷史紀錄（第 0 節永遠不准刪，客戶 2026-09-28 裁示）。本檔改寫依據：客戶 2026-11-03 指示（`DEC-2026-11-03-08`）；`PROJECT_RULES.md` 6.1.2「覆蓋、不累加」。
 
 > **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
-> - **查詢時點**：2026-11-03；**工作樹基底 main＝`3b40cbfb`**（Merge #1133：Canonical Rule Convergence＋New UI2 規則 A～I 落盤；含 #1131～#1133）；本批**未重查 GitHub**，接手先 `git fetch origin main`。
-> - **Open／Draft PR**：以 GitHub 為準（本批 Navigation Shell 的分支尚未 push、尚未開 PR；由總管處理）。
-> - **唯一下一接手點（單一）**：Navigation Shell 批（`DEC-2026-11-03-10`）的獨立稽核 → CI → 合併 → 客戶驗收 Preview（Shell 實作、H5 390px／1280px 量測與證據已完成，見 `docs/v2/80` 第 17 節、`docs/evidence/bl0536_shell_h5_2026-11-03/`）。
-> - **本批待客戶**：Shell pending 字樣定字（候選與推薦見 `docs/v2/80` 17.4）；確認 Status Bar 不計入首屏 chip／數字預算的讀法、資料全取得時不寫「正常」；更新資料 CTA 目前停用（無安全可接的正式 refresh 流程，17.3）。其後 wireframe Gate 順序仍是 💼 → 🔍 → ⚙️（`docs/BACKLOG.md`）。
+> - **查詢時點**：2026-11-03；**文件 PR 起點 main＝`875b1955`**（#1134 已合併；本次文件修訂前已 Fresh GitHub 查證）；接手仍需重新 `git fetch origin main`，不得用本段代替實查。
+> - **Open／Draft PR**：以 GitHub 為準（本次文件修訂分支 `docs/new-ui2-text-convergence-20261104`；開放／合併狀態一律依 GitHub 現查）。
+> - **唯一下一接手點（單一）**：本次 `docs/v2/80` UI 設計文字收斂 PR → 專案 AI 獨立稽核／檢查 CI → 依合併規則 normal merge；然後由專案 AI 做 Shell 正式字樣程式同步與降級首屏驗收（需另批），再進 💼 wireframe。#1134 Shell 已合併；本 PR 僅文字，不代表程式同步完成。
+> - **本批待客戶**：Shell 文字方向已在 `docs/v2/80` 17.4 收斂；程式字樣及降級首屏回歸待專案 AI 依正式程序實作與驗證。Status Bar 僅純文字 chrome 不計頁級預算；額外 chip／核心數字不能自動排除；全取得不寫「正常」。更新資料 CTA 仍停用（17.3）。其後 wireframe Gate 順序仍是 💼 → 🔍 → ⚙️（`docs/BACKLOG.md`）。
 > - **已裁示、不再待裁**：🌍 首屏「市場狀態」「是否需注意」拆兩枚 chip＝採 C（兩枚獨立 chip、基準日改圖表附近純文字揭露行、首屏 ≤5 不變、不修訂 frozen 44）；用字統一＝「⛔ 利率資料來源尚未設定」「美10Y」「美2Y」（`DEC-2026-11-03-09`；舊 BL-0539 已結案）。證據截圖拍於改版前，已於該目錄 README 註記過期。
 
 ## 1. 必讀順序（新對話或換人接手）
@@ -26,7 +26,7 @@
 | 項 | 現況 |
 |---|---|
 | UI 三層邊界 | Old UI read-only；`ui_v2` maintenance-only；`ui_v3`＝New UI2 唯一未來正式（`DEC-2026-11-02-05`、`-06`）。正式 App 現況推定為 Old UI（Streamlit Cloud 設定，repo 內無法查證）；Preview App 平行驗收，尚未 cutover |
-| 現行五頁 | 🌍 市場與趨勢／💼 我的資產／🔍 找基金／🤖 AI 投資總結（Phase 7 前不掛導覽）／⚙️ 設定（`PROJECT_RULES.md` 13.2 第 1 點；程式側 `ui_v3/shell/registry.py`） |
+| 現行五頁 | 🌍 市場與趨勢／💼 我的資產／🔍 找基金／🤖 AI 投資總結（Phase 7 前導覽可見但不可點，不註冊頁面）／⚙️ 設定（`PROJECT_RULES.md` 13.2 第 1 點；程式側 `ui_v3/shell/registry.py`） |
 | 🌍 | wireframe 已裁示（`DEC-2026-11-03-01`）；歸一化 A2／B2／C2、H1b／H2／H3、Preview rendering、九項正式字樣、首屏採 C 與用字統一已合併（#1125～#1132；`DEC-2026-11-03-07`、`-09`）。詳情看 `docs/BACKLOG.md` BL-0536 與 `docs/v2/81` |
 | 💼／🔍／⚙️／🤖 | wireframe 尚未起草（順序 💼 → 🔍 → ⚙️；🤖 依 Phase 7）；核准前不寫該頁 `ui_v3` 代碼 |
 | cutover | 未開始；強制驗收項 BL-0535 |
@@ -72,6 +72,6 @@
 
 ## 5. 本檔沒查證的部分
 
-- main `3b40cbfb` 為工作樹基底，**未重查 GitHub／CI**；#1133 已合併為 git log 所見，CI 結果未查。Shell 批的量測為 Chromium＋注入的人造資料，真實連線與實機瀏覽器未驗。
+- 本次文本修訂前現查 main `875b1955`、open PR 0；本 PR 的 CI／獨立稽核與合併狀態**尚未驗證**，須由專案 AI 依 GitHub 實證確認。Shell 量測仍僅 Chromium＋注入的人造資料；真實連線與實機瀏覽器未驗。
 - 第 3 節 BL-0538～BL-0540 為本批新登記，內容單組寫成、未經第二組驗證。
 - 舊版 HANDOFF 內「未查證」各條（約 60 條，多為 2026-10 月批次紀錄）隨全文搬至歷史檔，**不再是現行聲明**。
