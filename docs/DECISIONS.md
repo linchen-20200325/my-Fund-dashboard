@@ -2272,6 +2272,23 @@
 | supersedes／superseded by | 無（不 supersede 既有裁示）。 |
 | provenance | 客戶指示為節錄逐字；稽核結論與整合取捨由執行組整理，A／B 保留與 C／D／E 捨棄的取捨可被客戶推翻；79 C-2 判定為執行組讀法，未經第二組獨立驗證。 |
 
+### DEC-2026-11-04-02｜💼 我的資產 U1～U5 UI 設計核准與缺 FX 方案 A
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-04 |
+| 決策者 | **客戶** |
+| 客戶裁示原文 | 「我對基金儀表板 💼 我的資產的裁示：U1～U5：全部採用 ChatGPT 建議，僅核准 UI 設計，G-1～G-5 仍須分別處理。缺 FX 顯示百分比：選 A：不顯示可能誤導的完整 100%，改顯示資料未備與未涵蓋範圍。請依此進行 GitHub 文件裁示落盤，不直接授權程式實作。」 |
+| 核准射程 | docs/v2/82 §9.7 的 U1～U5 皆為已核准 **UI 設計方向**。其中 A10 主圖採類別實際／目標並列橫向條；缺 FX 使分母不完整時，New UI2 **不得把僅涵蓋可估值部分的 100% 畫成完整資產配置**；改顯示資料未備及未涵蓋範圍。完整逐項範圍與限制在 82 §9.7.1。 |
+| 技術與資料現況 | ui_v2/alo/logic.py::_build_alo2 的舊分母計算仍可能顯示 100%；本次文件不修正舊程式，不改公式。新 UI 要合法滿足此呈現要求，仍需 BL-0542 G-1 的技術／資料語意 Gate。 |
+| 不授權事項 | **BL-0542 G-1～G-5 全部仍須分別處理**；不授權 PORT、放寬 Preview 執行期守衛、配息推估、四格計算、狀態詞新增，也不授權 💼 Python／Streamlit 實作或 OneBrain Phase 7。Q1～Q15 的其餘事項仍待決。 |
+| 驗收限制 | 後續核准實作後須測缺 USD／其他必要 FX、部分 worksheet skipped／分母涵蓋不完整；不能以簡化 UI 刪掉原始資料、Missing、provenance 或 Evidence，且仍須驗收 frozen 44 首屏 ≤5。 |
+| evidence／source | 客戶本輪直接逐字裁示；文件落點 docs/v2/82 §9.7.1；技術 Gate docs/BACKLOG.md BL-0542。 |
+| provenance | 客戶逐字裁示；其技術影響與文件對照為 ChatGPT 整理讀法，尚待專案 AI 獨立稽核。 |
+| 影響範圍 | docs-only：82、DECISIONS、BACKLOG、HANDOFF；不改 frozen、歷史 evidence 或 production code。 |
+| supersedes／superseded by | 取代 82 §9.7 U1～U5「待客戶核准」狀態；BL-0542 G-1 中「方案 A 是否採用」已就 **UI 呈現** 裁示，公式／PORT 的實作範圍未裁。 |
+| 是否可逆 | 可逆；後續以新 DEC 變更，不重寫歷史。 |
+
 ### DEC-2026-11-04-01｜客戶核准：💼 我的資產 New UI2 主要圖表在前、四項摘要在後、資料不足明確顯示 Missing（僅 UI 方向）
 
 | 欄位 | 內容 |
