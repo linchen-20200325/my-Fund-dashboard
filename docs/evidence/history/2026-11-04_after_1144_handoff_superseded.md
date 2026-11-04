@@ -1,7 +1,7 @@
 # #1144 整合後被取代的 HANDOFF 片段（歷史；2026-11-04）
 
 > ⛔ **NOT CURRENT — Historical evidence only — not current contract.** 本檔是 2026-11-04 整合 PR #1144（客戶核准 💼 U1～U5 全部 UI 設計與缺 FX 方案 A；`DEC-2026-11-04-02`）時，把 main `b9595833` 的 `docs/HANDOFF.md` 中被覆寫的「唯一下一接手點」bullet 逐字搬出。
-> 取代關係與原因：見 `docs/DECISIONS.md` `DEC-2026-11-04-02` 與 `docs/v2/82` 第 9.7.1 節；原位置現行區只留最新句與指標。
+> 取代關係與原因：見 `docs/DECISIONS.md` `DEC-2026-11-04-02` 與 `docs/v2/82` 第 9.8 節；原位置現行區只留最新句與指標。
 
 ## H9｜docs/HANDOFF.md 的 resume-next-point
 
