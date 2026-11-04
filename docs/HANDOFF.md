@@ -6,8 +6,9 @@
 > **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
 > - **查詢時點**：2026-11-03；#1136（Shell 定字與降級首屏）已合併為 `f07acd44`；main 現況與 Open／Draft PR 以 GitHub 為準；本批**未重查 GitHub**，接手先 `git fetch origin main`。
 > - **Open／Draft PR**：以 GitHub 為準；接手先 `git fetch origin main` 並查 `gh pr list`。
-> - **唯一下一接手點（單一）**：💼 我的資產：UI × Data × Evidence 詳細設計，由 ChatGPT 負責設計文字、資料串接契約與正式 GitHub 規格，核准後專案 AI 才實作；專案 AI 現不開始 💼 程式開發、也不另開競爭性設計文件（`DEC-2026-11-03-12`）。
+> - **唯一下一接手點（單一）**：💼 我的資產 UI×Data×Evidence：由 ChatGPT 完成 390px／1280px 最終線框、每張圖卡正式資料欄位映射、配置／損益／配息顯示規則、Missing／Freshness／Evidence 驗收並取得客戶核准；核准後專案 AI 才實作；現不開始 💼 程式開發。
 > - **本批已落地**：#1135 的有效成果併入 `docs/v2/80`（第 7.4 節 🤖 導覽可見但不可點、不註冊頁面；第 16.1 節 Chart SPEC 位置）；#1135 的第 17.3／17.4 節與 HANDOFF 改動不併入（正式字樣只在 `shared/ui_semantics/rules.py::APPROVED_WORDING`）。Shell 定字、Status Bar 純文字、降級情境第一屏 ≤5 已隨 #1136 合併（`DEC-2026-11-03-11`；量測 `docs/evidence/bl0536_shell_h5_2026-11-03/`）。
+> - **2026-11-04 #1138 整合批**：ChatGPT 的 💼 施工前草案 `docs/v2/82` 已併入（待客戶核准、非規格）；三組獨立稽核（單組各自）已核實 §2／§4 並回修，結果在 82 第 8 節；稽核新增的待客戶問題與 Decision Gate 候選（G-1～G-5）登記於 `docs/BACKLOG.md` BL-0542；基底 main `21296a0d`，未重查 GitHub／CI。
 > - **仍待驗證（不得宣稱已通過；`docs/BACKLOG.md` BL-0536 逐條）**：iOS／Android 實機、Safari、深色模式、Yahoo／FRED 真實連線、Streamlit 升版後導覽相容性、安全的資料更新入口（更新資料 CTA 停用中；不得為完成 Shell 開新 refresh pipeline）。
 > - **待客戶確認（總管讀法，不裁決）**：圖下摘要行逐序列仍各列一項狀態，若稽核把帶 `data-status-key` 的元素都算名額，降級 390px 比較檢視仍為 7；替代方案＝彙總句加逐序列移入展開區（`docs/v2/81` 第 10.2 節）。Status Bar 與側欄狀態句內的「n／m 項已取得」不算頁級核心數字的讀法（若整句算一個名額，降級會是 6，須回 Gate）。
 > - **已裁示、不再待裁**：🌍 首屏採 C 與用字統一（`DEC-2026-11-03-09`）；Shell 字樣、Status Bar 讀法、全取得不寫「正常」、降級首屏須 ≤5（`DEC-2026-11-03-11`）；#1135 文字修訂授權與 💼 階段分工（`DEC-2026-11-03-12`）。
@@ -31,7 +32,7 @@
 | UI 三層邊界 | Old UI read-only；`ui_v2` maintenance-only；`ui_v3`＝New UI2 唯一未來正式（`DEC-2026-11-02-05`、`-06`）。正式 App 現況推定為 Old UI（Streamlit Cloud 設定，repo 內無法查證）；Preview App 平行驗收，尚未 cutover |
 | 現行五頁 | 🌍 市場與趨勢／💼 我的資產／🔍 找基金／🤖 AI 投資總結（Phase 7 前導覽可見但不可點，不註冊頁面）／⚙️ 設定（`PROJECT_RULES.md` 13.2 第 1 點；程式側 `ui_v3/shell/registry.py`） |
 | 🌍 | wireframe 已裁示（`DEC-2026-11-03-01`）；歸一化 A2／B2／C2、H1b／H2／H3、Preview rendering、九項正式字樣、首屏採 C 與用字統一、Navigation Shell＋H5（#1134）、Shell 定字與降級首屏收尾（#1136；`DEC-2026-11-03-11`）已合併（#1125～#1136；`DEC-2026-11-03-07`、`-09`、`-10`、`-11`）。詳情看 `docs/BACKLOG.md` BL-0536 與 `docs/v2/81` |
-| 💼／🔍／⚙️／🤖 | wireframe 尚未起草（順序 💼 → 🔍 → ⚙️；🤖 依 Phase 7）；💼 先由 ChatGPT 負責設計文字、資料串接契約與正式 GitHub 規格（`DEC-2026-11-03-12`）；核准前不寫該頁 `ui_v3` 代碼 |
+| 💼／🔍／⚙️／🤖 | 💼 已有待客戶核准草案 `docs/v2/82`（ChatGPT 草案＋專案 AI 獨立稽核核實結果；不是現行規格、不授權 💼 程式；Gate 候選與待客戶問題見 `docs/BACKLOG.md` BL-0542）；🔍／⚙️／🤖 wireframe 尚未起草（順序 💼 → 🔍 → ⚙️；🤖 依 Phase 7）；核准前不寫該頁 `ui_v3` 代碼 |
 | cutover | 未開始；強制驗收項 BL-0535 |
 | 本機環境 | `ui_v2` 摘要守衛要用 Python 3.11 跑（CI 為 3.11）；`.claude/worktrees` 殘留會讓檔案引用守衛誤紅，需要時在乾淨 worktree 驗 |
 
@@ -62,6 +63,7 @@
 |---|---|
 | BL-0538 | Latest-Rule-Only 讀法與 0.5 改寫的客戶確認（G-1；總管讀法採方案 B，待確認） |
 | BL-0540 | Missing 字樣並存（`資料不足`／`此圖目前沒有可畫的資料`／`◇ 資料未備`）是否取代或並存（G-2）；🤖 輸出「六項」對映六段／四區（G-5）；資料健康度集中 ⚙️ 與 frozen 44 的承接（G-3，需 amendment） |
+| BL-0542 | 💼 稽核新增的待客戶問題與 Gate 候選（G-1～G-5；內容看 BACKLOG 與 `docs/v2/82` 第 6.1 節）；82 本身待客戶核准 |
 | BL-0369 | freshness 門檻（BL-0536-H4）；未裁示前首屏只顯示 `⬜ 門檻待裁示` |
 | BL-0537 | Old UI／`ui_v2` 凍結清單機械守衛 |
 | 其他 | 見 `docs/BACKLOG.md` §4 快速索引〈待客戶裁示〉 |
