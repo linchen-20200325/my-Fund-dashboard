@@ -2286,7 +2286,7 @@
 | evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-04_assets_chart_first_direction.md`；PR #1140（ChatGPT）與其整合 PR；落地：`docs/v2/82` §0.1、`docs/HANDOFF.md`、`docs/BACKLOG.md` BL-0542。 |
 | 影響範圍 | 文件 `docs/v2/82`、`docs/v2/80` §7.2（僅加 superseded 指標）、`docs/DECISIONS.md`、`docs/HANDOFF.md`、`docs/BACKLOG.md`；不改 production、frozen 44、81、`docs/v2/80` 架構區（第 1、2、3、8 節）、資料來源、公式、門檻或歷史 evidence。 |
 | 是否可逆 | 可逆（文件層；UI 順序方向，尚未實作）。 |
-| supersedes／superseded by | supersedes：僅 `docs/v2/80` §7.2 與 `docs/v2/82` §1.1 的區塊呈現**順序**（摘要在圖前）；原文保留並以刪除線標示。不 supersede 其他內容。 |
+| supersedes／superseded by | supersedes：僅 `docs/v2/80` §7.2 與 `docs/v2/82` §1.1 的區塊呈現**順序**（摘要在圖前）；原文保留並以刪除線或 superseded 指標註標示（80 §7.2 草圖在 code block 內，僅加指標註）。不 supersede 其他內容。 |
 | provenance | **逐字**：三項 UI 方向（客戶任務指示，經總管逐字轉交，見 evidence 檔）。**要點轉述**（轉述者：ChatGPT）：ChatGPT 提問、客戶回「同意」。射程映射為 agent 推論。 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
