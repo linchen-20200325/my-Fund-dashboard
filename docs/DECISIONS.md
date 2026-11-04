@@ -40,21 +40,6 @@
 
 ## 四、新條目（自 2026-10-16 起）
 
-### DEC-2026-11-04-01｜💼 我的資產 New UI2 主要圖表優先、摘要後置、Missing 如實顯示（僅 UI 方向）
-
-| 欄位 | 內容 |
-|---|---|
-| 日期 | 2026-11-04 |
-| 決策者 | **客戶** |
-| 客戶核准的方向 | ChatGPT 提出「是否同意我採用『主要圖表在前、四項摘要在後、資料不足就明確顯示 Missing』作為 💼 正式線框的設計基礎？」；客戶回覆：**「同意」**。 |
-| 現行效果 | 💼 New UI2 390px／1280px 線框以 chart-first、四格後置、Missing 佔位為核准方向；實作前仍需精確線框與各元件資料契約核准。詳細設計基礎在 `docs/v2/82` §0.1；取代 82 §1.1 與 80 §7.2 中摘要在圖前的舊呈現順序（**僅順序**），不修改 frozen 80 架構區或 44。 |
-| 保留條件 | 不自行計算摘要，不臆造成本／市值／匯率／配息口徑；Missing≠0；beta／資料健康仍需正式規則；滿足 frozen 44 既有首屏預算。 |
-| 不授權事項 | 不是 G-1 PORT、G-2 Preview 守衛、G-3 配息推估、G-4 四格公式、G-5 新字樣的核准；BL-0542、BL-0534、BL-0538、BL-0540、BL-0369 等持續待決。**不授權 Claude Code 開始 💼 UI 程式。** |
-| provenance | 客戶直接在本輪對話回覆「同意」；逐字可查本次對話，repo 內本列節錄僅記最小必要批准文字。ChatGPT 整理的射程與映射為設計解讀，須經後續獨立稽核。 |
-| 影響範圍 | 文件 `docs/v2/82`、`docs/DECISIONS.md` 與 `docs/HANDOFF.md`；不改 production、frozen 44、81、資料來源、公式、門檻或歷史 evidence。 |
-
-
-
 ### DEC-2026-10-16-01｜客戶頒布 Project AI Constitution v1.0
 
 | 欄位 | 內容 |
@@ -2286,6 +2271,23 @@
 | 是否可逆 | 可逆（文件層） |
 | supersedes／superseded by | 無（不 supersede 既有裁示）。 |
 | provenance | 客戶指示為節錄逐字；稽核結論與整合取捨由執行組整理，A／B 保留與 C／D／E 捨棄的取捨可被客戶推翻；79 C-2 判定為執行組讀法，未經第二組獨立驗證。 |
+
+### DEC-2026-11-04-01｜客戶核准：💼 我的資產 New UI2 主要圖表在前、四項摘要在後、資料不足明確顯示 Missing（僅 UI 方向）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-04 |
+| 決策者 | **客戶** |
+| 決策內容摘要 | 客戶 2026-11-04 核准 💼『我的資產』三項 UI 方向：(1) 主要圖表在前；(2) 四項摘要在後；(3) 資料不足明確顯示 Missing，不填假數據。逐字見 `docs/evidence/decisions/2026-11-04_assets_chart_first_direction.md`。 |
+| 現行效果 | 💼 New UI2 390px／1280px 線框以 chart-first、四格後置、Missing 佔位為核准方向；實作前仍需精確線框與各元件資料契約核准。設計基礎在 `docs/v2/82` §0.1。 |
+| 保留條件 | 不自行計算摘要，不臆造成本／市值／匯率／配息口徑；Missing≠0；beta／資料健康仍需正式規則；Missing 佔位仍計入 frozen 44 首屏 ≤5 的元素點數（保守讀法，待線框逐元素點數確認）。 |
+| 不授權事項 | 不是 G-1 PORT、G-2 Preview 守衛、G-3 配息推估、G-4 四格公式、G-5 新字樣的核准；BL-0542、BL-0534、BL-0538、BL-0540、BL-0369 等持續待決。**不授權 Claude Code 開始 💼 UI 程式。** |
+| 理由／背景 | 客戶要求 💼 以主要圖表為視覺焦點；`PROJECT_RULES.md` 13.5 第 1 點的 chart-first 順序與 `docs/v2/82` §1.1／`docs/v2/80` §7.2 早期「摘要在前」存在張力，本裁示僅就順序解除。ChatGPT 整理的射程與映射為設計解讀（agent 推論），須經後續獨立稽核。 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-11-04_assets_chart_first_direction.md`；PR #1140（ChatGPT）與其整合 PR；落地：`docs/v2/82` §0.1、`docs/HANDOFF.md`、`docs/BACKLOG.md` BL-0542。 |
+| 影響範圍 | 文件 `docs/v2/82`、`docs/v2/80` §7.2（僅加 superseded 指標）、`docs/DECISIONS.md`、`docs/HANDOFF.md`、`docs/BACKLOG.md`；不改 production、frozen 44、81、`docs/v2/80` 架構區（第 1、2、3、8 節）、資料來源、公式、門檻或歷史 evidence。 |
+| 是否可逆 | 可逆（文件層；UI 順序方向，尚未實作）。 |
+| supersedes／superseded by | supersedes：僅 `docs/v2/80` §7.2 與 `docs/v2/82` §1.1 的區塊呈現**順序**（摘要在圖前）；原文保留並以刪除線標示。不 supersede 其他內容。 |
+| provenance | **逐字**：三項 UI 方向（客戶任務指示，經總管逐字轉交，見 evidence 檔）。**要點轉述**（轉述者：ChatGPT）：ChatGPT 提問、客戶回「同意」。射程映射為 agent 推論。 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 

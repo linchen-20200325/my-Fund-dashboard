@@ -13,6 +13,7 @@
 | `2026-11-03_v2_80_shell_wording_superseded.md` | `docs/v2/80` 第 17.4 節舊 pending 字樣表（含標題行）、第 17.2 節 Status Bar 舊條文與「首屏預算讀法」舊條文（含「此讀法未經客戶確認」原句）；`DEC-2026-11-03-11` 落地時整段取代、現行區未留劃線 | S1、S2、S3 | `docs/v2/80` 第 17.2、17.4 節（基準 `875b1955`） |
 | `2026-11-04_after_1136_handoff_backlog_superseded.md` | #1136 合併後被取代的片段：HANDOFF Resume Checkpoint、第 2 節「現行五頁」「🌍」「💼／🔍／⚙️／🤖」三列與第 5 節首條、BACKLOG BL-0536 整列、`PROJECT_RULES.md` 頁面表 🤖 列與 13.2 第 1 點（`f07acd44` 版）；整合 #1135（`DEC-2026-11-03-12`）時改寫現行區 | H3、H4、H5、B3、P2、P3 | `docs/HANDOFF.md`、`docs/BACKLOG.md`、`PROJECT_RULES.md`（基準 `f07acd44`） |
 | `2026-11-04_after_1138_handoff_superseded.md` | #1138 整合後被取代的片段：HANDOFF Resume Checkpoint 的「唯一下一接手點」bullet、第 2 節 💼／🔍／⚙️／🤖 列（`21296a0d` 版）；整合 82 並依獨立稽核回修時改寫現行區 | H6、H7 | `docs/HANDOFF.md`（基準 `21296a0d`） |
+| `2026-11-04_after_1139_handoff_superseded.md` | #1140 整合後被取代的片段：HANDOFF Resume Checkpoint 的「唯一下一接手點」bullet（`66a09ed2` 版，原為「由 ChatGPT 完成最終線框」之舊句）；整合客戶核准的 💼 主圖在前方向（`DEC-2026-11-04-01`）時被現行句覆寫 | H8 | `docs/HANDOFF.md`（`66a09ed2`） |
 
 **防遺失機制**：每個區塊在 `MOVED-BEGIN` 標記記 `sha256` 與位元組數；`tests/test_canonical_rule_consistency.py` 重算每個區塊的 sha256 比對標記，並在可取得該區塊自己的基準 commit（`source` 的 `@` 後；`82ba783f` 或 `d6173220`）時與該 commit 的原文逐位元組（H1）或逐行（其餘區塊）比對。搬進來的文字**不准改**；要補註寫在區塊外。
 
