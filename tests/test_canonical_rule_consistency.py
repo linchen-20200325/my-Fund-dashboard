@@ -21,8 +21,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-KNOWN_BASES = ("82ba783f", "d6173220", "875b1955", "f07acd44", "21296a0d")  # 已知基準清單；區塊 source 的 `@sha` 必須屬於此
-BASE_COMMIT = "82ba783f"  # 預設基準；每個區塊的實際基準記在其 source 的 `@<sha>`（H2、B2 為 d6173220；S1～S3 為 875b1955；H3～H5、B3 為 f07acd44；H6、H7 為 21296a0d）
+KNOWN_BASES = ("82ba783f", "d6173220", "875b1955", "f07acd44", "21296a0d", "66a09ed2")  # 已知基準清單；區塊 source 的 `@sha` 必須屬於此
+BASE_COMMIT = "82ba783f"  # 預設基準；每個區塊的實際基準記在其 source 的 `@<sha>`（H2、B2 為 d6173220；S1～S3 為 875b1955；H3～H5、B3 為 f07acd44；H6、H7 為 21296a0d；H8 為 66a09ed2）
 HANDOFF_MAX_LINES = 120
 BL0536_ROW_MAX_BYTES = 8000
 

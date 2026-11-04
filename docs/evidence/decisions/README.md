@@ -55,6 +55,7 @@
 | `2026-11-03_pr1135_text_revision_integration_ruling.md` | 客戶 2026-11-03 指示節錄（PR #1135／#1136 收斂、兩個有效成果都保留、#1136 維持正式字樣單一 SSOT、💼 階段由 ChatGPT 先設計文字／資料串接契約／GitHub 規格、專案 AI 現不開始 💼 程式開發；`docs/DECISIONS.md` `DEC-2026-11-03-12`）；節錄逐字，無遮蔽 | 客戶對話中的指示，經總管於派工單內以原文節錄轉交 | 2026-11-03 | main `f07acd44`（全長 `f07acd44c343a7a7c4b6a9be754878f763a2f60e`） | 2116 | `93250610b11aefd362e786b103a8aa2fa43830dfc24552fedeb4c0697f018568` |
 | `2026-11-03_canonical_convergence_and_new_ui2_rules.md` | 客戶 2026-11-03 Canonical Rule Convergence／Latest-Rule-Only 指示與 New UI2 規則 A～I（**要點轉述，非逐字**；`DEC-2026-11-03-08`） | 總管於派工單內摘要轉交（本組未見客戶對話本身） | 2026-11-03 | main `4d8c07dd`＋`82ba783f` | 3763 | `f0cedd2f77cd2e552ba613127541aae3a1f663dd169c64abce8c0fb664b81028` |
 | `2026-11-03_new_ui2_rules_A_to_I_verbatim_excerpt.md` | 客戶 2026-11-03 New UI2 規則 D（資料健康度集中 ⚙️）與 G（UI ViewModel≠Decision Digest）兩段**逐字節錄，非全文**（`DEC-2026-11-03-08`） | 總管轉交的原文節錄（本組未見客戶對話本身） | 2026-11-03 | main `4d8c07dd`＋`82ba783f` | 1955 | `fe4e5ddb68a30bd4b8877acc45d417d90e6e46538e7431177fb7a2f609496be7` |
+| `2026-11-04_assets_chart_first_direction.md` | 客戶 2026-11-04 核准全文（💼 主要圖表在前、四項摘要在後、資料不足明確顯示 Missing；僅 UI 方向，不授權程式或 G-1～G-5；`docs/DECISIONS.md` `DEC-2026-11-04-01`）；圍欄內文 sha256 `b510fded330b7138730d539acdde090b24ce1831753734900c54588ecd0d96f6`（161 bytes，執行組以 Python 計算；無總管原檔可逐位元組比對）；另記 ChatGPT 轉述「同意」為要點轉述（非逐字）；無遮蔽 | 客戶 2026-11-04 對專案 AI 的任務指示，經總管逐字轉交 | 2026-11-04 | 分支 `ccr-a427a479-81wzdy` | 1192 | `40de87ef19ff5879d892e965a21d483dab6dda58e09c84d4b3a63fc18697fa81` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 
