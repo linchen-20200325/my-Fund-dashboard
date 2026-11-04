@@ -194,3 +194,128 @@ B 不是任意抽新 facade 的授權：只有已確認符合 `ui_v3` import bou
 - ui_v3 第一階段唯讀（`KNOWN_WRITE_FUNCTIONS` 含 `save_setting_for_page`）；💼 沒有合法寫入面設定目標、容許帶、基準。
 - `rules.resolve_precedence` 的 docstring 明文 BL-0411 修好前不得接進頁級燈；`shared/ui_semantics/rules.py` 目前無 `no_holding`／`partial`／`normal` 的核准字樣。
 - UNVERIFIED：兩頁同鍵合併規則在同鍵不同幣別以外的實務差異（稽核只用合成資料驗過 ccy 情境）；`skipped_holdings` 中文原因與 `80 §3.1` 的 reason_code 鍵落差由誰補；ui_v3 側完整欄位契約（需核准後的實作批驗證）。
+
+
+## 9. 💼 390／1280 精細線框與逐卡 Data × Evidence Contract（ChatGPT 設計提案；2026-11-04，**未核准**）
+
+> **文件角色**：延續第 0.1 節已核准的「主圖優先、四格後置、資料不足明確 Missing」，其他版面與顯示選型皆為待客戶裁示的設計提案。**非產品核准、非 technical PORT、非實作授權**。本節不修改 §8 已稽核的程式事實；若本節與 §8 衝突，回到已核准正式契約，不能由 UI 便利性覆蓋。其他 Q1～Q15／BL-0542 G-1～G-5 仍未裁。
+
+### 9.1 Information architecture 與元件識別
+
+- **第一層：決策入口**：頁級來源／評估狀態（A00）、配置主圖／降級卡（A10）、四項摘要（A20）、偏離／未評估入口（A30）；只能顯示已核准 domain 結果，不產生行動指令。
+- **第二層：有價值的詳細資料**：近期配息資訊（A40）、全部持倉（A50）、逐檔 NAV／配息／區間報酬（A51）、成本／市值與分組明細（A52）。沒有 Top N 截斷。
+- **第三層：資料證據與設定指引**：來源／缺值／失敗／skipped（A60）、成本／市值基準／使用者設定之唯讀對照（A61）、註記／門檻出處（A62）。未來完整 OneBrain Digest 是另一輸出投影，不由本頁畫面反推。
+- **共享 Shell**：沿用現行 ui_v3 navigation／Status Bar；不假設能連接刷新資料流程，禁新建 refresh pipeline。
+
+### 9.2 390px Mobile（方向已核准；細節為候選）
+
+\`\`\`text
+┌────────────────────────────────────┐
+│ 共用 Shell／狀態文字（不造新計數） │
+│ 💼 我的資產                        │  A00：狀態／未評估、來源
+│ <既有正式可證的狀態或 Missing>     │  沒有合法 β 就不顯示 β 結論
+├────────────────────────────────────┤
+│ 資產配置｜實際 vs 目標             │  A10
+│ [圖表 OR 缺值／取數失敗狀態卡]     │  不畫空軸、不造 100%
+│ [SPEC：成本／市值、單位、時間等]   │  SPEC 上方／緊鄰主圖；確切排版待核
+├────────────────────────────────────┤
+│ 總資產            │ 損益           │  A20 固定四格；Missing 也佔位
+│ ◇ 資料未備        │ ◇ 資料未備     │
+│ 報酬              │ 期間配息       │
+│ ◇ 資料未備        │ ◇ 資料未備     │
+├────────────────────────────────────┤
+│ ▸ 偏離／未評估與查看明細           │  A30；不是再平衡交易動作
+│ ▸ 已核實配息／近期事件             │  A40（位置候選，待 Q3）
+│ ▸ 全部持倉與單檔 NAV、配息         │  A50／A51
+│ ▸ 配置明細／類別分組               │  A52
+│ ▸ 來源、缺項、完整證據             │  A60／A61／A62
+└────────────────────────────────────┘
+│ 共用底部五格導航（不可遮蓋內容）   │
+\`\`\`
+
+- **首屏**：390px 的實際裝置高度尚未提供，**不能宣稱 A20 四格一定全在不捲動首屏**。不以固定像素高度作已核准契約。設計時至少保證「頁級狀態＋主圖入口」先出現；核心數字／chip 的總量（包含 Missing 佔位）依 frozen 44 ≤5 逐 DOM／視覺兩套驗收。狀態 chip 1＋四格佔位 4 已耗盡名額，**額外注意 chip 不得任意加入**；注意資訊可用既有正式文案在不增名額的單一摘要容器呈現，是否合約允許尚待 wireframe 驗證。
+- **主圖可用時**：僅投影同一口徑的 ALO-2 類別實際值／目標值／偏差與已設定容許帶；長類別名稱可換行，不截掉任何持倉。圖的設計方向為「每類別兩值比較條」而非跨幣別資產金額堆疊，**但具體圖型仍待客戶核准**；沒有正式分類或來源不可臆造。
+- **主圖不可用時**：A10 位置保留，顯示現有核准詞彙下的失敗、未設定或 Missing，並在可追溯明細保留原因；不得以示意數字、灰色空軸、預設目標 0 或不完整 100% 冒充完整比較。
+- **SPEC**：基準（成本／市值）、計價單位／百分比、已涵蓋持倉範圍、資料有效日與來源。SPEC 的**內容分類**沿用 80 §16.1，確切字樣只取現有正式 SSOT。沒有值時顯示缺項而非「最新」。
+- **閱讀路徑**：A30「查看偏離明細」是展開控制，不是下單／建議；A50 按基金可進單檔展開，無新導航頁。A40 的排位、事件種類仍待裁示；此處不是默認客戶核准。
+
+### 9.3 1280px Desktop（布局候選）
+
+\`\`\`text
+┌ 共用 Sidebar/Shell ──┬───────────────────────────────────────────┐
+│ 五頁導航／狀態       │ 💼 我的資產｜來源／頁級判讀 A00         │
+│                     ├──────────────────────────┬────────────────┤
+│                     │ 資產配置主圖 A10         │ 已核准依據摘要 │
+│                     │ [主圖 OR 狀態卡]         │ （不造 rule）  │
+│                     │ SPEC／分母未涵蓋揭露     │                │
+│                     ├──────────────────────────┴────────────────┤
+│                     │ 總資產｜損益｜報酬｜期間配息 A20          │
+│                     ├──────────────────────────┬────────────────┤
+│                     │ A30 偏離／未評估         │ A40 配息事件   │
+│                     ├──────────────────────────┴────────────────┤
+│                     │ A50 全列持倉／A51 NAV 配息／A52 配置明細 │
+│                     │ A60～A62 來源證據與唯讀設定              │
+└─────────────────────┴───────────────────────────────────────────┘
+\`\`\`
+
+- 共用 Shell 左側；主圖為視覺主角，A20 四格**在主圖之後**（不把四格移到主圖上方或側欄置頂）。桌機兩欄只屬設計提案，不是設計 Token 或 grid breakpoints 的新裁示。
+- 桌機保留 80 §7.2 的「基金占比／各檔區間報酬」能力，優先整合於 A51／A52，不因視覺收斂而刪功能。這些圖若缺合法計算，顯示缺值且保留對應資料證據，不畫假圖。
+- A40 若佔右欄，只能顯示已驗證日期的資訊；不以「預計入帳」冒充 pay_date。未核准配息排位前右欄也可僅留 evidence／限制，不必建空卡占位。
+
+### 9.4 每張卡的來源／欄位／轉換／Missing／Evidence 映射
+
+| ID | UI 資料需求與可用欄位（不得臆造 output） | 目前函式／來源（已稽核 §8） | Domain／顯示契約、必須 Gate | Missing／Evidence |
+|---|---|---|---|---|
+| A00 | holding、policy、skipped_tabs、skipped_holdings、source failure、active sheet 狀態及 HLD／ALO 結論 | \`alo_holdings.load_alo_tables_active\`；判定在 \`ui_v2/{hld,alo}/logic.py\`、\`ui_v2/asset/page_status.py\` | β 組合尚不可合法接 ui_v3（G-1、BL-0411）；\`is_no_active\` 尚在 \`ui_v2/active_gate.py\`（G-1）。未 PORT 時只顯示確實可追溯的 source 狀態，不宣稱已評估全部 | 區分未選 Active、來源讀取失敗、空持倉、部分略過；保存原始來源時間與略過證據；無 UI traceback |
+| A10 | holding.bucket、cost_twd、units_shares、NAV、FX；\`alo_target_weights\`、\`alo_basis\`、\`alo_bucket_names\`、\`alo_tolerance_pp\` | 原子 \`services/v2_domain/holdings.py\`；組合 \`ui_v2/alo/logic.py::_build_alo2\` | 成本或市值依使用者設定，不能在 UI 選預設；組合必須 G-1 PORT 且 G-2 解執行期守衛；\`FX_OBS_DATE_RULE_VERIFIED=False\` 時不能假設市值合法。**不得把排除缺值後所得 100% 當全持倉 100%** | 每類別 actual／target／差額 pp／band 狀態／completeness 與排除數；無完整分母則強制清楚揭露（若規格不夠先降級，不畫看似完整配置圖） |
+| A20-1 | 總資產：跨持倉彙總所需計價日、基準、換匯 | \`ui_v2/asset/overview.py::summary_strip\`＝Missing | G-4 未核准前**不計、不顯示假總額**；\`cost_twd\` 不是市值，不拿來冒充總資產 | 固定佔位；Missing 原因引用 G-4；Digest 不把 Missing 寫成 0 |
+| A20-2 | 損益：本金、估值、幣別、期間及已核准公式 | 同上（目前沒有可用正式算法） | G-4；不假設舊 \`portfolio_returns\` 等價於 44 的損益口徑 | Missing；保留底層有合法來源者及其日期／計價單位 |
+| A20-3 | 報酬：需釐清價格報酬 vs 總報酬／組合報酬、是否含 FX 與配息 | \`services/v2_domain/nav_metrics.py::return_pct\` 為 NAV 價格報酬原子；組合總報酬未核准 | G-4；不能把逐檔 NAV 價格報酬直接當組合總報酬 | Missing；正確的金額／% 單位及期間仍需裁示 |
+| A20-4 | 期間配息：已確認 ex_date、每單位原幣、單位數、幣別與區間 | \`nav_dividend.build_nav_dividend_tables\`；既有 HLD-3 組合在 \`ui_v2\` | G-1／G-3／G-4、BL-0534；日期與期間配息彙總口徑未核准前固定 Missing | 無證據不能報 0 或「無配息」；付款日期不可用 |
+| A30 | HLD-1 逐檔偏離、ALO-2 類別與門檻、未評估原因 | \`v2_domain/deviation.py\` 原子；完整 \`ui_v2/hld/logic.py::deviation_rows\` 與 ALO page model | G-1；用已生效的使用者門檻，不從 UI 新建門檻；動作只有「展開」 | 未設定門檻 ≠ 未觸發；保留 rule source、threshold reference、不可評估明細 |
+| A40 | \`dividend\` 的 \`fund_code, ex_date, pay_date, div_per_unit_orig_ccy, ccy, div_kind, fetched_at\`（**無 record_date/status，pay_date 目前 None**） | \`services/v2_tables/nav_dividend.py\`；\`services/dividend_calendar.py\` 不在 ui_v3 白名單 | G-3、BL-0534；已發生除息資料僅在 L2 真正合法可用時顯示；「推估基準日」不得當「預計入帳」 | Date semantics、原幣、資料取得日分欄保存；當取數 gate 關閉，不造已發生事件 |
+| A50 | holding_id、fund_code、holding.bucket、cost_twd、units_shares、ccy 及其可用來源 | \`alo_holdings.build_alo_tables\`、\`v2_domain/holdings.py\` | 身份、同鍵合併規則 HLD vs ALO 差異（Q10）先 Gate；不能憑基金名合併；只讀、全列 | 另存 skipped_holdings、skipped_tabs，表層不把失敗說無持倉 |
+| A51 | 單檔 NAV 日期／淨值點、配息逐筆、已核准區間指標 | \`nav_dividend.build_nav_dividend_tables\`、\`v2_domain/nav_metrics.py\`；逐檔組列仍在 \`ui_v2/hld/logic.py\` | G-1／G-2；NAV not-ready 10 天語意移植未批准；來源點被扣下不重建 | 每檔獨立來源、日期、幣別、缺值與扣下原因；不補日期 |
+| A52 | ALO-6 歸屬明細、類別比例、已核准分類與使用者基準 | \`ui_v2/alo/logic.py::_build_alo6\` 尚待 PORT；\`alo_holdings\` 原料 | G-1；使用者未分類不得假定某類；完整來源與分母揭露 | 總體比例缺項不可藏在 100%；不丟未歸類原始資料 |
+| A60 | 未取得／失敗／略過／未讀／未設定／unknown currency 與來源診斷 | L2 \`alo_holdings\`／\`settings_store\`、\`ui_v2\` source；\`ui_v3/viewmodels/common.py\` 五態 | G-5、BL-0540：只用核准 human-readable vocabulary；\`skipped_holdings\` 為中文字串而非 reason_code，轉換仍未核准 | 對一般 UI 遮蔽 secret／traceback，診斷預設收合；來源健康在 ⚙️ 詳細承接 |
+| A61／A62 | \`alo_*\` 四個設定鍵（target、tolerance、basis、bucket_names）；區間鍵、threshold reference、來源時間 | \`settings_store.load_user_settings\`（SETTINGS_SHEET_ID）、既有 HLD／ALO 契約 | New UI2 第一階段唯讀；沒有合法寫入端；User setting 不因 Active Sheet 改切而跟著換；版面標示設定來源 | 未設定與取數失敗分開；不暴露 private Sheet ID／credential |
+
+> **Mapping 的完整度**：本表為設計至已稽核 function 的 mapping，**不是逐欄已通過的 machine schema**。尚缺每個 L2 output 的 return path／型別／source／as_of／retrieved_at／status reason_code 的實際契約與跨頁 golden；不應以本表直接生成 Python。精確 schema 仍以 §8 與核准後獨立實跑 trace 為準。UI 沒顯示的正式 evidence 也不能從 future Digest 移除。
+
+### 9.5 Missing、Freshness、幣別及資料健康矩陣
+
+| 情境 | 第一屏 A00／A10／A20 | 明細與 Evidence | 禁止的誤解 |
+|---|---|---|---|
+| 沒有 Active Sheet | A00 反映「尚未選定來源」之核准語意；主圖及四格無值 | 可提示既有來源選擇路徑，但無合法一鍵改 Sheet 時不造按鈕 | 不說「持倉 0」，不 fallback 到別的 Sheet |
+| Source 整體讀取失敗 | A00 失敗；A10 卡片降級；A20 Missing | A60 留錯誤分類，遮蔽機密與 raw trace | 不以「空持倉」代替失敗 |
+| 一部分 worksheet skipped/unread | 第一屏不能出現虛假的完整結論；A10 覆蓋不足時降級／註明不可完整 | A50 保留可用列，A60 完整提示略過／未讀證據 | 不依可讀列算全持倉百分比 |
+| 真正空持倉（資料完整才可判） | 不能用零值編造四格；A10 缺可比較類別 | A60 證明資料源確實完整且無有效列 | skipped all ≠ zero holdings |
+| \`alo_basis\` 未設定 | A10 顯示未設定的核准狀態；四格仍 Missing | A61 顯示唯讀設定缺項 | 不自行預設成本 |
+| 市值缺 USD/TWD 或其他必要 FX | A10 不可畫看似完整的 100%；四格 Missing | A60 記載排除基金與未涵蓋基準金額 | 不自動改用成本、不說債券佔全組合 100% |
+| NAV 缺點／超過 10 天 | 依正式 NAV gate 處理；主圖僅取合法用來計算的資料 | A51 保留觀測日、取得日與扣下原因 | 不補 0、不套全站未裁示的 freshness 門檻 |
+| 設定讀取失敗／門檻未設定 | A00 不假裝「安全」，A10 顯示不可判讀或未設定 | A61 保留設定失敗或未設之區別 | not configured ≠ neutral |
+| Dividend gate pending／無日期語意 | A40 不宣稱確認配息；A20-4 Missing | A60 留取得失敗與日期欄位的狀態 | \`pay_date=None\` ≠ 尚未入帳日；空列 ≠ 無配息 |
+| 同鍵身份衝突或同鍵不同 ccy | 依正式 identity fail-closed，不合併成一檔 | A50 保留衝突來源作資料診斷 | 不以同名、相近字串自動合併 |
+
+- **新鮮度**：每個欄位層級區分 \`as_of/obs_date\`（資料涵蓋時點）、\`fetched_at/retrieved_at\`（取得時點）與來源聲明。尚未正式裁示的 stale threshold 不自行開啟，也不拿 render timestamp 當市場資料時間。
+- **匯率**：跨幣別金額缺任何必要 FX，就標註不可完整計算；不可把被排除的基金從分母靜默移除、又顯示「100% 完成」。
+- **配息**：顯示以正式 date semantics 及實際可用 L2 為前提；ex_date、配息基準日、pay_date、平台入帳日是不同概念，不能合併命名；「正式日期優先、deterministic estimate fallback」尚未落實，不作現況宣稱。
+- **語意字樣**：使用 \`shared/ui_semantics/rules.py\` 已核准詞彙；上表敘述只說明意義，**不是核准新文案**。
+
+### 9.6 Three-path design & build decision（本輪只選設計，不核准程式）
+
+| 路徑 | 正確性 | 速度／Token | 決策 |
+|---|---|---|---|
+| A. 直接照 UI 草圖填字／做圖，留公式交 Claude 臨場決定 | 高風險，會重複判定及藏 Missing | 表面最快、返工成本最高 | 不採 |
+| **B. 先正式逐卡 contract 與降級 wireframe，等 G-1～G-5 Gate 後分階段 PORT 與 ViewModel** | **低風險、可驗收、符合分層** | 單一 SSOT，總 Token／返工較低 | **推薦（僅設計路徑）** |
+| C. 本輪先要求全部資料源、公式、OneBrain 一次上線 | 未授權跨模組高風險 | 最慢、需要 High／完整 QA | 不採 |
+
+### 9.7 客戶需核准的最小 UI 事項（本節建議，不當作已裁）
+
+1. **P1**：390px 配息／近期事件放 A30 偏離摘要之後、全部持倉之前；1280px 允許右欄（但不要壓過主圖）。
+2. **P2**：配置主圖使用「類別實際 vs 目標」**並列橫向條**，只在有完整合法 category denominator／target／basis 時畫；不具備時以狀態卡保留位置，完整依據放展開區。
+3. **P3**：首屏 A00 使用單一正式狀態容器，A10 SPEC 簡潔列；四項摘要仍是四個 slot，**不得把注意 chip 再加一個使名額突破 5**。真正高度、Status Bar 字句名額與降級情境另以真實 390px／1280px 像素實測。
+4. **P4**：持倉完整清單及單檔 NAV／配息在 A50／A51 展開，完整類別歸屬與使用者設定在 A52／A61，UI 精簡不影響 OneBrain Evidence。
+5. **P5**：尚未合法接入的 β、四格公式、配息推估、status wording 不因採這套版面自動放行，仍按 BL-0542 Gate 決定。
+
+**本節 Design Gate**：客戶已核准 §0.1 的三項方向，**沒有核准 P1～P5、Q1～Q15**。專案 AI 只可獨立稽核本節的引用／資料來源／與 frozen 契約是否一致，不得因 merge 自動做 Python／Streamlit。正式實作前應再補逐欄 L2 schema／fixture／測試與必要 Decision Gate 結果；新口徑、新公式與新增文字一律停止待裁。
