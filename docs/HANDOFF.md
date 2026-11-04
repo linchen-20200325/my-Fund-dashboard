@@ -6,7 +6,8 @@
 > **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
 > - **查詢時點**：2026-11-04；最新 main 為 `b9595833`（本批整合 #1144 的基底；#1139 為 `66a09ed2`）；#1136（Shell 定字與降級首屏）先前合併為 `f07acd44`；main 現況與 Open／Draft PR 以 GitHub 為準；本批**未重查 GitHub**，接手先 `git fetch origin main`。
 > - **Open／Draft PR**：以 GitHub 為準；接手先 `git fetch origin main` 並查 `gh pr list`。
-> - **唯一下一接手點（單一）**：💼 我的資產：客戶已核准主圖在前、四格後置與 Missing（DEC-2026-11-04-01），並於 2026-11-04 核准 U1～U5 全部 UI 設計及缺 FX 方案 A（DEC-2026-11-04-02；82 §9.8）。接下來為 G-1～G-5 逐一 Decision Gate 與尚未解決的欄位／資料語意提案，由客戶裁示；獨立稽核後才能取得另批實作授權；**本次沒有授權 💼 程式**。
+> - **唯一下一接手點（單一）**：G1-① 以 GitHub 實況為準；之後：等客戶另批授權 G1-②（需 High 重估與獨立稽核）。G-1 方向（方案 C 保守 PORT＋S2-Lite 分階段）已登記於 `DEC-2026-11-04-03`；本批只授權 G1-① Golden Baseline（僅 tests／fixtures，零 production 行為變更）；G-2～G-5 與 💼 程式照舊未授權。
+> - **2026-11-04 G-1 方向登記批**：`DEC-2026-11-04-03`（客戶方向裁示，要點轉述、非逐字）＋ BL-0542 G-1 狀態備註；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-04_after_1145_handoff_superseded.md`（H10；NOT CURRENT）；基底 main `e6ff1902`，未重查 GitHub／CI。
 > - **2026-11-04 #1144 整合批**：客戶核准的 💼 U1～U5 全部 UI 設計與缺 FX 方案 A（`DEC-2026-11-04-02`；82 §9.8）已併入；#1142／#1143 已合併；僅 UI 設計核准，不授權 G-1～G-5 或 💼 程式；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-04_after_1144_handoff_superseded.md`（H9；NOT CURRENT）；基底 main `b9595833`，未重查 GitHub／CI。
 > - **2026-11-04 #1140 整合批**：客戶核准的 💼 版面方向（主圖在前、四格摘要在後、缺值如實 Missing；僅 UI 順序，不授權 G-1～G-5 或 💼 程式）已併入 `DEC-2026-11-04-01`／82 §0.1；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-04_after_1139_handoff_superseded.md`（H8；NOT CURRENT）；基底 main `66a09ed2`，未重查 GitHub／CI。
 > - **本批已落地**：#1135 的有效成果併入 `docs/v2/80`（第 7.4 節 🤖 導覽可見但不可點、不註冊頁面；第 16.1 節 Chart SPEC 位置）；#1135 的第 17.3／17.4 節與 HANDOFF 改動不併入（正式字樣只在 `shared/ui_semantics/rules.py::APPROVED_WORDING`）。Shell 定字、Status Bar 純文字、降級情境第一屏 ≤5 已隨 #1136 合併（`DEC-2026-11-03-11`；量測 `docs/evidence/bl0536_shell_h5_2026-11-03/`）。

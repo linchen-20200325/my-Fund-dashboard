@@ -2308,6 +2308,25 @@
 | supersedes／superseded by | 取代 82 §9.7 U1～U5「待客戶核准」狀態；BL-0542 G-1 中「方案 A 是否採用」已就 **UI 呈現** 裁示，公式／PORT 的實作範圍未裁。 |
 | 是否可逆 | 可逆；後續以新 DEC 變更，不重寫歷史。 |
 
+### DEC-2026-11-04-03｜💼 BL-0542 G-1 方向：方案 C 保守 PORT＋S2-Lite 分階段；僅授權 G1-① Golden Baseline
+
+> 編號：同日序列 `-01`、`-02` 之後的下一個流水號；無歧義。
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-04 |
+| 決策者 | **客戶**（僅下列「客戶裁示」欄；技術建議與調查結論不是客戶裁示） |
+| 客戶裁示 | (1) G-1 採**方案 C＝保守 PORT**：正式公式與 identity 語意不變，另立獨立的完整性契約（completeness contract）；(2) G-1 內部採 **S2-Lite 分階段路線**（不採 S1 獨立複製缺值計算；不採 S2 一次性 PORT）；(3) 架構方向：Complete Evidence 同時供給兩個輸出——人類 UI ViewModel 與 Decision Digest（未來 OneBrain）；人類 UI 簡化不等於證據縮減；Decision Digest 不得只以 UI 壓縮後摘要為事實來源；正式財務計算留在確定性領域，OneBrain 不重算正式公式；(4) 本批**只授權**登記上述方向，以及實作 G1-① Golden Baseline（僅 tests／fixtures、零 production 行為變更），並走 QA、獨立稽核與 Auto-Ship PR。 |
+| 技術建議（非客戶裁示） | ChatGPT 技術建議：批次 ①②③ 切分、reason codes、候選 completeness schema。Claude Code 調查結論：單組調查、事實已獨立稽核。以上皆為技術建議，**不是**客戶裁示，可被推翻。 |
+| 現行效果 | G-1 方向已定；G1-① 可實作。G1-②／③ 須客戶另批授權。 |
+| 已知落差 | 已核准的方案 A UI 行為（`DEC-2026-11-04-02`）與現行 `ui_v2/alo/logic.py::_build_alo2` 不同：缺一類別時其他類別仍顯示 100%（由 `tests/ui_v2/test_alo_logic.py` 釘住）。本批**不修**。 |
+| 不授權事項 | G1-②／③；PORT `basis_value_with_key`／`_category_values`；任何改動 `_build_alo2` 分母或 pct；HLD／ALO identity 規則；NAV 10 日門檻；`ui_v2` 顯示；`ui_v3`；G-2～G-5；OneBrain runtime／Risk Cap／System Action／Phase 7。**仍未決（各需自己的 Gate）**：反證（counter-evidence）定義、Digest schema／fingerprint、證據索引與按需載入、verdict／status 字樣。 |
+| evidence／source | **無逐字 evidence 檔**，不補造。文件落點：`docs/BACKLOG.md` BL-0542；`docs/HANDOFF.md`；歷史搬出 `docs/evidence/history/2026-11-04_after_1145_handoff_superseded.md`（H10）。 |
+| provenance | **要點轉述（非逐字）**：客戶指示經 ChatGPT／總管轉交，轉述者為 ChatGPT／總管。無逐字存檔，未驗證原話；轉述可能有誤，客戶可推翻。 |
+| 影響範圍 | 文件 `docs/DECISIONS.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md`、`docs/evidence/history/`；G1-① 另限 tests／fixtures。不改 production code、frozen、`docs/v2/*`。 |
+| 是否可逆 | 可逆；以新 DEC 變更，不重寫歷史。 |
+| supersedes／superseded by | 不 supersede 任何 DEC。於 `DEC-2026-11-04-02` 之上補 G-1 方向（該 DEC 原文未動）。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
