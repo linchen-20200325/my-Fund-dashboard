@@ -6,7 +6,7 @@
 > **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
 > - **查詢時點**：2026-11-03；#1136（Shell 定字與降級首屏）已合併為 `f07acd44`；main 現況與 Open／Draft PR 以 GitHub 為準；本批**未重查 GitHub**，接手先 `git fetch origin main`。
 > - **Open／Draft PR**：以 GitHub 為準；接手先 `git fetch origin main` 並查 `gh pr list`。
-> - **唯一下一接手點（單一）**：💼 我的資產 UI×Data×Evidence：由 ChatGPT 完成 390px／1280px 最終線框、每張圖卡正式資料欄位映射、配置／損益／配息顯示規則、Missing／Freshness／Evidence 驗收並取得客戶核准；核准後專案 AI 才實作；現不開始 💼 程式開發。
+> - **唯一下一接手點（單一）**：💼 我的資產 UI×Data×Evidence：專案 AI 的獨立欄位契約驗證已由本批完成（`docs/v2/82` 第 8 節，單組、非客戶裁示），下一步由 ChatGPT 完成 390px／1280px 最終線框並取得客戶核准（不另開競爭性設計文件，`DEC-2026-11-03-12`；Gate 候選見 `docs/BACKLOG.md` BL-0542）；核准後專案 AI 才實作；現不開始 💼 程式開發。
 > - **本批已落地**：#1135 的有效成果併入 `docs/v2/80`（第 7.4 節 🤖 導覽可見但不可點、不註冊頁面；第 16.1 節 Chart SPEC 位置）；#1135 的第 17.3／17.4 節與 HANDOFF 改動不併入（正式字樣只在 `shared/ui_semantics/rules.py::APPROVED_WORDING`）。Shell 定字、Status Bar 純文字、降級情境第一屏 ≤5 已隨 #1136 合併（`DEC-2026-11-03-11`；量測 `docs/evidence/bl0536_shell_h5_2026-11-03/`）。
 > - **2026-11-04 #1138 整合批**：ChatGPT 的 💼 施工前草案 `docs/v2/82` 已併入（待客戶核准、非規格）；三組獨立稽核（單組各自）已核實 §2／§4 並回修，結果在 82 第 8 節；稽核新增的待客戶問題與 Decision Gate 候選（G-1～G-5）登記於 `docs/BACKLOG.md` BL-0542；基底 main `21296a0d`，未重查 GitHub／CI。
 > - **仍待驗證（不得宣稱已通過；`docs/BACKLOG.md` BL-0536 逐條）**：iOS／Android 實機、Safari、深色模式、Yahoo／FRED 真實連線、Streamlit 升版後導覽相容性、安全的資料更新入口（更新資料 CTA 停用中；不得為完成 Shell 開新 refresh pipeline）。
@@ -25,7 +25,7 @@
 
 **工作規則一律看 `PROJECT_RULES.md`，本檔不重述**：Silent Autonomous Cruise／No Progress Narration（第 3 節）、Model／Effort Change Gate 與 Hard-Stop（5.1）、Context Efficiency（11.1）、Minimum-Cost Correct Path（9.2）、正式 Streamlit 顯示規則與 cutover 檢查（13.2）、一般 merge commit 與不加 AI 署名（第 10 節）。
 
-## 2. 現況（2026-11-03；以 GitHub 為準）
+## 2. 現況（2026-11-04；以 GitHub 為準）
 
 | 項 | 現況 |
 |---|---|
@@ -77,6 +77,6 @@
 
 ## 5. 本檔沒查證的部分
 
-- main `f07acd44`（含 #1136）為工作樹基底，**未重查 GitHub／CI**；#1134、#1136 已合併為 git log 所見，CI 結果未查。本批的量測為 Chromium＋注入的人造資料，真實連線、Safari、實機、深色模式未驗；降級名額守衛是 DOM 計數（AppTest 不載入 CSS），可視計數以 Playwright 為準。
+- main `21296a0d`（含 #1136、#1138）為工作樹基底，**未重查 GitHub／CI**；#1134、#1136 已合併為 git log 所見，CI 結果未查。本批的量測為 Chromium＋注入的人造資料，真實連線、Safari、實機、深色模式未驗；降級名額守衛是 DOM 計數（AppTest 不載入 CSS），可視計數以 Playwright 為準。
 - 第 3 節 BL-0538～BL-0540 為本批新登記，內容單組寫成、未經第二組驗證。
 - 舊版 HANDOFF 內「未查證」各條（約 60 條，多為 2026-10 月批次紀錄）隨全文搬至歷史檔，**不再是現行聲明**。
