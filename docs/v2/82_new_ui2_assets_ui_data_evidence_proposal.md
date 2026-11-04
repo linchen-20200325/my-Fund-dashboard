@@ -235,7 +235,7 @@ B 不是任意抽新 facade 的授權：只有已確認符合 `ui_v3` import bou
 
 - **首屏**：390px 的實際裝置高度尚未提供，**不能宣稱 A20 四格一定全在不捲動首屏**。不以固定像素高度作已核准契約。設計時至少保證「頁級狀態＋主圖入口」先出現；核心數字／chip 的總量（包含 Missing 佔位）依 frozen 44 ≤5 逐 DOM／視覺兩套驗收。保守讀法（待線框逐元素點數確認；frozen 44 字面是頁級主數字＋chips ≤5、一張卡算一個，Missing 佔位是否計入屬讀法，A10 SPEC／primary_chips 是否計入亦待確認）：狀態 chip 1＋四格佔位 4 可能已耗盡名額，**額外注意 chip 不得任意加入**；注意資訊可用既有正式文案在不增名額的單一摘要容器呈現，是否合約允許尚待 wireframe 驗證。
 - **主圖可用時**：僅投影同一口徑的 ALO-2 類別實際值／目標值／偏差與已設定容許帶；長類別名稱可換行，不截掉任何持倉。圖的設計方向為「每類別兩值比較條」而非跨幣別資產金額堆疊，**但具體圖型仍待客戶核准**；沒有正式分類或來源不可臆造。
-- **主圖不可用時**：A10 位置保留，顯示現有核准詞彙下的失敗、未設定或 Missing，並在可追溯明細保留原因；不得以示意數字、灰色空軸、預設目標 0 或不完整 100% 冒充完整比較。
+- **主圖不可用時**：A10 位置保留，顯示現有核准詞彙下的失敗、未設定或 Missing，並在可追溯明細保留原因；不得以示意數字、灰色空軸、預設目標 0 或不完整 100% 冒充完整比較（新要求；現行 _build_alo2 行為相反；屬 BL-0542 G-1 Decision Gate，不代裁）。
 - **FX 現況註記**：上列「不畫完整 100%」與 §9.4 A10／§9.5 的相關禁令，**此為新要求；現行 `ui_v2/alo/logic.py::_build_alo2` 行為相反**（缺 USD 匯率時該類別值為 None 並寫「合計未涵蓋 <類別>」，分母只加總有值類別，其餘類別照算且可顯示 100%）；採用與否為 BL-0542 G-1 的 Decision Gate 項，客戶未裁，本節不代裁。
 - **SPEC**：基準（成本／市值）、計價單位／百分比、已涵蓋持倉範圍、資料有效日與來源。SPEC 的**內容分類**沿用 80 §16.1，確切字樣只取現有正式 SSOT。沒有值時顯示缺項而非「最新」。
 - **閱讀路徑**：A30「查看偏離明細」是展開控制，不是下單／建議；A50 按基金可進單檔展開，無新導航頁。A40 的排位、事件種類仍待裁示；此處不是默認客戶核准。
@@ -268,7 +268,7 @@ B 不是任意抽新 facade 的授權：只有已確認符合 `ui_v3` import bou
 | ID | UI 資料需求與可用欄位（不得臆造 output） | 目前函式／來源（已稽核 §8） | Domain／顯示契約、必須 Gate | Missing／Evidence |
 |---|---|---|---|---|
 | A00 | holding、policy、skipped_tabs、skipped_holdings、source failure、active sheet 狀態及 HLD／ALO 結論 | `alo_holdings.load_alo_tables_active`；判定在 `ui_v2/{hld,alo}/logic.py`、`ui_v2/asset/page_status.py` | β 組合尚不可合法接 ui_v3（G-1、BL-0411）；`is_no_active` 尚在 `ui_v2/active_gate.py`（G-1）。未 PORT 時只顯示確實可追溯的 source 狀態，不宣稱已評估全部 | 區分未選 Active、來源讀取失敗、空持倉、部分略過；保存原始來源時間與略過證據；無 UI traceback |
-| A10 | holding.bucket、cost_twd、units_shares、NAV、FX；`alo_target_weights`、`alo_basis`、`alo_bucket_names`、`alo_tolerance_pp` | 原子 `services/v2_domain/holdings.py`；組合 `ui_v2/alo/logic.py::_build_alo2` | 成本或市值依使用者設定，不能在 UI 選預設；組合必須 G-1 PORT 且 G-2 解執行期守衛；`FX_OBS_DATE_RULE_VERIFIED=False` 時不能假設市值合法。**不得把排除缺值後所得 100% 當全持倉 100%（**此為新要求；現行 `ui_v2/alo/logic.py::_build_alo2` 行為相反**（缺 USD 匯率時該類別值為 None 並寫「合計未涵蓋 <類別>」，分母只加總有值類別，其餘類別照算且可顯示 100%）；採用與否為 BL-0542 G-1 的 Decision Gate 項，客戶未裁，本節不代裁）** | 每類別 actual／target／差額 pp／band 狀態／completeness 與排除數；無完整分母則強制清楚揭露（若規格不夠先降級，不畫看似完整配置圖） |
+| A10 | holding.bucket、cost_twd、units_shares、NAV、FX；`alo_target_weights`、`alo_basis`、`alo_bucket_names`、`alo_tolerance_pp` | 原子 `services/v2_domain/holdings.py`；組合 `ui_v2/alo/logic.py::_build_alo2` | 成本或市值依使用者設定，不能在 UI 選預設；組合必須 G-1 PORT 且 G-2 解執行期守衛；`FX_OBS_DATE_RULE_VERIFIED=False` 時不能假設市值合法。不得把排除缺值後所得 100% 當全持倉 100%（此為新要求；現行 `ui_v2/alo/logic.py::_build_alo2` 行為相反（缺 USD 匯率時該類別值為 None 並寫「合計未涵蓋 <類別>」，分母只加總有值類別，其餘類別照算且可顯示 100%）；採用與否為 BL-0542 G-1 的 Decision Gate 項，客戶未裁，本節不代裁） | 每類別 actual／target／差額 pp／band 狀態／completeness 與排除數；若採用該新要求，則無完整分母時須清楚揭露（若規格不夠先降級，不畫看似完整配置圖）（新要求；現行 _build_alo2 行為相反；屬 BL-0542 G-1 Decision Gate，不代裁） |
 | A20-1 | 總資產：跨持倉彙總所需計價日、基準、換匯 | `ui_v2/asset/overview.py::summary_strip`＝Missing | G-4 未核准前**不計、不顯示假總額**；`cost_twd` 不是市值，不拿來冒充總資產 | 固定佔位；Missing 原因引用 G-4；Digest 不把 Missing 寫成 0 |
 | A20-2 | 損益：本金、估值、幣別、期間及已核准公式 | 同上（目前沒有可用正式算法） | G-4；不假設舊 `portfolio_returns` 等價於 44 的損益口徑 | Missing；保留底層有合法來源者及其日期／計價單位 |
 | A20-3 | 報酬：需釐清價格報酬 vs 總報酬／組合報酬、是否含 FX 與配息 | `services/v2_domain/nav_metrics.py::return_pct` 為 NAV 價格報酬原子；組合總報酬未核准 | G-4；不能把逐檔 NAV 價格報酬直接當組合總報酬 | Missing；正確的金額／% 單位及期間仍需裁示 |
@@ -311,15 +311,14 @@ B 不是任意抽新 facade 的授權：只有已確認符合 `ui_v3` import bou
 |---|---|---|---|
 | X. 直接照 UI 草圖填字／做圖，留公式交 Claude 臨場決定 | 高風險，會重複判定及藏 Missing | 表面最快、返工成本最高 | 不採 |
 | **Y. 先正式逐卡 contract 與降級 wireframe，等 G-1～G-5 Gate 後分階段 PORT 與 ViewModel** | **低風險、可驗收、符合分層** | 單一 SSOT，總 Token／返工較低 | **推薦（僅設計路徑）** |
+| Z. 本輪先要求全部資料源、公式、OneBrain 一次上線 | 未授權跨模組高風險 | 最慢、需要 High／完整 QA | 不採 |
 
 > 註：§9.6 路徑 X／Y／Z 為設計路徑，與 §4 的 A／B／C 及 P1～P5（PORT 路徑）不同；Y 不等於 §4 的 B0，與「B0 不需新 Gate」並存，不改 §4 的最小成本路徑結論。
-
-| Z. 本輪先要求全部資料源、公式、OneBrain 一次上線 | 未授權跨模組高風險 | 最慢、需要 High／完整 QA | 不採 |
 
 ### 9.7 設計事項 U1～U5（客戶需核准的最小 UI 事項；本節建議，不當作已裁；與 §4 的 P1～P5 無關）
 
 1. **U1**：390px 配息／近期事件放 A30 偏離摘要之後、全部持倉之前；1280px 允許右欄（但不要壓過主圖）。
-2. **U2**：配置主圖使用「類別實際 vs 目標」**並列橫向條**，只在有完整合法 category denominator／target／basis 時畫；不具備時以狀態卡保留位置，完整依據放展開區。
+2. **U2**：配置主圖使用「類別實際 vs 目標」**並列橫向條**，若採用該新要求，只在有完整合法 category denominator／target／basis 時畫（新要求；現行 _build_alo2 行為相反；屬 BL-0542 G-1 Decision Gate，不代裁）；不具備時以狀態卡保留位置，完整依據放展開區。
 3. **U3**：首屏 A00 使用單一正式狀態容器，A10 SPEC 簡潔列；四項摘要仍是四個 slot，**不得把注意 chip 再加一個使名額突破 5**。真正高度、Status Bar 字句名額與降級情境另以真實 390px／1280px 像素實測。
 4. **U4**：持倉完整清單及單檔 NAV／配息在 A50／A51 展開，完整類別歸屬與使用者設定在 A52／A61，UI 精簡不影響 OneBrain Evidence。
 5. **U5**：尚未合法接入的 β、四格公式、配息推估、status wording 不因採這套版面自動放行，仍按 BL-0542 Gate 決定。
