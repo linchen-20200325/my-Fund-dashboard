@@ -14,7 +14,7 @@
 | `ui_v2/*/page.py::_grid_css` | GitHub code search 命中 mkt／hld／alo／exp／set 五份 | **確認重複 presentation**，非死碼 | 新 UI 用一份共同 layout/token；不在 Legacy 直接合併或刪 |
 | `services/v2_tables/alo_holdings.py::load_alo_tables` | 檔頭明說舊 `POLICY_SHEET_ID` 路徑只剩 `refetch_nav` 相容用途；持倉主要改 `load_alo_tables_active` | **Residual reachable compatibility path（文件宣告，待符號呼叫圖複驗）** | 專項列出 caller／CI／Cloud 流量／回切依賴後才判退役，不先動 |
 | `services/v2_tables/personal_session.py` | L2 明確包既有 Google OAuth、Pending／Active Sheet、白名單、失效清 Session | **權威認證與選本橋接** | New UI 共用，不重造認證／token 層 |
-| `services/fund_identity_shadow.py` | 檔頭宣告由 `fund_keys.resolve_full_keys` 且 `DG2_SHADOW_ENABLED=False` 預設關閉時才 import；GitHub 搜尋顯示兩處相關 services 引用 | **Conditional shadow／diagnostic code**，不是死碼 | 確認 probe／CI／覆核期與正式 DEC，未經結案前不得刪 |
+| `services/fund_identity_shadow.py` | 檔頭宣告由 `fund_keys.resolve_full_keys` 且 `DG2_SHADOW_ENABLED` 預設為 `False`；啟用時才 import；GitHub 搜尋顯示兩處相關 services 引用 | **Conditional shadow／diagnostic code**，不是死碼 | 確認 probe／CI／覆核期與正式 DEC，未經結案前不得刪 |
 | `services/v2_tables/market_indicator.py::FX_OBS_DATE_RULE_VERIFIED` | GitHub 目前為 `False`；程式檔頭列出 DST／國定假日等未驗證條件 | **正式資料有效性 Gate** | 不能以整理為名開閘／補 0／改成本口徑 |
 | `services/v2_domain/*` | G-1 ①～③已合併，包含 `allocation_evidence.py` 的確定性 Evidence producer | **Current canonical domain candidate / implemented** | 保留單一算法，禁止複製回 UI |
 | `services/dividend_calendar_render.py` | GitHub 搜尋在 `ui/helpers/`、`scripts/`、`tests/`、`ui/views/` 等查到名稱 | **有潛在 consumer，未證實死亡** | 先查定時腳本和維運用途再判斷 |
