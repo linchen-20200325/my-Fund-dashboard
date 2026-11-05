@@ -5,8 +5,10 @@
 （舊字串必須**剛好出現一次**，否則當場紅燈 —— 目標消失或變成兩處都要有人看），把改壞的模組 exec 進隔離命名空間
 （不寫檔、不進 `sys.modules`），以 `tests/_alo_core_golden.py` 的**同一份**情境矩陣重跑，結果必須**不同於**黃金檔。
 
-⚠️ 搬遷（G1-②）把 `basis_value_with_key`／`_category_values` 搬走之後，本檔的目標字串會消失 ⇒ 這些測試會紅燈，
-   那是設計：搬遷者必須把突變目標跟著搬到新位置（改 `_MUTANT_FILES` 與各筆的舊字串），再證明黃金檔仍咬得到。
+✅ G1-②（最小 PORT）已完成：`basis_value_with_key`／`_category_values` 的數值與缺值判定本體搬到
+   `services/v2_domain/holdings.py::basis_value_with_reason`／`category_values`，原本鎖在 `ui_v2/alo/logic.py` 的突變目標
+   已**跟著搬到新位置**（每一筆仍剛好比對一次、仍被黃金檔抓到，偵測力不減）；仍留在 `logic.py` 的（薄包裝、中文字面、
+   ALO-2 以後的下游）原地不動。另新增 M37 起針對新程式碼（缺值代碼對照、結構式過期判定、累加順序、資料類互換……）的突變。
 
 對照組（`test_對照組_未突變的載入器重現黃金檔`）：用同一個載入器載入**未改**的原始碼，結果必須等於黃金檔 —— 證明
 「突變體不同於黃金檔」是突變造成的，不是載入方式造成的。
@@ -36,27 +38,28 @@ _DATED = 'NAV_NOT_READY_DATED_TEXT = "⬜ 資料未備：最近一筆淨值 {day
 
 # (編號, 檔案, 舊字串（剛好一次）, 新字串, 說明)
 MUTATIONS = [
-    ("M01_cost_returns_cost_orig_ccy", _LOGIC, 'return float(holding["cost_twd"]), None, None',
+    ("M01_cost_returns_cost_orig_ccy", _HOLD, 'return float(holding["cost_twd"]), None, None',
      'return float(holding["cost_orig_ccy"]), None, None', "成本基準回原幣成本"),
-    ("M02_usd_not_multiplied_by_fx", _LOGIC, "return value * rate, None, None", "return value, None, None", "非新臺幣不乘匯率"),
+    ("M02_usd_not_multiplied_by_fx", _HOLD, "return value * rate, None, None", "return value, None, None", "非新臺幣不乘匯率"),
     ("M03_fx_obs_date_lt", _HOLD, 'r["obs_date"] <= nav_date', 'r["obs_date"] < nav_date', "匯率對齊 <= 改 <"),
-    ("M04_twd_not_shortcut", _LOGIC, '    if nav["ccy"] == "TWD":\n        return value, None, None\n',
+    ("M04_twd_not_shortcut", _HOLD, '    if nav["ccy"] == "TWD":\n        return value, None, None\n',
      '    if False:\n        return value, None, None\n', "新臺幣也走換匯路徑"),
-    ("M05_missing_summed_as_zero", _LOGIC, 'slot["value"], slot["reason"] = None, reason\n',
-     'slot["value"], slot["reason"] = 0.0, reason\n', "缺值當 0.0 記進類別"),
-    ("M06_missing_not_counted", _LOGIC, 'slot["value"], slot["reason"] = None, reason\n',
-     'slot["value"], slot["reason"] = None, reason\n            slot["count"] -= 1\n', "缺值的持倉不計入件數"),
-    ("M07_last_reason_wins", _LOGIC, '        if slot["reason"] is not None:\n            if is_stale',
-     '        if slot["reason"] is not None and value is not None:\n            if is_stale', "第一種理由定案 → 最後一種理由定案"),
+    ("M05_missing_summed_as_zero", _HOLD, "slot[0], slot[1], slot[3] = None, reason, kind\n",
+     "slot[0], slot[1], slot[3] = 0.0, reason, kind\n", "缺值當 0.0 記進類別"),
+    ("M06_missing_not_counted", _HOLD, "slot[0], slot[1], slot[3] = None, reason, kind\n",
+     "slot[0], slot[1], slot[3] = None, reason, kind\n            slot[2] -= 1\n", "缺值的持倉不計入件數"),
+    ("M07_last_reason_wins", _HOLD, "        if slot[1] is not None:\n            if is_stale",
+     "        if slot[1] is not None and value is not None:\n            if is_stale", "第一種理由定案 → 最後一種理由定案"),
     ("M08_stale_sentence_loses_date", _LOGIC, _DATED,
      'NAV_NOT_READY_DATED_TEXT = "⬜ 資料未備：最近一筆淨值，已超過 {days} 日"', "過期句子不帶日期"),
-    ("M09_stale_merge_keeps_first_date_only", _LOGIC, "stale[cat].append((code, last[code]))", "None",
-     "同類別過期只留第一檔日期"),
+    ("M09_stale_merge_keeps_first_date_only", _HOLD,
+     "stale[cat] = StaleMerge(stale[cat].entries + ((code, reason.stale_day),), reason.stale_days)",
+     "stale[cat] = stale[cat]", "同類別過期只留第一檔日期"),
     ("M10_denominator_lt_zero", _LOGIC, "if denominator <= 0:", "if denominator < 0:", "分母 <= 0 改 < 0"),
-    ("M11_missing_key_fx_as_nav", _LOGIC, "return None, fx_missing_text(key), _CLASS_FX",
-     "return None, fx_missing_text(key), _CLASS_NAV", "缺匯率記成淨值類"),
-    ("M12_missing_key_nav_as_fx", _LOGIC, 'return None, empty_source_text(["nav"]), _CLASS_NAV',
-     'return None, empty_source_text(["nav"]), _CLASS_FX', "缺淨值記成匯率類"),
+    ("M11_missing_key_fx_as_nav", _HOLD, "return None, MissingReason(REASON_FX_ABSENT, fx_key=key), KIND_FX",
+     "return None, MissingReason(REASON_FX_ABSENT, fx_key=key), KIND_NAV", "缺匯率記成淨值類"),
+    ("M12_missing_key_nav_as_fx", _HOLD, "return None, MissingReason(REASON_NAV_ABSENT), KIND_NAV",
+     "return None, MissingReason(REASON_NAV_ABSENT), KIND_FX", "缺淨值記成匯率類"),
     ("M13_single_reason_ge", _LOGIC, "elif len(reasons) == 1 and None not in reasons:",
      "elif len(reasons) >= 1 and None not in reasons:", "單一理由判斷 == 1 改 >= 1"),
     ("M14_exceeds_endpoint_is_breach", _HOLD,
@@ -64,15 +67,21 @@ MUTATIONS = [
      "return abs(diff) >= tolerance", "端點相等算超出"),
     ("M15_row_order_sorted", _LOGIC, "for bucket in _row_order(targets, bucket_names, values):",
      "for bucket in sorted(_row_order(targets, bucket_names, values)):", "ALO-2 列序排序"),
-    ("M16_category_order_sorted", _LOGIC, "        stale_out.update(stale)\n    return values\n",
-     "        stale_out.update(stale)\n    return dict(sorted(values.items()))\n", "類別順序排序"),
-    ("M17_basis_not_mv_goes_cost", _LOGIC, '    if basis == BASIS_COST:\n        return float(holding["cost_twd"])',
-     '    if basis != BASIS_MV:\n        return float(holding["cost_twd"])', "基準 None／未知字串改走成本路徑"),
-    ("M18_cost_basis_reads_nav", _LOGIC, '    if basis == BASIS_COST:\n        return float(holding["cost_twd"])',
-     '    latest_nav(dataset, holding["fund_code"])\n    if basis == BASIS_COST:\n        return float(holding["cost_twd"])',
+    ("M16_category_order_sorted", _HOLD,
+     "return {cat: CategorySlot(s[0], s[1], s[2], s[3]) for cat, s in slots.items()}, stale",
+     "return {cat: CategorySlot(s[0], s[1], s[2], s[3]) for cat, s in sorted(slots.items())}, stale", "類別順序排序"),
+    ("M17_basis_not_mv_goes_cost", _LOGIC, "        holding, dataset, market=(basis != BASIS_COST), fx_key_of=fx_key_for,",
+     "        holding, dataset, market=(basis == BASIS_MV), fx_key_of=fx_key_for,",
+     "基準 None／未知字串改走成本路徑（單檔包裝）"),
+    ("M17b_category_basis_not_mv_goes_cost", _LOGIC,
+     "aggregated_holdings(dataset), dataset, market=(basis != BASIS_COST), track_stale=track_stale,",
+     "aggregated_holdings(dataset), dataset, market=(basis == BASIS_MV), track_stale=track_stale,",
+     "基準 None／未知字串改走成本路徑（類別加總包裝）"),
+    ("M18_cost_basis_reads_nav", _HOLD, '    if not market:\n        return float(holding["cost_twd"]), None, None\n',
+     '    tables["nav"]\n    if not market:\n        return float(holding["cost_twd"]), None, None\n',
      "成本基準也讀淨值（破壞惰性）"),
-    ("M19_nav_not_ready_checked_eagerly", _LOGIC, '    nav = latest_nav(dataset, holding["fund_code"])\n    if nav is None:\n        # 總管',
-     '    nav_not_ready(dataset)\n    nav = latest_nav(dataset, holding["fund_code"])\n    if nav is None:\n        # 總管',
+    ("M19_nav_not_ready_checked_eagerly", _HOLD, '    code = holding["fund_code"]\n    nav = latest_nav_row(tables["nav"], code)\n',
+     '    code = holding["fund_code"]\n    stale_provider()\n    nav = latest_nav_row(tables["nav"], code)\n',
      "nav_not_ready 形狀檢查提前到有淨值也做"),
     ("M20_fx_same_day_last_wins", _HOLD, 'return max(rows, key=lambda r: r["obs_date"])["value_num"] if rows else None',
      'return max(reversed(rows), key=lambda r: r["obs_date"])["value_num"] if rows else None', "同日多列匯率取最後一列"),
@@ -95,9 +104,9 @@ MUTATIONS = [
      '    return "其他" if category is None else category', "未分類字樣改"),
     ("M30_tolerance_none_ignored", _LOGIC, "    if tolerance is None:\n        return TEXT_UNSET",
      "    if False:\n        return TEXT_UNSET", "容許帶未設仍判內外"),
-    ("M31_stale_dedupe_removed", _LOGIC, "code not in {c for c, _ in stale[cat]}", "True",
+    ("M31_stale_dedupe_removed", _HOLD, "code not in {c for c, _ in stale[cat].entries}", "True",
      "同代碼多保單過期不去重"),
-    ("M32_stale_listing_ignored", _LOGIC, 'if holding["fund_code"] in codes:', "if False:",
+    ("M32_stale_listing_ignored", _HOLD, 'if holding["fund_code"] in codes:', "if False:",
      "nav_not_ready 名單被忽略"),
     ("M33_pct_not_times_100", _LOGIC, 'row["_current_pct"] = slot["value"] / denominator * 100.0',
      'row["_current_pct"] = slot["value"] / denominator', "目前比重不乘 100"),
@@ -106,17 +115,64 @@ MUTATIONS = [
      "return abs(diff) > tolerance", "容許帶端點不留浮點容差"),
     ("M36_leaders_exact_equality", _LOGIC, 'math.isclose(abs(r["_diff"]), top, abs_tol=1e-9)',
      'abs(r["_diff"]) == top', "並列最大差距改精確相等"),
+    # ── G1-② 起針對新程式碼（領域核心＋薄包裝）的突變 ──
+    ("M37_wrapper_undated_uses_dated_text", _LOGIC, "return NAV_NOT_READY_TEXT.format(days=missing.stale_days)",
+     "return NAV_NOT_READY_DATED_TEXT.format(day=missing.stale_day, days=missing.stale_days)",
+     "包裝：舊形狀過期代碼誤對到有日期句子"),
+    ("M38_wrapper_nav_absent_text_swapped", _LOGIC,
+     '    if code == _v2d.holdings.REASON_NAV_ABSENT:\n        return empty_source_text(["nav"])',
+     '    if code == _v2d.holdings.REASON_NAV_ABSENT:\n        return fx_missing_text("nav")', "包裝：缺淨值代碼對到缺匯率句子"),
+    ("M39_wrapper_fx_absent_drops_key", _LOGIC, "return fx_missing_text(missing.fx_key)", "return fx_missing_text(FX_KEY)",
+     "包裝：缺匯率句子不帶實際匯率鍵"),
+    ("M40_domain_undated_code_swapped", _HOLD, "MissingReason(REASON_NAV_STALE_UNDATED, stale_days=days)",
+     "MissingReason(REASON_NAV_STALE, stale_days=days)", "領域：舊形狀過期回成有日期代碼"),
+    ("M41_domain_dated_code_swapped", _HOLD, "MissingReason(REASON_NAV_STALE, stale_day=last[holding[\"fund_code\"]], stale_days=days)",
+     "MissingReason(REASON_NAV_STALE_UNDATED, stale_days=days)", "領域：有日期過期回成舊形狀代碼"),
+    ("M42_domain_is_stale_true_for_fx_absent", _HOLD, "reason.code == REASON_NAV_STALE\n",
+     "reason.code != REASON_NAV_ABSENT\n", "領域：結構式過期判定把缺匯率也當過期"),
+    ("M43_domain_is_stale_ignores_track_stale", _HOLD, "is_stale = track_stale and value is None",
+     "is_stale = value is None", "領域：非市值基準（None／未知字串）也做過期併日期"),
+    ("M44_domain_iterates_reversed", _HOLD, "    for holding in holdings:\n        cat = category_of(holding)",
+     "    for holding in reversed(list(holdings)):\n        cat = category_of(holding)", "領域：持倉倒序累加（類別順序、定案順序、累加順序皆變）"),
+    ("M45_domain_slot_start_int_zero", _HOLD, "slots.setdefault(cat, [0.0, None, 0, None])",
+     "slots.setdefault(cat, [0, None, 0, None])", "領域：累加起點 0.0 改整數 0"),
+    ("M46_domain_dedupe_by_day", _HOLD, "code not in {c for c, _ in stale[cat].entries}",
+     "reason.stale_day not in {d for _, d in stale[cat].entries}", "領域：過期去重改以日期（而非代碼）判斷"),
+    ("M47_wrapper_kind_nav_as_fx", _LOGIC, "    if kind == _v2d.holdings.KIND_NAV:\n        return _CLASS_NAV",
+     "    if kind == _v2d.holdings.KIND_NAV:\n        return _CLASS_FX", "包裝：資料類代碼 nav 對到市場指標類"),
+    ("M48_wrapper_stale_out_not_filled", _LOGIC,
+     "stale_out.update({cat: list(merge.entries) for cat, merge in stale.items()})", "stale_out.update({})",
+     "包裝：stale_out 不回填"),
+    ("M49_wrapper_missing_key_dropped", _LOGIC,
+     '            values[cat]["_missing_key"] = _class_of_kind(slot.kind)', "            pass",
+     "包裝：類別缺值不記資料類"),
+    ("M50_domain_slot_missing_kind_lost", _HOLD, "slot[0], slot[1], slot[3] = None, reason, kind\n",
+     "slot[0], slot[1], slot[3] = None, reason, None\n", "領域：類別缺值的資料類丟失"),
+    ("M51_domain_nav_date_from_wrong_row", _HOLD, 'nav_date = nav["nav_date"]\n', 'nav_date = "9999-12-31"\n',
+     "領域：匯率對齊日不取淨值日"),
     ("M34_diff_reversed", _LOGIC, 'row["_diff"] = row["_current_pct"] - row["_target_pct"]',
      'row["_diff"] = row["_target_pct"] - row["_current_pct"]', "差額方向相反"),
 ]
 
 #: 倖存的突變（等價或矩陣打不到）→ 理由。跑完實測後填入；空表 = 全數被抓到。
-SURVIVORS_DOCUMENTED: dict = {}
+SURVIVORS_DOCUMENTED: dict = {
+    "M43_domain_is_stale_ignores_track_stale": (
+        "黃金檔沒有『非市值基準（None／未知字串）＋過期名單＋同類別兩檔過期』這個組合；等價性改由 "
+        "`tests/test_v2_domain_alo_core.py` 的探針突變測試與對搬遷前實作的隨機差分咬住（不改黃金檔）。"),
+    "M45_domain_slot_start_int_zero": (
+        "黃金檔的金額全是浮點，`0 + 浮點` 與 `0.0 + 浮點` 逐位元組相同；只有全整數輸入才看得出型別差，"
+        "由 `tests/test_v2_domain_alo_core.py` 的探針（整數單位數 × 整數淨值）咬住。"),
+    "M46_domain_dedupe_by_day": (
+        "黃金檔的過期情境裡，不同代碼的最後淨值日都不同、同代碼的日期必相同 ⇒ 以日期或以代碼去重結果一樣；"
+        "『不同代碼同一天』由 `tests/test_v2_domain_alo_core.py` 的探針咬住。"),
+}
 
 
 def _exec_module(source: str, name: str, package: str) -> dict:
     ns = {"__name__": name, "__package__": package}
-    exec(compile(source, f"<mutant:{name}>", "exec"), ns)   # noqa: S102 — 只執行 repo 自己的原始碼（改過一處）
+    # dont_inherit=True：不繼承本測試檔的 `from __future__ import annotations`（否則被載入的模組裡 dataclass 欄位註記
+    # 會變成字串，而突變體不進 sys.modules，dataclasses 查不到模組會炸）。被載入的原始碼自己有沒有 future import 照它自己的。
+    exec(compile(source, f"<mutant:{name}>", "exec", dont_inherit=True), ns)   # noqa: S102 — 只執行 repo 自己的原始碼（改過一處）
     return ns
 
 

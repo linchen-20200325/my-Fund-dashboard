@@ -773,28 +773,43 @@ def basis_value(dataset, holding, basis):
 
 def basis_value_with_key(dataset, holding, basis):
     """同 `basis_value`，另回缺值那一支屬哪一類資料（淨值或市場指標；有值時 None）。BL-0250 批次 3-B（總管第二輪裁定第 1、3 點）：
-    資料未備的資料類在判定分支就地寫明（畫面字不變）。"""
-    if basis == BASIS_COST:
-        return float(holding["cost_twd"]), None, None
-    nav = latest_nav(dataset, holding["fund_code"])
-    if nav is None:
-        # 總管 2026-10-13 裁決：淨值過期而不納入的檔寫準確的那一句；真正缺淨值的照舊。
-        codes, days, last = nav_not_ready(dataset)
-        if holding["fund_code"] in codes:
-            if last is None:   # 舊形狀（沒有 `last`）：照舊的無日期字面
-                return None, NAV_NOT_READY_TEXT.format(days=days), _CLASS_NAV
-            # 客戶 2026-10-14 裁示：逐檔帶自己最後一筆淨值日。
-            return None, NAV_NOT_READY_DATED_TEXT.format(day=last[holding["fund_code"]], days=days), _CLASS_NAV
-        return None, empty_source_text(["nav"]), _CLASS_NAV
-    value = holding["units_shares"] * nav["nav_orig_ccy"]
-    if nav["ccy"] == "TWD":
-        return value, None, None
-    # ~~非美元 → raise（ALO-GAP-非美元幣別）~~ → 2026-10-13：照 Q9 換鍵，缺匯率照實寫資料未備（見該 GAP）。
-    key = fx_key_for(nav["ccy"])
-    rate = fx_for_date(dataset, nav["nav_date"], key)
-    if rate is None:
-        return None, fx_missing_text(key), _CLASS_FX
-    return value * rate, None, None
+    資料未備的資料類在判定分支就地寫明（畫面字不變）。
+    BL-0542 G1-②（最小 PORT）：數值與缺值判定的本體搬到 `services/v2_domain/holdings.py::basis_value_with_reason`
+    （缺值原因是英文代碼）；這裡是薄包裝，只負責把代碼換回原本的中文句子與資料類，回傳形狀、鍵序、字面一字不變。
+    `nav_not_ready`、`fx_key_for` 留在本頁、由包裝注入（它們的中文 TypeError／ValueError 訊息與丟出時機不變）。"""
+    value, missing, kind = _v2d.holdings.basis_value_with_reason(
+        holding, dataset, market=(basis != BASIS_COST), fx_key_of=fx_key_for,
+        stale_provider=lambda: nav_not_ready(dataset))
+    return value, _missing_text(missing), _class_of_kind(kind)
+
+
+def _missing_text(missing):
+    """L2 的缺值原因 → 本頁原本的中文句子（`MissingReason`／`StaleMerge`；None ＝ 沒有缺值）。未知代碼 → raise（不猜）。"""
+    if missing is None:
+        return None
+    if isinstance(missing, _v2d.holdings.StaleMerge):
+        return nav_not_ready_dated_text(list(missing.entries), missing.days)
+    code = missing.code
+    if code == _v2d.holdings.REASON_NAV_ABSENT:
+        return empty_source_text(["nav"])
+    if code == _v2d.holdings.REASON_NAV_STALE_UNDATED:
+        return NAV_NOT_READY_TEXT.format(days=missing.stale_days)
+    if code == _v2d.holdings.REASON_NAV_STALE:
+        return NAV_NOT_READY_DATED_TEXT.format(day=missing.stale_day, days=missing.stale_days)
+    if code == _v2d.holdings.REASON_FX_ABSENT:
+        return fx_missing_text(missing.fx_key)
+    raise ValueError(f"未知的缺值原因代碼：{code!r}")
+
+
+def _class_of_kind(kind):
+    """L2 的缺值資料類代碼 → `page_health.DATA_CLASSES` 的字樣（None ＝ 沒有缺值）。"""
+    if kind is None:
+        return None
+    if kind == _v2d.holdings.KIND_NAV:
+        return _CLASS_NAV
+    if kind == _v2d.holdings.KIND_FX:
+        return _CLASS_FX
+    raise ValueError(f"未知的缺值資料類代碼：{kind!r}")
 
 
 # BL-0250 批次 3-B（總管第二輪裁定第 1、2、3 點）：本頁 ◇ 的鍵。換算匯率住在市場指標表（`fx_twd_per_<幣別>`）。
@@ -837,35 +852,21 @@ def _category_values(dataset, basis, bucket_names, stale_out=None):
     同類別後面同為過期的檔**不算另一種理由**，而是把它的日期併進同一句（`nav_not_ready_dated_text`），
     否則畫面只看得到第一檔的日期。其他種理由照舊「第一種定案」。
     `stale_out`（選填 dict）：回填 {類別: [(代碼, 日期), …]}，只含定案理由為過期的類別（給 ALO-2 整塊空狀態用）。"""
+    # BL-0542 G1-②：加總與「第一種缺值定案／過期併日期」的本體搬到 `services/v2_domain/holdings.py::category_values`。
+    track_stale = basis == BASIS_MV
+    if track_stale:
+        nav_not_ready(dataset)   # 形狀檢查提前（結果不用）：維持原本「先驗名單形狀、再碰持倉」的例外先後
+    slots, stale = _v2d.holdings.category_values(
+        aggregated_holdings(dataset), dataset, market=(basis != BASIS_COST), track_stale=track_stale,
+        category_of=lambda holding: category_of(holding, bucket_names), fx_key_of=fx_key_for,
+        stale_provider=lambda: nav_not_ready(dataset))
     values = {}
-    stale = {}
-    if basis == BASIS_MV:
-        codes, days, last = nav_not_ready(dataset)
-    else:
-        codes, days, last = frozenset(), None, None
-    for holding in aggregated_holdings(dataset):
-        cat = category_of(holding, bucket_names)
-        slot = values.setdefault(cat, {"value": 0.0, "reason": None, "count": 0})
-        slot["count"] += 1
-        value, reason, missing_key = basis_value_with_key(dataset, holding, basis)
-        code = holding["fund_code"]
-        is_stale = (value is None and last is not None and code in codes
-                    and reason == NAV_NOT_READY_DATED_TEXT.format(day=last[code], days=days))
-        if slot["reason"] is not None:
-            if is_stale and cat in stale and code not in {c for c, _ in stale[cat]}:
-                stale[cat].append((code, last[code]))
-                slot["reason"] = nav_not_ready_dated_text(stale[cat], days)
-            continue
-        if value is None:
-            slot["value"], slot["reason"] = None, reason
-            slot["_missing_key"] = missing_key   # BL-0250 批次 3-B：定案的那一種缺值理由屬哪一類資料（同一類別第一種定案）
-            if is_stale:
-                stale[cat] = [(code, last[code])]
-                slot["reason"] = nav_not_ready_dated_text(stale[cat], days)
-        else:
-            slot["value"] += value
+    for cat, slot in slots.items():
+        values[cat] = {"value": slot.value, "reason": _missing_text(slot.reason), "count": slot.count}
+        if slot.reason is not None:
+            values[cat]["_missing_key"] = _class_of_kind(slot.kind)   # BL-0250 批次 3-B：定案的那一種缺值理由屬哪一類資料
     if stale_out is not None:
-        stale_out.update(stale)
+        stale_out.update({cat: list(merge.entries) for cat, merge in stale.items()})
     return values
 
 
