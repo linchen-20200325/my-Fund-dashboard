@@ -12,14 +12,21 @@
 兩者是否該收斂成一條規則，屬跨頁一致性（`PROJECT_RULES.md` 13.3）的業務判斷，本批登記、不裁。
 """
 
-from __future__ import annotations
-
+# ⚠️ 本檔刻意**不**寫 `from __future__ import annotations`：下方 frozen dataclass 的欄位註記若是字串，
+#    `dataclasses` 會去查 `sys.modules[cls.__module__]`；而突變測試（`tests/test_alo_core_golden_mutations.py`）
+#    以 `exec(compile(…, dont_inherit=True))` 載入本檔、且依約不進 `sys.modules`，字串註記會讓它在載入時炸掉。
+#    本檔其餘註記（`-> bool`）立即求值無妨。
 import math
+from dataclasses import dataclass
 
 __all__ = (
     "HOLDING_SUM_COLUMNS", "HOLDING_SAME_COLUMNS", "HoldingKeyConflict",
     "holding_key", "merge_same_key_holdings", "aggregate_holding_rows",
     "latest_nav_row", "fx_rate_as_of", "bucket_category", "exceeds", "target_sum",
+    # BL-0542 G1-② 最小 PORT：基準值（成本／市值）與類別加總的純數值＋缺值判定核心。
+    "REASON_NAV_ABSENT", "REASON_NAV_STALE", "REASON_NAV_STALE_UNDATED", "REASON_FX_ABSENT",
+    "KIND_NAV", "KIND_FX", "MissingReason", "StaleMerge", "CategorySlot",
+    "basis_value_with_reason", "category_values",
 )
 
 # 同鍵加總的三欄（hld 與 alo 相同、順序相同）。
@@ -114,3 +121,117 @@ def exceeds(diff, tolerance) -> bool:
 def target_sum(targets):
     """目標比重合計：`weight_ratio` 留空（None）的那一列不計入。"""
     return sum(t["weight_ratio"] for t in targets or () if t["weight_ratio"] is not None)
+
+
+# ───────────────────────── BL-0542 G1-② 最小 PORT：基準值與類別加總 ─────────────────────────
+#
+# 本段是 `ui_v2/alo/logic.py::basis_value_with_key`／`_category_values` 的**純數值與缺值判定**本體（判定一字未改）。
+# 回傳值不帶任何畫面字樣：缺值原因是機器可讀的英文代碼（`MissingReason`／`StaleMerge`），由 ui_v2 薄包裝換回原本的中文句子與
+# 資料類字樣（`page_health.DATA_CLASSES`）。逐位元組不變由 `tests/test_alo_core_golden.py`（212 情境）與其突變測試守住。
+#
+# 刻意保留的行為（PORT 不得順手「改好」）：
+# - 浮點累加起點是 `0.0`、依持倉順序 `+=`；缺值是 `None`，不是 0.0。
+# - 取表是惰性的：成本基準從不讀 `nav`／`market_indicator`；`market_indicator` 只在非新臺幣淨值時才讀。
+# - 例外型別、訊息與發生時機不變：`stale_provider`／`fx_key_of` 由呼叫端注入（ui_v2 的 `nav_not_ready`／`fx_key_for`，
+#   中文例外訊息原樣穿過），且只在原本就會呼叫的那個位置才呼叫。
+# - 同類別遇到的第一種缺值定案；之後的持倉仍會被計入件數、仍會被呼叫（可能丟例外），只是值被忽略。
+# - `NAV_NOT_READY_DAYS` 不在這裡：天數由 `stale_provider()` 帶進來（唯一給值處仍是 `ui_v2/thresholds.py`）。
+
+# 缺值原因代碼（機器可讀；中文句子由 ui_v2 對照）。
+REASON_NAV_ABSENT = "nav_absent"                  # 該檔在 `nav` 表沒有任何一列，也不在過期名單
+REASON_NAV_STALE = "nav_stale"                    # 在過期名單，且帶最後淨值日（`stale_day`）
+REASON_NAV_STALE_UNDATED = "nav_stale_undated"    # 在過期名單，舊形狀（沒有最後淨值日）
+REASON_FX_ABSENT = "fx_absent"                    # 有淨值，但缺該幣別的換算匯率（`fx_key`）
+# 缺值屬哪一類資料（ui_v2 對照 `page_health.DATA_CLASSES`）。
+KIND_NAV = "nav"
+KIND_FX = "fx"
+
+
+@dataclass(frozen=True)
+class MissingReason:
+    """單檔缺基準值的原因。`fx_key` 只在 `REASON_FX_ABSENT` 有值；`stale_day`／`stale_days` 只在過期兩種有值
+    （`REASON_NAV_STALE_UNDATED` 的 `stale_day` 為 None）。"""
+
+    code: str
+    fx_key: object = None
+    stale_day: object = None
+    stale_days: object = None
+
+
+@dataclass(frozen=True)
+class StaleMerge:
+    """類別層「淨值過期」的合併結果：`entries` 是 ((代碼, 最後淨值日), …)，依持倉順序、同代碼只一次；`days` 是門檻天數。"""
+
+    entries: tuple
+    days: object
+
+
+@dataclass(frozen=True)
+class CategorySlot:
+    """一個類別的加總結果。`value` 為 None ＝ 缺值（不是 0.0）；缺值時 `reason` 是 `MissingReason` 或 `StaleMerge`、
+    `kind` 是 `KIND_*`；有值時兩者皆 None。`count` 含被忽略的後續持倉。"""
+
+    value: object
+    reason: object
+    count: int
+    kind: object
+
+
+def basis_value_with_reason(holding, tables, *, market, fx_key_of, stale_provider):
+    """單檔基準值 → (新臺幣值 或 None, `MissingReason` 或 None, `KIND_*` 或 None)。
+
+    `market` 為 False ＝ 成本基準（`float(cost_twd)`，不讀任何表）；True ＝ 市值基準（淨值 × 單位數，非新臺幣再乘匯率）。
+    `tables`：有 `"nav"`、`"market_indicator"` 兩張表列的映射，**惰性**讀取（成本基準一張都不碰）。
+    `fx_key_of(ccy)`：幣別 → 匯率鍵（呼叫端注入；不合法的幣別由它丟例外）。
+    `stale_provider()`：→ (過期代碼集合, 天數, {代碼: 最後淨值日} 或 None)；**只在該檔沒有淨值時**才呼叫。"""
+    if not market:
+        return float(holding["cost_twd"]), None, None
+    code = holding["fund_code"]
+    nav = latest_nav_row(tables["nav"], code)
+    if nav is None:
+        codes, days, last = stale_provider()
+        if holding["fund_code"] in codes:
+            if last is None:   # 舊形狀（沒有 `last`）：沒有日期
+                return None, MissingReason(REASON_NAV_STALE_UNDATED, stale_days=days), KIND_NAV
+            return None, MissingReason(REASON_NAV_STALE, stale_day=last[holding["fund_code"]], stale_days=days), KIND_NAV
+        return None, MissingReason(REASON_NAV_ABSENT), KIND_NAV
+    value = holding["units_shares"] * nav["nav_orig_ccy"]
+    if nav["ccy"] == "TWD":
+        return value, None, None
+    key = fx_key_of(nav["ccy"])
+    nav_date = nav["nav_date"]
+    rate = fx_rate_as_of(tables["market_indicator"], nav_date, key)
+    if rate is None:
+        return None, MissingReason(REASON_FX_ABSENT, fx_key=key), KIND_FX
+    return value * rate, None, None
+
+
+def category_values(holdings, tables, *, market, track_stale, category_of, fx_key_of, stale_provider):
+    """持倉（已同鍵加總）→ ({類別: `CategorySlot`}, {類別: `StaleMerge`})，類別依第一次出現的順序。
+
+    `track_stale`：True 時，定案的缺值若是「過期且帶日期」，同類別後面同為過期的檔併進同一個 `StaleMerge`
+    （同代碼只一次）；單檔過期也一律包成 `StaleMerge`（一筆）。第二個回傳值依「定案」的先後順序。
+    `category_of(holding)`：持倉 → 類別（呼叫端注入，含未分類的字樣）。其餘參數同 `basis_value_with_reason`。"""
+    slots = {}    # 類別 → [值, 原因, 件數, 資料類]（工作狀態，最後才凍結）
+    stale = {}    # 類別 → StaleMerge
+    for holding in holdings:
+        cat = category_of(holding)
+        slot = slots.setdefault(cat, [0.0, None, 0, None])
+        slot[2] += 1
+        value, reason, kind = basis_value_with_reason(
+            holding, tables, market=market, fx_key_of=fx_key_of, stale_provider=stale_provider)
+        code = holding["fund_code"]
+        is_stale = track_stale and value is None and reason.code == REASON_NAV_STALE
+        if slot[1] is not None:
+            if is_stale and cat in stale and code not in {c for c, _ in stale[cat].entries}:
+                stale[cat] = StaleMerge(stale[cat].entries + ((code, reason.stale_day),), reason.stale_days)
+                slot[1] = stale[cat]
+            continue
+        if value is None:
+            slot[0], slot[1], slot[3] = None, reason, kind
+            if is_stale:
+                stale[cat] = StaleMerge(((code, reason.stale_day),), reason.stale_days)
+                slot[1] = stale[cat]
+        else:
+            slot[0] += value
+    return {cat: CategorySlot(s[0], s[1], s[2], s[3]) for cat, s in slots.items()}, stale

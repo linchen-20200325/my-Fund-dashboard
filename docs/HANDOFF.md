@@ -4,9 +4,10 @@
 > **歷史**：2026-11-03 Canonical Rule Convergence 批把舊版全文（543 行；含檔頭 40 則追加 checkpoint、24 個「第 N 次現況」框、舊下一步）逐字搬到 `docs/evidence/history/2026-11-03_handoff_pre_convergence.md`（**NOT CURRENT，不是現行規則或現況**）。更舊的交接本 `docs/handover_2026_09_26_latest.md` 為歷史紀錄（第 0 節永遠不准刪，客戶 2026-09-28 裁示）。本檔改寫依據：客戶 2026-11-03 指示（`DEC-2026-11-03-08`）；`PROJECT_RULES.md` 6.1.2「覆蓋、不累加」。
 
 > **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
-> - **查詢時點**：2026-11-04；最新 main 為 `b9595833`（本批整合 #1144 的基底；#1139 為 `66a09ed2`）；#1136（Shell 定字與降級首屏）先前合併為 `f07acd44`；main 現況與 Open／Draft PR 以 GitHub 為準；本批**未重查 GitHub**，接手先 `git fetch origin main`。
+> - **查詢時點**：2026-11-05；最新 main 為 `1f260bfc`（G1-① #1146 已合併，本批基底；#1144 為 `b9595833`、#1139 為 `66a09ed2`）；#1136（Shell 定字與降級首屏）先前合併為 `f07acd44`；main 現況與 Open／Draft PR 以 GitHub 為準；本批**未重查 GitHub**，接手先 `git fetch origin main`。
 > - **Open／Draft PR**：以 GitHub 為準；接手先 `git fetch origin main` 並查 `gh pr list`。
-> - **唯一下一接手點（單一）**：G1-① 以 GitHub 實況為準；之後：等客戶另批授權 G1-②（需 High 重估與獨立稽核）。G-1 方向（方案 C 保守 PORT＋S2-Lite 分階段）已登記於 `DEC-2026-11-04-03`；本批只授權 G1-① Golden Baseline（僅 tests／fixtures，零 production 行為變更）；G-2～G-5 與 💼 程式照舊未授權。
+> - **唯一下一接手點（單一）**：G1-② 以 GitHub 實況為準；之後：等客戶另批授權 G1-③（Complete Evidence／完整性契約；需 High 重估與獨立稽核）。G1-② 為最小共用核心 PORT（`services/v2_domain/holdings.py`，英文 reason code；ui_v2 薄包裝；golden 不變），授權依據為客戶 2026-11-05 於對話中的指示（要點轉述、非逐字）；G1-③、G-2～G-5、OneBrain／Phase 7 與 💼 程式照舊未授權。
+> - **2026-11-05 G1-② 批**：G1-① 已合併（#1146，main `1f260bfc`）；G1-② 最小共用核心 PORT 的 PR 以 GitHub 為準；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-05_after_1146_handoff_superseded.md`（H11；NOT CURRENT）；基底 main `1f260bfc`，未重查 GitHub／CI。
 > - **2026-11-04 G-1 方向登記批**：`DEC-2026-11-04-03`（客戶方向裁示，要點轉述、非逐字）＋ BL-0542 G-1 狀態備註；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-04_after_1145_handoff_superseded.md`（H10；NOT CURRENT）；基底 main `e6ff1902`，未重查 GitHub／CI。
 > - **2026-11-04 #1144 整合批**：客戶核准的 💼 U1～U5 全部 UI 設計與缺 FX 方案 A（`DEC-2026-11-04-02`；82 §9.8）已併入；#1142／#1143 已合併；僅 UI 設計核准，不授權 G-1～G-5 或 💼 程式；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-04_after_1144_handoff_superseded.md`（H9；NOT CURRENT）；基底 main `b9595833`，未重查 GitHub／CI。
 > - **2026-11-04 #1140 整合批**：客戶核准的 💼 版面方向（主圖在前、四格摘要在後、缺值如實 Missing；僅 UI 順序，不授權 G-1～G-5 或 💼 程式）已併入 `DEC-2026-11-04-01`／82 §0.1；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-04_after_1139_handoff_superseded.md`（H8；NOT CURRENT）；基底 main `66a09ed2`，未重查 GitHub／CI。
