@@ -2327,6 +2327,21 @@
 | 是否可逆 | 可逆；以新 DEC 變更，不重寫歷史。 |
 | supersedes／superseded by | 不 supersede 任何 DEC。於 `DEC-2026-11-04-02` 之上補 G-1 方向（該 DEC 原文未動）。 |
 
+### DEC-2026-11-05-01｜New UI2 桌機／手機登入入口設計方向（僅 UI 設計）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-05 |
+| 決策者 | 客戶（以下為 ChatGPT 要點轉述，非逐字） |
+| 客戶裁示 | 採用最新提供的響應式登入 UI 參考：桌機固定左側欄頂部放 Google 帳號區；手機頂部右側保留精簡帳號入口，按需展開帳號資訊與操作，平時不以大卡壓縮首屏；保留既定手機導覽與頁面設計，不因登入功能重做 OAuth。 |
+| 技術讀法（非客戶裁示） | ChatGPT 依 `ui_v3/shell/nav.py` 核實目前手機正式導覽是**底部五頁導覽**（而非漢堡選單），所以登入入口須獨立於底部導覽；從既有 `services/v2_tables/personal_session.status()` 讀取登入／Pending／Active 狀態，共用認證邏輯。以上為相容性技術判斷，可依程式證據更正。 |
+| 正式設計落點 | `docs/design/new_ui2_responsive_login_2026_11_05.md`（限定 UI 呈現契約與將來驗收條件）。正式字樣仍以 `shared/ui_semantics/rules.py` 等已核准來源為準。 |
+| 不授權事項 | 本批僅登記 UI 設計；不授權 OAuth、Streamlit／ui_v3 程式、測試、runtime guard、Preview／正式切換或 G-2～G-5 其他工程。不改 frozen 44／79、五頁 IA、手機底部導覽。 |
+| 與現行工作關係 | 不併入正在執行的 G-2 Preview adapter PR；G-2 結案後才另行安排登入入口的最小程式施工。 |
+| evidence／source | 客戶提供的桌機／手機參考示意圖與 2026-11-05 對話同意；對話來源由 ChatGPT 轉達，repo 無逐字 image evidence，不捏造逐字引用。 |
+| provenance | **要點轉述（非逐字）**；技術讀法屬 ChatGPT 建議，不冒充客戶裁示。 |
+| 是否可逆 | 可逆；後續以新 DEC 修改，不重寫舊記錄。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
