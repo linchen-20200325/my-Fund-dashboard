@@ -9,10 +9,11 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 
-ROOT_DIRS = ("infra", "repositories", "services", "shared", "ui", "scripts", "tests")
+EXCLUDED_DIRS = {"__pycache__", "node_modules", "venv", "env", "site-packages"}
 
 
 def discovered_ui_dirs(root: Path) -> tuple[str, ...]:
@@ -22,12 +23,15 @@ def discovered_ui_dirs(root: Path) -> tuple[str, ...]:
 
 
 def scan(root: Path) -> dict:
-    source_dirs = ROOT_DIRS + discovered_ui_dirs(root)
-    paths = [p for name in source_dirs if (root / name).is_dir()
-             for p in (root / name).rglob("*.py")
-             if not any(s in p.parts for s in ("__pycache__", ".venv", ".git"))]
-    if (root / "app.py").is_file():
-        paths.append(root / "app.py")
+    # Discover sources rather than assuming the current architecture is exhaustive.
+    # Prune environments/worktrees before descent; never follow linked directories/files.
+    paths = []
+    for directory, directories, filenames in os.walk(root, followlinks=False):
+        directories[:] = sorted(name for name in directories
+                                 if not name.startswith(".") and name not in EXCLUDED_DIRS
+                                 and not (Path(directory) / name).is_symlink())
+        paths.extend(Path(directory) / name for name in filenames
+                     if name.endswith(".py") and not (Path(directory) / name).is_symlink())
     paths.sort()
     def module(path: Path) -> str:
         parts = path.relative_to(root).with_suffix("").parts
@@ -83,6 +87,8 @@ def scan(root: Path) -> dict:
     return {
         "classification": "TRIAGE_ONLY_NOT_SAFE_TO_DELETE",
         "module_count": len(members),
+        "scanned_paths": sorted(members.values()),
+        "scan_scope": "all_python_files_except_hidden_environment_vendor_and_symlink_paths",
         "external_entrypoints_to_verify": (["app.py"] + [f"{name}/app_preview.py" for name in discovered_ui_dirs(root)
                                              if (root / name / "app_preview.py").is_file()]),
         "without_static_importers": [{"module": k, "path": members[k]} for k in candidates],

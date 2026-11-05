@@ -3,6 +3,15 @@
 > **用途**：只回答六件事：現在在哪、active work、最新 main／PR／CI checkpoint、下一接手點、blocker／待客戶裁示、新對話從哪開始。**本檔不得單獨作為完成或正確的證明**（`PROJECT_RULES.md` 1.3）；任何「已合併」「CI 綠」都要回 GitHub／git 重查。
 > **歷史**：2026-11-03 Canonical Rule Convergence 批把舊版全文（543 行；含檔頭 40 則追加 checkpoint、24 個「第 N 次現況」框、舊下一步）逐字搬到 `docs/evidence/history/2026-11-03_handoff_pre_convergence.md`（**NOT CURRENT，不是現行規則或現況**）。更舊的交接本 `docs/handover_2026_09_26_latest.md` 為歷史紀錄（第 0 節永遠不准刪，客戶 2026-09-28 裁示）。本檔改寫依據：客戶 2026-11-03 指示（`DEC-2026-11-03-08`）；`PROJECT_RULES.md` 6.1.2「覆蓋、不累加」。
 
+## 本輪清理接手點（2026-11-05 台北；尚未合併）
+
+- GitHub 實查 main `43b54f32ed3c62241f572040a8212a75e549b90e`，main 四條 check-run success；Open Draft #1150～#1154。#1150／#1151 設計線與 Claude G-2 優先，不改其檔案。
+- #1152 head `38ddee46`：僅初步分類；四條 CI success，無 review。唯讀複查找到 legacy 持倉／shadow／backfill／月曆引用，沒有確認死碼。
+- #1153 原 head `5fc7c2b1`：四條 CI success，但漏掃 root 的 fund_fetcher.py、models、mcp_server 等。此次在同一 PR 修正來源發現，新增可核對的 scanned_paths、排除環境／隱藏目錄／symlink，沒有 production 改動。本地 Python 3.12：5 tests passed；修正後盤點 1082 模組、parse_errors={}；664 個無靜態 importer 項只是候選，不是死碼。新 head／CI 以本 PR GitHub 實況為準。
+- #1154 head `8a88830c`：fast／schema／VF success，slow in_progress（最後查詢）；本地 Python 3.12 遮蔽工廠與既有三組回歸合計 281 passed；未修改此 PR。這是本接手執行者對前次實作的複查，不冒充另派 subagent 的獨立 QA。
+- **唯一下一步**：先完成 #1152～#1154 的獨立 QA／#1153 新 head CI，再依 Auto-Ship 與 GitHub protection 收斂。新剝離候選為 exp_profile／nav_dividend 的 aware datetime parser；尚未動工，須等目前三支 PR 收斂及獨立稽核安排。
+- **阻塞與限制**：PROCESS.md §8 的必要獨立 subagent QA 尚未執行；未 merge、未刪碼。branch protection 讀取 API 回 403，rulesets=[]，不能宣稱已確認全部 required checks。不得繞過保護。Cloud 外部入口、真實服務與外部排程未驗。DECISIONS 與 #1150 同檔，依主線優先規則本輪不追加，裁示同步待不衝突時處理（BL-0543）。
+
 > **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
 > - **查詢時點**：2026-11-05；最新 main 為 `81827057`（G1-③ #1148 已合併，本批基底；#1147 為 `d4eabb35`、#1146 為 `1f260bfc`、#1144 為 `b9595833`、#1139 為 `66a09ed2`）；#1136（Shell 定字與降級首屏）先前合併為 `f07acd44`；main 現況與 Open／Draft PR 以 GitHub 為準；本批**未重查 GitHub**，接手先 `git fetch origin main`。
 > - **Open／Draft PR**：以 GitHub 為準；接手先 `git fetch origin main` 並查 `gh pr list`。
