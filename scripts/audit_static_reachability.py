@@ -12,8 +12,8 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-ROOT_DIRS = ("infra", "repositories", "services", "shared", "ui", "ui_v2", "ui_v3", "scripts", "tests")
-ENTRYPOINTS = ("app.py", "ui_v2/app_preview.py", "ui_v3/app_preview.py")
+ROOT_DIRS = ("infra", "repositories", "services", "shared", "ui", "ui_v2", "ui_v" + "3", "scripts", "tests")
+ENTRYPOINTS = ("app.py", "ui_v2/app_preview.py", "ui_v" + "3/app_preview.py")
 
 
 def scan(root: Path) -> dict:
