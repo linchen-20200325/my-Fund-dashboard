@@ -12,12 +12,18 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-ROOT_DIRS = ("infra", "repositories", "services", "shared", "ui", "ui_v2", "ui_v" + "3", "scripts", "tests")
-ENTRYPOINTS = ("app.py", "ui_v2/app_preview.py", "ui_v" + "3/app_preview.py")
+ROOT_DIRS = ("infra", "repositories", "services", "shared", "ui", "scripts", "tests")
+
+
+def discovered_ui_dirs(root: Path) -> tuple[str, ...]:
+    """Inventory every UI generation without hardcoding any preview application path."""
+    return tuple(sorted(p.name for p in root.iterdir() if p.is_dir() and p.name.startswith("ui_")))
+
 
 
 def scan(root: Path) -> dict:
-    paths = [p for name in ROOT_DIRS if (root / name).is_dir()
+    source_dirs = ROOT_DIRS + discovered_ui_dirs(root)
+    paths = [p for name in source_dirs if (root / name).is_dir()
              for p in (root / name).rglob("*.py")
              if not any(s in p.parts for s in ("__pycache__", ".venv", ".git"))]
     if (root / "app.py").is_file():
@@ -77,7 +83,8 @@ def scan(root: Path) -> dict:
     return {
         "classification": "TRIAGE_ONLY_NOT_SAFE_TO_DELETE",
         "module_count": len(members),
-        "external_entrypoints_to_verify": list(ENTRYPOINTS),
+        "external_entrypoints_to_verify": (["app.py"] + [f"{name}/app_preview.py" for name in discovered_ui_dirs(root)
+                                             if (root / name / "app_preview.py").is_file()]),
         "without_static_importers": [{"module": k, "path": members[k]} for k in candidates],
         "dynamic_import_sites": [{"module": k, "lines": sorted(set(v))} for k, v in sorted(dynamic.items())],
         "parse_errors": errors,
