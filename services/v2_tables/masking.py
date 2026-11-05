@@ -212,3 +212,14 @@ def mask_message(message: str, secrets: Iterable[str]) -> str:
 def is_masked(message) -> bool:
     """字串裡確實含記號才回 True（ACCEPTANCE 7.4：沒有遮任何東西時不加註記）。"""
     return isinstance(message, str) and MASK in message
+
+
+def make_masker(secret_values):
+    """秘密值清單 → L1 可用的遮蔽 callback；凍結輸入一次，避免重複耗盡 iterable。
+
+    保持 alo_holdings／settings_store 原有的型別拒絕、例外字串及遮蔽規則。
+    """
+    if isinstance(secret_values, (str, bytes)):
+        raise TypeError("secret_values 須為秘密值的清單，不可直接傳字串")
+    values = list(secret_values)
+    return lambda message: mask_message(message, values)
