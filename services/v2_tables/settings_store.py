@@ -49,7 +49,7 @@ from repositories.macro.yf import fetch_yf_close
 from repositories.fund import declared_profile
 from services.v2_tables import alo_holdings, exp_nav, exp_profile, fund_keys, nav_dividend
 from services.v2_tables import market_indicator as mi
-from services.v2_tables.masking import mask_message
+from services.v2_tables.masking import make_masker
 
 SettingsSheetError = store.SettingsSheetError
 
@@ -97,12 +97,8 @@ _CACHED_FETCHER_BY_SOURCE = {"Yahoo": fetch_yf_close, "FRED": fetch_fred_vintage
 
 
 def masker(secret_values) -> Callable[[str], str]:
-    """秘密值清單 → `mask`。**拒收字串**：`list("abc")` 會把一把金鑰拆成單一字元去遮，
-    等於把訊息裡每個出現過的字母都換成記號（回修第 2 輪 8）。"""
-    if isinstance(secret_values, (str, bytes)):
-        raise TypeError("secret_values 須為秘密值的清單，不可直接傳字串")
-    values = list(secret_values)
-    return lambda message: mask_message(message, values)
+    """保留既有 L2 公開介面；共同的遮蔽 callback 邏輯集中在 masking。"""
+    return make_masker(secret_values)
 
 
 # ── 讀寫（L3 → 這裡 → L1）────────────────────────────────────────────
