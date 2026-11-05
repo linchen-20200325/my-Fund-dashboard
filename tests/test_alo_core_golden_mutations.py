@@ -83,8 +83,9 @@ MUTATIONS = [
     ("M19_nav_not_ready_checked_eagerly", _HOLD, '    code = holding["fund_code"]\n    nav = latest_nav_row(tables["nav"], code)\n',
      '    code = holding["fund_code"]\n    stale_provider()\n    nav = latest_nav_row(tables["nav"], code)\n',
      "nav_not_ready 形狀檢查提前到有淨值也做"),
-    ("M20_fx_same_day_last_wins", _HOLD, 'return max(rows, key=lambda r: r["obs_date"])["value_num"] if rows else None',
-     'return max(reversed(rows), key=lambda r: r["obs_date"])["value_num"] if rows else None', "同日多列匯率取最後一列"),
+    # G1-③：匯率對齊的唯一實作搬到 `fx_row_as_of`（`fx_rate_as_of` 委派過去），本筆目標字串跟著搬；偵測力不變。
+    ("M20_fx_same_day_last_wins", _HOLD, 'return max(rows, key=lambda r: r["obs_date"]) if rows else None',
+     'return max(reversed(rows), key=lambda r: r["obs_date"]) if rows else None', "同日多列匯率取最後一列"),
     ("M21_latest_nav_min", _HOLD, 'return max(rows, key=lambda r: r["nav_date"]) if rows else None',
      'return min(rows, key=lambda r: r["nav_date"]) if rows else None', "最近一筆淨值改取最舊"),
     ("M22_no_uncovered_tail", _LOGIC, 'tail_lines.append("合計未涵蓋 " + "、".join(uncovered))', "pass",

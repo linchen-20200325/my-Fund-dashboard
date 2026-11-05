@@ -22,7 +22,7 @@ from dataclasses import dataclass
 __all__ = (
     "HOLDING_SUM_COLUMNS", "HOLDING_SAME_COLUMNS", "HoldingKeyConflict",
     "holding_key", "merge_same_key_holdings", "aggregate_holding_rows",
-    "latest_nav_row", "fx_rate_as_of", "bucket_category", "exceeds", "target_sum",
+    "latest_nav_row", "fx_row_as_of", "fx_rate_as_of", "bucket_category", "exceeds", "target_sum",
     # BL-0542 G1-② 最小 PORT：基準值（成本／市值）與類別加總的純數值＋缺值判定核心。
     "REASON_NAV_ABSENT", "REASON_NAV_STALE", "REASON_NAV_STALE_UNDATED", "REASON_FX_ABSENT",
     "KIND_NAV", "KIND_FX", "MissingReason", "StaleMerge", "CategorySlot",
@@ -96,14 +96,22 @@ def latest_nav_row(nav_rows, fund_code):
     return max(rows, key=lambda r: r["nav_date"]) if rows else None
 
 
-def fx_rate_as_of(indicator_rows, nav_date, key):
-    """`market_indicator` 表裡 `indicator_key == key` 且 `obs_date` 不晚於 `nav_date` 的最近一筆 `value_num`；沒有 → None。"""
+def fx_row_as_of(indicator_rows, nav_date, key):
+    """`market_indicator` 表裡 `indicator_key == key` 且 `obs_date` 不晚於 `nav_date` 的最近一**列**（整列，不只數值）；沒有 → None。
+    BL-0542 G1-③：對齊規則的**唯一實作**（`fx_rate_as_of` 委派到這裡）；同日多列取第一個出現的（`max` 的規則）。"""
     rows = [
         r
         for r in indicator_rows
         if r["indicator_key"] == key and r["obs_date"] <= nav_date
     ]
-    return max(rows, key=lambda r: r["obs_date"])["value_num"] if rows else None
+    return max(rows, key=lambda r: r["obs_date"]) if rows else None
+
+
+def fx_rate_as_of(indicator_rows, nav_date, key):
+    """`market_indicator` 表裡 `indicator_key == key` 且 `obs_date` 不晚於 `nav_date` 的最近一筆 `value_num`；沒有 → None。
+    （BL-0542 G1-③：本體改為委派 `fx_row_as_of`；回傳值、例外型別與發生時機不變。）"""
+    row = fx_row_as_of(indicator_rows, nav_date, key)
+    return row["value_num"] if row is not None else None
 
 
 def bucket_category(bucket, bucket_names):
