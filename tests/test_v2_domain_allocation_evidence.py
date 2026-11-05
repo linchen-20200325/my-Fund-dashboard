@@ -73,7 +73,7 @@ def _source_of(ds):
 
 
 def build(E, ds, *, settings="auto", source="auto", prov=None, nnr="auto", use_label=True, tables=None, fx=True,
-          category_fn=None):
+          category_fn=None, nav_input_state=None):
     """`fx` is the caller-supplied FX-rule status (True by default so that existing scenarios are not 'undetermined' only
     because of the FX gate; tests of the gate pass None / False explicitly)."""
     st = _settings_of(ds) if settings == "auto" else settings
@@ -84,7 +84,7 @@ def build(E, ds, *, settings="auto", source="auto", prov=None, nnr="auto", use_l
         ds if tables is None else tables, settings=st, nav_not_ready=_nnr_of(ds) if nnr == "auto" else nnr, fx_key_of=L.fx_key_for,
         basis_mode_of=lambda b: E.BasisMode(market=(b != COST), track_stale=(b == MV)),
         category_of=label_fn, source_state=_source_of(ds) if source == "auto" else source, nav_provenance=prov,
-        fx_rule_verified=fx)
+        fx_rule_verified=fx, nav_input_state=nav_input_state)
 
 
 def _by_code(ev, code, policy=None):
@@ -828,7 +828,10 @@ def check_pending_gates_make_the_chart_undetermined_not_comparable(E):
 @check
 def check_target_sum_uses_a_tolerance_not_exact_equality(E):
     weights = [0.6, 0.3, 0.1]
-    assert sum(weights) != 1.0 and abs(sum(weights) - 1.0) < 1e-12                # the float trap this test is about
+    folded = 0.0
+    for w in weights:                        # plain left fold: interpreter independent (builtin sum() is compensated from CPython 3.12)
+        folded += w
+    assert folded != 1.0 and abs(folded - 1.0) < 1e-12                           # the float trap this test is about
     targets = [{"bucket": CORE, "weight_ratio": 0.6}, {"bucket": SAT, "weight_ratio": 0.3}, {"bucket": BOND, "weight_ratio": 0.1}]
     rows = [H("A", cost=6.0), H("C", bucket=SAT, cost=3.0), H("D", bucket=BOND, cost=1.0)]
     ev = build(E, DS(rows, targets=targets, names=G.NAMES + (BOND,)))
@@ -1156,6 +1159,11 @@ def test_programming_errors_raise_but_data_conditions_do_not():
         REAL.build_allocation_evidence({}, **{**ok, "fx_key_of": None})
     with pytest.raises(TypeError):
         REAL.build_allocation_evidence({}, **{**ok, "category_of": 5})
+    for bad in ("x", True, 1, "", "ASSEMBLED", False, 0, b"assembled", ["assembled"]):
+        with pytest.raises(TypeError):
+            REAL.build_allocation_evidence({}, **ok, nav_input_state=bad)
+    for good in (None, "not_assembled", "assembled"):
+        REAL.build_allocation_evidence({}, **ok, nav_input_state=good)             # a declaration is never a data condition
     ev = REAL.build_allocation_evidence({}, **ok)                    # no `holding` key at all: recorded, not raised
     assert ev.evaluation_errors and ev.evaluation_errors[0].stage == "holding_table"
     assert ev.valuation_completeness.status == "failed" and "holding_table_unreadable" in ev.valuation_completeness.reason_codes
@@ -1321,7 +1329,7 @@ def test_fuzz_weird_settings_never_raise_and_stay_strict_json():
                 settings = {**_settings_of(ds), key: weird}
                 ev = build(REAL, ds, settings=settings)
                 data = _strict(REAL, ev)
-                assert data["schema_version"] == 1
+                assert data["schema_version"] == REAL.SCHEMA_VERSION
                 n += 1
         for weird in _weird_values():                                         # the settings object itself
             _strict(REAL, build(REAL, ds, settings=weird))
@@ -1424,3 +1432,448 @@ def check_withheld_and_too_old_last_distinguish_no_entry_from_not_provided(E):
     assert a.too_old_last == "2026-09-01" and b.too_old_last == "no_entry"
     none = _by_code(build(E, ds, prov={"not_fresh": ["A"]}), "A").nav_cause
     assert none.withheld == "not_provided" and none.too_old_last == "not_provided"
+
+
+# ═══════════════════════ E. NAV input state (Option D: internal technical evidence state, no wording) ═══════════════════════
+#
+# Declared "not_assembled" / "assembled" is the CALLER's claim; the producer cannot verify it. What is checked here: Missing never
+# becomes 0 / complete / comparable / safe, and "not assembled", "assembled but no data", "failed" and "obtained but rejected"
+# stay four different things in the evidence.
+
+_PROV_CLEAR = {"provenance": {}, "withheld": {}, "key_failed": [], "not_fresh": [], "too_old": [], "too_old_last": {}}
+_NAV_STATES_ALLOWED = {"present", "not_required", "not_evaluated", "error", "not_assembled", "failed", "no_data",
+                       "obtained_rejected", "cause_unknown"}
+_BAD_STATES = {"not_assembled", "failed", "no_data", "obtained_rejected", "cause_unknown"}
+
+
+def _nav_ds(nav=None, **kw):
+    """Market basis: A (USD, CORE) and B (TWD, SAT). `nav=None` -> NAV_ALL; pass a list to choose which NAV rows exist."""
+    return DS([H("A"), H("B", bucket=SAT, ccy="TWD", units=100.0)], NAV_ALL if nav is None else nav, FX_STD(), basis=MV, **kw)
+
+
+def _b_only():
+    return [N("B", "2026-10-03", 20.0, "TWD")]
+
+
+def _without(prim, *keys):
+    return {k: v for k, v in prim.items() if k not in keys}
+
+
+@check
+def check_nav_not_assembled_is_not_evaluated_never_zero_or_comparable(E):
+    ev = build(E, _nav_ds(), nav_input_state="not_assembled")          # NAV rows ARE in the table: a declaration means they are ignored
+    assert ev.nav_input_state == "not_assembled"
+    assert len(ev.holdings) == 2
+    for h in ev.holdings:
+        assert h.nav_state == "not_assembled" and h.value_twd is None and h.value_status == "not_evaluated" and not h.valued
+        assert h.nav.status == "not_evaluated" and h.fx.status == "not_evaluated" and h.nav.nav_orig_ccy is None
+        assert h.reason is None and h.missing_kind is None and not h.counted_in_denominator and h.errors == ()
+    assert ev.valuation_completeness.status == "not_evaluated" and ev.valuation_completeness.reason_codes == ("nav_not_assembled",)
+    assert ev.chart_comparability.status == "not_evaluated" and "nav_not_assembled" in ev.chart_comparability.failing_conditions
+    assert ev.categories == () and ev.denominator.verdict == "none" and ev.denominator.value_twd is None
+    assert ev.coverage.covered_value_twd is None and ev.coverage.uncovered_value.status == "not_evaluated"
+    assert ev.evaluation_errors == () and ev.input_problems == ()
+    assert not any(g.startswith("fx_obs_date_rule") for g in ev.open_gates)         # no FX was required: nothing was evaluated
+    _strict(E, ev)
+    # the other assessments are untouched by the declaration
+    assert ev.source_coverage.status == "complete"
+
+
+@check
+def check_nav_not_assembled_never_reads_nav_or_market_indicator(E):
+    ds = _nav_ds()
+    spy = G.Spy(ds)
+    ev = build(E, ds, tables=spy, nav_input_state="not_assembled")
+    assert spy.touched == {"holding"}, spy.touched
+    assert all(h.nav_state == "not_assembled" for h in ev.holdings)
+    bare = {"holding": ds["holding"]}                                  # the adapter-like shape: no nav / market_indicator key at all
+    ev = build(E, ds, tables=bare, nav_input_state="not_assembled")
+    assert ev.evaluation_errors == () and ev.valuation_completeness.reason_codes == ("nav_not_assembled",)
+    # control: without the declaration the same call DOES read them
+    spy2 = G.Spy(ds)
+    build(E, ds, tables=spy2)
+    assert {"nav", "market_indicator"} <= spy2.touched
+
+
+@check
+def check_nav_not_assembled_conflicts_fail_closed(E):
+    stale = NNR(["A"], 10, {"A": "2026-09-01"})
+    ev = build(E, _nav_ds(), nnr=stale, nav_input_state="not_assembled")
+    assert [p.argument for p in ev.input_problems] == ["nav_not_ready"]
+    a = _by_code(ev, "A")
+    assert a.nav_state == "not_assembled" and a.reason is None and a.value_twd is None       # the stale listing is not trusted
+    assert ev.valuation_completeness.status == "not_evaluated" and ev.chart_comparability.status == "not_evaluated"
+    ev = build(E, _nav_ds(), prov=_PROV_CLEAR, nav_input_state="not_assembled")
+    assert [p.argument for p in ev.input_problems] == ["nav_provenance"]
+    assert ev.valuation_completeness.status == "not_evaluated"
+    ev = build(E, _nav_ds(errors={"nav": "HTTP 503"}), nav_input_state="not_assembled")     # the table-level failure wins
+    assert any(p.argument == "nav_input_state" for p in ev.input_problems)
+    assert ev.valuation_completeness.status == "failed" and "nav_read_failed" in ev.valuation_completeness.reason_codes
+    assert all(h.nav_state == "failed" and h.value_twd is None for h in ev.holdings)
+    assert ev.chart_comparability.status == "not_comparable"
+    ev = build(E, _nav_ds(), nnr=stale, prov=_PROV_CLEAR, nav_input_state="not_assembled")
+    assert sorted(p.argument for p in ev.input_problems) == ["nav_not_ready", "nav_provenance"]
+    assert ev.chart_comparability.status != "comparable"
+
+
+@check
+def check_nav_not_assembled_inert_on_cost_basis(E):
+    ds = _cost_ds()
+    base = E.to_primitive(build(E, ds))
+    declared = E.to_primitive(build(E, ds, nav_input_state="not_assembled"))
+    assert _without(base, "nav_input_state") == _without(declared, "nav_input_state")
+    assert base["nav_input_state"] == "not_provided" and declared["nav_input_state"] == "not_assembled"
+    assert declared["valuation_completeness"]["status"] == "complete" and declared["chart_comparability"]["status"] == "comparable"
+    assert all(h["nav_state"] == "not_required" for h in declared["holdings"])
+    # NAV is not needed on the cost basis even when the holding read failed (the state is about NAV need, not about the read)
+    failed = build(E, DS(_cost_ds()["holding"], errors={"holding": "HTTP 503"}), nav_input_state="not_assembled")
+    assert all(h.nav_state == "not_required" for h in failed.holdings) and "nav_not_assembled" not in failed.valuation_completeness.reason_codes
+    # basis unknown: the state is "not_evaluated", and the declaration adds no blocking code of its own
+    unset = build(E, DS([H("A", cost=3000.0)], NAV_ALL, FX_STD(), basis=None), nav_input_state="not_assembled")
+    assert unset.valuation_completeness.reason_codes == ("basis_unset",)
+    assert all(h.nav_state == "not_evaluated" for h in unset.holdings)
+    assert "nav_not_assembled" not in unset.chart_comparability.failing_conditions
+
+
+@check
+def check_not_assembled_vs_no_data_vs_cause_unknown_differ(E):
+    ds = _nav_ds(_b_only())                                            # no NAV row for A
+    unknown = _by_code(build(E, ds), "A")
+    no_data = _by_code(build(E, ds, prov=_PROV_CLEAR, nav_input_state="assembled"), "A")
+    not_assembled = _by_code(build(E, _nav_ds([]), nav_input_state="not_assembled"), "A")
+    assert (unknown.nav_state, no_data.nav_state, not_assembled.nav_state) == ("cause_unknown", "no_data", "not_assembled")
+    for h in (unknown, no_data, not_assembled):
+        assert h.value_twd is None and not h.valued and h.nav.nav_orig_ccy is None
+    assert unknown.reason.code == "nav_absent" and no_data.reason.code == "nav_absent" and not_assembled.reason is None
+    # the same nav=[] under the three declarations
+    states = {}
+    for label, decl, prov in (("none", None, None), ("assembled_clear", "assembled", _PROV_CLEAR), ("not_assembled", "not_assembled", None)):
+        states[label] = _by_code(build(E, _nav_ds([]), prov=prov, nav_input_state=decl), "B").nav_state
+    assert states == {"none": "cause_unknown", "assembled_clear": "no_data", "not_assembled": "not_assembled"}
+
+
+@check
+def check_legacy_without_declaration_never_claims_no_data(E):
+    ds = _nav_ds(_b_only())
+    for prov in (None, _PROV_CLEAR, {"not_fresh": []}, {**_PROV_CLEAR, "provenance": {"A": {"cache_fallback": False}}}):
+        assert _by_code(build(E, ds, prov=prov), "A").nav_state == "cause_unknown", prov
+        assert _by_code(build(E, ds, prov=prov, nav_input_state=None), "A").nav_state == "cause_unknown"
+    # "assembled" with an assembler list missing is not "all clear" either (absent part = not provided, never False)
+    for part in ("key_failed", "not_fresh", "too_old", "withheld"):
+        prov = {k: v for k, v in _PROV_CLEAR.items() if k != part}
+        assert _by_code(build(E, ds, prov=prov, nav_input_state="assembled"), "A").nav_state == "cause_unknown", part
+    assert _by_code(build(E, ds, nav_input_state="assembled"), "A").nav_state == "cause_unknown"
+    assert _by_code(build(E, ds, prov=_PROV_CLEAR, nav_input_state="assembled"), "A").nav_state == "no_data"
+
+
+@check
+def check_not_assembled_discards_provenance_parts(E):
+    prov = {"provenance": {"A": {"cache_fallback": True, "stale": True, "estimated": True}}, "withheld": {"A": "x"},
+            "key_failed": ["A"], "not_fresh": ["A"], "too_old": ["A"], "too_old_last": {"A": "2026-09-01"}}
+    ev = build(E, _nav_ds(_b_only()), prov=prov, nav_input_state="not_assembled")
+    for h in ev.holdings:
+        assert h.nav_state == "not_assembled"
+        assert [getattr(h.nav_cause, f) for f in ("cache_fallback", "stale", "estimated", "live_error", "withheld", "key_failed",
+                                                  "in_not_fresh", "in_too_old", "too_old_last")] == ["not_provided"] * 9
+    assert [p.argument for p in ev.input_problems] == ["nav_provenance"]
+
+
+@check
+def check_nav_failed_table_level_and_per_fund(E):
+    for decl in (None, "assembled"):
+        table = build(E, _nav_ds(errors={"nav": "HTTP 503"}), nav_input_state=decl)
+        assert [h.nav_state for h in table.holdings] == ["failed", "failed"]                     # table level: every fund
+        assert table.valuation_completeness.status == "failed" and all(h.value_twd is None for h in table.holdings)
+        assert table.chart_comparability.status == "not_comparable"
+        one = build(E, _nav_ds(_b_only()), prov={**_PROV_CLEAR, "key_failed": ["A"]}, nav_input_state=decl)    # per fund
+        assert _by_code(one, "A").nav_state == "failed" and _by_code(one, "B").nav_state == "present"
+        assert _by_code(one, "A").value_twd is None and one.valuation_completeness.status == "incomplete"
+    both = build(E, _nav_ds(_b_only()), prov={**_PROV_CLEAR, "key_failed": ["A"], "not_fresh": ["A"]}, nav_input_state="assembled")
+    assert _by_code(both, "A").nav_state == "failed"                                              # a failure outranks a removal
+    cost = build(E, DS([H("A", cost=5.0)], NAV_ALL, FX_STD(), errors={"nav": "HTTP 503"}))
+    assert cost.holdings[0].nav_state == "not_required" and cost.valuation_completeness.status == "complete"
+
+
+@check
+def check_nav_obtained_rejected_stale_and_removed(E):
+    for decl in (None, "assembled"):
+        ds = _nav_ds(_b_only(), nav_not_ready=NNR(["A"], 10, {"A": "2026-09-01"}))
+        a = _by_code(build(E, ds, prov=_PROV_CLEAR, nav_input_state=decl), "A")
+        assert a.nav_state == "obtained_rejected" and a.reason.code == "nav_stale" and a.value_twd is None
+        old = _nav_ds(_b_only(), nav_not_ready=NNR(["A"], 7))
+        assert _by_code(build(E, old, prov=_PROV_CLEAR, nav_input_state=decl), "A").nav_state == "obtained_rejected"
+        for part, value in (("not_fresh", ["A"]), ("too_old", ["A"]), ("withheld", {"A": "ccy_missing"})):
+            prov = {**_PROV_CLEAR, part: value}
+            h = _by_code(build(E, _nav_ds(_b_only()), prov=prov, nav_input_state=decl), "A")
+            assert h.nav_state == "obtained_rejected", (part, decl)
+            assert h.value_twd is None and h.reason.code == "nav_absent" and h.value_status == "missing"      # removed rows stay Missing
+    # the producer does not second-guess a NAV row that IS present (no new rule): the listing is ignored when a row exists
+    kept = _by_code(build(E, _nav_ds(), prov={**_PROV_CLEAR, "not_fresh": ["A"]}, nav_input_state="assembled"), "A")
+    assert kept.nav_state == "present" and kept.valued
+
+
+@check
+def check_nav_state_basics(E):
+    ev = build(E, _nav_ds(), nav_input_state="assembled")
+    assert [h.nav_state for h in ev.holdings] == ["present", "present"] and ev.valuation_completeness.status == "complete"
+    assert [h.nav_state for h in build(E, _cost_ds()).holdings] == ["not_required", "not_required"]
+    assert [h.nav_state for h in build(E, DS([H("A")], NAV_ALL, FX_STD(), basis=None)).holdings] == ["not_evaluated"]
+    held = build(E, _nav_ds(errors={"holding": "HTTP 503"}))                                     # nothing evaluated on the market basis
+    assert all(h.nav_state == "not_evaluated" for h in held.holdings)
+    err = build(E, DS([H("A")], [N("A", "2026-10-03", 10.0, "usd")], FX_STD(), basis=MV))         # the trace itself raised
+    assert _by_code(err, "A").nav_state == "error" and _by_code(err, "A").nav.status == "error"
+    assert err.valuation_completeness.status == "failed"
+    # present NAV but missing FX: the NAV side is fine, so the NAV state says so
+    nofx = build(E, DS([H("A")], NAV_ALL, [], basis=MV))
+    assert _by_code(nofx, "A").nav_state == "present" and _by_code(nofx, "A").reason.code == "fx_absent"
+
+
+@check
+def check_invalid_nav_input_state_raises_typeerror(E):
+    for bad in ("x", True, 1, "", "ASSEMBLED", False, 0, b"assembled", ["assembled"], ("assembled",), {"assembled": 1}, 1.5):
+        try:
+            build(E, _nav_ds(), nav_input_state=bad)
+        except TypeError:
+            continue
+        raise AssertionError(f"nav_input_state={bad!r} must raise TypeError")
+    class Hostile(str):                       # a str subclass whose __eq__ says yes once and no afterwards
+        calls = 0
+
+        def __eq__(self, other):
+            Hostile.calls += 1
+            return Hostile.calls == 1
+
+        __hash__ = str.__hash__
+
+    for text in ("not_assembled", "assembled"):
+        Hostile.calls = 0
+        try:
+            build(E, _nav_ds(), nav_input_state=Hostile(text))
+        except TypeError:
+            continue
+        raise AssertionError("a str subclass must be rejected by an exact type check")
+    for good in (None, "not_assembled", "assembled"):
+        build(E, _nav_ds(), nav_input_state=good)
+
+
+@check
+def check_stale_listing_outranks_key_failed_for_a_missing_row(E):
+    """Pins ORDERING only: assemble_nav forbids key_failed overlapping the nav codes, so this input cannot come from the live
+    assembler; it is a direct producer input that fixes which reading wins if both ever appear."""
+    ds = _nav_ds(_b_only(), nav_not_ready=NNR(["A"], 10, {"A": "2026-09-01"}))
+    a = _by_code(build(E, ds, prov={**_PROV_CLEAR, "key_failed": ["A"]}, nav_input_state="assembled"), "A")
+    assert a.nav_state == "obtained_rejected" and a.reason.code == "nav_stale" and a.value_twd is None
+    assert a.nav_cause.key_failed is True                                       # the key failure is still visible as data
+
+
+@check
+def check_not_assembled_with_malformed_nav_not_ready_stays_fail_closed(E):
+    """CURRENT behaviour pinned: under not_assembled the nav_not_ready shape is not validated at all; it is only reported as
+    given (one `nav_not_ready` problem) and discarded. Never comparable, never numeric."""
+    for bad in ({"codes": ["A"]}, 5, "x", {"codes": 1, "days": "x"}, [], {}):
+        ev = build(E, _nav_ds(), nnr=bad, nav_input_state="not_assembled")
+        assert [p.argument for p in ev.input_problems] == ["nav_not_ready"], bad
+        assert ev.valuation_completeness.status == "not_evaluated" and ev.valuation_completeness.reason_codes == ("nav_not_assembled",)
+        assert ev.chart_comparability.status == "not_evaluated" and ev.chart_comparability.status != "comparable"
+        assert all(h.value_twd is None and not h.valued and h.nav_state == "not_assembled" for h in ev.holdings)
+        assert ev.denominator.value_twd is None and ev.categories == ()
+
+
+@check
+def check_assembled_declaration_changes_nothing_but_the_echo_when_rows_exist(E):
+    for ds in (_nav_ds(), _cost_ds(), _nav_ds(errors={"nav": "x"}), DS([H("A")], NAV_ALL, FX_STD(), basis=None)):
+        base = E.to_primitive(build(E, ds, prov=_PROV_CLEAR))
+        declared = E.to_primitive(build(E, ds, prov=_PROV_CLEAR, nav_input_state="assembled"))
+        assert declared["nav_input_state"] == "assembled" and base["nav_input_state"] == "not_provided"
+        assert _without(base, "nav_input_state") == _without(declared, "nav_input_state")
+
+
+_MATRIX_CACHE = {"module": None, "rows": None}
+
+
+def _nav_matrix(E):
+    """declaration x NAV table x provenance x nav read error x stale listing x basis. Cached for the last module object."""
+    if _MATRIX_CACHE["module"] is E:
+        return _MATRIX_CACHE["rows"]
+    navs = {"rows": NAV_ALL, "b_only": _b_only(), "empty": [], "bad_ccy": [N("A", "2026-10-03", 10.0, "usd")] + _b_only()}
+    provs = (None, _PROV_CLEAR, {**_PROV_CLEAR, "key_failed": ["A"]}, {**_PROV_CLEAR, "not_fresh": ["A"]})
+    stale = (None, NNR(["A"], 10, {"A": "2026-09-01"}))
+    rows = []
+    for decl in (None, "not_assembled", "assembled"):
+        for nav_label, nav in navs.items():
+            for prov in provs:
+                for errors in ({}, {"nav": "HTTP 503"}):
+                    for nnr in stale:
+                        for basis in (MV, COST, None):
+                            ds = DS([H("A", cost=3000.0), H("B", bucket=SAT, ccy="TWD", units=100.0, cost=1000.0)], nav, FX_STD(),
+                                    basis=basis, errors=errors, nav_not_ready=nnr)
+                            rows.append((decl, nav_label, prov, errors, nnr, basis, build(E, ds, prov=prov, nav_input_state=decl)))
+    _MATRIX_CACHE["module"], _MATRIX_CACHE["rows"] = E, rows
+    return rows
+
+
+@check
+def check_cross_product_not_assembled_never_numeric_comparable_or_safe(E):
+    seen = 0
+    for decl, _nav, prov, errors, _nnr, basis, ev in _nav_matrix(E):
+        seen += 1
+        assert ev.nav_input_state == ("not_provided" if decl is None else decl)
+        for h in ev.holdings:
+            assert h.nav_state in _NAV_STATES_ALLOWED, h.nav_state
+            if basis == COST:
+                assert h.nav_state == "not_required"
+            if basis is None:
+                assert h.nav_state == "not_evaluated"
+        if basis != MV:
+            continue
+        if decl == "not_assembled":
+            for h in ev.holdings:
+                assert h.value_twd is None and not h.valued and h.value_status == "not_evaluated"
+                assert h.nav_state == ("failed" if errors else "not_assembled")
+                assert h.nav.nav_orig_ccy is None and h.fx.value_num is None
+            assert ev.valuation_completeness.status in ("not_evaluated", "failed")
+            assert ev.denominator.value_twd is None and ev.categories == () and ev.coverage.covered_value_twd is None
+        if decl != "assembled" or prov is None:
+            assert all(h.nav_state != "no_data" for h in ev.holdings), (decl, prov)     # no_data needs a declaration AND the lists
+        if any(h.nav_state in _BAD_STATES for h in ev.holdings):
+            # a NAV side that is not present can never read as complete / comparable / nothing-uncovered
+            assert all(h.value_twd is None for h in ev.holdings if h.nav_state in _BAD_STATES)
+            assert ev.valuation_completeness.status != "complete"
+            assert ev.chart_comparability.status != "comparable"
+            assert ev.coverage.uncovered_value.status != "none_uncovered"
+            assert ev.denominator.verdict != "complete"
+            assert all(c.share.covers_all_holdings is False for c in ev.categories)
+    assert seen == 3 * 4 * 4 * 2 * 2 * 3, seen
+
+
+@check
+def check_nav_state_vocabulary_is_closed_and_fully_reachable(E):
+    observed = {h.nav_state for *_rest, ev in _nav_matrix(E) for h in ev.holdings}
+    assert observed == _NAV_STATES_ALLOWED, sorted(observed ^ _NAV_STATES_ALLOWED)
+    assert set(E.NAV_STATES) == _NAV_STATES_ALLOWED and len(E.NAV_STATES) == len(_NAV_STATES_ALLOWED)
+    assert E.NAV_INPUT_STATES == ("not_assembled", "assembled")
+    echoes = {ev.nav_input_state for *_rest, ev in _nav_matrix(E)}
+    assert echoes == {"not_provided", "not_assembled", "assembled"}
+    chart = {c for *_rest, ev in _nav_matrix(E) for c in ev.chart_comparability.failing_conditions if c.startswith("nav_")}
+    assert chart == {"nav_not_assembled"}
+    codes = {c for *_rest, ev in _nav_matrix(E) for c in ev.valuation_completeness.reason_codes if c.startswith("nav_")}
+    assert codes == {"nav_not_assembled", "nav_read_failed"}                      # the new soft code and the existing hard code
+
+
+@check
+def check_nav_input_echo_strict_json_and_inputs_not_mutated(E):
+    for decl in (None, "not_assembled", "assembled"):
+        ds = _nav_ds(_b_only(), nav_not_ready=NNR(["A"], 10, {"A": "2026-09-01"}))
+        prov = {**_PROV_CLEAR, "not_fresh": ["A"]}
+        nnr = _nnr_of(ds)
+        before = (copy.deepcopy(ds), copy.deepcopy(prov), copy.deepcopy(nnr))
+        ev = build(E, ds, prov=prov, nnr=nnr, nav_input_state=decl)
+        assert (ds, prov, nnr) == before
+        data = _strict(E, ev)
+        assert data["nav_input_state"] == ("not_provided" if decl is None else decl)
+        assert all(h["nav_state"] in _NAV_STATES_ALLOWED for h in data["holdings"])
+
+
+@check
+def check_schema_version_is_two_and_primitive_reads_the_constant(E):
+    assert E.SCHEMA_VERSION == 2 and type(E.SCHEMA_VERSION) is int
+    ev = build(E, _cost_ds())
+    assert ev.schema_version == E.SCHEMA_VERSION == E.to_primitive(ev)["schema_version"]
+
+
+_FIXTURE_PATH = _ROOT / "tests" / "fixtures" / "allocation_evidence_legacy_digests.json"
+_NEW_ROOT_KEYS = {"nav_input_state"}
+_NEW_HOLDING_KEYS = {"nav_state"}
+
+
+@check
+def check_field_sets_are_the_old_ones_plus_the_two_new_keys(E):
+    import dataclasses
+    doc = json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
+    assert {f.name for f in dataclasses.fields(E.HoldingEvidence)} == set(doc["holding_evidence_fields"]) | _NEW_HOLDING_KEYS
+    assert {f.name for f in dataclasses.fields(E.AllocationEvidence)} == set(doc["allocation_evidence_fields"]) | _NEW_ROOT_KEYS
+    assert not (_NEW_HOLDING_KEYS & set(doc["holding_evidence_fields"])) and not (_NEW_ROOT_KEYS & set(doc["allocation_evidence_fields"]))
+
+
+# ───────── legacy differential: callers that pass nothing get the old output (modulo the two new keys and the version) ─────────
+
+_PROV_LEGACY = {"provenance": {"A": {"cache_fallback": True, "stale": False}}, "withheld": {"B": "x"}, "key_failed": ["C"],
+                "not_fresh": ["A"], "too_old": [], "too_old_last": {}}
+
+
+def _legacy_cases():
+    """id -> function(E) -> evidence. Kept IDENTICAL to the generator that produced the fixture from the unmodified producer
+    (commit 133c4444, python 3.11): do not edit the case list without regenerating from that commit."""
+    cases = {}
+    for label in G._alo2_cases():
+        def ds_of(label=label):
+            return G._alo2_cases()[label]
+        cases[f"alo2:{label}|std"] = lambda E, f=ds_of: build(E, f())
+        cases[f"alo2:{label}|fx_none"] = lambda E, f=ds_of: build(E, f(), fx=None)
+        cases[f"alo2:{label}|no_source_no_nnr"] = lambda E, f=ds_of: build(E, f(), source=None, nnr=None)
+        cases[f"alo2:{label}|prov"] = lambda E, f=ds_of: build(E, f(), prov=_PROV_LEGACY)
+    targets3 = [{"bucket": CORE, "weight_ratio": 0.6}, {"bucket": SAT, "weight_ratio": 0.3}, {"bucket": BOND, "weight_ratio": 0.1}]
+    rows3 = [H("A", cost=6.0), H("C", bucket=SAT, cost=3.0), H("D", bucket=BOND, cost=1.0)]
+    names3 = G.NAMES + (BOND,)
+    off = [{"bucket": CORE, "weight_ratio": 0.6}, {"bucket": SAT, "weight_ratio": 0.3}, {"bucket": BOND, "weight_ratio": 0.1001}]
+    extras = {
+        "target_sum:exact_tolerance": lambda E: build(E, DS(rows3, targets=targets3, names=names3)),
+        "target_sum:off": lambda E: build(E, DS(rows3, targets=off, names=names3)),
+        "mv:clean_all_present": lambda E: build(E, DS([H("A"), H("B", bucket=SAT, ccy="TWD", units=100.0)], NAV_ALL, FX_STD(), basis=MV)),
+        "mv:nav_missing_one": lambda E: build(E, DS([H("Z"), H("B", bucket=SAT, ccy="TWD", units=100.0)], NAV_ALL, FX_STD(), basis=MV)),
+        "mv:nav_table_empty": lambda E: build(E, DS([H("A"), H("B", bucket=SAT, ccy="TWD", units=100.0)], [], FX_STD(), basis=MV)),
+        "mv:fx_missing": lambda E: build(E, DS([H("A"), H("B", bucket=SAT, ccy="TWD", units=100.0)], NAV_ALL, [], basis=MV)),
+        "mv:stale_new_shape": lambda E: build(E, DS([H("Z"), H("Y")], NAV_ALL, FX_STD(), basis=MV, nav_not_ready=NNR(["Z", "Y"], 10, {"Z": "2026-09-01", "Y": "2026-09-05"}))),
+        "mv:stale_old_shape": lambda E: build(E, DS([H("Z")], NAV_ALL, FX_STD(), basis=MV, nav_not_ready=NNR(["Z"], 7))),
+        "mv:invalid_nnr": lambda E: build(E, DS([H("A")], NAV_ALL, FX_STD(), basis=MV, nav_not_ready={"codes": ["A"]})),
+        "mv:nav_read_error": lambda E: build(E, DS([H("A")], NAV_ALL, FX_STD(), basis=MV, errors={"nav": "HTTP 503"})),
+        "mv:market_indicator_read_error": lambda E: build(E, DS([H("A")], NAV_ALL, FX_STD(), basis=MV, errors={"market_indicator": "HTTP 503"})),
+        "mv:provenance_full": lambda E: build(E, DS([H("A"), H("B", bucket=SAT, ccy="TWD", units=100.0)], NAV_ALL, FX_STD(), basis=MV),
+                                              prov={"provenance": {"A": {"cache_fallback": True, "stale": False, "live_error": "boom"}},
+                                                    "withheld": {"B": "ccy_missing"}, "key_failed": [], "not_fresh": ["A"], "too_old": [], "too_old_last": {}}),
+        "mv:provenance_malformed": lambda E: build(E, DS([H("A")], NAV_ALL, FX_STD(), basis=MV), prov={"nope": 1}),
+        "mv:fx_lag": lambda E: build(E, DS([H("A")], [N("A", "2026-10-05", 10.0)], [FX(FX_USD, "2026-10-01", 29.0)], basis=MV)),
+        "mv:fx_rule_none": lambda E: build(E, DS([H("A")], NAV_ALL, FX_STD(), basis=MV), fx=None),
+        "mv:fx_rule_false": lambda E: build(E, DS([H("A")], NAV_ALL, FX_STD(), basis=MV), fx=False),
+        "mv:nav_present_error_trace": lambda E: build(E, DS([H("A")], [N("A", "2026-10-03", 10.0, "usd")], FX_STD(), basis=MV)),
+        "mv:twd_only": lambda E: build(E, DS([H("B", ccy="TWD", units=100.0)], NAV_ALL, [], basis=MV)),
+        "mv:no_holdings": lambda E: build(E, DS([], NAV_ALL, FX_STD(), basis=MV)),
+        "mv:basis_unset": lambda E: build(E, DS([H("A")], NAV_ALL, FX_STD(), basis=None)),
+        "mv:no_active_source": lambda E: build(E, DS([H("A")], NAV_ALL, FX_STD(), basis=MV), source={"active_source": "none", "errors": {}, "skipped_tabs": [], "skipped_holdings": []}),
+        "mv:settings_none": lambda E: build(E, DS([H("A")], NAV_ALL, FX_STD(), basis=MV), settings=None),
+        "cost:clean": lambda E: build(E, DS([H("A", cost=3000.0), H("C", bucket=SAT, cost=4000.0)])),
+        "cost:with_nnr_and_prov_given": lambda E: build(E, DS([H("A", cost=3000.0)], nav_not_ready=NNR(["A"], 3)), prov={"not_fresh": ["A"]}),
+    }
+    cases.update(extras)
+    return cases
+
+
+def _legacy_digest(E, ev, old_version):
+    import hashlib
+    data = E.to_primitive(ev)
+    data.pop("nav_input_state")                       # the two new keys are removed, the version is set back to the old one;
+    data["schema_version"] = old_version              # everything else must be byte-identical to the unmodified producer
+    for holding in data["holdings"]:
+        holding.pop("nav_state")
+    text = json.dumps(data, sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def test_legacy_fixture_covers_exactly_the_current_case_list():
+    doc = json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
+    assert set(doc["cases"]) == set(_legacy_cases())
+    assert doc["header"]["case_count"] == len(doc["cases"]) >= 400
+    assert doc["header"]["base_commit"] and doc["header"]["python"].startswith("3.11")
+
+
+def test_legacy_differential_old_callers_get_the_old_output():
+    """Callers that pass no `nav_input_state` get EXACTLY the old output once the two new keys are stripped and the version is set
+    back to 1 (sha256 of canonical JSON, per case). Pinned to the python of the fixture (3.11, the CI version): the builtin `sum()` is
+    compensated from 3.12 on, so float digests differ there even without any producer change."""
+    import sys
+    doc = json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
+    if sys.version_info[:2] != tuple(int(x) for x in doc["header"]["python"].split(".")[:2]):
+        pytest.skip(f"fixture digests are pinned to python {doc['header']['python']} (float sum() differs on {sys.version.split()[0]})")
+    bad = [cid for cid, fn in _legacy_cases().items()
+           if _legacy_digest(REAL, fn(REAL), doc["header"]["schema_version"]) != doc["cases"][cid]]
+    assert bad == [], bad[:10]

@@ -34,12 +34,30 @@ Inputs (all explicit; nothing global, nothing read from disk or network):
   `services.v2_tables`, so the caller passes `market_indicator.FX_OBS_DATE_RULE_VERIFIED`. None = not provided.
   Whenever a non-TWD FX was required an open gate is ALWAYS recorded (`fx_obs_date_rule_status_not_provided` for None,
   `fx_obs_date_rule_unverified` for False); True records no gate. Both gates affect chart comparability.
+- `nav_input_state` (optional, CALLER-DECLARED, internal technical state): None = legacy behaviour (echoed as "not_provided";
+  a missing NAV row never claims "no data" without a declaration, it is `cause_unknown`). "not_assembled" = the caller did NOT
+  assemble the NAV side at all: on the market basis nothing is evaluated (all per-holding values None, `nav_state` is
+  "not_assembled", valuation `not_evaluated` with the soft code `nav_not_assembled`, chart never `comparable`), `tables["nav"]`
+  and `tables["market_indicator"]` are never read, and `nav_not_ready` / `nav_provenance` must be None (given anyway: recorded
+  as an `InputProblem` and discarded). "assembled" = the caller claims it ran the assembler; the producer CANNOT verify that
+  claim (it only lets a missing row be told apart as "no_data" when the assembler-supplied lists are clear, see `nav_state`).
+  The cost basis does not use NAV, so the declaration is inert there (echoed only).
+  `HoldingEvidence.nav_state` (per holding, all internal codes, no wording): "not_required" (cost basis), "not_evaluated"
+  (basis unknown / nothing evaluated), "not_assembled", "failed" (`source_state.errors["nav"]`, or the fund is in
+  `nav_provenance["key_failed"]`), "present", "error" (the trace itself raised), and for a MISSING row: "obtained_rejected"
+  (the fund is in `nav_not_ready` or in the assembler's `not_fresh` / `too_old` / `withheld`), "no_data" (declared
+  "assembled", the assembler lists `key_failed` / `not_fresh` / `too_old` / `withheld` are provided and hold nothing for the fund),
+  else "cause_unknown". The producer reads only the assembler-supplied lists; it never interprets per-fund cache_fallback /
+  stale / estimated flags itself and adds no threshold. Missing is never 0, complete, comparable or safe.
+  CONTRACT RISK (found by audit): "no_data" relies on the caller converting the assembler's error (assemble_nav["error"]) into
+  `source_state.errors["nav"]`. If a caller omits that conversion, a per-fund fetch failure with a declared "assembled" and
+  empty lists would be classified "no_data"; the producer cannot verify the claim.
 
 Output: frozen dataclasses (`AllocationEvidence` at the root) and `to_primitive()` for a JSON-primitive form.
 The producer NEVER raises for data or settings conditions (identity conflict, non-positive denominator, a failing or
 misbehaving injected callable, malformed settings, unhashable category labels, ...); it records them as `input_problems` /
 `evaluation_errors` and downgrades the assessments. It raises only for programming errors (a non-callable argument,
-`tables` not a mapping, `fx_rule_verified` not None/bool).
+`tables` not a mapping, `fx_rule_verified` not None/bool, `nav_input_state` not None / "not_assembled" / "assembled").
 
 chart_comparability (CANDIDATE states):
 - `comparable`: no blocking fact and no comparability-affecting open gate.
@@ -60,10 +78,14 @@ from services.v2_domain import holdings as _h
 __all__ = (
     "PRODUCER_ID", "SCHEMA_VERSION", "BasisMode", "AllocationEvidence", "build_allocation_evidence", "to_primitive",
     "NOT_PROVIDED", "NOT_COMPUTABLE", "NOT_EVALUATED", "NOT_DEFINED", "NOT_REQUIRED", "PRESENT", "MISSING",
+    "NAV_INPUT_NOT_ASSEMBLED", "NAV_INPUT_ASSEMBLED", "NAV_INPUT_STATES", "NAV_STATE_PRESENT", "NAV_STATE_NOT_REQUIRED",
+    "NAV_STATE_NOT_EVALUATED", "NAV_STATE_ERROR", "NAV_STATE_NOT_ASSEMBLED", "NAV_STATE_FAILED", "NAV_STATE_NO_DATA",
+    "NAV_STATE_OBTAINED_REJECTED", "NAV_STATE_CAUSE_UNKNOWN", "NAV_STATES",
 )
 
 PRODUCER_ID = "v2_domain.allocation_evidence"
-SCHEMA_VERSION = 1   # CANDIDATE: the evidence schema is not an approved contract; bump on any field change.
+SCHEMA_VERSION = 2   # CANDIDATE: the evidence schema is not an approved contract; bump on any field change.
+#                      v2: + HoldingEvidence.nav_state, + AllocationEvidence.nav_input_state, + code `nav_not_assembled`.
 
 # generic status codes
 PRESENT = "present"
@@ -114,6 +136,21 @@ DEN_INCOMPLETE = "incomplete"
 DEN_NONE = "none"
 DEN_NON_POSITIVE = "non_positive"
 DEN_NON_FINITE = "non_finite"
+# NAV input declaration (CALLER-DECLARED; internal technical codes only) and per-holding NAV state
+NAV_INPUT_NOT_ASSEMBLED = "not_assembled"
+NAV_INPUT_ASSEMBLED = "assembled"
+NAV_INPUT_STATES = (NAV_INPUT_NOT_ASSEMBLED, NAV_INPUT_ASSEMBLED)
+NAV_STATE_PRESENT = PRESENT
+NAV_STATE_NOT_REQUIRED = NOT_REQUIRED
+NAV_STATE_NOT_EVALUATED = NOT_EVALUATED
+NAV_STATE_ERROR = ERROR
+NAV_STATE_NOT_ASSEMBLED = "not_assembled"        # declared: the NAV side was never assembled / attempted
+NAV_STATE_FAILED = "failed"                      # the NAV read / key failed
+NAV_STATE_NO_DATA = "no_data"                    # assembled, nothing failed, nothing removed, and no row for this fund
+NAV_STATE_OBTAINED_REJECTED = "obtained_rejected"   # obtained but rejected by the data-validity requirements
+NAV_STATE_CAUSE_UNKNOWN = "cause_unknown"        # row missing and the evidence cannot say why
+NAV_STATES = (NAV_STATE_PRESENT, NAV_STATE_NOT_REQUIRED, NAV_STATE_NOT_EVALUATED, NAV_STATE_ERROR, NAV_STATE_NOT_ASSEMBLED,
+              NAV_STATE_FAILED, NAV_STATE_NO_DATA, NAV_STATE_OBTAINED_REJECTED, NAV_STATE_CAUSE_UNKNOWN)
 
 _SETTING_KEYS = ("basis", "targets", "tolerance", "bucket_names")
 _SOURCE_KEYS = ("active_source", "errors", "skipped_tabs", "skipped_holdings")
@@ -253,6 +290,7 @@ class HoldingEvidence:
     fx: FxFact
     nav_ccy_matches_holding_ccy: object
     nav_cause: NavCauseFact
+    nav_state: str   # one of NAV_STATES (internal technical code)
     value_status: str
     value_twd: object
     reason: object
@@ -435,6 +473,7 @@ class AllocationEvidence:
     input_problems: tuple
     open_gates: tuple
     fx_rule_verified: object   # True / False, or "not_provided"
+    nav_input_state: str       # echo of the caller's declaration: "not_provided" / "not_assembled" / "assembled"
 
 
 # ----------------------------- small helpers -----------------------------
@@ -684,6 +723,43 @@ def _nav_cause(code, parts) -> NavCauseFact:
         in_not_fresh=member("not_fresh"), in_too_old=member("too_old"), too_old_last=lookup("too_old_last"))
 
 
+def _in_part(parts, part, code):
+    """True / False when the side-channel `part` was provided (membership of `code`), None when it was not provided."""
+    if parts is None or part not in parts:
+        return None
+    try:
+        hit = code in parts[part]
+    except TypeError:        # an unhashable fund code: unknown, never "not in"
+        return None
+    return hit
+
+
+def _nav_state(*, mode_known, market, declared, nav_table_failed, nav_fact, reason, parts, code):
+    """Per-holding NAV state, derived ONLY from facts already in the evidence and the assembler-supplied lists.
+    No threshold, no judgment of cache_fallback / stale / estimated flags (they are not read here)."""
+    if not mode_known:
+        return NAV_STATE_NOT_EVALUATED
+    if not market:
+        return NAV_STATE_NOT_REQUIRED
+    if nav_table_failed:
+        return NAV_STATE_FAILED
+    if declared == NAV_INPUT_NOT_ASSEMBLED:
+        return NAV_STATE_NOT_ASSEMBLED
+    if nav_fact.status != MISSING:
+        return nav_fact.status       # present / not_evaluated / error
+    if reason is not None and reason.code in (_h.REASON_NAV_STALE, _h.REASON_NAV_STALE_UNDATED):
+        return NAV_STATE_OBTAINED_REJECTED
+    key_failed = _in_part(parts, "key_failed", code)
+    if key_failed is True:
+        return NAV_STATE_FAILED
+    not_fresh, too_old, withheld = (_in_part(parts, name, code) for name in ("not_fresh", "too_old", "withheld"))
+    if not_fresh is True or too_old is True or withheld is True:
+        return NAV_STATE_OBTAINED_REJECTED
+    if declared == NAV_INPUT_ASSEMBLED and key_failed is False and not_fresh is False and too_old is False and withheld is False:
+        return NAV_STATE_NO_DATA
+    return NAV_STATE_CAUSE_UNKNOWN
+
+
 # ----------------------------- per-holding trace -----------------------------
 
 
@@ -724,7 +800,8 @@ def _empty_nav(status):
             FxFact(status, None, None, None, None, None, None, None, None, ()))
 
 
-def _evaluate_holding(agg, raw_rows, tables, *, market, fx_key_of, stale_provider, evaluate, category_of, bucket_names, parts):
+def _evaluate_holding(agg, raw_rows, tables, *, market, fx_key_of, stale_provider, evaluate, category_of, bucket_names, parts,
+                      mode_known, declared, nav_table_failed):
     errors = []
     code = agg["fund_code"]
     nav_fact, fx_fact = _empty_nav(NOT_EVALUATED)
@@ -761,6 +838,8 @@ def _evaluate_holding(agg, raw_rows, tables, *, market, fx_key_of, stale_provide
     except Exception as exc:  # noqa: BLE001 - recorded as evidence, never swallowed
         unclassified = None
         errors.append(_error("bucket_category", exc))
+    nav_state = _nav_state(mode_known=mode_known, market=market, declared=declared, nav_table_failed=nav_table_failed,
+                           nav_fact=nav_fact, reason=_reason_fact(missing), parts=parts, code=code)
     return HoldingEvidence(
         policy_id=agg["policy_id"], fund_code=code, holding_id=agg.get("holding_id"), fund_name=agg.get("fund_name"),
         bucket=agg.get("bucket"), category=label, is_unclassified=unclassified, ccy=agg.get("ccy"),
@@ -770,7 +849,7 @@ def _evaluate_holding(agg, raw_rows, tables, *, market, fx_key_of, stale_provide
             "holding_id", "policy_id", "fund_code", "fund_name", "bucket", "ccy", "units_shares", "cost_orig_ccy", "cost_twd")])
                           for r in raw_rows),
         nav=nav_fact, fx=fx_fact, nav_ccy_matches_holding_ccy=matches, nav_cause=_nav_cause(code, parts),
-        value_status=status, value_twd=value, reason=_reason_fact(missing), missing_kind=kind,
+        nav_state=nav_state, value_status=status, value_twd=value, reason=_reason_fact(missing), missing_kind=kind,
         valued=(status == VALUED), counted_in_denominator=False, excluded_by_category_rule=False,
         category_status=None, category_first_reason=None, errors=tuple(errors))
 
@@ -779,7 +858,7 @@ def _evaluate_holding(agg, raw_rows, tables, *, market, fx_key_of, stale_provide
 
 
 def build_allocation_evidence(tables, *, settings, nav_not_ready, fx_key_of, basis_mode_of, category_of=None,
-                              source_state=None, nav_provenance=None, fx_rule_verified=None):
+                              source_state=None, nav_provenance=None, fx_rule_verified=None, nav_input_state=None):
     """Build the `AllocationEvidence` for one allocation scope. Pure; never mutates its inputs; see the module docstring."""
     if not _is_mapping(tables):
         raise TypeError("tables must be a mapping")
@@ -789,6 +868,10 @@ def build_allocation_evidence(tables, *, settings, nav_not_ready, fx_key_of, bas
         raise TypeError("category_of must be callable or None")
     if fx_rule_verified is not None and not isinstance(fx_rule_verified, bool):
         raise TypeError("fx_rule_verified must be True, False or None")
+    # exact type check: a str subclass (hostile __eq__ / __hash__) never gets in, so every later comparison and the echo
+    # only ever see a plain str that was validated once here
+    if nav_input_state is not None and not (type(nav_input_state) is str and nav_input_state in NAV_INPUT_STATES):
+        raise TypeError("nav_input_state must be None, 'not_assembled' or 'assembled'")
     problems = []
 
     source = _source_facts(source_state, problems)
@@ -823,7 +906,18 @@ def build_allocation_evidence(tables, *, settings, nav_not_ready, fx_key_of, bas
     # -- what blocks evaluation --
     market = mode is not None and mode.market
     nav_nr = None
-    if market:
+    not_assembled = market and nav_input_state == NAV_INPUT_NOT_ASSEMBLED
+    if not_assembled:
+        # declared "not assembled": no NAV-side input can exist, so nothing of it is read or trusted (fail closed)
+        if nav_not_ready is not None:
+            problems.append(InputProblem("nav_not_ready", "must be None when nav_input_state is not_assembled"))
+        if nav_provenance is not None:
+            problems.append(InputProblem("nav_provenance", "must be None when nav_input_state is not_assembled"))
+            parts = None
+        if "nav" in error_tables:
+            problems.append(InputProblem("nav_input_state", "not_assembled conflicts with a nav read error"))
+        nav_nr = (frozenset(), None, None)
+    elif market:
         nav_nr = _normalize_nav_not_ready(nav_not_ready, problems)
     hard = []
     if conflict is not None:
@@ -853,6 +947,8 @@ def build_allocation_evidence(tables, *, settings, nav_not_ready, fx_key_of, bas
         soft.append("basis_" + echo.basis.status)
     if not aggregated and conflict is None and not aggregation_error and not table_unreadable:
         soft.append("no_holdings")
+    if not_assembled:
+        soft.append("nav_not_assembled")
     evaluate = not hard and not soft
 
     # -- per-holding evaluation (single source: holdings.basis_value_with_reason) --
@@ -862,7 +958,8 @@ def build_allocation_evidence(tables, *, settings, nav_not_ready, fx_key_of, bas
         group = [r for r in raw_rows if r["policy_id"] == agg["policy_id"] and r["fund_code"] == agg["fund_code"]]
         holding_items.append(_evaluate_holding(
             agg, group, tables, market=market, fx_key_of=fx_key_of, stale_provider=stale_provider, evaluate=evaluate,
-            category_of=category_of, bucket_names=names, parts=parts))
+            category_of=category_of, bucket_names=names, parts=parts, mode_known=mode is not None, declared=nav_input_state,
+            nav_table_failed=market and "nav" in error_tables))
     any_item_error = any(item.errors for item in holding_items)
     if any_item_error:
         hard.append("holding_evaluation_error")
@@ -1103,9 +1200,11 @@ def build_allocation_evidence(tables, *, settings, nav_not_ready, fx_key_of, bas
         failing.append("denominator_not_positive")
     if conflict is not None:
         failing.append("identity_conflict")
+    if not_assembled:
+        failing.append("nav_not_assembled")                 # a prerequisite is missing: nothing was evaluated
     pending = tuple(g for g in gates if g in _CHART_AFFECTING_GATES)
     prerequisite_only = {"basis_unset", "basis_not_provided", "targets_unset", "targets_empty", "targets_not_provided",
-                         "valuation_not_evaluated", "source_coverage_not_selected"}
+                         "valuation_not_evaluated", "source_coverage_not_selected", "nav_not_assembled"}
     if failing:
         status = CHART_NOT_EVALUATED if all(code in prerequisite_only for code in failing) else CHART_NOT_COMPARABLE
         chart = ChartComparability(status, tuple(failing), pending)
@@ -1120,7 +1219,8 @@ def build_allocation_evidence(tables, *, settings, nav_not_ready, fx_key_of, bas
         source_coverage=source_coverage, valuation_completeness=valuation, chart_comparability=chart,
         identity_conflict=conflict, evaluation_errors=tuple(evaluation_errors + [e for i in final_items for e in i.errors]),
         input_problems=tuple(problems), open_gates=tuple(gates),
-        fx_rule_verified=NOT_PROVIDED if fx_rule_verified is None else fx_rule_verified)
+        fx_rule_verified=NOT_PROVIDED if fx_rule_verified is None else fx_rule_verified,
+        nav_input_state=NOT_PROVIDED if nav_input_state is None else nav_input_state)
 
 
 # ----------------------------- JSON-primitive form -----------------------------
