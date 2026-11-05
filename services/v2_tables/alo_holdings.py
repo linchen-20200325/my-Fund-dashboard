@@ -64,7 +64,7 @@ from repositories import personal_drive_repository as personal_drive
 from repositories import personal_policy_reader as personal_repo
 from repositories import policy_supplement_repository as repo
 from services.v2_tables import contract, personal_session
-from services.v2_tables.masking import make_masker
+from services.v2_tables.masking import make_masker, mask_message
 
 PolicySupplementError = repo.PolicySupplementError
 
@@ -94,7 +94,7 @@ def _holding_id(pid: str, code: str, n: int) -> str:
 
 def masker(secret_values) -> Callable[[str], str]:
     """保留既有 L2 公開介面；共同的遮蔽 callback 邏輯集中在 masking。"""
-    return make_masker(secret_values)
+    return make_masker(secret_values, render=lambda message, values: mask_message(message, values))
 
 
 def last_synced_at_from_check_date(text) -> str:

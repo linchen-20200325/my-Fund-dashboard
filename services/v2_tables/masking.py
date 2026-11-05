@@ -214,12 +214,15 @@ def is_masked(message) -> bool:
     return isinstance(message, str) and MASK in message
 
 
-def make_masker(secret_values):
+def make_masker(secret_values, *, render=None):
     """秘密值清單 → L1 可用的遮蔽 callback；凍結輸入一次，避免重複耗盡 iterable。
 
     保持 alo_holdings／settings_store 原有的型別拒絕、例外字串及遮蔽規則。
+    render 讓相容 wrapper 保留自己模組的動態名稱查找；省略時查本模組。
     """
     if isinstance(secret_values, (str, bytes)):
         raise TypeError("secret_values 須為秘密值的清單，不可直接傳字串")
     values = list(secret_values)
-    return lambda message: mask_message(message, values)
+    if render is None:
+        return lambda message: mask_message(message, values)
+    return lambda message: render(message, values)

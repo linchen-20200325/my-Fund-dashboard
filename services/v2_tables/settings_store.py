@@ -49,7 +49,7 @@ from repositories.macro.yf import fetch_yf_close
 from repositories.fund import declared_profile
 from services.v2_tables import alo_holdings, exp_nav, exp_profile, fund_keys, nav_dividend
 from services.v2_tables import market_indicator as mi
-from services.v2_tables.masking import make_masker
+from services.v2_tables.masking import make_masker, mask_message
 
 SettingsSheetError = store.SettingsSheetError
 
@@ -98,7 +98,7 @@ _CACHED_FETCHER_BY_SOURCE = {"Yahoo": fetch_yf_close, "FRED": fetch_fred_vintage
 
 def masker(secret_values) -> Callable[[str], str]:
     """保留既有 L2 公開介面；共同的遮蔽 callback 邏輯集中在 masking。"""
-    return make_masker(secret_values)
+    return make_masker(secret_values, render=lambda message, values: mask_message(message, values))
 
 
 # ── 讀寫（L3 → 這裡 → L1）────────────────────────────────────────────
