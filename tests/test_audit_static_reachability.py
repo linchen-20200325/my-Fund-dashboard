@@ -35,3 +35,13 @@ def test_dynamic_import_and_no_deletion_claim():
         report = scan(root)
         assert report["classification"] == "TRIAGE_ONLY_NOT_SAFE_TO_DELETE"
         assert report["dynamic_import_sites"] == [{"module": "services.a", "lines": [2]}]
+
+
+def test_discover_new_ui_generation_without_hardcoded_path():
+    with TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "ui_v42").mkdir()
+        (root / "ui_v42" / "app_preview.py").write_text("VALUE=1\n")
+        report = scan(root)
+        assert report["external_entrypoints_to_verify"] == ["app.py", "ui_v42/app_preview.py"]
+        assert report["module_count"] == 1
