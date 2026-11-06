@@ -1,6 +1,6 @@
-# New UI2｜過期規格與資料能力裁示前審查（2026-11-06）
+# New UI2｜GitHub 對話記憶與舊規格取代索引、資料有效性審查（2026-11-06）
 
-> 狀態：**設計與資料契約修訂候選，待使用者核准；非正式 SSOT、非實作授權**。本報告不刪除 frozen 44、原始 DEC、Git 歷史，不修改 80 等已核准規格。不宣稱刪除 ChatGPT 帳戶 Memory。
+> 狀態：**客戶已於 2026-11-06 裁示手機頁首方案 B、健康原評等＋覆蓋＋資料准入三軸的設計方向**（`DEC-2026-11-06-01`／`-02`）；本檔只做 GitHub **對話記憶／舊規格**索引及資料稽核，不是另一套 SSOT、不是程式施工授權。frozen 44、歷史原始 DEC、Git 歷史一律保留。
 >
 > 驗證基準：main `861628cc377352c4f651ddc1172e13ab07e4d90d`；另參 PR #1150、#1151、#1157、#1158 的 **head 文件**（目前 Draft）。正式現況及 CI 在採納前必須重新查 GitHub。
 
@@ -9,7 +9,7 @@
 | 舊敘述 | 新讀法（候選／既有權威） | 處理方式 |
 |---|---|---|
 | main #1049、Open PR 0、舊五頁 hld/alo 作為 New UI2 | main／PR 每次重新取得；New UI2 固定 🌍／💼／🔍／🤖／⚙️ 五頁（80），Old UI 只作讀碼參考 | 在現行 HANDOFF 更新最新 checkpoint，舊描述移歷史，不刪歷史 |
-| 手機永遠使用底部五頁導覽 | 現行 44／80／ui_v3/shell/nav.py **仍採底部**；2026-11-06 使用者提出 **上方橫向頁籤候選**，與 #1150/#1151 衝突 | 準備專案正式 Layout / DEC Gate；核准前不得直接修改 44、80、程式 |
+| 手機永遠使用底部五頁導覽 | 現行 44／80／ui_v3/shell/nav.py **程式及 frozen 44 仍採底部**；客戶較新設計已**選定 B 頁首橫向五頁籤**，與 #1150/#1151 舊草案衝突（`DEC-2026-11-06-01`） | 方案已核准；先走 frozen 44 最小 amendment 與獨立 QA，核准前不修改 Shell 程式 |
 | 一個基金只保留一條部位 | UI 可以按可驗證身份去重聚合，原始保單／持倉列／成本／幣別必須全保留 | 加入 💼 頁完整線框候選；不能用相似名稱合併 |
 | 4D / 5D 分數有 A 就代表健康資料完整 | compute_4d_health 實際為五維，符合最少兩維與核心條件即可有等第 | 顯示 n_scored/n_applicable、missing 與有效性，不把 2/5 說成 5/5 |
 | 報酬負值或 NAV 下跌就是基金品質惡化 | 市場／同類相對表現／絕對風險／配息來源需分開判讀 | benchmark 與 thresholds 未核准前不得自評品質 |
@@ -46,10 +46,18 @@
 - 🔍 身份與兩區語意已核准；完整 New UI2 單頁線框仍需核准。
 - ⚙️ 帳號／Active Sheet／資料健康度分離；#1150 草稿與頁首導覽衝突須先解決。
 - 🤖 Phase 7 前只能描述候選頁，不掛 runtime、不生成 AI 分析。
-- **手機導覽三方案**：A 保留底部＋safe-area（與嵌入 App 遮擋風險仍在）；B 頁首可橫向捲動的五頁籤（最直接解決遮擋，須正式 Layout Gate）；C 頁首單一選單（最省空間但降低五頁可見性）。**建議 B 供客戶確認，核准前不施工**。
+- **手機導覽三方案**：A 保留底部＋safe-area（與嵌入 App 遮擋風險仍在）；B 頁首可橫向捲動的五頁籤（最直接解決遮擋，須正式 Layout Gate）；C 頁首單一選單（最省空間但降低五頁可見性）。**使用者已選定 B（`DEC-2026-11-06-01`）；在 frozen 44 的合法 amendment 與獨立 QA 前仍不施工**。
 
 ## D. 治理與限制
 
-- 將本文件視為「審稿候選」，沒有任何舊正式決策被本 PR 自動撤銷。確定的過期敘述在下一個不撞檔治理 PR 更新 `docs/BACKLOG.md`／`docs/HANDOFF.md`；新客戶裁示經核准寫進 `docs/DECISIONS.md`。
+- 將本文件視為「審稿候選」，沒有任何舊正式決策被本 PR 自動撤銷。本次已在同一 Draft #1160 的 `docs/DECISIONS.md`／`docs/BACKLOG.md`／`docs/HANDOFF.md` 加入新的裁示與待辦；因 #1150／#1153 修改同檔，必須待其收斂後重比對 diff、解決衝突、獨立 QA，**不得在未合併 Draft 前宣稱 main 已更新**。
 - 已開 Draft #1150／#1151／#1157／#1158／#1159 及清理 Work #1152～#1154；本批不修改其編輯中的檔案、不直接 push main、不合併 Draft。
-- **ChatGPT Memory 不能由 GitHub 修改。** Repo 中舊聊天快照可標 NOT CURRENT 並引用現行決策；帳戶記憶的完整移除另須使用者在 Settings → Personalization → Memory summary → Manage 修訂、刪除含有該內容的原始聊天與其他來源。
+- **客戶已澄清「記憶」僅指 GitHub 中保存的 ChatGPT 對話與接手快照**，不是帳戶 Memory。#1158（未合併 head）、#1150／#1151 的底部導航描述視為**歷史設計脈絡／NOT CURRENT future preference**，不刪原始 Git 紀錄；以本次 `DEC-2026-11-06-01`／`-02` 與 80 §18、82 §10 作最新方向索引，不建立第二套對話 SSOT。
+
+## E. 實際回寫位置與剩餘 Gate（2026-11-06）
+
+- 客戶逐字裁示：`docs/evidence/decisions/2026-11-06_new_ui2_top_tabs_health_coverage_ruling.md`；正式裁示 `docs/DECISIONS.md` 的 `DEC-2026-11-06-01`／`-02`。
+- 導覽現行設計與規格衝突：`docs/v2/80` §18；`docs/BACKLOG.md` BL-0544；**frozen 44 原文未改**。
+- 健康原評級、覆蓋率與正式資料准入：`docs/v2/82` §10；BL-0545；**沒有改 Domain Grade 或門檻**。
+- 對話記憶的唯一熱接手：`docs/HANDOFF.md`；舊版本保全 `docs/evidence/history/2026-11-06_handoff_before_top_tabs_health_ruling.md`，#1158 仍作未合併歷史快照而非正式產品 SSOT。
+- 活體 Active Sheet 覆蓋率與 provider 實測尚未通過，詳見本檔 B 節、#1157；**無法取得**只限已證實特定 producer 不支援，不能概括成所有基金永久沒有該資料。
