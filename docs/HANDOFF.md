@@ -10,9 +10,18 @@
 |---|---|
 | Repository／main | `linchen-20200325/my-Fund-dashboard`；`861628cc377352c4f651ddc1172e13ab07e4d90d` |
 | main CI | 該 SHA 上 Fast／Schema／Slow／Visual Fidelity 均 success（查詢時點）；不是對任何開放 PR 的合併背書 |
-| Open PR | #1150／#1151 設計 Draft；#1152～#1154 清理 Work（#1153 已非 Draft）；#1157 4D／5D Draft；#1158 對話快照 Draft；#1159 治理 Draft；#1160 **本次規格與 GitHub 記憶收斂 Draft** |
-| 已知檢查 | #1157 head `161784a6` Fast failure 源自三處 Markdown trailing whitespace（pytest passed；尚未修）；#1158 `ff407e54` Fast／Schema／VF success、Slow 在本次檢查仍 in_progress；#1160 head 及 CI **需重新查** |
-| 編輯衝突 | #1150 改 `docs/DECISIONS.md`（預留 `DEC-2026-11-05-01`）；#1153 改 `docs/BACKLOG.md`／`docs/HANDOFF.md`（預留 `BL-0543`）。#1160 **不可直接合併**，須在既有 PR 收斂後重對 base、無損整合與獨立 QA |
+| Open PR head（`git rev-parse origin/<branch>`，2026-11-06） | #1150 `12e6ac37`（Draft；含 supersession 註記、已併 main，新 head CI 需重查）；#1151 `961b6638`（Draft）；#1152 `0a482e79`；#1153 `710829c1`（非 Draft；HANDOFF 已壓縮、已併 main，新 head CI 需重查）；#1154 `74c1e98c`；#1157 `161784a6`（Draft）；#1158 `ff407e54`（Draft）；#1159 `f0c11414`（Draft）；#1160 本 PR（Draft；最新 head 以 GitHub 為準） |
+| 已知檢查 | #1160 前一 head `357e698d` 四項 check-run 均 success，**本次提交後的新 head CI 需重查**；#1157 `161784a6` Fast failure 源自三處 Markdown trailing whitespace（pytest passed；尚未修）；#1158 僅作歷史證據，其舊文字不得覆蓋較新裁示；其餘 PR 的 CI 本檔未查 |
+| 編輯衝突 | #1150 改 `docs/DECISIONS.md`（預留 `DEC-2026-11-05-01`）；#1153 改 `docs/BACKLOG.md`／`docs/HANDOFF.md`（預留 `BL-0543`，BL-0543 只存在於 #1153）。#1160 **不可直接合併**，須在既有 PR 收斂後重對 base、無損整合與獨立 QA |
+
+**清理線狀態索引**（只作指標，內容以各 PR 為準）：
+
+| 項 | 狀態 |
+|---|---|
+| #1152 `0a482e79`／#1153 `710829c1`／#1154 `74c1e98c` | 清理 Work；#1153 非 Draft，三者合併前須重查 head CI 與獨立 QA |
+| 工具盤點 ≠ 死碼確認 | 靜態可達性工具輸出只是候選清單，刪除前仍須逐項人工與 caller 實測 |
+| 分支保護 | 讀取 HTTP 403、rulesets=[]：必要檢查 **未驗證**，不得宣稱已驗證 |
+| 證據位置 | #1153／`BL-0543`；歷史檔 H14 `docs/evidence/history/2026-11-05_cleanup_handoff_superseded.md`（僅存在於 #1153 分支，合併後才在 main）；本 PR 的舊 HANDOFF 全文見 `docs/evidence/history/2026-11-06_handoff_before_top_tabs_health_ruling.md` |
 
 ## 2. 最新客戶裁示與確定的邊界
 
@@ -32,7 +41,7 @@
 
 ## 4. 接手點與禁止事項
 
-唯一下一接手點：先核 #1160 所有變更的獨立 QA、diff／完整 head CI、與 #1150／#1153 的文件競合。**Draft 不合併**。接著依 `BL-0544` 走 frozen 44 最小 amendment Gate、依 `BL-0545` 排 Live Active Sheet 唯讀覆蓋探針；不得把文件合併當施工授權。
+唯一下一接手點：完成 #1150／#1153／#1160 的文件無損整合與最新 head 獨立 QA，確認 GitHub 保護條件後，再依 BL-0544 提出 frozen 44 手機頁首五頁籤最小修正案，依 BL-0545 規劃健康覆蓋率與正式准入的唯讀實測；未經相關 Gate 不進入程式實作。
 
 - 先讀 `CLAUDE.md` → `PROJECT_RULES.md` → `docs/DECISIONS.md`／`docs/BACKLOG.md` → 本檔；產品規格回查 frozen `docs/v2/44`、子法 1＋57、`docs/v2/67`／`75`／`79`／`80`／`81`／`82`。
 - Old UI 唯讀參考、`ui_v2` maintenance-only；不改 production data source、公式、FX 觀測日、Risk Cap、身份與原始持倉；不直接 push main；每批最多三項安全工作；變更 Model／Mode／Effort 必須先依 Hard-Stop Gate。
