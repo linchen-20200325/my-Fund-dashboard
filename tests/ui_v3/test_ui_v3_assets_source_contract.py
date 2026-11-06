@@ -266,6 +266,8 @@ def check_producer_arguments_are_exactly_the_cost_path(M):
     passed, kw = spy.calls[0]
     assert set(passed) == {"holding"}                                               # 不建 nav／market_indicator
     assert kw["nav_not_ready"] is None and kw["nav_provenance"] is None and kw["category_of"] is None
+    # 淨值輸入宣告：adapter 不得宣稱「已組裝」（生產者無法驗證這個宣稱；它目前什麼都不傳，市值基準維持 blocked）
+    assert kw.get("nav_input_state") in (None, "not_assembled")
     assert set(kw["source_state"]) == {"active_source", "errors", "skipped_tabs", "skipped_holdings"}
     assert kw["source_state"]["errors"] == {}
     mode = kw["basis_mode_of"]("成本")

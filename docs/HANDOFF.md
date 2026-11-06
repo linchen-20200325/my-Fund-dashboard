@@ -3,14 +3,20 @@
 > **用途**：只回答六件事：現在在哪、active work、最新 main／PR／CI checkpoint、下一接手點、blocker／待客戶裁示、新對話從哪開始。**本檔不得單獨作為完成或正確的證明**（`PROJECT_RULES.md` 1.3）；任何「已合併」「CI 綠」都要回 GitHub／git 重查。
 > **歷史**：2026-11-03 Canonical Rule Convergence 批把舊版全文（543 行；含檔頭 40 則追加 checkpoint、24 個「第 N 次現況」框、舊下一步）逐字搬到 `docs/evidence/history/2026-11-03_handoff_pre_convergence.md`（**NOT CURRENT，不是現行規則或現況**）。更舊的交接本 `docs/handover_2026_09_26_latest.md` 為歷史紀錄（第 0 節永遠不准刪，客戶 2026-09-28 裁示）。本檔改寫依據：客戶 2026-11-03 指示（`DEC-2026-11-03-08`）；`PROJECT_RULES.md` 6.1.2「覆蓋、不累加」。
 
-> **⏯ Resume Checkpoint**（2026-11-05 台北；依 `PROJECT_RULES.md` 6.1.2 覆蓋舊版，接手須重查 GitHub）
-> - **已驗 main**：`43b54f32ed3c62241f572040a8212a75e549b90e`，四條 check-run success；G-2 #1149 已合併，沒有 UI 接線或守衛變更。
-> - **本輪分支／PR**：清理線 #1152 `audit/code-data-boundaries-20261105`、#1153 `audit/static-reachability-tool-20261105`、#1154 `refactor/shared-masker-factory-20261105`，皆為 Draft；#1150／#1151 設計線與 Claude 工作優先，本輪不動其檔案。
-> - **已完成與停點**：#1153 漏掃修補 head `6e021744`；原工具測試 5 passed、連同文件計數 71 passed（Python 3.12），1082 模組、664 個無靜態 importer 候選，無 parse error；這不是死碼確認。shadow 條件修正已發布 #1152 `0a482e79`，callback 相容性修正已發布 #1154 `74c1e98c`；#1153 本 PR 包含 checkpoint／歷史保全修正，精確 head 以 GitHub 為準，尚待重新 QA／CI；未 merge／刪碼，本機內容保存狀態須與 remote 比對。
-> - **QA／CI**：客戶已以「好 授權」明示啟用獨立子代理，獨立 QA 進行中；修復後需重新綁定 head 稽核；三支 PR 的新 head 均須另查逐條 CI，不得沿用舊 head 的 PASS。
-> - **唯一下一接手點**：核對本 PR 最新 head，完成三支 PR 各自 head 的獨立 QA 與逐條 CI，符合 Auto-Ship 及 GitHub 保護後收斂。
-> - **後續範圍**：共用 aware datetime parser 僅為下一批候選，未動工。Claude G-2 後續仍須另批授權：市值基準 NAV／匯率組裝與 NAV 10 日門檻歸屬、⚙️ 登入／Active 入口、💼 頁 wireframe 與 ui_v3 接線；G-3～G-5、Digest／OneBrain／Phase 7 未授權（BL-0542）。
-> - **限制／同步**：branch protection 讀取 403、rulesets=[]，不能宣稱已確認全部 required checks；不得繞過保護。Cloud 外部入口、真實服務與外部排程未驗。DECISIONS 與 #1150 同檔，暫不追加以避衝突；範圍與明示授權先記 BL-0543。模型／Effort 本輪未要求切換；低風險非語意修補，targeted tests。舊 checkpoint 與聲明逐字保全：`docs/evidence/history/2026-11-05_cleanup_handoff_superseded.md`（H14，NOT CURRENT）。
+> **⏯ Resume Checkpoint**（2026-11-06 台北；依 `PROJECT_RULES.md` 6.1.2 覆蓋舊版，接手須重查 GitHub）
+> - **main**：`861628cc377352c4f651ddc1172e13ab07e4d90d`（本次合併時 `git rev-parse origin/main` 所見；CI 狀態需重查）。
+> - **唯一下一接手點（單一）**：G-2 以 GitHub 實況為準；之後：等客戶另批授權（市值基準的 NAV／匯率組裝與 NAV 10 日門檻歸屬 Gate、⚙️ 登入／Active 入口、或 💼 頁 wireframe 與 ui_v3 接線；需 Effort Gate 與獨立稽核）。G-2 為最小 Preview 資料載入轉接層（`ui_v3/adapters/assets_source.py`；未接任何頁面或 renderer、守衛零變更），授權依據為客戶 2026-11-05 於對話中的指示（要點轉述、非逐字）；G-3～G-5、OneBrain／Phase 7 與 💼 程式照舊未授權。
+> - **清理線狀態摘要**（專案級下一接手點不被清理線取代；證據只在 BL-0543、#1152～#1154 與 H14，不在此重述）：
+>
+> | PR | branch | 已記錄 head | 內容 | 狀態 |
+> |---|---|---|---|---|
+> | #1152 | `audit/code-data-boundaries-20261105` | `0a482e79` | 清理線：shadow 條件修正 | Draft；獨立 QA／逐條 CI 需重查 |
+> | #1153 | `audit/static-reachability-tool-20261105` | `6e021744`（工具修補）；本分支另含 checkpoint 收斂，精確 head 以 GitHub 為準 | 靜態可達性盤點工具＋文件收斂；工具測試 5 passed、連同文件計數 71 passed（BL-0543 記錄） | 非 Draft；QA／逐條 CI 需重查 |
+> | #1154 | `refactor/shared-masker-factory-20261105` | `74c1e98c` | 清理線：callback 相容性修正 | Draft；獨立 QA／逐條 CI 需重查 |
+> | 規則 | — | — | 工具清單（1082 模組、664 候選）＝TRIAGE_ONLY_NOT_SAFE_TO_DELETE，**不是死碼確認**；無刪碼結論 | 刪碼須另經確認 |
+> | 保護條件 | — | — | branch protection 讀取 HTTP 403、rulesets=[] | required checks **未驗證**，不得宣稱已確認或繞過 |
+>
+> 證據與範圍：BL-0543（`docs/BACKLOG.md`）；舊 checkpoint 與聲明逐字保全於 `docs/evidence/history/2026-11-05_cleanup_handoff_superseded.md`（H14，NOT CURRENT）。共用 aware datetime parser 僅為下一批候選，未動工。
 
 ## 1. 必讀順序（新對話或換人接手）
 
