@@ -1,6 +1,6 @@
 # 基金 New UI2｜2026-11-06 客戶最新兩項設計裁示（逐字來源）
 
-> **來源**：2026-11-06 本次使用者與 ChatGPT 對話；此檔為 GitHub durable conversation evidence，不是另一套 SSOT。正式裁示索引：`docs/DECISIONS.md` 的 `DEC-2026-11-06-01`／`-02`（在待審查 Draft #1160，尚未併入 main）。
+> **來源**：2026-11-06 本次使用者與 ChatGPT 對話；此檔為 GitHub durable conversation evidence，不是另一套 SSOT。正式裁示索引：`docs/DECISIONS.md` 的 `DEC-2026-11-06-01`／`-02`（現存於乾淨替代 Draft #1162，尚未併入 main；原 #1160 僅供歷史追溯）。
 
 ## 客戶逐字裁示
 
