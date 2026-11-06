@@ -342,3 +342,32 @@ B 不是任意抽新 facade 的授權：只有已確認符合 `ui_v3` import bou
 **已知程式與裁示差異**：現行 ui_v2/alo/logic.py::_build_alo2 在缺 USD 匯率時可因分母僅納入有值類別而顯示 100%，同時註記「合計未涵蓋」。此舊行為目前仍在；本次不修改它，不授權在 ui_v3 自行重算或默默扣除基金。**BL-0542 G-1 仍待獨立技術／資料語意 Gate**，G-2～G-5 亦然。
 
 **其他邊界**：U1～U5 設計已核准不等於 390px／1280px 實際版面與首屏驗收完成。Q1～Q15 中獨立的欄位／資料／日期／跨頁語意 Gate 繼續保留；未經核准之公式、資料來源、狀態詞、Risk Cap、System Action 與 OneBrain 仍不得新增或啟用。
+
+## 10. 2026-11-06 客戶新增：健康原評級、覆蓋率與正式資料准入分開呈現（DEC-2026-11-06-02）
+
+> **位階**：使用者已核准**展示方向**（逐字於 `docs/evidence/decisions/2026-11-06_new_ui2_top_tabs_health_coverage_ruling.md`）；本節補足 💼 頁未施工的 Data × Evidence 顯示要求。不是更動正式評級公式、權重、門檻、FX 來源、Risk Cap、准入政策或 Phase 7 的授權；原 U1～U5 UI 核准範圍不擴充為 renderer 授權。
+
+### 10.1 3 個獨立欄位群，不可混成「健康」
+
+| 顯示群 | 資料責任與來源 | 未取得時如何處理 |
+|---|---|---|
+| **原始健康指標及原字母 Grade** | 沿用已驗證 `services/health/grade.py::compute_4d_health` 等既有 Domain 計算結果，不在 UI 重算；保留五維各自的 raw evidence、期間、原值、原模型版本 | 原本無值就維持 Missing；**不得因缺資料改造新 Grade**，也不自行修改評級切點 |
+| **資料覆蓋率** | 各基金適用維度數 `n_applicable`、合格可計分維度數 `n_scored`、各缺項 reason/source/as_of/window；TWD 的 FX 維度若不適用應區別 N/A；完整原始持倉與 skipped/failed 仍在 Evidence | 無法算分母就顯示無法取得／尚未評估，不得寫 `0/5`；不把 `2/5` A 視為完整 A |
+| **正式資料准入狀態** | 另由經核准的 deterministic data-validity／coverage Gate 判定能否將健康結果用於**正式品質判斷**；需引用所用規則版本與 evidence | **尚未有核准准入準則時不得顯示通過或安全**；使用已核准 Missing／無法判定語意，不自創 `safe`／`passed` 詞彙；此准入不是 OneBrain／Phase 7 action Gate |
+
+### 10.2 現有資料覆蓋的已知事實與待實測（PR #1157）
+
+- `compute_4d_health` 實際評估 coverage、Sharpe、trend、volatility、FX risk **五個維度**；至少兩維加一核心維（配息 coverage 或 Sharpe）即可有原 Grade，故 Grade 的資訊強度**必須**附上覆蓋率。
+- `services/fx_regime_service.py` 目前只支援 USD 歷史 FX volatility provider；非 USD 的其他外幣只能標現有提供器 unsupported，**不是永久抓不到所有外匯數據**。TWD 對該外幣風險維度屬 N/A。現行健康報表 `ma_dir=None`，不能宣稱已評估 MA60 方向。
+- Sharpe 若混 6M／1Y、TER 只曾在歷史兩檔樣本 0/2、規模單位不統一、NAV／配息期間不足等，全部是**來源有效性或可比性問題**，不得武斷當作永久缺數。spot FX 是否抓得到，也不證明歷史 FX 波動可計分。
+- 現時未有使用者 Active Sheet **全部唯一基金**的逐維合格覆蓋率。實測需保留原始保單持倉列，在 canonical 身份確認後才按基金去重，並列出全體唯一基金／來源成功抓取／該維適用三個分母及 skipped／failed／missing／stale／conflicted 分類。
+- 原有「配息含本金」官方披露與模型 proxy 必須分開；「市場全面下跌」與「基金相對品質下降」也必須分軸分析，未核准同類 benchmark 前不得用單檔負報酬當成品質壞。
+
+### 10.3 UI 設計候選（仍須完整 💼 線框及正式文案 Gate）
+
+- 手機在既有 A50/A51（完整持倉）中依經驗證基金身份聚合行、可展開全部保單／部位。每檔顯示原 Grade／有效維度數／正式准入結果三項**互相獨立**；查不到的項目不可消失或擠成同一顏色。
+- 單檔詳細 Evidence 能展開五維原值、來源日期、Missing 原因與完整部位，不因主畫面簡化而刪除或阻斷未來 Decision Digest。
+- 與客戶同日的手機頁首橫向五頁籤選型（`DEC-2026-11-06-01`）一併遵守 `docs/v2/80` §18；**frozen 44 合法 amendment 未完成前不能把此段當作新 Shell 已上線**。
+- G-1～G-5 及其餘 Q 類財務／資料／狀態語意 Gate 仍然未裁。健康資料准入規則的數值門檻需另行客戶裁示，這份文件不提供任何建議升格或自動交易決策。
+
+**資料可靠性審查待辦**：`docs/BACKLOG.md` BL-0545；靜態來源 #1157；現有舊規格中單一 Grade 直接被理解為全面健康的對話推論視為 **NOT CURRENT**，保留原始證據以供查核。
