@@ -19,6 +19,7 @@
 | `2026-11-05_after_1146_handoff_superseded.md` | G1-① 合併後被取代的片段：HANDOFF Resume Checkpoint 的「唯一下一接手點」bullet（`1f260bfc` 版，原為「G1-① 以 GitHub 實況為準；之後等 G1-②」之舊句）；登記 G1-② 最小共用核心 PORT 時被現行句覆寫 | H11 | `docs/HANDOFF.md`（`1f260bfc`） |
 | `2026-11-05_after_1147_handoff_superseded.md` | G1-② 合併後被取代的片段：HANDOFF Resume Checkpoint 的「唯一下一接手點」bullet（`d4eabb35` 版，原為「G1-② 以 GitHub 實況為準；之後等 G1-③」之舊句）；登記 G1-③ Complete Evidence 產生器時被現行句覆寫 | H12 | `docs/HANDOFF.md`（`d4eabb35`） |
 | `2026-11-05_after_1148_handoff_superseded.md` | G1-③ 合併後被取代的片段：HANDOFF Resume Checkpoint 的「唯一下一接手點」bullet（`81827057` 版，原為「G1-③ 以 GitHub 實況為準；之後等 G-2 或接線 ui_v3」之舊句）；登記 G-2 最小 Preview 資料載入轉接層時被現行句覆寫 | H13 | `docs/HANDOFF.md`（`81827057`） |
+| `2026-11-06_handoff_before_top_tabs_health_ruling.md` | main `861628cc` 時 `docs/HANDOFF.md` 的完整逐字全文（前置 6 行 NOT CURRENT 說明），為 2026-11-06 頂層分頁與健康度覆蓋裁示前的版本；非區塊檔、無 `MOVED-BEGIN` 標記，**NOT CURRENT**；現行內容見 PR #1160 head 的 `docs/HANDOFF.md` 與 `DEC-2026-11-06-01`／`DEC-2026-11-06-02` | （無，非區塊檔） | `docs/HANDOFF.md`（基準 `861628cc`） |
 
 **防遺失機制**：每個區塊在 `MOVED-BEGIN` 標記記 `sha256` 與位元組數；`tests/test_canonical_rule_consistency.py` 重算每個區塊的 sha256 比對標記，並在可取得該區塊自己的基準 commit（`source` 的 `@` 後；`82ba783f` 或 `d6173220`）時與該 commit 的原文逐位元組（H1）或逐行（其餘區塊）比對。搬進來的文字**不准改**；要補註寫在區塊外。
 
