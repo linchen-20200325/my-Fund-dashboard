@@ -30,9 +30,9 @@
 | ⚙️ 設定 | 登入／Active Sheet／資料健康分離；#1150 登入草案需與頁首導航收斂，OAuth 不改 |
 | 🤖 AI 投資總結 | `docs/v2/67`／`75` OneBrain 設計；Phase 7 前不得註冊／執行。Digest／Evidence 必須完整，UI 簡化不刪 AI Context |
 
-## 4. 唯一下一接手點與禁止事項
+## 4. 接手點與禁止事項
 
-**接手點**：先核 #1160 所有變更的獨立 QA、diff／完整 head CI、與 #1150／#1153 的文件競合。**Draft 不合併**。接著依 `BL-0544` 走 frozen 44 最小 amendment Gate、依 `BL-0545` 排 Live Active Sheet 唯讀覆蓋探針；不得把文件合併當施工授權。
+唯一下一接手點：先核 #1160 所有變更的獨立 QA、diff／完整 head CI、與 #1150／#1153 的文件競合。**Draft 不合併**。接著依 `BL-0544` 走 frozen 44 最小 amendment Gate、依 `BL-0545` 排 Live Active Sheet 唯讀覆蓋探針；不得把文件合併當施工授權。
 
 - 先讀 `CLAUDE.md` → `PROJECT_RULES.md` → `docs/DECISIONS.md`／`docs/BACKLOG.md` → 本檔；產品規格回查 frozen `docs/v2/44`、子法 1＋57、`docs/v2/67`／`75`／`79`／`80`／`81`／`82`。
 - Old UI 唯讀參考、`ui_v2` maintenance-only；不改 production data source、公式、FX 觀測日、Risk Cap、身份與原始持倉；不直接 push main；每批最多三項安全工作；變更 Model／Mode／Effort 必須先依 Hard-Stop Gate。
