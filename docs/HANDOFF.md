@@ -8,20 +8,20 @@
 
 | 項 | 2026-11-06 查核 |
 |---|---|
-| Repository／main | `linchen-20200325/my-Fund-dashboard`；`861628cc377352c4f651ddc1172e13ab07e4d90d` |
-| main CI | 該 SHA 上 Fast／Schema／Slow／Visual Fidelity 均 success（查詢時點）；不是對任何開放 PR 的合併背書 |
-| Open PR head（`git rev-parse origin/<branch>`，2026-11-06） | #1150 `12e6ac37`（Draft；含 supersession 註記、已併 main，新 head CI 需重查）；#1151 `961b6638`（Draft）；#1152 `0a482e79`；#1153 `710829c1`（非 Draft；HANDOFF 已壓縮、已併 main，新 head CI 需重查）；#1154 `74c1e98c`；#1157 `161784a6`（Draft）；#1158 `ff407e54`（Draft）；#1159 `f0c11414`（Draft）；#1160 本 PR（Draft；最新 head 以 GitHub 為準） |
-| 已知檢查 | #1160 前一 head `357e698d` 四項 check-run 均 success，**本次提交後的新 head CI 需重查**；#1157 `161784a6` Fast failure 源自三處 Markdown trailing whitespace（pytest passed；尚未修）；#1158 僅作歷史證據，其舊文字不得覆蓋較新裁示；其餘 PR 的 CI 本檔未查 |
-| 編輯衝突 | #1150 改 `docs/DECISIONS.md`（預留 `DEC-2026-11-05-01`）；#1153 改 `docs/BACKLOG.md`／`docs/HANDOFF.md`（預留 `BL-0543`，BL-0543 只存在於 #1153）。#1160 **不可直接合併**，須在既有 PR 收斂後重對 base、無損整合與獨立 QA |
+| Repository／main | `linchen-20200325/my-Fund-dashboard`；`be6e1e344e00751d5d9e162764d53bb3b70a10f2`（#1153 以 merge commit 合入；2026-11-06 fetch 所見） |
+| main CI | 該 SHA 上 CI 本檔未查，須重查；不是對任何開放 PR 的合併背書 |
+| Open PR（2026-11-06 GitHub 實查） | #1150 Draft（head `5b3ad954`，base 已為 `be6e1e34`，CI 需重查）；#1160 本 PR Draft（已整合 main `be6e1e34`，新 head 以 GitHub 為準）；#1151／#1152／#1154／#1157／#1158／#1159 head 與 CI 本檔未重查 |
+| 已知檢查 | #1160 整合 main 後的新 head CI **待驗**；#1158 僅作歷史證據，其舊文字不得覆蓋較新裁示；其餘 PR 的 CI 本檔未查 |
+| 編輯衝突 | #1153 已合入 main（`BL-0543`、H14 已在 main）；#1150 仍 Draft 未併入 main，`DEC-2026-11-05-01` 只存在於 #1150，本 PR 不含也不偽造。#1160 **不可直接合併**，須經獨立 QA 與客戶授權 |
 
 **清理線狀態索引**（只作指標，內容以各 PR 為準）：
 
 | 項 | 狀態 |
 |---|---|
-| #1152 `0a482e79`／#1153 `710829c1`／#1154 `74c1e98c` | 清理 Work；#1153 非 Draft，三者合併前須重查 head CI 與獨立 QA |
+| #1152／#1154 | 清理 Work（Draft）；#1153 已合入 main（merge commit `be6e1e34`）；合併前須重查 head CI 與獨立 QA |
 | 工具盤點 ≠ 死碼確認 | 靜態可達性工具輸出只是候選清單，刪除前仍須逐項人工與 caller 實測 |
 | 分支保護 | 讀取 HTTP 403、rulesets=[]：必要檢查 **未驗證**，不得宣稱已驗證 |
-| 證據位置 | #1153／`BL-0543`；歷史檔 H14 `docs/evidence/history/2026-11-05_cleanup_handoff_superseded.md`（僅存在於 #1153 分支，合併後才在 main）；本 PR 的舊 HANDOFF 全文見 `docs/evidence/history/2026-11-06_handoff_before_top_tabs_health_ruling.md` |
+| 證據位置 | `BL-0543`；歷史檔 H14 `docs/evidence/history/2026-11-05_cleanup_handoff_superseded.md`（已在 main）；本 PR 的舊 HANDOFF 全文見 `docs/evidence/history/2026-11-06_handoff_before_top_tabs_health_ruling.md` |
 
 ## 2. 最新客戶裁示與確定的邊界
 
