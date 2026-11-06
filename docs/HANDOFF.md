@@ -3,22 +3,20 @@
 > **用途**：只回答六件事：現在在哪、active work、最新 main／PR／CI checkpoint、下一接手點、blocker／待客戶裁示、新對話從哪開始。**本檔不得單獨作為完成或正確的證明**（`PROJECT_RULES.md` 1.3）；任何「已合併」「CI 綠」都要回 GitHub／git 重查。
 > **歷史**：2026-11-03 Canonical Rule Convergence 批把舊版全文（543 行；含檔頭 40 則追加 checkpoint、24 個「第 N 次現況」框、舊下一步）逐字搬到 `docs/evidence/history/2026-11-03_handoff_pre_convergence.md`（**NOT CURRENT，不是現行規則或現況**）。更舊的交接本 `docs/handover_2026_09_26_latest.md` 為歷史紀錄（第 0 節永遠不准刪，客戶 2026-09-28 裁示）。本檔改寫依據：客戶 2026-11-03 指示（`DEC-2026-11-03-08`）；`PROJECT_RULES.md` 6.1.2「覆蓋、不累加」。
 
-> **⏯ Resume Checkpoint**（總管提供；接手先依 `PROJECT_RULES.md` 6.1.2 比對 GitHub，不一致以 GitHub 為準；本區塊覆蓋舊版）
-> - **查詢時點**：2026-11-05；最新 main 為 `81827057`（G1-③ #1148 已合併，本批基底；#1147 為 `d4eabb35`、#1146 為 `1f260bfc`、#1144 為 `b9595833`、#1139 為 `66a09ed2`）；#1136（Shell 定字與降級首屏）先前合併為 `f07acd44`；main 現況與 Open／Draft PR 以 GitHub 為準；本批**未重查 GitHub**，接手先 `git fetch origin main`。
-> - **Open／Draft PR**：以 GitHub 為準；接手先 `git fetch origin main` 並查 `gh pr list`。
+> **⏯ Resume Checkpoint**（2026-11-06 台北；依 `PROJECT_RULES.md` 6.1.2 覆蓋舊版，接手須重查 GitHub）
+> - **main**：`861628cc377352c4f651ddc1172e13ab07e4d90d`（本次合併時 `git rev-parse origin/main` 所見；CI 狀態需重查）。
 > - **唯一下一接手點（單一）**：G-2 以 GitHub 實況為準；之後：等客戶另批授權（市值基準的 NAV／匯率組裝與 NAV 10 日門檻歸屬 Gate、⚙️ 登入／Active 入口、或 💼 頁 wireframe 與 ui_v3 接線；需 Effort Gate 與獨立稽核）。G-2 為最小 Preview 資料載入轉接層（`ui_v3/adapters/assets_source.py`；未接任何頁面或 renderer、守衛零變更），授權依據為客戶 2026-11-05 於對話中的指示（要點轉述、非逐字）；G-3～G-5、OneBrain／Phase 7 與 💼 程式照舊未授權。
-> - **2026-11-05 G-2 批**：G1-③ 已合併（#1148，main `81827057`）；G-2 最小 Preview 資料載入轉接層（`ui_v3/adapters/assets_source.py`；模組層只匯入 `services.v2_domain.*`、L2 惰性匯入；不接頁面／renderer；市值基準組裝未移植、回阻擋結果）的 PR 以 GitHub 為準；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-05_after_1148_handoff_superseded.md`（H13；NOT CURRENT）；基底 main `81827057`，未重查 GitHub／CI。
-> - **2026-11-05 G1-③ 批**：G1-② 已合併（#1147，main `d4eabb35`）；G1-③ Complete Evidence 產生器（`services/v2_domain/allocation_evidence.py`，純 Domain；`fx_row_as_of` 重構、`fx_rate_as_of` 委派且逐位元組一致）的 PR 以 GitHub 為準；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-05_after_1147_handoff_superseded.md`（H12；NOT CURRENT）；基底 main `d4eabb35`，未重查 GitHub／CI。
-> - **2026-11-05 G1-② 批**：G1-① 已合併（#1146，main `1f260bfc`）；G1-② 最小共用核心 PORT 的 PR 以 GitHub 為準；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-05_after_1146_handoff_superseded.md`（H11；NOT CURRENT）；基底 main `1f260bfc`，未重查 GitHub／CI。
-> - **2026-11-04 G-1 方向登記批**：`DEC-2026-11-04-03`（客戶方向裁示，要點轉述、非逐字）＋ BL-0542 G-1 狀態備註；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-04_after_1145_handoff_superseded.md`（H10；NOT CURRENT）；基底 main `e6ff1902`，未重查 GitHub／CI。
-> - **2026-11-04 #1144 整合批**：客戶核准的 💼 U1～U5 全部 UI 設計與缺 FX 方案 A（`DEC-2026-11-04-02`；82 §9.8）已併入；#1142／#1143 已合併；僅 UI 設計核准，不授權 G-1～G-5 或 💼 程式；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-04_after_1144_handoff_superseded.md`（H9；NOT CURRENT）；基底 main `b9595833`，未重查 GitHub／CI。
-> - **2026-11-04 #1140 整合批**：客戶核准的 💼 版面方向（主圖在前、四格摘要在後、缺值如實 Missing；僅 UI 順序，不授權 G-1～G-5 或 💼 程式）已併入 `DEC-2026-11-04-01`／82 §0.1；被覆寫的舊接手點句逐字搬至 `docs/evidence/history/2026-11-04_after_1139_handoff_superseded.md`（H8；NOT CURRENT）；基底 main `66a09ed2`，未重查 GitHub／CI。
-> - **本批已落地**：#1135 的有效成果併入 `docs/v2/80`（第 7.4 節 🤖 導覽可見但不可點、不註冊頁面；第 16.1 節 Chart SPEC 位置）；#1135 的第 17.3／17.4 節與 HANDOFF 改動不併入（正式字樣只在 `shared/ui_semantics/rules.py::APPROVED_WORDING`）。Shell 定字、Status Bar 純文字、降級情境第一屏 ≤5 已隨 #1136 合併（`DEC-2026-11-03-11`；量測 `docs/evidence/bl0536_shell_h5_2026-11-03/`）。
-> - **2026-11-04 #1138 整合批**：ChatGPT 的 💼 施工前草案 `docs/v2/82` 已併入（~~待客戶核准、非規格~~ 現況：U1～U5 UI 設計已核准〔`DEC-2026-11-04-02`〕、僅 UI；其餘仍待裁示；非規格）；三組獨立稽核（單組各自）已核實 §2／§4 並回修，結果在 82 第 8 節；稽核新增的待客戶問題與 Decision Gate 候選（G-1～G-5）登記於 `docs/BACKLOG.md` BL-0542；基底 main `21296a0d`，未重查 GitHub／CI。
-> - **仍待驗證（不得宣稱已通過；`docs/BACKLOG.md` BL-0536 逐條）**：iOS／Android 實機、Safari、深色模式、Yahoo／FRED 真實連線、Streamlit 升版後導覽相容性、安全的資料更新入口（更新資料 CTA 停用中；不得為完成 Shell 開新 refresh pipeline）。
-> - **待客戶確認（總管讀法，不裁決）**：圖下摘要行逐序列仍各列一項狀態，若稽核把帶 `data-status-key` 的元素都算名額，降級 390px 比較檢視仍為 7；替代方案＝彙總句加逐序列移入展開區（`docs/v2/81` 第 10.2 節）。Status Bar 與側欄狀態句內的「n／m 項已取得」不算頁級核心數字的讀法（若整句算一個名額，降級會是 6，須回 Gate）。
-> - **已裁示、不再待裁**：🌍 首屏採 C 與用字統一（`DEC-2026-11-03-09`）；Shell 字樣、Status Bar 讀法、全取得不寫「正常」、降級首屏須 ≤5（`DEC-2026-11-03-11`）；#1135 文字修訂授權與 💼 階段分工（`DEC-2026-11-03-12`）。
-> - **舊 Checkpoint 全文**（#1136 合併前版本；NOT CURRENT）：`docs/evidence/history/2026-11-04_after_1136_handoff_backlog_superseded.md`（H3）。
+> - **清理線狀態摘要**（專案級下一接手點不被清理線取代；證據只在 BL-0543、#1152～#1154 與 H14，不在此重述）：
+>
+> | PR | branch | 已記錄 head | 內容 | 狀態 |
+> |---|---|---|---|---|
+> | #1152 | `audit/code-data-boundaries-20261105` | `0a482e79` | 清理線：shadow 條件修正 | Draft；獨立 QA／逐條 CI 需重查 |
+> | #1153 | `audit/static-reachability-tool-20261105` | `6e021744`（工具修補）；本分支另含 checkpoint 收斂，精確 head 以 GitHub 為準 | 靜態可達性盤點工具＋文件收斂；工具測試 5 passed、連同文件計數 71 passed（BL-0543 記錄） | 非 Draft；QA／逐條 CI 需重查 |
+> | #1154 | `refactor/shared-masker-factory-20261105` | `74c1e98c` | 清理線：callback 相容性修正 | Draft；獨立 QA／逐條 CI 需重查 |
+> | 規則 | — | — | 工具清單（1082 模組、664 候選）＝TRIAGE_ONLY_NOT_SAFE_TO_DELETE，**不是死碼確認**；無刪碼結論 | 刪碼須另經確認 |
+> | 保護條件 | — | — | branch protection 讀取 HTTP 403、rulesets=[] | required checks **未驗證**，不得宣稱已確認或繞過 |
+>
+> 證據與範圍：BL-0543（`docs/BACKLOG.md`）；舊 checkpoint 與聲明逐字保全於 `docs/evidence/history/2026-11-05_cleanup_handoff_superseded.md`（H14，NOT CURRENT）。共用 aware datetime parser 僅為下一批候選，未動工。
 
 ## 1. 必讀順序（新對話或換人接手）
 
@@ -31,7 +29,7 @@
 
 **工作規則一律看 `PROJECT_RULES.md`，本檔不重述**：Silent Autonomous Cruise／No Progress Narration（第 3 節）、Model／Effort Change Gate 與 Hard-Stop（5.1）、Context Efficiency（11.1）、Minimum-Cost Correct Path（9.2）、正式 Streamlit 顯示規則與 cutover 檢查（13.2）、一般 merge commit 與不加 AI 署名（第 10 節）。
 
-## 2. 現況（2026-11-04；以 GitHub 為準）
+## 2. 現況（2026-11-05；以 GitHub 為準）
 
 | 項 | 現況 |
 |---|---|
@@ -39,6 +37,7 @@
 | 現行五頁 | 🌍 市場與趨勢／💼 我的資產／🔍 找基金／🤖 AI 投資總結（Phase 7 前導覽可見但不可點，不註冊頁面）／⚙️ 設定（`PROJECT_RULES.md` 13.2 第 1 點；程式側 `ui_v3/shell/registry.py`） |
 | 🌍 | wireframe 已裁示（`DEC-2026-11-03-01`）；歸一化 A2／B2／C2、H1b／H2／H3、Preview rendering、九項正式字樣、首屏採 C 與用字統一、Navigation Shell＋H5（#1134）、Shell 定字與降級首屏收尾（#1136；`DEC-2026-11-03-11`）已合併（#1125～#1136；`DEC-2026-11-03-07`、`-09`、`-10`、`-11`）。詳情看 `docs/BACKLOG.md` BL-0536 與 `docs/v2/81` |
 | 💼／🔍／⚙️／🤖 | 💼 已有 `docs/v2/82`（U1～U5 UI 設計已核准〔`DEC-2026-11-04-02`〕，其餘仍待裁示；ChatGPT 草案＋專案 AI 獨立稽核核實結果；不是現行規格、不授權 💼 程式；Gate 候選與待客戶問題見 `docs/BACKLOG.md` BL-0542）；🔍／⚙️／🤖 wireframe 尚未起草（順序 💼 → 🔍 → ⚙️；🤖 依 Phase 7）；核准前不寫該頁 `ui_v3` 代碼 |
+| G-2 資料轉接 | #1149 已隨 main `43b54f32` 合併，`ui_v3/adapters/assets_source.py` 未接頁面／renderer；仍不授權市值基準組裝移植與 UI 接線，詳見 BL-0542 |
 | cutover | 未開始；強制驗收項 BL-0535 |
 | 本機環境 | `ui_v2` 摘要守衛要用 Python 3.11 跑（CI 為 3.11）；`.claude/worktrees` 殘留會讓檔案引用守衛誤紅，需要時在乾淨 worktree 驗 |
 
@@ -83,6 +82,6 @@
 
 ## 5. 本檔沒查證的部分
 
-- main `21296a0d`（含 #1136、#1138）為工作樹基底，**未重查 GitHub／CI**；#1134、#1136 已合併為 git log 所見，CI 結果未查。本批的量測為 Chromium＋注入的人造資料，真實連線、Safari、實機、深色模式未驗；降級名額守衛是 DOM 計數（AppTest 不載入 CSS），可視計數以 Playwright 為準。
-- 第 3 節 BL-0538～BL-0540 為本批新登記，內容單組寫成、未經第二組驗證。
-- 舊版 HANDOFF 內「未查證」各條（約 60 條，多為 2026-10 月批次紀錄）隨全文搬至歷史檔，**不再是現行聲明**。
+- 真實 Cloud 外部入口、帳號、Secrets、Yahoo／FRED／Google／MoneyDJ 連線、外部排程、Safari／iOS／Android 實機與深色模式未驗；CI fixture 截圖不能冒充 production-like 驗收。
+- 必要獨立 QA 與修復後各 head 的完整 CI 未結案；局部測試通過不等於三支 PR 可合併。
+- 舊 checkpoint 的各次量測、未查證聲明與歷史基準已逐字保存於 H14，不再當成本輪最新事實；既有待裁事項仍查 `docs/BACKLOG.md`。
