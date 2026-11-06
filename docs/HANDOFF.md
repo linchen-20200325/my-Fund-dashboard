@@ -9,10 +9,10 @@
 | 項 | 2026-11-06 查核 |
 |---|---|
 | Repository／main | `linchen-20200325/my-Fund-dashboard`；`be6e1e344e00751d5d9e162764d53bb3b70a10f2`（#1153 以 merge commit 合入；2026-11-06 fetch 所見） |
-| main CI | 該 SHA 上 CI 本檔未查，須重查；不是對任何開放 PR 的合併背書 |
-| Open PR（2026-11-06 GitHub 實查） | #1150 Draft（head `5b3ad954`，base 已為 `be6e1e34`，CI 需重查）；#1160 本 PR Draft（已整合 main `be6e1e34`，新 head 以 GitHub 為準）；#1151／#1152／#1154／#1157／#1158／#1159 head 與 CI 本檔未重查 |
-| 已知檢查 | #1160 整合 main 後的新 head CI **待驗**；#1158 僅作歷史證據，其舊文字不得覆蓋較新裁示；其餘 PR 的 CI 本檔未查 |
-| 編輯衝突 | #1153 已合入 main（`BL-0543`、H14 已在 main）；#1150 仍 Draft 未併入 main，`DEC-2026-11-05-01` 只存在於 #1150，本 PR 不含也不偽造。#1160 **不可直接合併**，須經獨立 QA 與客戶授權 |
+| main CI | 該 SHA 上 Fast／Schema／Slow／Visual 四項 success（GitHub 2026-11-06 核對）；不是對任何開放 PR 的合併背書 |
+| Open PR（2026-11-06 GitHub 實查） | 原 #1150／#1160 保留 Draft 作歷史；乾淨替代 #1161（登入規格）與 #1162（上方五頁籤／健康資料覆蓋）均為 Draft，尚未合併；#1151／#1152／#1154／#1157／#1158／#1159 待依 GitHub 即時核對 |
+| 已知檢查 | #1162 整合 #1161 後的新 head CI **待驗**；#1158 僅作歷史證據，其舊文字不得覆蓋較新裁示；其餘 PR 的 CI 本檔未查 |
+| 文件整合 | #1153 已合入 main（`BL-0543`、H14 已在 main）；#1161 與 #1162 的規格文件已在 #1162 替代分支做無損整合，含 `DEC-2026-11-05-01`；兩者仍是 Draft，且**沒有合併 main**。獨立 QA／最新 head CI 須重做 |
 
 **清理線狀態索引**（只作指標，內容以各 PR 為準）：
 
@@ -36,12 +36,12 @@
 | 🌍 市場與趨勢 | `docs/v2/81` 線框已核准，保留已有 Preview，不重畫 |
 | 💼 我的資產 | `docs/v2/82` U1～U5 **僅 UI 方向**已核准，仍須完整合法線框／資料 Gate；主圖先於四格，持倉去重但保留所有部位，NAV＋σ 同圖與配息台幣、USD 100 萬、A／B／C 僅候選，**不直接搬舊交易公式** |
 | 🔍 找基金 | 基金代碼身份與單檔／篩選兩區語意已核准；整頁 New UI2 線框尚待核准 |
-| ⚙️ 設定 | 登入／Active Sheet／資料健康分離；#1150 登入草案需與頁首導航收斂，OAuth 不改 |
+| ⚙️ 設定 | 登入／Active Sheet／資料健康分離；#1161 登入草案已與 #1162 頁首導航文件同分支收斂（仍待 QA），OAuth 不改 |
 | 🤖 AI 投資總結 | `docs/v2/67`／`75` OneBrain 設計；Phase 7 前不得註冊／執行。Digest／Evidence 必須完整，UI 簡化不刪 AI Context |
 
 ## 4. 接手點與禁止事項
 
-唯一下一接手點：完成 #1150／#1153／#1160 的文件無損整合與最新 head 獨立 QA，確認 GitHub 保護條件後，再依 BL-0544 提出 frozen 44 手機頁首五頁籤最小修正案，依 BL-0545 規劃健康覆蓋率與正式准入的唯讀實測；未經相關 Gate 不進入程式實作。
+唯一下一接手點：完成 #1161／#1162 最新 head CI、獨立 QA 與治理文件無損驗證，未經正式解除 Draft 與合併授權不得合併；再依 BL-0544 檢查手機上方五頁籤與 frozen 44 的真實條文衝突、依 BL-0545 規劃 Active Sheet 健康覆蓋率唯讀實測，未經 Gate 不進入程式實作。
 
 - 先讀 `CLAUDE.md` → `PROJECT_RULES.md` → `docs/DECISIONS.md`／`docs/BACKLOG.md` → 本檔；產品規格回查 frozen `docs/v2/44`、子法 1＋57、`docs/v2/67`／`75`／`79`／`80`／`81`／`82`。
 - Old UI 唯讀參考、`ui_v2` maintenance-only；不改 production data source、公式、FX 觀測日、Risk Cap、身份與原始持倉；不直接 push main；每批最多三項安全工作；變更 Model／Mode／Effort 必須先依 Hard-Stop Gate。
