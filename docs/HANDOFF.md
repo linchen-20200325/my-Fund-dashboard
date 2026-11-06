@@ -1,18 +1,18 @@
-# HANDOFF — 基金 New UI2 唯一現行接手點（2026-11-06）
+# HANDOFF — 基金 New UI2 唯一現行接手點（2026-11-07）
 
-> **⏯ Resume Checkpoint（2026-11-06；唯一現行）**
+> **⏯ Resume Checkpoint（2026-11-07；唯一現行）**
 
 > **不是完成證明**：本頁只是熱交接索引；任何 main SHA、PR、CI、QA、合併與授權須先獨立重查 GitHub。上一版全文逐字保全在 `docs/evidence/history/2026-11-06_handoff_before_top_tabs_health_ruling.md`（**NOT CURRENT**）。歷史對話快照 #1158 仍供追溯，但新的兩項裁示已在 `DEC-2026-11-06-01`／`-02`；不能以舊快照或 ChatGPT Memory 取代本次裁示。
 
 ## 1. GitHub Verification Gate（本次量測，不保證之後不漂移）
 
-| 項 | 2026-11-06 查核 |
+| 項 | 2026-11-07 查核 |
 |---|---|
-| Repository／main | `linchen-20200325/my-Fund-dashboard`；`be6e1e344e00751d5d9e162764d53bb3b70a10f2`（#1153 以 merge commit 合入；2026-11-06 fetch 所見） |
-| main CI | 該 SHA 上 Fast／Schema／Slow／Visual 四項 success（GitHub 2026-11-06 核對）；不是對任何開放 PR 的合併背書 |
-| Open PR（2026-11-06 GitHub 實查） | 原 #1150／#1160 保留 Draft 作歷史；乾淨替代 #1161（登入規格）與 #1162（上方五頁籤／健康資料覆蓋）均為 Draft，尚未合併；#1151／#1152／#1154／#1157／#1158／#1159 待依 GitHub 即時核對 |
-| 已知檢查 | #1162 整合 #1161 後的新 head CI **待驗**；#1158 僅作歷史證據，其舊文字不得覆蓋較新裁示；其餘 PR 的 CI 本檔未查 |
-| 文件整合 | #1153 已合入 main（`BL-0543`、H14 已在 main）；#1161 與 #1162 的規格文件已在 #1162 替代分支做無損整合，含 `DEC-2026-11-05-01`；兩者仍是 Draft，且**沒有合併 main**。獨立 QA／最新 head CI 須重做 |
+| Repository／main | `linchen-20200325/my-Fund-dashboard`；`5782ba8980e7edbe2012c87c7378b350375af6a1`（#1161 以一般 merge commit 合入；2026-11-07 GitHub 查核） |
+| main CI | 該 SHA 上 Fast／Schema／Slow／Visual 四項 success（GitHub 2026-11-07 核對）；不是對任何開放 PR 的合併背書 |
+| Open PR（2026-11-07 GitHub 實查） | 原 #1150／#1160 保留 Draft 作歷史；乾淨替代 #1161（登入規格）已合入 main（`5782ba89`）；#1162（上方五頁籤／健康資料覆蓋）仍為 Draft，尚未合併；#1151／#1152／#1154／#1157／#1158／#1159 待依 GitHub 即時核對 |
+| 已知檢查 | #1162 前一 head `28e8112e` 的 Fast／Schema／Slow／Visual 四項 success；非作者唯讀稽核回報核心內容 PASS、HANDOFF 過期為必修 1；**本修正產生的新 head CI 與增量獨立 QA 均須重新驗證**。#1158 僅作歷史證據，不能覆蓋較新裁示 |
+| 文件整合 | #1153（`BL-0543`、H14）與 #1161（`DEC-2026-11-05-01` 登入設計）均已合入 main；#1162 的上方五頁籤／健康覆蓋裁示文件仍在 Draft，尚未合併。非作者 QA 對前一 head `28e8112e` 報告唯一必修為本檔過期；本次僅修正熱交接狀態並待增量複驗 |
 
 **清理線狀態索引**（只作指標，內容以各 PR 為準）：
 
@@ -36,12 +36,12 @@
 | 🌍 市場與趨勢 | `docs/v2/81` 線框已核准，保留已有 Preview，不重畫 |
 | 💼 我的資產 | `docs/v2/82` U1～U5 **僅 UI 方向**已核准，仍須完整合法線框／資料 Gate；主圖先於四格，持倉去重但保留所有部位，NAV＋σ 同圖與配息台幣、USD 100 萬、A／B／C 僅候選，**不直接搬舊交易公式** |
 | 🔍 找基金 | 基金代碼身份與單檔／篩選兩區語意已核准；整頁 New UI2 線框尚待核准 |
-| ⚙️ 設定 | 登入／Active Sheet／資料健康分離；#1161 登入草案已與 #1162 頁首導航文件同分支收斂（仍待 QA），OAuth 不改 |
+| ⚙️ 設定 | 登入／Active Sheet／資料健康分離；#1161 登入設計已合入 main，#1162 頁首導航文件仍待最終驗收，OAuth 不改 |
 | 🤖 AI 投資總結 | `docs/v2/67`／`75` OneBrain 設計；Phase 7 前不得註冊／執行。Digest／Evidence 必須完整，UI 簡化不刪 AI Context |
 
 ## 4. 接手點與禁止事項
 
-唯一下一接手點：完成 #1161／#1162 最新 head CI、獨立 QA 與治理文件無損驗證，未經正式解除 Draft 與合併授權不得合併；再依 BL-0544 檢查手機上方五頁籤與 frozen 44 的真實條文衝突、依 BL-0545 規劃 Active Sheet 健康覆蓋率唯讀實測，未經 Gate 不進入程式實作。
+唯一下一接手點：完成 #1162 本次 HANDOFF 最小修正之最新 head CI 與非作者獨立增量 QA，核對文件無損與 GitHub 正常 merge Gate；客戶已條件授權通過後轉 Ready、以一般 merge commit 合併；再依 BL-0544 檢查手機上方五頁籤與 frozen 44 的真實條文衝突、依 BL-0545 規劃 Active Sheet 健康覆蓋率唯讀實測，未經 Gate 不進入程式實作。
 
 - 先讀 `CLAUDE.md` → `PROJECT_RULES.md` → `docs/DECISIONS.md`／`docs/BACKLOG.md` → 本檔；產品規格回查 frozen `docs/v2/44`、子法 1＋57、`docs/v2/67`／`75`／`79`／`80`／`81`／`82`。
 - Old UI 唯讀參考、`ui_v2` maintenance-only；不改 production data source、公式、FX 觀測日、Risk Cap、身份與原始持倉；不直接 push main；每批最多三項安全工作；變更 Model／Mode／Effort 必須先依 Hard-Stop Gate。
