@@ -1,5 +1,7 @@
 # HANDOFF — 基金 New UI2 唯一現行接手點（2026-11-06）
 
+> **⏯ Resume Checkpoint（2026-11-06；唯一現行）**
+
 > **不是完成證明**：本頁只是熱交接索引；任何 main SHA、PR、CI、QA、合併與授權須先獨立重查 GitHub。上一版全文逐字保全在 `docs/evidence/history/2026-11-06_handoff_before_top_tabs_health_ruling.md`（**NOT CURRENT**）。歷史對話快照 #1158 仍供追溯，但新的兩項裁示已在 `DEC-2026-11-06-01`／`-02`；不能以舊快照或 ChatGPT Memory 取代本次裁示。
 
 ## 1. GitHub Verification Gate（本次量測，不保證之後不漂移）
