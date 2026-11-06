@@ -2387,7 +2387,7 @@
 | 決策者 | **客戶**；逐字原文於 `docs/evidence/decisions/2026-11-06_new_ui2_top_tabs_health_coverage_ruling.md` |
 | 客戶裁示 | 「手機導覽採B 上方橫向五頁籤」；指示依最新 GitHub 驗證更新既有規格與 DEC／BACKLOG／HANDOFF，維持 frozen 44 修正程序、先獨立 QA、不擅自合併 Draft。 |
 | 現行效果 | **設計選型已裁示**：New UI2 手機要走頁首橫向五頁籤，不再把 #1150／#1151 的固定底部設計當成**未來目標**。五頁名稱、順序、🤖 Phase 7 前不可進入仍照已核准契約。桌面既有側欄方向維持。 |
-| 位階／Stop Gate | `docs/v2/44_fund_ui_ssot.md` 與 `docs/v2/80` 及現行 `ui_v3/shell/nav.py` 仍存在固定底部／斷點契約。**本筆不直接改動 frozen 44 或解除守衛**；先列明受影響條文，按合法 amendment／Layout Decision Gate 完成對齊與獨立 QA，之後才可另批實作／Visual Fidelity 實機驗收。 |
+| 位階／Stop Gate | ~~`docs/v2/44_fund_ui_ssot.md` 與 `docs/v2/80` 及現行 `ui_v3/shell/nav.py` 仍存在固定底部／斷點契約。~~ → **勘誤（2026-11-06；總管／文件組讀法，不是客戶裁示；有意識的更正，不是漏刪）**：「44 明寫固定底部導覽」查無依據——44 對 `底部`／`bottom` 皆 0 命中；固定底部手機導覽出自 `DEC-2026-10-27-11` 與 `ui_v3/shell/nav.py`、`docs/v2/80`，44 的 `768` 只是欄數斷點。本筆僅取代 `DEC-2026-10-27-11` 中「手機導覽位置形式」一項，不延伸到桌機側欄、登入／Active Sheet／OAuth、五頁 IA 與順序、🤖 Phase 7 前禁入。全文見 `docs/evidence/new_ui2_top_tabs_44_amendment_inventory_2026_11_06.md`「勘誤與現行解讀指標（2026-11-06）」。**本筆不直接改動 frozen 44 或解除守衛**；先列明受影響條文，按合法 amendment／Layout Decision Gate 完成對齊與獨立 QA，之後才可另批實作／Visual Fidelity 實機驗收。 |
 | 仍未授權 | 手機導航 production code、cutover、OAuth／登入狀態變更、改動舊 UI／ui_v2、修改凍結文件、增加頁面、啟動 🤖。 |
 | supersedes／superseded by | **只在最新設計方向上取代** #1150／#1151／#1158 中「手機底部五頁為未來最終設計」的舊對話說法；不撤銷既有正式上位條文，也不刪除原文件歷史。 |
 | provenance | 客戶逐字原話存於上述 evidence；後續適用的實作條件與可能的技術解法為審查組讀法，不能冒充客戶逐字裁示。 |
