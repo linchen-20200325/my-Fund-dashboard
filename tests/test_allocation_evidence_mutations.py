@@ -163,6 +163,87 @@ MUTATIONS += [
      "if any(i.fx.status == PRESENT for i in final_items):", "FX gate only when an FX row exists"),
 ]
 
+MUTATIONS += [
+    # ── Option D: NAV input state (nav_input_state / HoldingEvidence.nav_state) ──
+    ("N01_declaration_ignored", "not_assembled = market and nav_input_state == NAV_INPUT_NOT_ASSEMBLED", "not_assembled = False",
+     "a declared not_assembled no longer stops the evaluation"),
+    ("N02_cost_basis_gated_off_market", "not_assembled = market and nav_input_state == NAV_INPUT_NOT_ASSEMBLED",
+     "not_assembled = nav_input_state == NAV_INPUT_NOT_ASSEMBLED", "the declaration blocks the cost basis too"),
+    ("N03_not_assembled_returned_as_no_data", "        return NAV_STATE_NOT_ASSEMBLED\n", "        return NAV_STATE_NO_DATA\n",
+     "not assembled is reported as assembled-but-no-data"),
+    ("N04_failed_vs_not_assembled_priority_swapped",
+     "    if nav_table_failed:\n        return NAV_STATE_FAILED\n    if declared == NAV_INPUT_NOT_ASSEMBLED:\n        return NAV_STATE_NOT_ASSEMBLED\n",
+     "    if declared == NAV_INPUT_NOT_ASSEMBLED:\n        return NAV_STATE_NOT_ASSEMBLED\n    if nav_table_failed:\n        return NAV_STATE_FAILED\n",
+     "a nav read failure is hidden behind not_assembled"),
+    ("N05_chart_failing_code_removed", '    if not_assembled:\n        failing.append("nav_not_assembled")', '    if False:\n        failing.append("nav_not_assembled")',
+     "chart comparability no longer names the missing NAV assembly"),
+    ("N06_not_in_prerequisite_only", ', "source_coverage_not_selected", "nav_not_assembled"}', ', "source_coverage_not_selected"}',
+     "not_assembled is read as a blocking fact instead of a missing prerequisite"),
+    ("N07_stale_not_rejected",
+     "    if reason is not None and reason.code in (_h.REASON_NAV_STALE, _h.REASON_NAV_STALE_UNDATED):\n        return NAV_STATE_OBTAINED_REJECTED\n",
+     "", "a stale-listed fund no longer reads as obtained-but-rejected"),
+    ("N08_key_failed_ignored", "    if key_failed is True:\n        return NAV_STATE_FAILED\n", "", "a per-fund key failure is ignored"),
+    ("N09_no_data_without_declaration", "    if declared == NAV_INPUT_ASSEMBLED and key_failed is False", "    if key_failed is False",
+     "no_data claimed without the caller's declaration"),
+    ("N10_cause_unknown_becomes_no_data", "    return NAV_STATE_CAUSE_UNKNOWN\n", "    return NAV_STATE_NO_DATA\n",
+     "an unexplained missing row is reported as no data"),
+    ("N11_echo_fixed_to_assembled", "nav_input_state=NOT_PROVIDED if nav_input_state is None else nav_input_state)",
+     "nav_input_state=NAV_INPUT_ASSEMBLED)", "the echo of the declaration is fixed"),
+    ("N12_invalid_declaration_accepted", '        raise TypeError("nav_input_state must be None', '        pass; ("nav_input_state must be None',
+     "an invalid declaration is accepted"),
+    ("N13_provenance_not_discarded_under_not_assembled", '            parts = None\n        if "nav" in error_tables:',
+     '            pass\n        if "nav" in error_tables:', "assembler lists are still trusted although nothing was assembled"),
+    ("N14_conflict_problem_removed",
+     '            problems.append(InputProblem("nav_not_ready", "must be None when nav_input_state is not_assembled"))', "            pass",
+     "a nav_not_ready given with not_assembled is silently dropped"),
+    ("N15_soft_code_swapped", '        soft.append("nav_not_assembled")', '        soft.append("no_holdings")',
+     "the missing NAV assembly is reported under another code"),
+    # additional mutants of the new code (all must be killed as well)
+    ("N16_no_data_ignores_key_failed_list", "key_failed is False and not_fresh is False and too_old is False and withheld is False:",
+     "not_fresh is False and too_old is False and withheld is False:", "no_data without the key_failed list being provided"),
+    ("N17_no_data_ignores_not_fresh_list", "key_failed is False and not_fresh is False and too_old is False and withheld is False:",
+     "key_failed is False and too_old is False and withheld is False:", "no_data without the not_fresh list being provided"),
+    ("N18_no_data_ignores_too_old_list", "key_failed is False and not_fresh is False and too_old is False and withheld is False:",
+     "key_failed is False and not_fresh is False and withheld is False:", "no_data without the too_old list being provided"),
+    ("N19_no_data_ignores_withheld_part", "key_failed is False and not_fresh is False and too_old is False and withheld is False:",
+     "key_failed is False and not_fresh is False and too_old is False:", "no_data without the withheld part being provided"),
+    ("N20_rejected_ignores_withheld", "if not_fresh is True or too_old is True or withheld is True:", "if not_fresh is True or too_old is True:",
+     "a withheld fund is not obtained-but-rejected"),
+    ("N21_rejected_ignores_not_fresh", "if not_fresh is True or too_old is True or withheld is True:", "if too_old is True or withheld is True:",
+     "a not_fresh fund is not obtained-but-rejected"),
+    ("N22_rejected_ignores_too_old", "if not_fresh is True or too_old is True or withheld is True:", "if not_fresh is True or withheld is True:",
+     "a too_old fund is not obtained-but-rejected"),
+    ("N23_table_failure_ignored", "    if nav_table_failed:\n        return NAV_STATE_FAILED\n", "", "a nav table read failure is not shown per holding"),
+    ("N24_soft_code_dropped", '        soft.append("nav_not_assembled")', "        pass", "not_assembled no longer blocks the evaluation"),
+    ("N25_nav_not_ready_not_neutralised", "        nav_nr = (frozenset(), None, None)\n    elif market:", "        nav_nr = None\n    elif market:",
+     "the stale listing slot is left open under not_assembled"),
+    ("N26_mode_known_ignored", "    if not mode_known:\n        return NAV_STATE_NOT_EVALUATED\n", "",
+     "an unknown basis reads as not_required"),
+    ("N27_cost_basis_state_dropped", "    if not market:\n        return NAV_STATE_NOT_REQUIRED\n", "",
+     "the cost basis state depends on whether anything was evaluated"),
+    ("N28_provenance_conflict_dropped",
+     '            problems.append(InputProblem("nav_provenance", "must be None when nav_input_state is not_assembled"))',
+     "            pass", "a nav_provenance given with not_assembled is silently dropped"),
+    ("N29_errors_conflict_dropped",
+     '            problems.append(InputProblem("nav_input_state", "not_assembled conflicts with a nav read error"))', "            pass",
+     "not_assembled together with a nav read error is not recorded as a conflict"),
+    ("N30_unknown_membership_read_as_false", "    if parts is None or part not in parts:\n        return None\n",
+     "    if parts is None or part not in parts:\n        return False\n", "a side-channel part that was not provided is read as clear"),
+    ("N31_version_not_bumped", "SCHEMA_VERSION = 2 ", "SCHEMA_VERSION = 1 ", "schema version not bumped for the new fields"),
+    # ── audit round: str subclass, priority pin, not_assembled + malformed nav_not_ready ──
+    ("N32_str_subclass_accepted", "if nav_input_state is not None and not (type(nav_input_state) is str and",
+     "if nav_input_state is not None and not (isinstance(nav_input_state, str) and", "a str subclass declaration passes validation"),
+    ("N33_key_failed_outranks_stale_listing",
+     "    if reason is not None and reason.code in (_h.REASON_NAV_STALE, _h.REASON_NAV_STALE_UNDATED):\n        return NAV_STATE_OBTAINED_REJECTED\n"
+     "    key_failed = _in_part(parts, \"key_failed\", code)\n    if key_failed is True:\n        return NAV_STATE_FAILED\n",
+     "    key_failed = _in_part(parts, \"key_failed\", code)\n    if key_failed is True:\n        return NAV_STATE_FAILED\n"
+     "    if reason is not None and reason.code in (_h.REASON_NAV_STALE, _h.REASON_NAV_STALE_UNDATED):\n        return NAV_STATE_OBTAINED_REJECTED\n",
+     "the priority between the stale listing and a key failure is swapped"),
+    ("N34_not_assembled_validates_nav_not_ready", "        nav_nr = (frozenset(), None, None)\n    elif market:",
+     "        nav_nr = _normalize_nav_not_ready(nav_not_ready, problems)\n    elif market:",
+     "a malformed nav_not_ready under not_assembled is validated and turns into a second problem / hard failure"),
+]
+
 #: survivors -> reason (empty = every mutation is killed)
 SURVIVORS_DOCUMENTED: dict = {}
 
@@ -199,6 +280,9 @@ def test_mutation_is_killed(mutation):
     if mutation[0] == "E23_denominator_order_changed" and sum([0.1, 0.2, 0.3]) == sum([0.3, 0.2, 0.1]):
         pytest.skip("this interpreter's sum() is order-insensitive for the probe (CPython >= 3.12 compensated sum); "
                     "the order mutation cannot change a float result here")
+    if mutation[0] == "F04_target_sum_exact_float_compare" and sum([0.6, 0.3, 0.1]) == 1.0:
+        pytest.skip("this interpreter's builtin sum() is compensated (CPython >= 3.12): the target sum is exactly 1.0 here, so an "
+                    "exact-equality mutant behaves identically; the mutation is observable (and killed) on CPython 3.11, the CI version")
     killers = _failures(_load(mutation))
     assert killers, f"{mutation[0]} ({mutation[3]}): no check noticed the mutation"
 
