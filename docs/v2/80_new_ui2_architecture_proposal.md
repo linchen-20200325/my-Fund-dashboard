@@ -670,3 +670,23 @@ Playwright chromium、`deviceScaleFactor` 2；腳本與原始數字在 `docs/evi
 結論：未發現首屏預算或資訊密度的實質衝突，沒有放寬 frozen 44。量測限制：真實 Yahoo／FRED 未連線；只量了 Chromium（Safari 未驗）；沒有實機 iOS／Android 瀏覽器（safe-area 與動態網址列為 CSS `env()` 推論，未實機驗）；未驗深色模式的底部列；Streamlit 升版後導覽相容性未驗（CSS 依賴 `data-testid`）；首屏「可見」以座標判定，不是人眼評審。以上皆保留在 BACKLOG BL-0536 待驗證清單，不得宣稱已通過。
 
 ⚠️ 本節由執行組單組寫成，未經第二組獨立驗證；選型與首屏預算讀法為總管可推翻的執行組讀法。
+
+## 18. 2026-11-06 最新手機導覽設計裁示（B 上方橫向五頁籤；尚待 frozen 44 合法 amendment）
+
+> **權威來自既有 `docs/DECISIONS.md` `DEC-2026-11-06-01`；客戶逐字來源：`docs/evidence/decisions/2026-11-06_new_ui2_top_tabs_health_coverage_ruling.md`。本節僅補充 New UI2 已裁示的未來設計目標，不改 §1～3／§8 凍結架構，不取代 frozen 44 或授權程式修改。**
+
+### 18.1 目標與歷史 supersession
+
+- 手機 New UI2 **選定方案 B：頁首橫向五頁籤**。五個入口維持 🌍 市場與趨勢／💼 我的資產／🔍 找基金／🤖 AI 投資總結／⚙️ 設定；導覽順序與頁面註冊、🤖 Phase 7 前「可見但不可進」規則不變。
+- 桌機既有固定側欄方向不在本次裁示的改動範圍；手機帳號精簡入口與頁首五頁籤不得互相遮擋，也不改 OAuth、Active Sheet 或 ShellStatus。
+- **較舊記憶**：本檔 §17 的底部列實作紀錄、#1150/#1151 的底部設計草案、#1158 對話快照記載的是先前狀態；自本次裁示起**不可作為未來手機版型的最終設計偏好**。其原始 Git 歷史與已驗程式行為保留，不作無證據的舊設計刪除。
+- **仍有效的上位限制**：frozen `docs/v2/44_fund_ui_ssot.md` 的手機布局／導覽條款在正式 amendment 完成前仍適用；`ui_v3/shell/nav.py` 的 ≤768px bottom-nav 是現有程式事實。此處只記錄「目標已改」，不宣稱「正式 SSOT 與實作已改」。
+
+### 18.2 最小安全 Layout / Amendment Gate（BL-0544）
+
+1. 鎖定 main SHA，逐條定位 frozen 44 中明寫底部導覽及 768 斷點的原文、對應測試／守衛、`docs/v2/79`、本檔 §7／§17、`docs/v2/81`／`82`、#1150／#1151 的衝突。先產出**最小正式 amendment**，客戶核准與獨立 QA 前不直接改 44。
+2. 390／768／769／1280 寬度，手機嵌入訊息 App／WebView、safe-area、無橫向*頁面*溢出、橫向*頁籤*滾動、鍵盤／螢幕閱讀器、48px 觸控區、焦點與目前頁語意、🤖 禁入均納入正式驗收；不得只量桌面瀏覽器或以 CSS 推論代替手機實測。
+3. 先比對 #1150 登入入口與 #1151 五頁線框草案，舊 PR 未合併則讀 **head**。正式 SPEC／字樣 Gate 和 Visual Fidelity 通過後才另批授權修改 `ui_v3` Shell；不改 Old UI／ui_v2／正式登入憑證。
+4. 保留畫面精簡、完整資料與 Evidence 不減少、首屏核心元素上限。若與現有首屏量測／frozen 44 衝突，列為未解決而不是暗中調高預算。
+
+**未驗項**：實機 WebView 遮擋是否已被解決、真實頁籤可達性、實作與截圖、Cloud production-like 驗收。以上都尚未通過，不得用本節當合併或上線證明。
