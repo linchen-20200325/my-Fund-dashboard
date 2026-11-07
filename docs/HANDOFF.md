@@ -40,7 +40,7 @@
 
 | 順序 | 工作 | Gate／owner |
 |---|---|---|
-| NOW | 修正本 HANDOFF／BACKLOG 過期指標 | ChatGPT 文件批；#1164 已 merged，但本文件 PR 的 CI／QA 另算 |
+| 輔助 | 只有 GitHub 再次出現實質狀態漂移時才追加交接更正 | ChatGPT，必查 live source；不得每輪為改文件而開 PR |
 | NEXT | BL-0545 五維健康評級覆蓋率唯讀分母調查 | ChatGPT 設計／Claude Code 必要 probe；既有來源、不可改原 Grade／門檻／資料准入規則 |
 | LATER | BL-0542 💼 我的資產 G-3～G-5 | UI 設計部分核准，資料／配息／整頁接線 Gate 未全授權 |
 | LATER | BL-0530 找基金 ISIN → MoneyDJ deterministic identity | research-only；無已核准 source 時不得啟用 mapping |
