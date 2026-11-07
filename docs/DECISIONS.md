@@ -2421,6 +2421,21 @@
 | supersedes／superseded by | 取代「只顯示字母評級即代表資料完整／可正式判斷」的過時對話讀法；不改寫既有 Domain 計算結果。 |
 | provenance | 客戶逐字裁示如上；eligible／coverage 與狀態細節的 UI 契約是既有資料完整性規則及 #1157 稽核之保守落地建議，正式 UI 字樣須遵守 `APPROVED_WORDING` Gate。 |
 
+
+### DEC-2026-11-07-01｜BL-0544 採方案 B：最小 successor 適用性確認＋Preview-only 有條件施工授權
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-07（Asia/Taipei） |
+| 決策者／原話 | **客戶**：「同意 B」。這是對 ChatGPT 前述 BL-0544 三方案推薦 B 及限縮施工授權的回覆；除這三字外均是**方案射程整理**，不冒充客戶逐字原文。 |
+| 核准路線 | **方案 B**：先由非作者獨立 QA 逐條確認 frozen 44 的真實導航相關條文與手機頂部五頁籤無直接衝突；若確認無衝突，**44 原封不動**，較新 `DEC-2026-11-06-01` 僅取代 `DEC-2026-10-27-11` 的**手機導覽位置形式**。不自行宣稱 DEC 指標就是已完成 44 amendment。 |
+| 合法 Gate | 核對 44 第二節 2.1（欄數斷點）、其七之二十 其三帳號入口、其七之十八／十九首屏及 57／CONSTITUTION／guard 等適用性；非作者獨立治理 QA 必須確認方案 B 是否足以滿足既有正式修正程序。若發現真實衝突、程序不能確立或需改 44，**停手，另提正式 amendment（方案 C 或合法程序）並請客戶裁示**。 |
+| 有條件施工授權 | **現在不直接開工**；合法 Gate、精確 UI 線框／字樣 Gate、非作者 QA 完成且裁示同步 GitHub 後，Claude Code 僅可實作 **Preview-only `ui_v3` 手機頁首橫向五頁籤 Shell 單切片**與必要 tokens／測試。桌機側欄、五頁名稱順序、🤖 Phase 7 前不可進入、≤2 次互動及登入入口不變。 |
+| UI 驗收要求 | 390／768／769／1280 斷點與首屏、WebView／safe-area、帳號入口不遮擋、鍵盤／螢幕閱讀器、48px 觸控、頁籤橫向捲動且整頁不橫溢；未實測不能標 PASS。 |
+| 不授權 | Old UI／`ui_v2`、production cutover、OAuth／session／Active Sheet 身分、新資料源、NAV／FX／配息／健康准入、金融公式與 Risk Cap、OneBrain／Phase 7、第六頁、直接修改 frozen 44 或 md5 守衛。 |
+| 證據與狀態 | `DEC-2026-11-06-01`、`BL-0544`、`docs/evidence/bl0544_mobile_top_tabs_minimal_gate_proposal_2026_11_07.md`、PR #1163。**B 已裁、合法 Gate／實作 Gate 仍待驗；不得把本 DEC 當作測試或 amendment 完成證明。** |
+
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
