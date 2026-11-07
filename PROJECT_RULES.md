@@ -972,3 +972,6 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 6. **主動提供『可直接複製的新對話提示語』**：完成可恢復的遠端保存後，由 AI 主動告知「🟡 建議換新對話」／適當的狀態燈，附一份完整提示語，至少寫 repo、GitHub Verification Gate、必讀治理文件、未合併 PR head、正式 vs 候選需求、禁止事項、下一個唯一安全動作、Model／Mode／Minimum Sufficient Effort。**不能只給短摘要、不能只說『看上一個對話』**。若保存失敗則先說明阻塞，提供尚可驗證的手動救援提示語，不宣稱安全落盤。
 7. **與靜默巡航併用**：這是「對話不安全／需要安全交接」的明確狀態報告，而非逐 commit／CI 等待的進度碎訊；安全時保持靜默，只有真正接近無法可靠續聊或客戶要求時才提醒一次，避免重複打擾。
 8. **驗收／定義完成**：新對話只靠最新 GitHub main＋必要 Open／Draft PR head＋既有治理檔案即可正確恢復已核准內容、候選方向、阻塞和 next safe action；若恢復不全，交接尚未完成，不能把聊天中的記憶當補洞來源。此項屬文件／流程治理，不授權實作新功能或更動正式投資公式。
+
+9. **基金專案 ChatGPT ↔ Claude Code 手動接力與每小時靜默 GitHub 巡檢（2026-11-07 客戶重申，要點轉述）**：定期巡檢必須**實際查 GitHub** 最新 main SHA、Open／Draft PR head／diff／CI／QA、規格與程式實況、未完成 BACKLOG 和唯一 HANDOFF 接手點，不能靠對話或上次巡檢複製狀態。ChatGPT 負責產品設計、至少三方案風險／速度／Token 比較、最小治理文件更新、獨立 GitHub 驗收及符合既有 Auto-Ship 授權的合併；**Claude Code（專案 AI）負責所有 CODE／Python／Streamlit 技術施工**。確有需要 Claude Code 工作時，由 ChatGPT **直接提供一份可複製的完整提示語，附建議 Model／Mode／Minimum Sufficient Effort、明確範圍／Stop Gate／驗收條件**；**客戶手動轉貼**，待 Claude 回報由客戶貼回，ChatGPT 重新獨立查 GitHub 再判斷。不得聲稱自動替客戶派遣 Claude。**通知節流**：在無確切 Claude Code 施工提示語可交付、無客戶必要裁示／真 Stop Gate、無迫切對話交接風險時保持靜默；巡檢中發現可合法進行的文書／治理事項先在既有授權內執行，必要階段成果與未完事項**保存到 GitHub 的既有 DECISIONS／BACKLOG／HANDOFF／PR evidence**，不為等 CI 或單純進度發訊息。這是既有第 3 節靜默、第 6／12 節保存及第 15 節交接的**執行補強**，不擴大無授權施工或合併權限；自動巡檢無法保證一般對話在離線時持續施工，正式進度仍以 GitHub 為準。
+
