@@ -17,7 +17,7 @@
 | 項目 | 2026-11-07 查到的狀態 | 對應證據 |
 |---|---|---|
 | main | `b0ca4b949e969165570c693a24e9f23f51952ac1`（#1164 合併 commit） | 本次觀測，**不是永遠最新 SHA** |
-| #1163 | **merged=true**，merge SHA 同上；B／S1 設計與合法適用性文書已進 main | [PR #1163](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1163) |
+| #1163 | **merged=true**；**歷史 merge SHA `025922382ef3921fc7b6858cb733084935fbf066`**（是 #1164 之前的 commit，不是當前 main HEAD） | [PR #1163](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1163)；B／S1 設計文件已進 main |
 | Open PR | **0**（本次觀測）；#1164 **merged=true**，merge SHA `b0ca4b949e969165570c693a24e9f23f51952ac1`；最後 head `4f045c26e64f71901bcf14db9209c7338f7de2dc` | [PR #1164](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1164)；**Code 已合入 main** |
 | #1164 已合併 head CI | [run 42359253829](https://github.com/linchen-20200325/my-Fund-dashboard/actions/runs/42359253829)：Fast／Schema／Slow／Visual **success** | 最後 head `4f045c26` 的結論；**不是 merge commit 的 main CI** |
 | Code | ≤768px 五格同列頁首／無橫滑／≥48px；769px+ 原側欄；僅 🌍 可進、🤖 不開放；無效 sticky 已修 | #1164 **已 merged 到 main**，但 Preview-only ≠ Cloud 正式上線 |
