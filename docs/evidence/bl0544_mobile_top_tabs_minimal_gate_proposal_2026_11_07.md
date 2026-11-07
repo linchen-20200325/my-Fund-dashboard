@@ -40,3 +40,10 @@
 **建議核准句**：「我同意 BL-0544 走最小 successor／適用性確認 B：先由獨立稽核確認 44 真實相關條文與頁首導覽無衝突；若無直接衝突，44 不動，較新 DEC 僅取代舊 DEC 的手機導覽位置。完成合法 Gate、精確 UI 線框及獨立 QA 後，授權 Claude Code **只做 Preview 的 ui_v3 手機頁首五頁籤 shell 單切片**，不含資料、OAuth、Phase 7 或 cutover。若查到真實 44 文字衝突，停下按正式 amendment 另裁示。」
 
 > 上述句子是**建議裁示**，未經客戶明示同意以前，不得登記為「已核准」或視為施工許可。
+
+## 5. 2026-11-07 客戶裁示狀態更新（不修改原提案與三路比較）
+
+- **已核准方案 B**：客戶針對本提案與限縮 Preview-only 工作回覆「同意 B」。正式裁示射程、Stop Gate 與不得動工範圍已記 `docs/DECISIONS.md` **`DEC-2026-11-07-01`**，`docs/BACKLOG.md` **BL-0544**，交接見 `docs/HANDOFF.md`。
+- **還沒核准完成的不是 B 選型，而是 B 的合法適用性及施工前 Gate**：非作者稽核仍需逐條確認 frozen 44 與導覽位置沒有真實衝突，並驗證上位治理允許以 newer DEC 作適用性 successor。精確線框、字樣與驗收契約也需獨立完成，不能把客戶一句「同意 B」擴大解讀為所有程序均 PASS。
+- **施工權限為條件式而非即刻開工**：合法 Gate／精確線框／獨立 QA 通過、GitHub 落盤後，才可按 DEC 在 `ui_v3` 做 Preview-only 手機頁首五頁籤；如遇真實 frozen 衝突，回到正式 amendment 路線，停止程式施工。
+- **本 PR 是治理文件批**，無 frozen 44、57、CONSTITUTION、程式、測試或 OAuth 改動；完成本 PR 的治理稽核與 CI 前仍 Draft，不直接 Auto-Ship。
