@@ -11,7 +11,7 @@
 | Repository／main | `linchen-20200325/my-Fund-dashboard`；`d0a0af20390af66171f7c75c46aaff9c18a28e0f`（2026-11-07 GitHub 實查；本輪 #1159、#1157、#1151、#1158 依序合併） |
 | main CI | `d0a0af20` 的 push／main CI 尚未逐項核對；#1159、#1157、#1151、#1158 各自**合併前 PR head** 的 Fast／Schema／Slow／Visual 四項均 success，不能冒稱新 main CI 已驗過 |
 | Open PR（2026-11-07 GitHub 實查） | 僅 **#1163 Draft** 尚未合併（BL-0544 合法適用性／精確線框 Gate）。#1150／#1160 已以 superseded 理由 **closed、未合併**；#1159 → #1157 → #1151 → #1158 **已以一般 merge commit 合併**，其餘 #1152／#1153／#1154／#1161／#1162 亦已合併；非 PR head branch 刪除證據 |
-| 已知檢查 | #1163 先前 head `790b3f48` 的 Schema／Fast／Slow／Visual 四項 CI success，**本次 HANDOFF 更新會產生新 head，須重查新 head**；其 frozen 44／57／CONSTITUTION 法定適用性、80 §18.2 舊 amendment 指示與較新 B 的關係及非作者 QA 尚未判為 PASS，精確 Preview 線框／字樣 Gate 未驗。#1158 已合併但僅作歷史對話證據 |
+| 已知檢查 | #1163 前一 head `acdb70e7` 的四項 CI success；**此次增補 44 §2.1 文本衝突／S1～S3 線框候選與 80 §18 supersession，產生新 head 後必須重查四項 CI**。非作者合法性 QA、S1／S2 精確線框／字樣 Gate 尚未 PASS。#1158 已合併但僅作歷史對話證據 |
 | 文件整合 | #1153、#1161、#1162 已合併；本輪 #1159 `5b27652e`、#1157 `55798db9`、#1151 `18fe3476`、#1158 `d0a0af20` 亦已合併。#1163 仍 Draft，只保存 BL-0544 的有條件核准與提案，**沒有改 frozen 44／57 或程式**，不得當成合法 Gate／施工完成 |
 
 **清理線狀態索引**（只作指標，內容以各 PR 為準）：
@@ -40,6 +40,8 @@
 | 🤖 AI 投資總結 | `docs/v2/67`／`75` OneBrain 設計；Phase 7 前不得註冊／執行。Digest／Evidence 必須完整，UI 簡化不刪 AI Context |
 
 ## 4. 接手點與禁止事項
+
+**BL-0544 2026-11-07 新增明確阻塞（GitHub 逐條初核，非獨立 QA）**：44 §2.1 明寫「**任何一段都不出現橫向捲動**」，與 80 §18.2／既有候選的「局部可橫向滑動五頁籤」有**未解歧義／潛在真衝突**。不可把「整頁不溢出」當充分證據。方案 B 的 successor 路線已選，但**合法性尚未通過**。在 #1163 裡已將 80 §18 的過期「必先 amendment」標 superseded，提出精確頁首五頁籤候選 S1（不滑動）／S2（局部滑動）／S3（必要時正式 44 amendment）和 NOT RUN 測試矩陣，詳 `docs/evidence/bl0544_mobile_top_tabs_minimal_gate_proposal_2026_11_07.md` §6～7；**S1 不是新客戶裁示，需正式線框 Gate 核准；S2 需核 44 適用性，均未獲動工許可**。
 
 唯一下一接手點：先完成 #1163（BL-0544 客戶已裁方案 B）之非作者**合法適用性稽核**，逐條核 frozen 44／57／CONSTITUTION、導覽與登入／首屏／斷點、並完成精確 Preview 線框與字樣 Gate；無直接衝突才保留 frozen 44 不動，Gate 通過且文件正式合併後，才依 `DEC-2026-11-07-01` 條件式授權 Claude Code 施工 **Preview-only `ui_v3` 手機頁首五頁籤 Shell 單切片**。若真衝突停手走正式 amendment；BL-0545 的 Active Sheet 覆蓋率唯讀實測另批處理，未經 Gate 不進入程式實作。
 
