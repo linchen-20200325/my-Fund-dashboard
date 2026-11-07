@@ -16,31 +16,31 @@
 
 | 項目 | 2026-11-07 查到的狀態 | 對應證據 |
 |---|---|---|
-| main | `025922382ef3921fc7b6858cb733084935fbf066` | 這不是永久最新 SHA |
+| main | `b0ca4b949e969165570c693a24e9f23f51952ac1`（#1164 合併 commit） | 本次觀測，**不是永遠最新 SHA** |
 | #1163 | **merged=true**，merge SHA 同上；B／S1 設計與合法適用性文書已進 main | [PR #1163](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1163) |
-| Open PR | **僅 #1164，Draft**；base `02592238`；head `4f045c26e64f71901bcf14db9209c7338f7de2dc`，mergeable=true | [PR #1164](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1164)；Code **尚未合入 main** |
-| #1164 最新 head CI | [run 42359253829](https://github.com/linchen-20200325/my-Fund-dashboard/actions/runs/42359253829) Fast／Schema／Slow／Visual 均 **success** | 只適用 head `4f045c26` |
-| Code | ≤768px 五格同列頁首／無橫滑／至少 48px；769px+ 原側欄；僅 🌍 可進、🤖 不開放；原無效 sticky 已在此 PR 修正 | `ui_v3/shell/nav.py`、`pages/chrome.py`、tests；**未正式上線** |
-| 視覺證據 | PR 已加入 374／375／390／768／769／1280 及 190% 模擬的 Chromium **fixture** JSON／PNG | `docs/evidence/bl0544_s1_chromium_fixture_2026_11_07/`；不等於正式 Cloud／真機／WebView |
-| QA／review | 0 unresolved threads；最新 head 非作者增量 QA 是否達完整 Gate **NOT VERIFIED** | COMMENTED review／CI 四綠不得自動當獨立 QA |
+| Open PR | **0**（本次觀測）；#1164 **merged=true**，merge SHA `b0ca4b949e969165570c693a24e9f23f51952ac1`；最後 head `4f045c26e64f71901bcf14db9209c7338f7de2dc` | [PR #1164](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1164)；**Code 已合入 main** |
+| #1164 已合併 head CI | [run 42359253829](https://github.com/linchen-20200325/my-Fund-dashboard/actions/runs/42359253829)：Fast／Schema／Slow／Visual **success** | 最後 head `4f045c26` 的結論；**不是 merge commit 的 main CI** |
+| Code | ≤768px 五格同列頁首／無橫滑／≥48px；769px+ 原側欄；僅 🌍 可進、🤖 不開放；無效 sticky 已修 | #1164 **已 merged 到 main**，但 Preview-only ≠ Cloud 正式上線 |
+| 視覺證據 | #1164 已合入 Chromium 合成 fixture 的 374／375／390／768／769／1280 及 190% 模擬 JSON／PNG | `docs/evidence/bl0544_s1_chromium_fixture_2026_11_07/`；**不代表**正式 Cloud／真機／WebView |
+| QA／review | #1164 0 unresolved threads；GitHub 3 則 `COMMENTED` review 並非明確非作者 QA 核准；最新 head 完整 QA 證據 **NOT VERIFIED** | **已 merge ≠ QA 自動 PASS**；留下事後稽核缺口，不得否認合併事實 |
 | main CI | 本次未取得 main HEAD 的逐 job 結論 | **NOT VERIFIED** |
 | 清理線 #1152／#1153／#1154 | GitHub 均顯示 `merged=true` | BL-0543 的舊「三 PR 尚未合併」敘事不得復活 |
 
-## 2. 唯一 NOW：BL-0544／PR #1164 結案驗證
+## 2. 唯一 NOW：#1164 已合併後的驗收證據／交接一致性核對
 
-**不再做 S1／S2 選型，不再做 #1163 文書 QA，也不再叫 Claude 重修已修的 37 tests、sticky 或 fixture JSON 換行。**
+**#1163、#1164 均已合併；不重做 S1／S2 選型，不重做舊 PR QA，不重修 37 個 tests、sticky 或 fixture JSON EOF，也不重開同功能 Code PR。**
 
 - Claude Code 負責 Code／測試／必要非作者技術 QA；ChatGPT 負責獨立 GitHub Gate、規格、文件與符合條件的 Auto-Ship。ChatGPT 不能僅靠留言聲稱已啟動外部 Claude 工作階段。
-- #1164 最新 head `4f045c26` 已解決 `c3117554` 的 37 測試失敗、`4ff03a49` 的 non-sticky 表述缺口，以及 `d27dad13` 的兩個 JSON 檔尾換行造成的 Fast CI 失敗。**舊紅燈不能沿用作現在的結論**。
-- **尚未證實**：真正非作者最新 head QA；production-like Cloud 390／1280 正式畫面確認；真機／WebView／OS 字體放大／讀屏。Preview 帳號入口目前 **NOT IMPLEMENTED**。fixture PASS 不能寫成 Cloud PASS。逐項確認是否是本批依上位規格必備的合併 Gate；不能為求合併自行降級為非阻擋。
-- **單一步驟**：對最新 head 取得獨立增量 QA 與正式視覺 Gate 判斷／證據 → 重新查四項 CI、diff、threads、review → 真正符合 Gate 才合併。若實測不能取得，留 Draft，明示唯一硬阻塞與需要的授權／環境，不重複開 PR。
+- #1164 **最後 head** `4f045c26` 已解決初版 `c3117554` 的 37 測試失敗，及後續 non-sticky 表述、fixture JSON EOF 格式失敗；最後 head 的四項 CI success，不拿舊紅燈推論現在失敗。
+- **已合併但仍未證實**：最後 head 真正非作者完整 QA、production-like Cloud 390／1280 正式截圖、真機／WebView／OS 字體放大／讀屏；Preview 帳號入口 **NOT IMPLEMENTED**。這些仍須依既有正式條款保留驗收缺口，不能把 fixture 當 Cloud PASS，也不能因已合併就說驗證齊備。
+- **單一步驟（已合併，不要重複合併）**：回查 #1164 實際合併 SHA、最後 head 四項 CI、review 和正式視覺 Gate，逐一標記 PASS／NOT VERIFIED／NOT RUN。若必要 QA／Cloud 仍缺，登記 **post-merge evidence gap**，辨明環境／責任與下一個最小取證工作，不回滾、重開同功能 PR 或捏造驗收；然後接續 BL-0545 已核准的唯讀研究。
 - 不動 frozen `docs/v2/44`／57／CONSTITUTION、Old UI／`ui_v2`、OAuth、Active Sheet 正式設定、金融資料、公式、FX、Risk Cap、OneBrain／Phase7、cutover；`DEC-2026-11-07-01/02` 為已核准 S1 射程。
 
 ## 3. NEXT／LATER（只安排已有安全條件的批次）
 
 | 順序 | 工作 | Gate／owner |
 |---|---|---|
-| NEXT | 更新本 HANDOFF／BACKLOG 的過期指標 | ChatGPT 文件批；不等於 #1164 已 merged，文件 PR 自己須驗收 |
+| NOW | 修正本 HANDOFF／BACKLOG 過期指標 | ChatGPT 文件批；#1164 已 merged，但本文件 PR 的 CI／QA 另算 |
 | NEXT | BL-0545 五維健康評級覆蓋率唯讀分母調查 | ChatGPT 設計／Claude Code 必要 probe；既有來源、不可改原 Grade／門檻／資料准入規則 |
 | LATER | BL-0542 💼 我的資產 G-3～G-5 | UI 設計部分核准，資料／配息／整頁接線 Gate 未全授權 |
 | LATER | BL-0530 找基金 ISIN → MoneyDJ deterministic identity | research-only；無已核准 source 時不得啟用 mapping |
@@ -50,7 +50,7 @@
 
 - [ ] 我已重新讀取 main SHA、Open／Draft PR、PR merged flag、最新 head diff、四 job conclusions、review／threads。
 - [ ] 能分清 **已在 main**、**Draft PR 中**、**尚未授權**、**NOT RUN／NOT VERIFIED**，不把 fixture 當正式畫面。
-- [ ] 沒有重派 #1163 工作、重開 #1164、再次「修復」舊 head 已結案的問題。
+- [ ] 沒有重派已合併的 #1163／#1164，也不把已合併的 Code 說成仍在 Draft；舊 head 的失敗不當成最新結果。
 - [ ] 最新 PR／CI 狀態寫在 GitHub 可追溯處；下一個 owner 與單一接手點清楚；只有已核准的安全工作才繼續。
 - [ ] 作者／非作者 QA 分離，`COMMENTED`／自述不冒充非作者驗收；無證據不 merge。
 - [ ] 文件或聊天太長仍從 GitHub 重查；本 HANDOFF 不能取代即時核驗或現行正式 DEC／SSOT。
