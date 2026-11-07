@@ -1,56 +1,60 @@
-# HANDOFF — 基金 New UI2 唯一現行接手點（2026-11-07）
+# HANDOFF — 基金 New UI2 現行零記憶接手點
 
-> **⏯ Resume Checkpoint（2026-11-07；唯一現行）**
+> **CURRENT／GitHub-first；觀測日期：2026-11-07（Asia/Taipei）**。本檔是「最後一次查到什麼」的**導航快照**，不是現在的 GitHub 查詢結果，更不是完成、CI 或獨立 QA 證明。任何新對話、長對話 compact、排程巡檢、Claude Code 接手、合併前都必須重新讀 GitHub。
+>
+> 舊版錯誤將 #1163 當 Draft 且否認 S1 Code 已動工。舊版原文逐字留存在 `docs/evidence/history/2026-11-07_handoff_before_cold_start_resync.md`（NOT CURRENT）；不可用舊版文件、對話記憶、PR body 或排程回報推翻即時 GitHub 證據。
 
-> **不是完成證明**：本頁只是熱交接索引；任何 main SHA、PR、CI、QA、合併與授權須先獨立重查 GitHub。上一版全文逐字保全在 `docs/evidence/history/2026-11-06_handoff_before_top_tabs_health_ruling.md`（**NOT CURRENT**）。歷史對話快照 #1158 仍供追溯，但新的兩項裁示已在 `DEC-2026-11-06-01`／`-02`；不能以舊快照或 ChatGPT Memory 取代本次裁示。
+## 0. 無記憶恢復順序（必須重新核查）
 
-## 1. GitHub Verification Gate（本次量測，不保證之後不漂移）
+1. **只查基金 repo** `linchen-20200325/my-Fund-dashboard`：`main` 完整 SHA、最近 commits、已 merged PR（讀 `merged`、`merge_commit_sha`）；不要拿今天的 main SHA 不同判斷歷史 PR 沒合併。
+2. **所有 Open／Draft PR**：逐一查 head/base SHA、diff/files、reviews、unresolved threads、mergeability 和 branches，確認是否已有人施工；PR 分支不等於 main，不能重開重複 PR。
+3. **CI 依最新 head**：Fast、Schema、Slow、Visual 逐項查 `conclusion`。新 head 不能繼承舊 head 的 success，`mergeable=true` 不代表 CI／QA 合格；main CI 不可拿 PR CI 冒充。
+4. **讀權威文件**：`CLAUDE.md` → `PROJECT_RULES.md` → 本檔 → `docs/BACKLOG.md` → `docs/DECISIONS.md` → 該批正式 SSOT／規格（frozen 44、子法 1＋57、79／80／81／82）。歷史快照不得當現行規格，HANDOFF 不能獨立宣稱完成。
+5. **判斷與交接**：標明 NOW／NEXT、owner、可動工 Gate、實際 CI／QA／視覺證據和未驗項；遇到文件與 GitHub 不一致，以即時 GitHub 為準，文件另由安全治理批修正，不重做已合併功能。不具備工具／證據就寫 NOT VERIFIED，禁止猜測。
 
-| 項 | 2026-11-07 查核 |
-|---|---|
-| Repository／main | `linchen-20200325/my-Fund-dashboard`；`d0a0af20390af66171f7c75c46aaff9c18a28e0f`（2026-11-07 GitHub 實查；本輪 #1159、#1157、#1151、#1158 依序合併） |
-| main CI | `d0a0af20` 的 push／main CI 尚未逐項核對；#1159、#1157、#1151、#1158 各自**合併前 PR head** 的 Fast／Schema／Slow／Visual 四項均 success，不能冒稱新 main CI 已驗過 |
-| Open PR（2026-11-07 GitHub 實查） | 僅 **#1163 Draft** 尚未合併（BL-0544 合法適用性／精確線框 Gate）。#1150／#1160 已以 superseded 理由 **closed、未合併**；#1159 → #1157 → #1151 → #1158 **已以一般 merge commit 合併**，其餘 #1152／#1153／#1154／#1161／#1162 亦已合併；非 PR head branch 刪除證據 |
-| 已知檢查 | #1163 前一 head `acdb70e7` 的四項 CI success；**此次增補 44 §2.1 文本衝突／S1～S3 線框候選與 80 §18 supersession，產生新 head 後必須重查四項 CI**。非作者合法性 QA、S1／S2 精確線框／字樣 Gate 尚未 PASS。#1158 已合併但僅作歷史對話證據 |
-| 文件整合 | #1153、#1161、#1162 已合併；本輪 #1159 `5b27652e`、#1157 `55798db9`、#1151 `18fe3476`、#1158 `d0a0af20` 亦已合併。#1163 仍 Draft，只保存 BL-0544 的有條件核准與提案，**沒有改 frozen 44／57 或程式**，不得當成合法 Gate／施工完成 |
+## 1. 最近一次 GitHub 實查快照（歷史觀測，必須重新查）
 
-**清理線狀態索引**（只作指標，內容以各 PR 為準）：
+| 項目 | 2026-11-07 查到的狀態 | 對應證據 |
+|---|---|---|
+| main | `b0ca4b949e969165570c693a24e9f23f51952ac1`（#1164 合併 commit） | 本次觀測，**不是永遠最新 SHA** |
+| #1163 | **merged=true**；**歷史 merge SHA `025922382ef3921fc7b6858cb733084935fbf066`**（是 #1164 之前的 commit，不是當前 main HEAD） | [PR #1163](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1163)；B／S1 設計文件已進 main |
+| Open PR | **0**（本次觀測）；#1164 **merged=true**，merge SHA `b0ca4b949e969165570c693a24e9f23f51952ac1`；最後 head `4f045c26e64f71901bcf14db9209c7338f7de2dc` | [PR #1164](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1164)；**Code 已合入 main** |
+| #1164 已合併 head CI | [run 42359253829](https://github.com/linchen-20200325/my-Fund-dashboard/actions/runs/42359253829)：Fast／Schema／Slow／Visual **success** | 最後 head `4f045c26` 的結論；**不是 merge commit 的 main CI** |
+| Code | ≤768px 五格同列頁首／無橫滑／≥48px；769px+ 原側欄；僅 🌍 可進、🤖 不開放；無效 sticky 已修 | #1164 **已 merged 到 main**，但 Preview-only ≠ Cloud 正式上線 |
+| 視覺證據 | #1164 已合入 Chromium 合成 fixture 的 374／375／390／768／769／1280 及 190% 模擬 JSON／PNG | `docs/evidence/bl0544_s1_chromium_fixture_2026_11_07/`；**不代表**正式 Cloud／真機／WebView |
+| QA／review | #1164 0 unresolved threads；GitHub 3 則 `COMMENTED` review 並非明確非作者 QA 核准；最新 head 完整 QA 證據 **NOT VERIFIED** | **已 merge ≠ QA 自動 PASS**；留下事後稽核缺口，不得否認合併事實 |
+| main CI | 本次未取得 main HEAD 的逐 job 結論 | **NOT VERIFIED** |
+| 清理線 #1152／#1153／#1154 | GitHub 均顯示 `merged=true` | BL-0543 的舊「三 PR 尚未合併」敘事不得復活 |
 
-| 項 | 狀態 |
-|---|---|
-| #1152／#1154 | 清理 Work 已合入 main（merge commits `0fa8deb3`／`e1e05ad3`）；#1153 早已合入 main（`be6e1e34`）；後續不得當成仍開放的 Draft |
-| 工具盤點 ≠ 死碼確認 | 靜態可達性工具輸出只是候選清單，刪除前仍須逐項人工與 caller 實測 |
-| 分支保護 | 讀取 HTTP 403、rulesets=[]：必要檢查 **未驗證**，不得宣稱已驗證 |
-| 證據位置 | `BL-0543`；歷史檔 H14 `docs/evidence/history/2026-11-05_cleanup_handoff_superseded.md`（已在 main）；本 PR 的舊 HANDOFF 全文見 `docs/evidence/history/2026-11-06_handoff_before_top_tabs_health_ruling.md` |
+## 2. 唯一 NOW：#1164 已合併後的驗收證據／交接一致性核對
 
-## 2. 最新客戶裁示與確定的邊界
+唯一下一接手點：先依 GitHub 最新狀態核對未結文件 PR 的 CI／QA 與合併結果，再接續 BL-0545 已核准範圍內的唯讀健康覆蓋率取證；#1164 已合併，不重做程式。
 
-1. **`DEC-2026-11-06-01`：手機 New UI2 選方案 B，頁首橫向五頁籤。** 五頁 IA／順序與 🤖 Phase 7 不可進入維持；**這是已裁設計方向，不代表 frozen 44 已 amended 或 `ui_v3` 已改動**。BL-0544 應先獨立核對 44 真實條文與 57／CONSTITUTION，確認 newer DEC 是否足以合法採 successor（方案 B），無直接衝突且程序允許才保留 44 不動；若有真衝突或程序不允許，停手另提正式 amendment。導航與登入設計、390／768／769／1280 及 WebView／safe-area／鍵盤可用性仍須測試。#1150 已關閉；#1151 已更正為新版候選並合併，#1158 合併但僅保留當時歷史快照。
-2. **`DEC-2026-11-06-02`：保留既有健康指標及原始評等，另外顯示覆蓋率與正式資料准入狀態。** `compute_4d_health` 名為 4D 但目前五維，2 維加核心維即可有字母等級；原 Grade 與覆蓋率／准入結果不能混成一種安全結論。缺值、unsupported、N/A、未評估都須獨立追溯；**真實 Active Sheet 命中率尚未測得**，不改任何 Grade threshold／金融公式／Risk Cap。後續見 `BL-0545` 與已合併的 #1157 **靜態稽核 evidence**；正式資料准入 ≠ Phase 7。
-3. **對話「記憶」是 GitHub 裡的 ChatGPT 對話快照與歷史記錄，不是 ChatGPT 帳戶 Memory**。逐字裁示存 `docs/evidence/decisions/2026-11-06_new_ui2_top_tabs_health_coverage_ruling.md`；#1160 有過期說法的 supersession ledger，舊 Git 歷史不刪；不建立第二套 SSOT。
+**#1163、#1164 均已合併；不重做 S1／S2 選型，不重做舊 PR QA，不重修 37 個 tests、sticky 或 fixture JSON EOF，也不重開同功能 Code PR。**
 
-## 3. 五頁與資料／AI 狀態
+- Claude Code 負責 Code／測試／必要非作者技術 QA；ChatGPT 負責獨立 GitHub Gate、規格、文件與符合條件的 Auto-Ship。ChatGPT 不能僅靠留言聲稱已啟動外部 Claude 工作階段。
+- #1164 **最後 head** `4f045c26` 已解決初版 `c3117554` 的 37 測試失敗，及後續 non-sticky 表述、fixture JSON EOF 格式失敗；最後 head 的四項 CI success，不拿舊紅燈推論現在失敗。
+- **已合併但仍未證實**：最後 head 真正非作者完整 QA、production-like Cloud 390／1280 正式截圖、真機／WebView／OS 字體放大／讀屏；Preview 帳號入口 **NOT IMPLEMENTED**。這些仍須依既有正式條款保留驗收缺口，不能把 fixture 當 Cloud PASS，也不能因已合併就說驗證齊備。
+- **單一步驟（已合併，不要重複合併）**：回查 #1164 實際合併 SHA、最後 head 四項 CI、review 和正式視覺 Gate，逐一標記 PASS／NOT VERIFIED／NOT RUN。若必要 QA／Cloud 仍缺，登記 **post-merge evidence gap**，辨明環境／責任與下一個最小取證工作，不回滾、重開同功能 PR 或捏造驗收；然後接續 BL-0545 已核准的唯讀研究。
+- 不動 frozen `docs/v2/44`／57／CONSTITUTION、Old UI／`ui_v2`、OAuth、Active Sheet 正式設定、金融資料、公式、FX、Risk Cap、OneBrain／Phase7、cutover；`DEC-2026-11-07-01/02` 為已核准 S1 射程。
 
-| 頁面 | 核准與未完成 |
-|---|---|
-| 🌍 市場與趨勢 | `docs/v2/81` 線框已核准，保留已有 Preview，不重畫 |
-| 💼 我的資產 | `docs/v2/82` U1～U5 **僅 UI 方向**已核准，仍須完整合法線框／資料 Gate；主圖先於四格，持倉去重但保留所有部位，NAV＋σ 同圖與配息台幣、USD 100 萬、A／B／C 僅候選，**不直接搬舊交易公式** |
-| 🔍 找基金 | 基金代碼身份與單檔／篩選兩區語意已核准；整頁 New UI2 線框尚待核准 |
-| ⚙️ 設定 | 登入／Active Sheet／資料健康分離；#1161 登入設計、#1162 頁首導覽方向文件均已合入 main；#1163 仍是 Preview-only 施工前合法 Gate，OAuth 不改 |
-| 🤖 AI 投資總結 | `docs/v2/67`／`75` OneBrain 設計；Phase 7 前不得註冊／執行。Digest／Evidence 必須完整，UI 簡化不刪 AI Context |
+## 3. NEXT／LATER（只安排已有安全條件的批次）
 
-## 4. 接手點與禁止事項
+| 順序 | 工作 | Gate／owner |
+|---|---|---|
+| 輔助 | 只有 GitHub 再次出現實質狀態漂移時才追加交接更正 | ChatGPT，必查 live source；不得每輪為改文件而開 PR |
+| NEXT | BL-0545 五維健康評級覆蓋率唯讀分母調查 | ChatGPT 設計／Claude Code 必要 probe；既有來源、不可改原 Grade／門檻／資料准入規則 |
+| LATER | BL-0542 💼 我的資產 G-3～G-5 | UI 設計部分核准，資料／配息／整頁接線 Gate 未全授權 |
+| LATER | BL-0530 找基金 ISIN → MoneyDJ deterministic identity | research-only；無已核准 source 時不得啟用 mapping |
+| LATER | 設定登入、BL-0534 frozen amendment、BL-0535 cutover、OneBrain／Phase7 | 各走正式授權、獨立 QA、必要人工／法規 Gate |
 
-**2026-11-07 最新客戶裁示 `DEC-2026-11-07-02`（逐字回答「可以」）**：客戶已核准 **S1 手機頂部五頁籤固定同列、全部可見、不左右滑動**。不再詢問 S1／S2；S2 的局部頁籤滾動不屬現行施工範圍，原版型歧義不再是所選 S1 的實作要求。但合法程序的**非作者獨立 QA**、frozen 44 首屏／帳號／斷點相容性與真實裝置、登入、安全區／可達性驗收仍未通過；**S1 DESIGN APPROVED ≠ Code Gate PASS**。本次新增 DEC、BL-0544 指標、80 §18 及 evidence §0／§7 狀態核准，不修改 44 或任何 Code。
+## 4. 新對話／compact 後交接自驗
 
-**BL-0544 2026-11-07 新增明確阻塞（GitHub 逐條初核，非獨立 QA）**：44 §2.1 明寫「**任何一段都不出現橫向捲動**」，與 80 §18.2／既有候選的「局部可橫向滑動五頁籤」有**未解歧義／潛在真衝突**。不可把「整頁不溢出」當充分證據。方案 B 的 successor 路線已選，但**合法性尚未通過**。在 #1163 裡已將 80 §18 的過期「必先 amendment」標 superseded，提出精確頁首五頁籤候選 S1（不滑動）／S2（局部滑動）／S3（必要時正式 44 amendment）和 NOT RUN 測試矩陣，詳 `docs/evidence/bl0544_mobile_top_tabs_minimal_gate_proposal_2026_11_07.md` §6～7；~~S1 不是新客戶裁示，需正式線框 Gate 核准；S2 需核 44 適用性，均未獲動工許可~~ → **`DEC-2026-11-07-02` 已核准 S1；S2 不實作，但 Code 仍須非作者合法／治理 QA 與正式合併後才授權**。
+- [ ] 我已重新讀取 main SHA、Open／Draft PR、PR merged flag、最新 head diff、四 job conclusions、review／threads。
+- [ ] 能分清 **已在 main**、**Draft PR 中**、**尚未授權**、**NOT RUN／NOT VERIFIED**，不把 fixture 當正式畫面。
+- [ ] 沒有重派已合併的 #1163／#1164，也不把已合併的 Code 說成仍在 Draft；舊 head 的失敗不當成最新結果。
+- [ ] 最新 PR／CI 狀態寫在 GitHub 可追溯處；下一個 owner 與單一接手點清楚；只有已核准的安全工作才繼續。
+- [ ] 作者／非作者 QA 分離，`COMMENTED`／自述不冒充非作者驗收；無證據不 merge。
+- [ ] 文件或聊天太長仍從 GitHub 重查；本 HANDOFF 不能取代即時核驗或現行正式 DEC／SSOT。
 
-唯一下一接手點：**S1 已裁示，勿重做選型或文件研究**；先完成 #1163 之真正非作者**合法適用性與治理 QA**、逐條核 frozen 44／57／CONSTITUTION 及手機首屏／登入入口／斷點與既有正式字樣的相容性，並確認最新 head 四項 CI、mergeability 與正式合併。無真實衝突且程序允許時保持 44 不動。全部通過後才依 `DEC-2026-11-07-01`、`-02` 的條件授權 Claude Code 施工 **Preview-only `ui_v3` 手機頂部 S1 五格同列、不滑動 Shell 單切片**；實作後量測 374／375／390／768／769／1280、WebView、safe-area、48px、390 首屏及截圖；未實測不得標 PASS。若真衝突停手走正式 amendment；BL-0545 的 Active Sheet 覆蓋率唯讀實測另批處理，未經 Gate 不進入程式實作。
-
-- 先讀 `CLAUDE.md` → `PROJECT_RULES.md` → `docs/DECISIONS.md`／`docs/BACKLOG.md` → 本檔；產品規格回查 frozen `docs/v2/44`、子法 1＋57、`docs/v2/67`／`75`／`79`／`80`／`81`／`82`。
-- Old UI 唯讀參考、`ui_v2` maintenance-only；不改 production data source、公式、FX 觀測日、Risk Cap、身份與原始持倉；不直接 push main；每批最多三項安全工作；變更 Model／Mode／Effort 必須先依 Hard-Stop Gate。
-- 現有 G-3～G-5、完整 💼 renderer、OneBrain／Phase 7 與 cutover 仍未因這次文件裁示獲授權。手機 UI 正式實作前必須完成 44 與相應 guard 的合法收斂。
-
-## 5. 未驗與交接限制
-
-本檔沒有實跑 Cloud 390px／WebView 遮擋、Safari／Android 真機、實際 Active Sheet 五維覆蓋、正式 Google OAuth 與新頁首導航。HTML 設計稿只是視覺候選，不是 GitHub 已上線。所有 PR／CI／head SHA 可能在本文件寫成之後變動，必須重做 GitHub Verification Gate。
+> 這份文件沒有創造新客戶裁示或改動高位階治理條文；詳細執行與權限一律回到 `CLAUDE.md`／`PROJECT_RULES.md`。舊交接保存在 history，僅作追溯。
