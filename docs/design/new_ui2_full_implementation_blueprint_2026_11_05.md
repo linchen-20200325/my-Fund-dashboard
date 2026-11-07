@@ -6,14 +6,16 @@
 >
 > **基準**：GitHub main `81827057b6116096ad16cd304540af55a3e1f1af`；此刻 G-2 正於 PR #1149 施工，登入文件於 PR #1150 進行中，**不得藉本文件合併或擴張兩批**。未讀到的 live schema 與尚未裁示口徑一律標待驗證。
 
+> **2026-11-07 目前適用性更正（supersession；本段不是新裁示）**：本檔是 2026-11-05 歷史施工候選，當時的 `main 81827057`、#1149 施工中、#1150 未合併、**手機固定底部導覽**等敘述僅保留為歷史基準，**不得作為當前施工依據**。現行 main 已合併 #1149（G-2）、#1161（登入設計）、#1162（`DEC-2026-11-06-01` 頁首橫向五頁籤 B、`-02` 健康覆蓋）；#1150 是未合併的舊 Draft。手機導覽目標改為**上方橫向五頁籤**，但 #1163 的 BL-0544 frozen 44／57／CONSTITUTION 適用性、精確線框及字樣 Gate 尚未完成，**不得直接改 `ui_v3` 或宣稱已核准實作**。桌機左側欄、五頁 IA、登入共用 OAuth/session、🤖 Phase 7 禁入仍不變。本檔未核准的其他四頁線框／金融演算仍只算候選。
+>
 ## 0. 全站單一設計系統
 
 **固定五頁與順序**：🌍 市場與趨勢（`mkt`）→ 💼 我的資產（`ast`）→ 🔍 找基金（`exp`）→ 🤖 AI 投資總結（`ai`）→ ⚙️ 設定（`set`），`ui_v3/shell/registry.py` 是頁名與掛載狀態來源。Phase 7 前 🤖 **可見、不可進、不註冊頁面、不建空殼**；其餘頁面只有在「已核准整頁線框且已實作」後才能 `registered=True`。
 
 | 設計維度 | 桌機／平板（>768px） | 手機（≤768px） | 不變條件 |
 |---|---|---|---|
-| 主導航 | 固定左側欄，五頁 IA | **固定底部五頁導覽**、安全區留白 | 不新增第六頁、不改五頁順序 |
-| 帳號入口 | 左側欄最上方「Google 帳號」精簡區 | 頂部右側精簡入口，按需開啟抽屜／浮層 | 同一 L2 登入狀態；獨立於底部導覽；PR #1150 文件候選 |
+| 主導航 | 固定左側欄，五頁 IA | ~~固定底部五頁導覽~~ → **頁首橫向五頁籤 B**（新方向；合法及精確線框 Gate 待驗）、安全區留白 | 不新增第六頁、不改五頁順序 |
+| 帳號入口 | 左側欄最上方「Google 帳號」精簡區 | 頂部右側精簡入口，按需開啟抽屜／浮層 | 同一 L2 登入狀態；獨立於頁首五頁籤；正式設計已由 #1161 合併 |
 | 頂端狀態 | PREVIEW、取得狀態、資料時點等已核准 shell 字樣 | 精簡一列，不複製資料健康大卡 | 無已知時間不猜；資料全齊不額外標「正常」 |
 | 頁面第一屏 | 頁面狀態 → 主視覺 → 必要摘要 | 同邏輯，但窄版優先一欄；主 CTA 不藏在長明細下方 | 既有凍結 44 首屏 chip／核心數字 ≤5，Missing 佔位亦需點數 |
 | 詳細資訊 | 可視需要右欄／收合 | 圖下方分層展開 | 「Presentation Compression ≠ Evidence Loss」，無 Top-N 截去 evidence |
@@ -37,7 +39,7 @@ Complete Evidence（含 skipped／failed／未評估／日期／FX 證據）
 - 缺值不可轉 `0`、`False`、中性或 HOLD；來源失敗和沒有資料不同；FX 未驗證時禁止把 covered denominator 畫成全資產 100%。
 - 同一基金、同一指標、同一觀測日／幣別／級別，跨頁結果須一致；不得在不同 UI 分別算一份。
 - 認證登入狀態／Active Sheet 選本狀態／資料完整性屬三個不同維度。
-- G-2 `ui_v3/adapters/assets_source.py` 與其真實 return schema 要等 #1149 合併後驗證；本文件**不聲稱該 adapter 已正式可供畫面使用**。
+- G-2 #1149 已合併；`ui_v3/adapters/assets_source.py` 的目前真實 schema 與可接線性仍須以最新 main 實碼獨立核驗，**不得把本歷史候選當成 renderer 已獲授權**。
 - Preview 不含 fake production data；fixtures 僅供測試；不得搬 `ui_v2` 舊 CSS、UI 模組或 Old UI presentation；正式 cutover 另 Gate。
 
 ## 2. 🌍 市場與趨勢：**已核准，KEEP**
@@ -60,7 +62,7 @@ Complete Evidence（含 skipped／failed／未評估／日期／FX 證據）
 ### 3.1 手機 390px（以下是 UI 候選，非真機測量）
 
 ```text
-[固定 Shell：頂部／右上帳號入口]     ← 帳號入口依 PR #1150，未實作
+[固定 Shell：頂部／右上帳號入口]     ← 登入設計已由 #1161 合併；UI 實作狀態另以程式查證
 [💼 我的資產] [日期／持倉來源摘要]
 [頁級 β／是否需注意：只有已核准且可證才顯示]
 ┌────────────────────────────────┐
@@ -74,7 +76,7 @@ Complete Evidence（含 skipped／failed／未評估／日期／FX 證據）
 [近期事件／可證實的除息與配息資訊]
 [▸ 全部持倉（全列，逐檔 NAV／配息可展開）]
 [▸ 各類別設定／來源證據／未計算及錯誤原因]
-[底部五頁導覽]
+[頁首橫向五頁籤 B（待合法 Gate／線框核准）]
 ```
 
 ### 3.2 桌機 1280px（UI 候選）
@@ -122,7 +124,7 @@ Complete Evidence（含 skipped／failed／未評估／日期／FX 證據）
 [合法母體與條件選取；已核准三態條件]
 [符合筆數、全部符合清單／可展開詳情]
 [比較區：最多 3 檔；與第一區其他比較元件互不混用]
-[底部五頁導覽]
+[頁首橫向五頁籤 B（待合法 Gate／線框核准）]
 ```
 
 ### 4.2 桌機 1280px 候選
@@ -157,7 +159,7 @@ Complete Evidence（含 skipped／failed／未評估／日期／FX 證據）
 [▸ 通知偏好／送達健康／稽核（僅合法已接線）]
 [▸ 正式規則登錄（唯讀）]
 [▸ Digest viewer：未有 production 時不啟用]
-[底部五頁導覽]
+[頁首橫向五頁籤 B（待合法 Gate／線框核准）]
 ```
 
 ### 5.2 桌機 1280px 候選
@@ -188,12 +190,12 @@ Complete Evidence（含 skipped／failed／未評估／日期／FX 證據）
 | 批次 | 由誰負責 | 前置 | 可交付的單位 | 驗收 |
 |---|---|---|---|---|
 | D0 設計 | ChatGPT | GitHub Gate | 本藍圖、登入 UI 契約、逐頁候選與未決項 | 同步客戶裁示／審查；**文件不等於核准線框** |
-| G-2 Data | 既有 Claude Code #1149 | 正在執行 | `assets_source` 最小 adapter | 稽核、source contract／CI；不得跨入 renderer |
+| G-2 Data | 既有 Claude Code #1149 | **已合併（歷史任務）** | `assets_source` 最小 adapter | 最新 schema／CI 仍應重查；不得跨入未授權 renderer |
 | D1 💼 最終線框 | ChatGPT | G-2 真 schema＋82 U1～U5 | 390／1280 完整逐卡 wireframe、保留待決 Gate | 客戶核准頁線框後才能寫該頁 UI |
 | D2 🔍 最終線框 | ChatGPT | 78／80 現行語意、identity 能力 Gate | 390／1280 New UI2 搜尋與篩選單頁 | 客戶核准再寫程式 |
 | D3 ⚙️ 最終線框 | ChatGPT | Session／OAuth、健康度、通知 ownership | 390／1280 New UI2 設定單頁 | 客戶核准再寫程式 |
 | C1/C2/C3 | Claude Code | 對應 D1/D2/D3 已核准，且 Model/Effort Gate | 依序 view model → adapters → page → AppTest/VF | 每批獨立稽核、完整真實證據 |
-| Login UI | Claude Code | PR #1150 設計文件合併／現行相容確認／獨立授權 | 桌機左欄＋手機頂部單一登入入口 | 登入、Pending、Active、安全／390px |
+| Login UI | Claude Code | **#1161 設計已合併；實作仍須獨立 Gate**（#1150 為舊 Draft） | 桌機左欄＋手機頂部單一登入入口 | 登入、Pending、Active、安全／390px |
 | AI／cutover | 暫不派工 | Phase 7 與 BL-0535 另 Gate | 無 | 不得提前 |
 
 **最大化速度、最省 Token 的選型**：① 不重做已完成的 🌍；② 一份共用 Shell／狀態／缺值／證據規格，供各頁直接引用；③ 每頁只保留真正依資料能力與核准口徑才能決定的 Gate，將其餘 presentation 細節做成候選供客戶一次核准。禁止每一個控件各發一次裁示題。
@@ -211,7 +213,7 @@ Complete Evidence（含 skipped／failed／未評估／日期／FX 證據）
 
 ## 9. 交接與限制
 
-**可直接當工程輸入而毋須重設計**：五頁 IA、現行 🌍 設計、全站 Shell／手機底部導覽、已核准帳號 UI 方向、資料與 Evidence 分離、不補 Missing、💼 主圖優先與 U1～U5 的 UI 方向、🔍 的正式搜尋身份語意、⚙️ 的 ownership、🤖 Phase 7 前禁入。
+**可當後續設計參考、但仍須核現行 Gate**：五頁 IA、現行 🌍 設計、全站 Shell／~~手機底部導覽~~ → 手機頁首五頁籤 B（待合法 Gate）、已核准帳號 UI 方向、資料與 Evidence 分離、不補 Missing、💼 主圖優先與 U1～U5 的 UI 方向、🔍 的正式搜尋身份語意、⚙️ 的 ownership、🤖 Phase 7 前禁入。
 
 **不能直接開始寫 UI 的部分**：💼／🔍／⚙️ 尚未收到逐頁 **完整** New UI2 線框核准；💼 的未決金融口徑；🔍 身份與實際來源尚缺的能力；⚙️ frozen 44 與通知動作前置；🤖 所有 Phase 7 動作。不得用這份文件冒充已核准或已上線。
 
