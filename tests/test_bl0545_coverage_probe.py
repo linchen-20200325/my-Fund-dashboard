@@ -521,3 +521,41 @@ def test_shadow_counts_primary_ok_but_dg2_not_base():
     sd = out["identity"]["shadow_diff"]
     assert sd["primary_ok_dg2_not_base_n"] == 1
     assert out["population"]["unique_funds"] == 2  # 主分組未受影響
+
+
+# ───────────────────────── R1:provenance 不可被占位符取代 ─────────────────────────
+
+PARSER = "repositories.fund.sources.parse_moneydj_input"
+
+
+def test_r1_provenance_parser_constant_all_paths(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    d = _run(_rows(("A", "ACTI171")))["identity"]["primary_provenance"]
+    assert d["parser"] == PARSER and d["mapping_source"] == "builtin"
+    assert d["cwd_mapping_csv_present"] is False and "cwd_mapping_csv_sha256" not in d
+    i = _run(_rows(("A", "ACTI171")), mapping={})["identity"]["primary_provenance"]
+    assert i["parser"] == PARSER and i["mapping_source"] == "injected" and "cwd_mapping_csv_present" not in i
+    body = "input_code,public_code,page_type,note\nZZZ111,YYY222,yp010001,x\n"
+    (tmp_path / "fund_code_mapping.csv").write_text(body, encoding="utf-8")
+    c = _run(_rows(("A", "ZZZ111")))["identity"]["primary_provenance"]
+    import hashlib
+    assert c["parser"] == PARSER and c["mapping_source"] == "csv+builtin"
+    assert c["cwd_mapping_csv_present"] is True
+    assert c["cwd_mapping_csv_sha256"] == hashlib.sha256(body.encode("utf-8")).hexdigest()
+    assert str(tmp_path) not in json.dumps(c)
+
+
+def test_r1_non_enumerated_mapping_source_is_unknown():
+    def fake(codes, mapping=None):
+        return {"results": [{"ok": True, "full_key": "AAA111"} for _ in codes],
+                "provenance": {"mapping_source": "weird", "mapping_size": 1, "parser": "x"}}
+
+    d = _run(_rows(("A", "AAA111")), mapping={}, resolver=fake)["identity"]["primary_provenance"]
+    assert d["mapping_source"] == "unknown" and d["parser"] == "non_production_resolver"
+
+
+def test_fixture_mapping_non_dict_is_input_error(tmp_path, capsys):
+    fp = tmp_path / "fx.json"
+    fp.write_text(json.dumps({"schema": probe.FIXTURE_SCHEMA, "mapping": ["x"], "holdings": []}), encoding="utf-8")
+    assert probe.main(["--fixture", str(fp)]) == 2
+    assert "mapping" in capsys.readouterr().err

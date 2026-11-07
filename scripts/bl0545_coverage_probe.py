@@ -77,7 +77,8 @@ _RE_REASON = re.compile(r"^[a-z0-9_]{1,40}$")
 _RE_REASON_ANYLEN = re.compile(r"^[a-z0-9_]+$")
 TOO_LONG = "reason_code_too_long"
 _RE_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}([T ][0-9:.]{1,15}(Z|[+-]\d{2}:?\d{2})?)?$")
-_RE_TAG = re.compile(r"^[A-Za-z0-9_.:+\-]{1,40}$")
+_RE_TAG = re.compile(r"^[A-Za-z0-9_.:\-]{1,40}$")
+_MAPPING_SOURCES = frozenset({"builtin", "csv+builtin", "injected"})  # 固定列舉,不走白名單
 _RE_SHA = re.compile(r"^[0-9a-f]{7,40}$")
 # 輸出落盤前的最後一道網:任何一個命中即視為洩漏疑慮,拒絕輸出。
 _LEAK_PATTERNS = (
@@ -212,9 +213,38 @@ def build_identity(rows: List[Dict[str, Optional[str]]], *, mapping: Optional[di
         "primary_groups": groups,
         "shadow_diff": shadow_diff,
         "provenance": dict(res.get("provenance") or {}),
+        "csv": _cwd_csv_evidence() if mapping is None else None,
         "_row_group": row_group,
         "_results": results,
     }
+
+
+def _cwd_csv_evidence() -> Dict[str, Any]:
+    """執行時 cwd 的 fund_code_mapping.csv 是否存在;存在才給內容 sha256(不輸出路徑)。"""
+    f = Path("fund_code_mapping.csv")
+    try:
+        if f.is_file():
+            return {"cwd_mapping_csv_present": True,
+                    "cwd_mapping_csv_sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
+    except OSError:
+        return {"cwd_mapping_csv_present": True, "cwd_mapping_csv_sha256": None}
+    return {"cwd_mapping_csv_present": False}
+
+
+def _provenance(ident: Dict[str, Any]) -> Dict[str, Any]:
+    """來源/版本證據:只輸出程式常數或固定列舉,不經使用者可控的白名單路徑。"""
+    from services.v2_tables.fund_keys import PARSER_NAME
+    raw = ident.get("provenance") or {}
+    src = raw.get("mapping_source")
+    size = raw.get("mapping_size")
+    out: Dict[str, Any] = {
+        "mapping_source": src if src in _MAPPING_SOURCES else "unknown",
+        "mapping_size": size if isinstance(size, int) and not isinstance(size, bool) else None,
+        "parser": PARSER_NAME if raw.get("parser") == PARSER_NAME else "non_production_resolver",
+    }
+    if ident.get("csv") is not None:
+        out.update(ident["csv"])
+    return out
 
 
 def _shadow_diff(rows, groups, row_group, table, shadow_resolver) -> Dict[str, Any]:
@@ -511,8 +541,7 @@ def run_probe(rows: List[Dict[str, Optional[str]]], *, fetcher: Optional[Callabl
         },
         "identity": {
             "primary_key": "services.v2_tables.fund_keys.resolve_full_keys",
-            "primary_provenance": {k: _safe_label(v, _RE_TAG, "redacted") if isinstance(v, str) else v
-                                   for k, v in ident["provenance"].items()},
+            "primary_provenance": _provenance(ident),
             "primary_groups": [
                 {"key": p["canonical_key_or_raw_code"], "kind": p["primary_key_kind"],
                  "row_count": len(groups[i]["row_indexes"])}
@@ -601,6 +630,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("fixture.holdings 每列須為含非空字串 fund_code 的物件", file=sys.stderr)
             return 2
         rows = [{"policy_id": h.get("policy_id"), "fund_code": h["fund_code"]} for h in holdings]
+    if "mapping" in fixture and not isinstance(fixture["mapping"], dict):
+        print("fixture.mapping 須為物件(dict);空物件=空對照表,不給=沿用 production 預設", file=sys.stderr)
+        return 2
     fetcher = make_fixture_fetcher(fixture.get("funds") or {}) if args.fixture else None
     out = run_probe(rows, fetcher=fetcher, mapping=fixture.get("mapping"),
                     holdings_origin=origin,
