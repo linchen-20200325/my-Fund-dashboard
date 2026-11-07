@@ -12,7 +12,7 @@
 
 | 檔案 | 說明 |
 |---|---|
-| `scripts/bl0545_coverage_probe.py` | 單檔、獨立、不 import streamlit、**沒有任何 production 呼叫端** |
+| `scripts/bl0545_coverage_probe.py` | 單檔、獨立、**本檔不直接 import streamlit**（匯入 production 模組時，若環境有 streamlit 會被載入）、**沒有任何 production 呼叫端** |
 | `tests/test_bl0545_coverage_probe.py` | T1～T10 與語意護欄測試（全離線） |
 | `docs/DECISIONS.md` | 新增 `DEC-2026-11-07-03` |
 
@@ -26,24 +26,24 @@ python scripts/bl0545_coverage_probe.py --codes-file codes.txt --fixture fixture
 
 - `--codes-file`：一行一個 `fund_code`；亦允許兩欄 CSV `policy_id,fund_code` 以保留保單列。空行與 `#` 開頭略過。
 - `--fixture`：離線 JSON，`schema` 必須是 `bl0545_probe_fixture_v1`：
-  `holdings`（`policy_id`／`fund_code` 列，僅在未給 `--codes-file` 時使用）、`mapping`（可選，注入給 `resolve_full_keys` 的對照表；預設空表，完全離線）、
+  `holdings`（`policy_id`／`fund_code` 列，僅在未給 `--codes-file` 時使用）、`mapping`（可選；有給才注入 `resolve_full_keys`，含給空物件＝空表；未給則走下方預設對照表）、
   `as_of`（可選）、`funds`（以 production 主鍵 `full_key` 為鍵）。每檔：
   `{"status": "ok", "inputs": {tr1y_pct, adr_pct, sharpe, sigma_pct, ma_dir, fund_ccy, fx_cv_pct}, "dimension_meta": {<維度>: {proxy, obs_date, source_tag}}}`
   或 `{"status": "failed", "reason": "<snake_case 代碼>"}`。
 - `--main-sha`：由使用者提供；探針不推斷。
-- 結束碼：0＝輸出有效；2＝輸入錯誤；3＝輸出標 `valid: false`（T7／T9 守恆不成立或與 `compute_4d_health` 覆蓋欄不一致，**不補數**）。
+- 結束碼：0＝輸出有效；2＝輸入錯誤（含 fixture 的 holding 缺 `fund_code`）；4＝輸出被洩漏檢查拒絕（未寫檔）；3＝輸出標 `valid: false`（T7／T9 守恆不成立或與 `compute_4d_health` 覆蓋欄不一致，**不補數**）。
 
 ## 3. 設計決策
 
 1. **live 抓取模式：NOT IMPLEMENTED。** 不新增來源、不改 production、本環境無網路與使用者憑證，未實測；每檔資料只來自 fixture 或呼叫端注入的 `fetcher`（`run_probe(..., fetcher=...)`）。沒有 fetcher 時，該檔 `fetch_status = not_attempted`、原因 `live_mode_not_implemented_no_fetcher`。
 2. **Active Sheet 讀取：本批不實作、不呼叫**；輸出固定 `real_active_sheet_coverage: "NOT VERIFIED"`、`admission: "NOT DEFINED"`、`live_mode: "NOT IMPLEMENTED"`。`active_sheet_id_hash`／`account_sub_hash` 恆為 null。
-3. **主鍵 vs shadow**：主分組＝`resolve_full_keys`（對照表注入）；`identity.shadow_diff` 為 DG2 `resolve_fund_identity(..., input_source="sheet_fund_code_column")` 的平行比較（以連通分量列出兩邊分組不一致的代碼、各自 `verification_status`）。DG2 失敗或例外只記錄 `shadow_error`，不影響主結果；探針不讀不寫 `DG2_SHADOW_ENABLED`。
+3. **主鍵 vs shadow**：主分組＝`resolve_full_keys`。**預設對照表**：未注入時沿用 production 預設（內建表加執行當下 cwd 的 `fund_code_mapping.csv`；L1 只做本機讀取，無網路、不寫檔，其 stdout 訊息被攔截以免污染 JSON），並在 `identity.primary_provenance` 揭露 `mapping_source`／`mapping_size`；注入對照表（fixture `mapping` 或 `run_probe(mapping=...)`）可完全離線覆寫。逐檔 `identity_status` 只有 `primary_resolved`／`primary_unresolved`（主鍵結果）；DG2 的 `verification_status` 在 `shadow_verification_status`。`shadow_diff.primary_ok_dg2_not_base_n` 為「主解析成功但 DG2 非 base_resolved」的代碼數（不改主分組）。`identity.shadow_diff` 為 DG2 `resolve_fund_identity(..., input_source="sheet_fund_code_column")` 的平行比較（以連通分量列出兩邊分組不一致的代碼、各自 `verification_status`）。DG2 失敗或例外只記錄 `shadow_error`，不影響主結果；探針不讀不寫 `DG2_SHADOW_ENABLED`。
 4. **維度狀態**：由唯讀呼叫 `compute_4d_health` 的 `factors`／`fx_risk_status`／`coverage` 導出，不自行重算分數；探針另以 `coverage` 欄交叉核對，不一致即 `valid: false`。狀態集合：`scored`／`not_applicable`／`unsupported`／`missing`。
 5. **`unsupported`（探針標籤）**：非 USD 外幣且 production 為 missing → `unsupported`，`reason_code = probe_label_fx_provider_usd_only`，並以 `production_status: "missing"` 保留 production 原樣。USD 取不到 CV、幣別缺漏仍為 `missing`。`unsupported` 計入 `applicable_n`（協定約定）。
 6. **`not_evaluated`**：stale／conflict 沒有裁示的判定依據，探針不自訂日期或差距門檻；頂層 `not_evaluated_states: ["stale","conflict"]`、維度計數 `stale`／`conflict` 為 null（不是 0）、逐檔維度 `stale_status`／`conflict_status` 為 `"not_evaluated"`。
 7. **null 規則**：`fetch_success = 0`（含空清單）時五維計數全為 null；`proxy_scored_n` 為相對協定的**增補欄位**（僅為區分 proxy，不改變計數定義）。
-8. **輸出衛生**：自由字串一律走白名單（代號、原因代碼、ISO 日期、sha、標籤），其餘以固定占位符取代；不輸出例外訊息、原始 URL、policy_id（改為序號）；序列化後再過一道洩漏檢查，命中即拒絕輸出。
-9. **本探針沒有「ok/PASS」之類的總結**：逐檔 `fetch_status` 沿用協定字面（`ok`／`failed`／`not_attempted`），其餘只有計數與原因代碼，另附 `coverage_disclosure.text`（例如 `2/5`＝scored_n／applicable_n）。
+8. **輸出衛生**：自由字串一律走白名單（代號、原因代碼、ISO 日期、sha、標籤），其餘以固定占位符取代（標籤上限 40 字元，過長為 `reason_code_too_long` 並另記長度）；不輸出例外訊息、原始 URL、policy_id（改為序號）；序列化後再過一道洩漏檢查，命中即拒絕輸出。
+9. **本探針沒有「ok/PASS」之類的總結**：逐檔 `fetch_status` 沿用協定字面（`ok`／`failed`／`not_attempted`），其餘只有計數與原因代碼（缺值 `reason_code` 是**探針依輸入有無推斷**的標籤，不是 production 輸出；輸入若為 0 或被上游標成缺值，會被標為 absent，探針無法分辨），另附 `coverage_disclosure.text`（例如 `2/5`＝scored_n／applicable_n）。
 
 ## 4. 與協定第 4.4 節對照
 

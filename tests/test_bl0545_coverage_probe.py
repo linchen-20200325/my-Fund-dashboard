@@ -210,16 +210,17 @@ def test_t7_fetch_failure_excluded_and_conserved():
 
 def test_t7_fetcher_exception_recorded_without_retry_or_message():
     calls = []
+    HOST = "10.%d.%d.%d" % (secrets.randbelow(200), secrets.randbelow(200), secrets.randbelow(200))
 
     def fetcher(key):
         calls.append(key)
-        raise TimeoutError("連線到內網 10.0.0.5 逾時")
+        raise TimeoutError("連線到內網 " + HOST + " 逾時")
 
     out = probe.run_probe(_rows(("A", "AAA111")), fetcher=fetcher, clock=_clock)
     assert calls == ["AAA111"]  # 不重試
     f = _fund(out, "AAA111")
     assert f["fetch_status"] == "failed" and f["fetch_failure_reason"] == "fetcher_exception_timeouterror"
-    assert "10.0.0.5" not in probe.render_json(out)
+    assert HOST not in probe.render_json(out)
 
 
 def test_t7_no_fetcher_is_not_attempted_live_not_implemented():
@@ -301,14 +302,15 @@ def test_t9_probe_vs_production_coverage_mismatch_is_invalid(monkeypatch, tmp_pa
 def test_t10_no_secrets_in_output_with_in_memory_negative_controls():
     email = f"{secrets.token_hex(4)}@{secrets.token_hex(3)}.example"
     sheet_id = secrets.token_urlsafe(33)  # 44 字元
-    bearer = "ya29." + secrets.token_hex(20)
+    tok = "ya" + "29"
+    bearer = f"{tok}." + secrets.token_hex(20)
     internal = "10.%d.%d.%d" % (secrets.randbelow(200), secrets.randbelow(200), secrets.randbelow(200))
     url = f"http://{internal}/{secrets.token_hex(4)}"
     rows = _rows((email, email), (sheet_id, sheet_id), ("P", bearer), ("P", url), ("P", "AAA111"))
     funds = {"AAA111": {**FULL_USD, "dimension_meta": {"coverage": {"source_tag": email, "obs_date": url}}}}
     out = _run(rows, funds, as_of=email, main_sha=bearer)
     text = _text(out)
-    for needle in (email, sheet_id, bearer, internal, url, "ya29"):
+    for needle in (email, sheet_id, bearer, internal, url, tok):
         assert needle not in text
     assert out["source"]["active_sheet_id_hash"] is None and out["source"]["account_sub_hash"] is None
     for k in ("client_secret", "refresh_token", "access_token", "password"):
@@ -429,3 +431,93 @@ def test_cli_rejects_wrong_fixture_schema(tmp_path):
     fp = tmp_path / "bad.json"
     fp.write_text(json.dumps({"schema": "other"}), encoding="utf-8")
     assert probe.main(["--fixture", str(fp)]) == 2
+
+
+# ───────────────────────── M1:預設主分組 = production 預設 ─────────────────────────
+
+def _no_network(monkeypatch):
+    import socket
+
+    def _boom(*a, **k):
+        raise AssertionError("探針離線測試不得連網")
+
+    monkeypatch.setattr(socket, "socket", _boom)
+    monkeypatch.setattr(socket, "create_connection", _boom)
+    monkeypatch.setattr(socket, "getaddrinfo", _boom)
+
+
+def test_m1_default_grouping_matches_production_default(monkeypatch, tmp_path):
+    from services.v2_tables.fund_keys import resolve_full_keys
+    monkeypatch.chdir(tmp_path)  # 無本機 csv → 內建表
+    _no_network(monkeypatch)
+    prod = resolve_full_keys(["ACTI171", "ACTI71"])
+    assert prod["results"][0]["full_key"] == prod["results"][1]["full_key"]
+    out = _run(_rows(("A", "ACTI171"), ("B", "ACTI71")), {prod["results"][0]["full_key"]: FULL_USD})
+    assert out["population"]["unique_funds"] == 1 and out["population"]["holding_rows"] == 2
+    prov = out["identity"]["primary_provenance"]
+    assert prov["mapping_source"] == prod["provenance"]["mapping_source"] and prov["mapping_size"] > 0
+
+
+def test_m1_injected_mapping_overrides_offline(monkeypatch):
+    _no_network(monkeypatch)
+    out = _run(_rows(("A", "ACTI171"), ("B", "ACTI71")), mapping={})
+    assert out["population"]["unique_funds"] == 2
+    assert out["identity"]["primary_provenance"]["mapping_source"] == "injected"
+    assert out["identity"]["primary_provenance"]["mapping_size"] == 0
+
+
+def test_m1_default_path_does_not_pollute_stdout(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "fund_code_mapping.csv").write_text(
+        "input_code,public_code,page_type,note\nZZZ111,YYY222,yp010001,x\n", encoding="utf-8")
+    out = _run(_rows(("A", "ZZZ111")))
+    assert capsys.readouterr().out == ""  # L1 的 print 被攔截
+    assert out["identity"]["primary_groups"][0]["key"] == "YYY222"
+    assert out["identity"]["primary_provenance"]["mapping_source"] == "csv+builtin"
+
+
+# ───────────────────────── M2:標籤長度與 CLI 錯誤處理 ─────────────────────────
+
+def test_m2_49_char_reason_does_not_crash_and_is_placeholder():
+    long_reason = "a_valid_snake_case_reason_" + "x" * 23
+    assert len(long_reason) == 49
+    out = _run(_rows(("A", "AAA111")), {"AAA111": {"status": "failed", "reason": long_reason}})
+    f = _fund(out, "AAA111")
+    assert f["fetch_failure_reason"] == "reason_code_too_long" and f["fetch_failure_reason_length"] == 49
+    assert long_reason not in _text(out)
+
+
+def test_m2_longest_dg2_status_name_is_kept():
+    from shared import fund_identity as flags
+    names = [getattr(flags, n) for n in dir(flags) if n.startswith("STATUS_") and isinstance(getattr(flags, n), str)]
+    assert names and max(len(n) for n in names) <= 40
+    for n in names:
+        assert probe._safe_label(n, probe._RE_REASON, "unknown") == n
+
+
+def test_m2_cli_leak_rejection_exit_4_no_traceback(monkeypatch, tmp_path, capsys):
+    fx = {"schema": probe.FIXTURE_SCHEMA, "holdings": [{"fund_code": "AAA111"}], "funds": {"AAA111": FULL_USD}}
+    fp, op = tmp_path / "fx.json", tmp_path / "o.json"
+    fp.write_text(json.dumps(fx), encoding="utf-8")
+
+    def refuse(_out):
+        raise ValueError("x")
+
+    monkeypatch.setattr(probe, "render_json", refuse)
+    assert probe.main(["--fixture", str(fp), "--out", str(op)]) == 4
+    assert not op.exists() and "拒絕" in capsys.readouterr().err
+
+
+def test_fixture_holding_without_fund_code_is_input_error(tmp_path, capsys):
+    fp = tmp_path / "fx.json"
+    fp.write_text(json.dumps({"schema": probe.FIXTURE_SCHEMA, "holdings": [{"policy_id": "P"}]}), encoding="utf-8")
+    assert probe.main(["--fixture", str(fp)]) == 2
+    assert "fund_code" in capsys.readouterr().err
+
+
+def test_shadow_counts_primary_ok_but_dg2_not_base():
+    # 帶後綴代碼:主解析成功(完整 full_key),DG2 對 Sheet 欄判契約違規/不剝 → 非 base_resolved
+    out = _run(_rows(("A", "ACDD01-EQTAL005"), ("B", "AAA111")), mapping={})
+    sd = out["identity"]["shadow_diff"]
+    assert sd["primary_ok_dg2_not_base_n"] == 1
+    assert out["population"]["unique_funds"] == 2  # 主分組未受影響

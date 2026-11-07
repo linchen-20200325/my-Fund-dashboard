@@ -21,8 +21,8 @@
 
 設計約定
 ========
-- 主分組鍵 = production `services.v2_tables.fund_keys.resolve_full_keys`(對照表由呼叫端注入,
-  預設空表 = 完全離線)。DG2 `services.fund_identity.resolve_fund_identity` **只做平行差異報告**
+- 主分組鍵 = production `services.v2_tables.fund_keys.resolve_full_keys`(對照表可由呼叫端注入;未注入時
+  沿用 production 預設=內建表+本機 csv,純本機讀取、無網路)。DG2 `services.fund_identity.resolve_fund_identity` **只做平行差異報告**
   (`identity.shadow_diff`),不影響主分組;DG2 旗標 `DG2_SHADOW_ENABLED` 本檔不讀、不寫。
 - 維度結果一律由 `compute_4d_health`(唯讀呼叫,不改它)的回傳導出,**不自行重算分數**。
 - 狀態:scored / not_applicable / unsupported / missing。stale、conflict 沒有裁示的判定依據,
@@ -36,9 +36,11 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import csv
 import hashlib
+import io
 import json
 import re
 import sys
@@ -70,9 +72,12 @@ REASON_FX_LABEL = "probe_label_fx_provider_usd_only"
 
 # 白名單:輸出中的自由字串只准這些形狀,其餘以占位符取代。
 _RE_CODE = re.compile(r"^[A-Za-z0-9\-]{1,40}$")
-_RE_REASON = re.compile(r"^[a-z0-9_]{1,64}$")
+_MAX_LABEL = 40
+_RE_REASON = re.compile(r"^[a-z0-9_]{1,40}$")
+_RE_REASON_ANYLEN = re.compile(r"^[a-z0-9_]+$")
+TOO_LONG = "reason_code_too_long"
 _RE_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}([T ][0-9:.]{1,15}(Z|[+-]\d{2}:?\d{2})?)?$")
-_RE_TAG = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
+_RE_TAG = re.compile(r"^[A-Za-z0-9_.:+\-]{1,40}$")
 _RE_SHA = re.compile(r"^[0-9a-f]{7,40}$")
 # 輸出落盤前的最後一道網:任何一個命中即視為洩漏疑慮,拒絕輸出。
 _LEAK_PATTERNS = (
@@ -102,7 +107,15 @@ def _safe_label(value: Any, pattern: "re.Pattern[str]", placeholder: str) -> Opt
         return None
     if isinstance(value, str) and pattern.match(value):
         return value
+    if isinstance(value, str) and pattern in (_RE_REASON, _RE_TAG) and len(value) > _MAX_LABEL \
+            and re.fullmatch(r"[A-Za-z0-9_.:\-]+", value):
+        return TOO_LONG  # 合法字元但過長:固定占位符,不洩漏內容(原長度另記)
     return placeholder
+
+
+def _note_len(entry: Dict[str, Any], reason: Any) -> None:
+    if entry.get("fetch_failure_reason") == TOO_LONG and isinstance(reason, str):
+        entry["fetch_failure_reason_length"] = len(reason)
 
 
 def _norm(raw: Any) -> str:
@@ -161,9 +174,16 @@ def build_identity(rows: List[Dict[str, Optional[str]]], *, mapping: Optional[di
     """
     if resolver is None:
         from services.v2_tables.fund_keys import resolve_full_keys as resolver  # production 主鍵
-    table = {} if mapping is None else mapping  # 預設注入空表:完全離線、不讀 csv
+    # mapping 未注入 → 沿用 production 預設(內建表 + 本機 cwd 的 fund_code_mapping.csv;
+    # 只做本機讀取,無網路、不寫檔;L1 可能 print 到 stdout,故攔截以免污染 JSON 輸出)。
     codes = [r["fund_code"] for r in rows]
-    res = resolver(list(codes), mapping=table)
+    with contextlib.redirect_stdout(io.StringIO()):
+        res = resolver(list(codes), mapping=mapping)
+        if mapping is None:
+            from repositories.fund.sources import load_fund_code_mapping
+            table = load_fund_code_mapping()  # 僅供 DG2 shadow 取同一份別名表
+        else:
+            table = mapping
     results = res["results"]
     if len(results) != len(rows):
         raise RuntimeError("resolve_full_keys 回傳長度與輸入不符")
@@ -262,6 +282,10 @@ def _shadow_diff(rows, groups, row_group, table, shadow_resolver) -> Dict[str, A
             "primary_unique_count": len(groups),
             "shadow_unique_count": len(shadow_groups),
             "shadow_status_counts": dict(sorted(counts.items())),
+            "primary_ok_dg2_not_base_n": sum(
+                1 for c in distinct
+                if groups[primary_of[c]]["kind"] == "full_key"
+                and status[c] != "base_resolved_attributes_unverified"),
             "differs": bool(entries),
             "entries": entries,
             "shadow_error": None,
@@ -270,7 +294,7 @@ def _shadow_diff(rows, groups, row_group, table, shadow_resolver) -> Dict[str, A
         }
     except Exception as e:  # noqa: BLE001 -- shadow 失敗只記錄類別,不影響主結果
         return {"evaluated": False, "primary_unique_count": len(groups), "shadow_unique_count": None,
-                "shadow_status_counts": None, "differs": None, "entries": None,
+                "shadow_status_counts": None, "primary_ok_dg2_not_base_n": None, "differs": None, "entries": None,
                 "shadow_error": _safe_label(type(e).__name__, _RE_TAG, "unknown_error"),
                 "_status_by_code": {},
                 "note": "shadow 失敗,主結果不受影響"}
@@ -424,6 +448,7 @@ def run_probe(rows: List[Dict[str, Optional[str]]], *, fetcher: Optional[Callabl
         if status == FETCH_NOT_ATTEMPTED:
             not_attempted += 1
             entry["fetch_failure_reason"] = _safe_label(res.get("reason"), _RE_REASON, "unspecified_reason_redacted")
+            _note_len(entry, res.get("reason"))
         elif status == FETCH_OK and isinstance(res.get("inputs"), dict):
             try:
                 d = derive_dimensions(res["inputs"], res.get("dimension_meta") or {}, health_fn)
@@ -451,6 +476,7 @@ def run_probe(rows: List[Dict[str, Optional[str]]], *, fetcher: Optional[Callabl
             entry["fetch_failure_reason"] = _safe_label(
                 res.get("reason") if isinstance(res, dict) else None, _RE_REASON,
                 "unspecified_reason_redacted") or "fetcher_bad_result"
+            _note_len(entry, res.get("reason") if isinstance(res, dict) else None)
         per_fund.append(entry)
 
     unique_funds = len(groups)
@@ -560,7 +586,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     fixture: Dict[str, Any] = {}
     if args.fixture:
         fixture = json.loads(Path(args.fixture).read_text(encoding="utf-8"))
-        if fixture.get("schema") != FIXTURE_SCHEMA:
+        if not isinstance(fixture, dict) or fixture.get("schema") != FIXTURE_SCHEMA:
             print(f"fixture schema 須為 {FIXTURE_SCHEMA}", file=sys.stderr)
             return 2
     if args.codes_file:
@@ -568,14 +594,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         origin = "user_supplied_code_list"
     else:
         origin = "fixture"
-        rows = [{"policy_id": h.get("policy_id"), "fund_code": h["fund_code"]}
-                for h in fixture.get("holdings", [])]
-        origin = "fixture"
+        holdings = fixture.get("holdings", [])
+        if not isinstance(holdings, list) or not all(
+                isinstance(h, dict) and isinstance(h.get("fund_code"), str) and h["fund_code"].strip()
+                for h in holdings):
+            print("fixture.holdings 每列須為含非空字串 fund_code 的物件", file=sys.stderr)
+            return 2
+        rows = [{"policy_id": h.get("policy_id"), "fund_code": h["fund_code"]} for h in holdings]
     fetcher = make_fixture_fetcher(fixture.get("funds") or {}) if args.fixture else None
-    out = run_probe(rows, fetcher=fetcher, mapping=fixture.get("mapping") or None,
+    out = run_probe(rows, fetcher=fetcher, mapping=fixture.get("mapping"),
                     holdings_origin=origin,
                     as_of=fixture.get("as_of"), main_sha=args.main_sha)
-    text = render_json(out)
+    try:
+        text = render_json(out)
+    except ValueError as e:
+        print(f"輸出被洩漏檢查拒絕,未寫出任何檔案:{e}", file=sys.stderr)
+        return 4
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
     else:
