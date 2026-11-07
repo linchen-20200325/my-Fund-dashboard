@@ -8,11 +8,11 @@
 
 | 項 | 2026-11-07 查核 |
 |---|---|
-| Repository／main | `linchen-20200325/my-Fund-dashboard`；`5782ba8980e7edbe2012c87c7378b350375af6a1`（#1161 以一般 merge commit 合入；2026-11-07 GitHub 查核） |
-| main CI | 該 SHA 上 Fast／Schema／Slow／Visual 四項 success（GitHub 2026-11-07 核對）；不是對任何開放 PR 的合併背書 |
-| Open PR（2026-11-07 GitHub 實查） | 原 #1150／#1160 保留 Draft 作歷史；乾淨替代 #1161（登入規格）已合入 main（`5782ba89`）；#1162（上方五頁籤／健康資料覆蓋）仍為 Draft，尚未合併；#1151／#1152／#1154／#1157／#1158／#1159 待依 GitHub 即時核對 |
-| 已知檢查 | #1162 前一 head `28e8112e` 的 Fast／Schema／Slow／Visual 四項 success；非作者唯讀稽核回報核心內容 PASS、HANDOFF 過期為必修 1；**本修正產生的新 head CI 與增量獨立 QA 均須重新驗證**。#1158 僅作歷史證據，不能覆蓋較新裁示 |
-| 文件整合 | #1153（`BL-0543`、H14）與 #1161（`DEC-2026-11-05-01` 登入設計）均已合入 main；#1162 的上方五頁籤／健康覆蓋裁示文件仍在 Draft，尚未合併。非作者 QA 對前一 head `28e8112e` 報告唯一必修為本檔過期；本次僅修正熱交接狀態並待增量複驗 |
+| Repository／main | `linchen-20200325/my-Fund-dashboard`；`b215d13b8def1715005d68087b266058f812046b`（#1162 以一般 merge commit 合入；2026-11-07 GitHub 查核） |
+| main CI | #1162 **合併前 head** `69fded71` Fast／Schema／Slow／Visual 四項 success；合併後 main `b215d13b` 的 push CI 在本批尚未全部核實 success，不得繼承前 head 的結果 |
+| Open PR（2026-11-07 GitHub 實查） | 原 #1150／#1160 保留 Draft 作歷史；#1161（`5782ba89`）與 #1162（`b215d13b`）已合入 main；#1163 是 BL-0544 最小合法方案 B 的**待獨立 QA Draft 文件 PR**；#1151／#1152／#1154／#1157／#1158／#1159 仍開放，狀態以 GitHub 為準 |
+| 已知檢查 | #1162 最終 head `69fded71` 四項 CI success、非作者獨立 QA 與 HANDOFF 增量 QA 必修 0，已正常合併。BL-0544 顧客已同意方案 B（`DEC-2026-11-07-01`），但合法適用性／精確線框／獨立 QA **仍待 Gate**；#1158 僅作歷史證據 |
+| 文件整合 | #1153（BL-0543／H14）、#1161 登入設計與 #1162 頂部分頁／健康覆蓋裁示已合入 main；#1163 為 BL-0544 方案 B 核准與必要文件收斂的 Draft，**沒有改 frozen 44／57 或程式**，不得當成施工完成 |
 
 **清理線狀態索引**（只作指標，內容以各 PR 為準）：
 
@@ -36,12 +36,12 @@
 | 🌍 市場與趨勢 | `docs/v2/81` 線框已核准，保留已有 Preview，不重畫 |
 | 💼 我的資產 | `docs/v2/82` U1～U5 **僅 UI 方向**已核准，仍須完整合法線框／資料 Gate；主圖先於四格，持倉去重但保留所有部位，NAV＋σ 同圖與配息台幣、USD 100 萬、A／B／C 僅候選，**不直接搬舊交易公式** |
 | 🔍 找基金 | 基金代碼身份與單檔／篩選兩區語意已核准；整頁 New UI2 線框尚待核准 |
-| ⚙️ 設定 | 登入／Active Sheet／資料健康分離；#1161 登入設計已合入 main，#1162 頁首導航文件仍待最終驗收，OAuth 不改 |
+| ⚙️ 設定 | 登入／Active Sheet／資料健康分離；#1161 登入設計、#1162 頁首導覽方向文件均已合入 main；#1163 仍是 Preview-only 施工前合法 Gate，OAuth 不改 |
 | 🤖 AI 投資總結 | `docs/v2/67`／`75` OneBrain 設計；Phase 7 前不得註冊／執行。Digest／Evidence 必須完整，UI 簡化不刪 AI Context |
 
 ## 4. 接手點與禁止事項
 
-唯一下一接手點：完成 #1162 本次 HANDOFF 最小修正之最新 head CI 與非作者獨立增量 QA，核對文件無損與 GitHub 正常 merge Gate；客戶已條件授權通過後轉 Ready、以一般 merge commit 合併；再依 BL-0544 檢查手機上方五頁籤與 frozen 44 的真實條文衝突、依 BL-0545 規劃 Active Sheet 健康覆蓋率唯讀實測，未經 Gate 不進入程式實作。
+唯一下一接手點：先完成 #1163（BL-0544 客戶已裁方案 B）之非作者**合法適用性稽核**，逐條核 frozen 44／57／CONSTITUTION、導覽與登入／首屏／斷點、並完成精確 Preview 線框與字樣 Gate；無直接衝突才保留 frozen 44 不動，Gate 通過且文件正式合併後，才依 `DEC-2026-11-07-01` 條件式授權 Claude Code 施工 **Preview-only `ui_v3` 手機頁首五頁籤 Shell 單切片**。若真衝突停手走正式 amendment；BL-0545 的 Active Sheet 覆蓋率唯讀實測另批處理，未經 Gate 不進入程式實作。
 
 - 先讀 `CLAUDE.md` → `PROJECT_RULES.md` → `docs/DECISIONS.md`／`docs/BACKLOG.md` → 本檔；產品規格回查 frozen `docs/v2/44`、子法 1＋57、`docs/v2/67`／`75`／`79`／`80`／`81`／`82`。
 - Old UI 唯讀參考、`ui_v2` maintenance-only；不改 production data source、公式、FX 觀測日、Risk Cap、身份與原始持倉；不直接 push main；每批最多三項安全工作；變更 Model／Mode／Effort 必須先依 Hard-Stop Gate。
