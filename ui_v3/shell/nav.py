@@ -80,7 +80,7 @@ def shell_css() -> str:
 .uv3-statusbar{{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:12px;line-height:1.5;opacity:.9;margin:0 0 .25rem 0}}
 .uv3-statusbar .uv3-tag{{font-weight:700;letter-spacing:.06em;border:1px solid currentColor;border-radius:4px;padding:0 5px;cursor:help}}
 .uv3-footer{{font-size:12px;opacity:.7;margin-top:1.2rem}}
-/* 頁首導覽：桌機／平板完全不顯示；手機佔用正常文流，sticky 不覆蓋登入／首屏 */
+/* 頁首導覽：桌機／平板完全不顯示；手機佔用文件流，sticky 不覆蓋登入／首屏 */
 .st-key-{TOP_KEY}{{display:none !important}}
 @media (max-width:{mobile}px){{
   [data-testid="stSidebar"],[data-testid="stSidebarCollapsedControl"],[data-testid="stExpandSidebarButton"]{{display:none !important}}
@@ -90,8 +90,13 @@ def shell_css() -> str:
     background:var(--background-color,#ffffff);color:inherit;border-bottom:1px solid rgba(128,128,128,.45)}}
   .st-key-{TOP_KEY} [class*="st-key-uv3-nav-"],.st-key-{TOP_KEY} [data-testid="stElementContainer"]{{gap:0 !important;margin:0 !important;min-width:0 !important}}
   .st-key-{TOP_KEY} > div{{display:flex !important;flex:1 1 0 !important;min-width:0 !important;width:100% !important}}
+  /* 未掛載項是 st.markdown（stMarkdown 預設 shrink-to-fit，實測 30～40px 寬、低於觸控下限且五格不等寬）→ 逐層撐滿格寬 */
+  .st-key-{TOP_KEY} [data-testid="stMarkdown"],.st-key-{TOP_KEY} [data-testid="stMarkdown"] > div,.st-key-{TOP_KEY} [data-testid="stMarkdownContainer"],
+  .st-key-{TOP_KEY} .uv3-tn-disabled{{width:100% !important;min-width:0 !important}}
+  /* stMarkdownContainer 預設帶負 margin-bottom（約 -1rem）→ 外層量到的高度比內容矮，字放大時內容超出頁首被裁；歸零讓格高跟著內容長 */
+  .st-key-{TOP_KEY} [data-testid="stMarkdownContainer"]{{margin-bottom:0 !important}}
   .st-key-{TOP_KEY} a[data-testid="stPageLink-NavLink"],.st-key-{TOP_KEY} .uv3-tn-disabled{{display:flex;flex-direction:column;align-items:center;
-    justify-content:center;gap:1px;box-sizing:border-box;height:{bar}px;min-height:{touch}px;min-width:0;padding:2px 0;margin:0;
+    justify-content:center;gap:1px;box-sizing:border-box;height:auto;min-height:{bar}px;min-width:0;padding:2px 0;margin:0;
     text-align:center;border-radius:0;font-size:12px;line-height:1.2;color:inherit;text-decoration:none;
     border-bottom:3px solid transparent}}
   .st-key-{TOP_KEY} a[data-testid="stPageLink-NavLink"] p{{font-size:12px !important;margin:0;white-space:normal}}

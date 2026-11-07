@@ -266,8 +266,16 @@ def test_css_switches_between_sidebar_and_top_nav_at_one_breakpoint():
     assert 'stSidebar"]' in mobile and "display:none" in mobile
     assert "position:sticky" in mobile and "top:env(safe-area-inset-top)" in mobile
     assert "flex-wrap:nowrap" in mobile and "overflow-x:hidden" in mobile and "width:100%" in mobile
-    assert f"height:{nav.TOP_NAV_HEIGHT_PX}px" in mobile and f"min-height:{nav.TOUCH_MIN_PX}px" in mobile
-    assert "bottom:0" not in mobile and "position:fixed" not in mobile
+    # 格高：下限 TOP_NAV_HEIGHT_PX（≥ 觸控下限 48），且 `height:auto` 讓字放大時格子跟著內容長（固定高度會在 190% 字體把文字裁掉）
+    assert f"min-height:{nav.TOP_NAV_HEIGHT_PX}px" in mobile and "height:auto" in mobile
+    assert nav.TOP_NAV_HEIGHT_PX >= nav.TOUCH_MIN_PX == 48
+    assert " height:" + f"{nav.TOP_NAV_HEIGHT_PX}px" not in mobile and ";height:" + f"{nav.TOP_NAV_HEIGHT_PX}px" not in mobile   # 不得留固定高度
+    # 未掛載項是 st.markdown：必須逐層撐滿格寬、並歸零 stMarkdownContainer 的負 margin-bottom（真瀏覽器實測：否則五格不等寬、高度被低估）
+    assert '[data-testid="stMarkdown"]' in mobile and "width:100% !important" in mobile
+    assert '[data-testid="stMarkdownContainer"]{margin-bottom:0 !important}' in mobile
+    import re
+
+    assert not re.search(r"(?<![-\w])bottom:\s*0", mobile) and "position:fixed" not in mobile   # 沒有貼底定位（`margin-bottom:0` 不算）
     assert "padding-bottom:calc(" not in mobile                    # 不再有底部 overlay 的避讓假空間
     assert "font-weight:700" in css and "text-decoration:underline" in mobile
     assert ":focus-visible" in mobile and "outline:" in mobile
