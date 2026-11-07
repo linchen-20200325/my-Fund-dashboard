@@ -1,8 +1,8 @@
 # 基金健康評分資料覆蓋准入｜唯讀稽核（2026-11-06）
 
-> **性質**：原始程式與現有測試的靜態查核，**不是持倉實測報告、不是新公式／門檻、不是 New UI2 動工授權**。  
-> **稽核 main SHA**：`861628cc377352c4f651ddc1172e13ab07e4d90d`。本批未修改計算、資料來源、UI、歷史持倉、任何正式規格或生產資料。  
-> **獨立性**：本批單組讀碼，未完成第二組獨立稽核或 runtime 等價測試。  
+> **性質**：原始程式與現有測試的靜態查核，**不是持倉實測報告、不是新公式／門檻、不是 New UI2 動工授權**。
+> **稽核 main SHA**：`861628cc377352c4f651ddc1172e13ab07e4d90d`。本批未修改計算、資料來源、UI、歷史持倉、任何正式規格或生產資料。
+> **獨立性**：本批單組讀碼，未完成第二組獨立稽核或 runtime 等價測試。
 > **邊界**：Old UI read-only logic reference；New UI2 應遵守 `docs/v2/44_fund_ui_ssot.md`、`docs/v2/57_amendment_8_directional_judgment.md`、`docs/v2/67_ai_action_vocabulary.md` 與 `docs/v2/80_new_ui2_architecture_proposal.md`。
 
 ## 1. 已證實的程式行為與排除候選
