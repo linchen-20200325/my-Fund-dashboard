@@ -1,0 +1,950 @@
+{
+ "374": {
+  "vw": 374,
+  "vh": 844,
+  "docScrollW": 374,
+  "docClientW": 374,
+  "bodyScrollW": 374,
+  "mainScrollW": 374,
+  "mainClientW": 374,
+  "nav": {
+   "display": "flex",
+   "position": "static",
+   "overflowX": "hidden",
+   "rect": {
+    "x": 16,
+    "y": 133.8,
+    "w": 342,
+    "h": 120.9,
+    "r": 358,
+    "b": 254.7
+   },
+   "scrollW": 342,
+   "clientW": 342,
+   "top": "auto"
+  },
+  "cells": [
+   {
+    "tag": "A",
+    "text": "🌍 市場",
+    "href": "",
+    "ariaDisabled": null,
+    "ariaLabel": null,
+    "ariaCurrent": null,
+    "tabindex": null,
+    "rect": {
+     "x": 16,
+     "y": 133.8,
+     "w": 68.4,
+     "h": 60,
+     "r": 84.4,
+     "b": 193.8
+    },
+    "inViewport": true,
+    "fontWeight": "700",
+    "borderBottom": "3px solid",
+    "textDecoration": "underline",
+    "fontSize": "22.8px",
+    "scrollW": 68,
+    "clientW": 68,
+    "textClipped": false,
+    "hitIsSelfOrChild": true,
+    "hitElement": "SPAN.st-emotion-cache-1qdnqng ewh6kot4[stIconEmoji]"
+   },
+   {
+    "tag": "DIV",
+    "text": "💼 資產 開發中",
+    "href": null,
+    "ariaDisabled": "true",
+    "ariaLabel": "💼 我的資產（開發中）",
+    "ariaCurrent": null,
+    "tabindex": null,
+    "rect": {
+     "x": 84.4,
+     "y": 133.8,
+     "w": 68.4,
+     "h": 97.1,
+     "r": 152.8,
+     "b": 230.9
+    },
+    "inViewport": true,
+    "fontWeight": "400",
+    "borderBottom": "3px solid",
+    "textDecoration": "none",
+    "fontSize": "22.8px",
+    "scrollW": 68,
+    "clientW": 68,
+    "textClipped": false,
+    "hitIsSelfOrChild": true,
+    "hitElement": "SPAN.[]"
+   },
+   {
+    "tag": "DIV",
+    "text": "🔍 找基金 開發中",
+    "href": null,
+    "ariaDisabled": "true",
+    "ariaLabel": "🔍 找基金（開發中）",
+    "ariaCurrent": null,
+    "tabindex": null,
+    "rect": {
+     "x": 152.8,
+     "y": 133.8,
+     "w": 68.4,
+     "h": 97.1,
+     "r": 221.2,
+     "b": 230.9
+    },
+    "inViewport": true,
+    "fontWeight": "400",
+    "borderBottom": "3px solid",
+    "textDecoration": "none",
+    "fontSize": "22.8px",
+    "scrollW": 68,
+    "clientW": 68,
+    "textClipped": false,
+    "hitIsSelfOrChild": true,
+    "hitElement": "SPAN.[]"
+   },
+   {
+    "tag": "DIV",
+    "text": "🤖 AI 尚未開放",
+    "href": null,
+    "ariaDisabled": "true",
+    "ariaLabel": "🤖 AI 投資總結（尚未開放）",
+    "ariaCurrent": null,
+    "tabindex": null,
+    "rect": {
+     "x": 221.2,
+     "y": 133.8,
+     "w": 68.4,
+     "h": 119.9,
+     "r": 289.6,
+     "b": 253.7
+    },
+    "inViewport": true,
+    "fontWeight": "400",
+    "borderBottom": "3px solid",
+    "textDecoration": "none",
+    "fontSize": "22.8px",
+    "scrollW": 68,
+    "clientW": 68,
+    "textClipped": false,
+    "hitIsSelfOrChild": true,
+    "hitElement": "SPAN.[]"
+   },
+   {
+    "tag": "DIV",
+    "text": "⚙️ 設定 開發中",
+    "href": null,
+    "ariaDisabled": "true",
+    "ariaLabel": "⚙️ 設定（開發中）",
+    "ariaCurrent": null,
+    "tabindex": null,
+    "rect": {
+     "x": 289.6,
+     "y": 133.8,
+     "w": 68.4,
+     "h": 97.1,
+     "r": 358,
+     "b": 230.9
+    },
+    "inViewport": true,
+    "fontWeight": "400",
+    "borderBottom": "3px solid",
+    "textDecoration": "none",
+    "fontSize": "22.8px",
+    "scrollW": 68,
+    "clientW": 68,
+    "textClipped": false,
+    "hitIsSelfOrChild": true,
+    "hitElement": "SPAN.[]"
+   }
+  ],
+  "overlaps": [],
+  "stHeader": {
+   "display": "flex",
+   "position": "absolute",
+   "zIndex": "999990",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 374,
+    "h": 114,
+    "r": 374,
+    "b": 114
+   },
+   "pointerEvents": "auto",
+   "bg": "rgb(255, 255, 255)"
+  },
+  "fixedElements": [
+   {
+    "tag": "DIV",
+    "testid": null,
+    "cls": "",
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 374,
+     "h": 844,
+     "r": 374,
+     "b": 844
+    }
+   }
+  ],
+  "sidebar": {
+   "display": "none",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 0,
+    "h": 0,
+    "r": 0,
+    "b": 0
+   }
+  },
+  "bottomNavPresent": false,
+  "statusbar": {
+   "x": 16,
+   "y": 286.5,
+   "w": 342,
+   "h": 20,
+   "r": 358,
+   "b": 306.5
+  },
+  "chips": [
+   {
+    "t": "⬜ 無法判定",
+    "x": 74,
+    "y": 505.6,
+    "w": 98.3,
+    "h": 25.7,
+    "r": 172.3,
+    "b": 531.3
+   },
+   {
+    "t": "⬜ 無法判定",
+    "x": 87,
+    "y": 654.6,
+    "w": 98.3,
+    "h": 25.7,
+    "r": 185.3,
+    "b": 680.3
+   },
+   {
+    "t": "⬜ 門檻待裁示",
+    "x": 87,
+    "y": 811.2,
+    "w": 112.3,
+    "h": 25.7,
+    "r": 199.3,
+    "b": 836.9
+   },
+   {
+    "t": "◇ 資料未備",
+    "x": 156.7,
+    "y": 3410.7,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 251.5,
+    "b": 3436.4
+   },
+   {
+    "t": "◇ 資料未備",
+    "x": 156.7,
+    "y": 3465.5,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 251.5,
+    "b": 3491.1
+   },
+   {
+    "t": "◇ 資料未備",
+    "x": 29,
+    "y": 3723.5,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 123.8,
+    "b": 3749.2
+   },
+   {
+    "t": "",
+    "x": 205.4,
+    "y": 3911.2,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 300.3,
+    "b": 3936.9
+   },
+   {
+    "t": "",
+    "x": 175,
+    "y": 3965.9,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 269.9,
+    "b": 3991.6
+   },
+   {
+    "t": "",
+    "x": 160.6,
+    "y": 4020.6,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 255.5,
+    "b": 4046.3
+   },
+   {
+    "t": "",
+    "x": 198.8,
+    "y": 4075.4,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 293.6,
+    "b": 4101
+   },
+   {
+    "t": "",
+    "x": 161.3,
+    "y": 4130.1,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 256.1,
+    "b": 4155.8
+   },
+   {
+    "t": "",
+    "x": 217.8,
+    "y": 4184.8,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 312.6,
+    "b": 4210.5
+   },
+   {
+    "t": "",
+    "x": 47.4,
+    "y": 4286.6,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 142.2,
+    "b": 4312.3
+   }
+  ],
+  "charts": [
+   {
+    "x": 16,
+    "y": 1541.8,
+    "w": 342,
+    "h": 228,
+    "r": 358,
+    "b": 1769.8
+   }
+  ],
+  "evidence": [
+   {
+    "t": "台股 近1Y +3.52%",
+    "x": 74,
+    "y": 696.3,
+    "w": 226,
+    "h": 41,
+    "r": 300,
+    "b": 737.3
+   },
+   {
+    "t": "S&P 500 近1Y +6.15%",
+    "x": 16,
+    "y": 743.5,
+    "w": 268.5,
+    "h": 41,
+    "r": 284.5,
+    "b": 784.5
+   }
+  ],
+  "scroll": {
+   "el": "stMain",
+   "top": 600,
+   "sh": 4342,
+   "ch": 844
+  },
+  "afterScroll": {
+   "navTop": -466.25,
+   "navBottom": -345.3125,
+   "hit": null
+  },
+  "bottom": {
+   "top": 3498,
+   "sh": 4342,
+   "ch": 844,
+   "atBottom": true,
+   "footer": {
+    "y": 532.46875,
+    "b": 570.84375
+   },
+   "vh": 844
+  },
+  "tabSeq": [
+   {
+    "tag": "BUTTON",
+    "testid": "stBaseButton-header",
+    "text": "Deploy",
+    "href": null,
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "3px none rgb(49, 51, 63)",
+    "outlineOffset": "0px"
+   },
+   {
+    "tag": "BUTTON",
+    "testid": "stMainMenuButton",
+    "text": "",
+    "href": null,
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "3px none rgb(49, 51, 63)",
+    "outlineOffset": "0px"
+   },
+   {
+    "tag": "SECTION",
+    "testid": "stMain",
+    "text": "🌍 市場 💼 資產 開發中 🔍 找",
+    "href": null,
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "3px none rgb(49, 51, 63)",
+    "outlineOffset": "0px"
+   },
+   {
+    "tag": "A",
+    "testid": "stPageLink-NavLink",
+    "text": "🌍 市場",
+    "href": "",
+    "inTopNav": true,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "2px solid rgb(49, 51, 63)",
+    "outlineOffset": "-3px"
+   },
+   {
+    "tag": "A",
+    "testid": null,
+    "text": "",
+    "href": "#a6f5add9",
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "3px none rgb(0, 84, 163)",
+    "outlineOffset": "1px"
+   },
+   {
+    "tag": "A",
+    "testid": null,
+    "text": "",
+    "href": "#vs-s-and-p-500",
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "3px none rgb(0, 84, 163)",
+    "outlineOffset": "1px"
+   },
+   {
+    "tag": "INPUT",
+    "testid": null,
+    "text": "",
+    "href": null,
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "1px auto rgb(16, 16, 16)",
+    "outlineOffset": "2px"
+   },
+   {
+    "tag": "INPUT",
+    "testid": null,
+    "text": "",
+    "href": null,
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "1px auto rgb(16, 16, 16)",
+    "outlineOffset": "2px"
+   }
+  ]
+ },
+ "390": {
+  "vw": 390,
+  "vh": 844,
+  "docScrollW": 390,
+  "docClientW": 390,
+  "bodyScrollW": 390,
+  "mainScrollW": 390,
+  "mainClientW": 390,
+  "nav": {
+   "display": "flex",
+   "position": "static",
+   "overflowX": "hidden",
+   "rect": {
+    "x": 16,
+    "y": 133.8,
+    "w": 358,
+    "h": 120.9,
+    "r": 374,
+    "b": 254.7
+   },
+   "scrollW": 358,
+   "clientW": 358,
+   "top": "auto"
+  },
+  "cells": [
+   {
+    "tag": "A",
+    "text": "🌍 市場",
+    "href": "",
+    "ariaDisabled": null,
+    "ariaLabel": null,
+    "ariaCurrent": null,
+    "tabindex": null,
+    "rect": {
+     "x": 16,
+     "y": 133.8,
+     "w": 71.6,
+     "h": 60,
+     "r": 87.6,
+     "b": 193.8
+    },
+    "inViewport": true,
+    "fontWeight": "700",
+    "borderBottom": "3px solid",
+    "textDecoration": "underline",
+    "fontSize": "22.8px",
+    "scrollW": 72,
+    "clientW": 72,
+    "textClipped": false,
+    "hitIsSelfOrChild": true,
+    "hitElement": "SPAN.st-emotion-cache-1qdnqng ewh6kot4[stIconEmoji]"
+   },
+   {
+    "tag": "DIV",
+    "text": "💼 資產 開發中",
+    "href": null,
+    "ariaDisabled": "true",
+    "ariaLabel": "💼 我的資產（開發中）",
+    "ariaCurrent": null,
+    "tabindex": null,
+    "rect": {
+     "x": 87.6,
+     "y": 133.8,
+     "w": 71.6,
+     "h": 97.1,
+     "r": 159.2,
+     "b": 230.9
+    },
+    "inViewport": true,
+    "fontWeight": "400",
+    "borderBottom": "3px solid",
+    "textDecoration": "none",
+    "fontSize": "22.8px",
+    "scrollW": 72,
+    "clientW": 72,
+    "textClipped": false,
+    "hitIsSelfOrChild": true,
+    "hitElement": "SPAN.[]"
+   },
+   {
+    "tag": "DIV",
+    "text": "🔍 找基金 開發中",
+    "href": null,
+    "ariaDisabled": "true",
+    "ariaLabel": "🔍 找基金（開發中）",
+    "ariaCurrent": null,
+    "tabindex": null,
+    "rect": {
+     "x": 159.2,
+     "y": 133.8,
+     "w": 71.6,
+     "h": 97.1,
+     "r": 230.8,
+     "b": 230.9
+    },
+    "inViewport": true,
+    "fontWeight": "400",
+    "borderBottom": "3px solid",
+    "textDecoration": "none",
+    "fontSize": "22.8px",
+    "scrollW": 72,
+    "clientW": 72,
+    "textClipped": false,
+    "hitIsSelfOrChild": true,
+    "hitElement": "SPAN.[]"
+   },
+   {
+    "tag": "DIV",
+    "text": "🤖 AI 尚未開放",
+    "href": null,
+    "ariaDisabled": "true",
+    "ariaLabel": "🤖 AI 投資總結（尚未開放）",
+    "ariaCurrent": null,
+    "tabindex": null,
+    "rect": {
+     "x": 230.8,
+     "y": 133.8,
+     "w": 71.6,
+     "h": 119.9,
+     "r": 302.4,
+     "b": 253.7
+    },
+    "inViewport": true,
+    "fontWeight": "400",
+    "borderBottom": "3px solid",
+    "textDecoration": "none",
+    "fontSize": "22.8px",
+    "scrollW": 72,
+    "clientW": 72,
+    "textClipped": false,
+    "hitIsSelfOrChild": true,
+    "hitElement": "SPAN.[]"
+   },
+   {
+    "tag": "DIV",
+    "text": "⚙️ 設定 開發中",
+    "href": null,
+    "ariaDisabled": "true",
+    "ariaLabel": "⚙️ 設定（開發中）",
+    "ariaCurrent": null,
+    "tabindex": null,
+    "rect": {
+     "x": 302.4,
+     "y": 133.8,
+     "w": 71.6,
+     "h": 97.1,
+     "r": 374,
+     "b": 230.9
+    },
+    "inViewport": true,
+    "fontWeight": "400",
+    "borderBottom": "3px solid",
+    "textDecoration": "none",
+    "fontSize": "22.8px",
+    "scrollW": 72,
+    "clientW": 72,
+    "textClipped": false,
+    "hitIsSelfOrChild": true,
+    "hitElement": "SPAN.[]"
+   }
+  ],
+  "overlaps": [],
+  "stHeader": {
+   "display": "flex",
+   "position": "absolute",
+   "zIndex": "999990",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 114,
+    "r": 390,
+    "b": 114
+   },
+   "pointerEvents": "auto",
+   "bg": "rgb(255, 255, 255)"
+  },
+  "fixedElements": [
+   {
+    "tag": "DIV",
+    "testid": null,
+    "cls": "",
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 390,
+     "h": 844,
+     "r": 390,
+     "b": 844
+    }
+   }
+  ],
+  "sidebar": {
+   "display": "none",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 0,
+    "h": 0,
+    "r": 0,
+    "b": 0
+   }
+  },
+  "bottomNavPresent": false,
+  "statusbar": {
+   "x": 16,
+   "y": 286.5,
+   "w": 358,
+   "h": 20,
+   "r": 374,
+   "b": 306.5
+  },
+  "chips": [
+   {
+    "t": "⬜ 無法判定",
+    "x": 74,
+    "y": 505.6,
+    "w": 98.3,
+    "h": 25.7,
+    "r": 172.3,
+    "b": 531.3
+   },
+   {
+    "t": "⬜ 無法判定",
+    "x": 87,
+    "y": 654.6,
+    "w": 98.3,
+    "h": 25.7,
+    "r": 185.3,
+    "b": 680.3
+   },
+   {
+    "t": "⬜ 門檻待裁示",
+    "x": 87,
+    "y": 811.2,
+    "w": 112.3,
+    "h": 25.7,
+    "r": 199.3,
+    "b": 836.9
+   },
+   {
+    "t": "◇ 資料未備",
+    "x": 156.7,
+    "y": 3421.4,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 251.5,
+    "b": 3447.1
+   },
+   {
+    "t": "◇ 資料未備",
+    "x": 156.7,
+    "y": 3476.1,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 251.5,
+    "b": 3501.8
+   },
+   {
+    "t": "◇ 資料未備",
+    "x": 29,
+    "y": 3734.2,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 123.8,
+    "b": 3759.8
+   },
+   {
+    "t": "",
+    "x": 205.4,
+    "y": 3921.9,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 300.3,
+    "b": 3947.5
+   },
+   {
+    "t": "",
+    "x": 175,
+    "y": 3976.6,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 269.9,
+    "b": 4002.3
+   },
+   {
+    "t": "",
+    "x": 160.6,
+    "y": 4031.3,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 255.5,
+    "b": 4057
+   },
+   {
+    "t": "",
+    "x": 198.8,
+    "y": 4086,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 293.6,
+    "b": 4111.7
+   },
+   {
+    "t": "",
+    "x": 161.3,
+    "y": 4140.7,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 256.1,
+    "b": 4166.4
+   },
+   {
+    "t": "",
+    "x": 217.8,
+    "y": 4195.5,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 312.6,
+    "b": 4221.1
+   },
+   {
+    "t": "",
+    "x": 47.4,
+    "y": 4297.3,
+    "w": 94.8,
+    "h": 25.7,
+    "r": 142.2,
+    "b": 4323
+   }
+  ],
+  "charts": [
+   {
+    "x": 16,
+    "y": 1541.8,
+    "w": 358,
+    "h": 238.7,
+    "r": 374,
+    "b": 1780.4
+   }
+  ],
+  "evidence": [
+   {
+    "t": "台股 近1Y +3.52%",
+    "x": 74,
+    "y": 696.3,
+    "w": 226,
+    "h": 41,
+    "r": 300,
+    "b": 737.3
+   },
+   {
+    "t": "S&P 500 近1Y +6.15%",
+    "x": 16,
+    "y": 743.5,
+    "w": 268.5,
+    "h": 41,
+    "r": 284.5,
+    "b": 784.5
+   }
+  ],
+  "scroll": {
+   "el": "stMain",
+   "top": 600,
+   "sh": 4353,
+   "ch": 844
+  },
+  "afterScroll": {
+   "navTop": -466.25,
+   "navBottom": -345.3125,
+   "hit": null
+  },
+  "bottom": {
+   "top": 3509,
+   "sh": 4353,
+   "ch": 844,
+   "atBottom": true,
+   "footer": {
+    "y": 532.125,
+    "b": 570.5
+   },
+   "vh": 844
+  },
+  "tabSeq": [
+   {
+    "tag": "BUTTON",
+    "testid": "stBaseButton-header",
+    "text": "Deploy",
+    "href": null,
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "3px none rgb(49, 51, 63)",
+    "outlineOffset": "0px"
+   },
+   {
+    "tag": "BUTTON",
+    "testid": "stMainMenuButton",
+    "text": "",
+    "href": null,
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "3px none rgb(49, 51, 63)",
+    "outlineOffset": "0px"
+   },
+   {
+    "tag": "SECTION",
+    "testid": "stMain",
+    "text": "🌍 市場 💼 資產 開發中 🔍 找",
+    "href": null,
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "3px none rgb(49, 51, 63)",
+    "outlineOffset": "0px"
+   },
+   {
+    "tag": "A",
+    "testid": "stPageLink-NavLink",
+    "text": "🌍 市場",
+    "href": "",
+    "inTopNav": true,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "2px solid rgb(49, 51, 63)",
+    "outlineOffset": "-3px"
+   },
+   {
+    "tag": "A",
+    "testid": null,
+    "text": "",
+    "href": "#a6f5add9",
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "3px none rgb(0, 84, 163)",
+    "outlineOffset": "1px"
+   },
+   {
+    "tag": "A",
+    "testid": null,
+    "text": "",
+    "href": "#vs-s-and-p-500",
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "3px none rgb(0, 84, 163)",
+    "outlineOffset": "1px"
+   },
+   {
+    "tag": "INPUT",
+    "testid": null,
+    "text": "",
+    "href": null,
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "1px auto rgb(16, 16, 16)",
+    "outlineOffset": "2px"
+   },
+   {
+    "tag": "INPUT",
+    "testid": null,
+    "text": "",
+    "href": null,
+    "inTopNav": false,
+    "inSidebar": false,
+    "focusVisible": true,
+    "outline": "1px auto rgb(16, 16, 16)",
+    "outlineOffset": "2px"
+   }
+  ]
+ }
+}

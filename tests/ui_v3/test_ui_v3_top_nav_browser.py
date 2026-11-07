@@ -45,6 +45,12 @@ _MEASURE = r"""
                navDisplay: nav ? getComputedStyle(nav).display : null,
                sidebarDisplay: (document.querySelector('[data-testid="stSidebar"]') ? getComputedStyle(document.querySelector('[data-testid="stSidebar"]')).display : null)};
   if (!nav) return out;
+  const hdr = document.querySelector('[data-testid="stHeader"]');
+  const hr = hdr ? hdr.getBoundingClientRect() : null;
+  out.navPosition = getComputedStyle(nav).position; out.navTop = nav.getBoundingClientRect().top;
+  out.header = hr ? {top: hr.top, bottom: hr.bottom, left: hr.left, right: hr.right} : null;
+  if (hr) { const hit = document.elementFromPoint((hr.left + hr.right) / 2, (hr.top + hr.bottom) / 2);
+            out.headerCovered = !!hit && !hdr.contains(hit) && hit !== hdr; out.headerHitNav = !!hit && nav.contains(hit); }
   out.navScrollW = nav.scrollWidth; out.navClientW = nav.clientWidth;
   const nr = nav.getBoundingClientRect(); out.navBottom = nr.bottom; out.navScrollH = nav.scrollHeight; out.navClientH = nav.clientHeight;
   out.cells = [...nav.querySelectorAll('a[data-testid="stPageLink-NavLink"], .uv3-tn-disabled')].map(e => {
@@ -115,6 +121,11 @@ def test_mobile_top_nav_five_equal_visible_cells_at_least_48px(base_and_browser,
     assert all(cells[i]["r"] <= cells[i + 1]["x"] + 0.5 for i in range(4)), "五格不得重疊"
     assert m["navScrollW"] <= m["navClientW"] and m["docScrollW"] <= m["vw"] and m["mainScrollW"] <= m["mainClientW"], ("不得橫向捲動", m)
     assert not m["fixed"], ("手機不得有貼底 fixed 元素", m["fixed"])
+    # 頁首是文件流內一排（非 sticky／fixed）：位置在頁面開頭，且與 Streamlit 自帶 stHeader 互不重疊、stHeader 沒被蓋住
+    assert m["navPosition"] not in ("sticky", "fixed", "absolute"), m["navPosition"]
+    assert m["header"] is not None
+    assert m["navTop"] >= m["header"]["bottom"] - 0.5 and m["navTop"] < 200, ("頁首在 stHeader 之下、頁面開頭", m["navTop"], m["header"])
+    assert not m["headerCovered"] and not m["headerHitNav"], "stHeader 被蓋住"
 
 
 def test_mobile_top_nav_states_and_aria(base_and_browser):
@@ -169,3 +180,19 @@ def test_top_nav_survives_190_percent_text_without_clipping_or_scrolling(base_an
         assert cell["overflowingText"] == 0, ("190% 字體文字被裁", cell)
     assert m["navScrollW"] <= m["navClientW"] and m["navScrollH"] <= m["navClientH"] + 1, ("頁首不得捲動（橫或直）", m)
     assert m["docScrollW"] <= m["vw"], m
+
+
+def test_top_nav_scrolls_away_with_the_page_flow(base_and_browser):
+    """客戶定案「非 sticky」：頁首隨文流移走是預期；這裡只鎖住它沒有變成吸頂或貼底的 overlay（不斷言吸頂）。"""
+    base, browser = base_and_browser
+    ctx, page = _open(browser, base, 390)
+    try:
+        before = page.evaluate("document.querySelector('.st-key-uv3-top-nav').getBoundingClientRect().top")
+        page.evaluate("document.querySelector('[data-testid=\"stMain\"]').scrollTop = 600")
+        page.wait_for_timeout(400)
+        after = page.evaluate("document.querySelector('.st-key-uv3-top-nav').getBoundingClientRect().top")
+        fixed = page.evaluate(_MEASURE)["fixed"]
+    finally:
+        ctx.close()
+    assert after < before - 300, ("頁首應隨文流移走", before, after)
+    assert not fixed

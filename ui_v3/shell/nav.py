@@ -19,7 +19,7 @@ from ui_v3.shell.registry import IA_PAGES, PageSlot
 
 MOBILE_MAX_PX = 768          # 44 第二節 2.1：≤768 手機頁首、>768 原桌機側欄（兩者不同時出現）
 TOUCH_MIN_PX = 48            # 觸控目標下限（Apple HIG／Material 取 44～48）
-TOP_NAV_HEIGHT_PX = 60       # S1 頂部導覽最小高度；在文件流內 sticky，不壓住首屏／頁尾
+TOP_NAV_HEIGHT_PX = 60       # S1 頂部導覽最小高度；在文件流內（不吸頂、不貼定位；隨頁面捲動移走），不壓住首屏／頁尾
 TOP_KEY = "uv3-top-nav"
 SIDEBAR_KEY = "uv3-sidebar-nav"
 
@@ -54,7 +54,7 @@ def nav_items(pages: Optional[Tuple[PageSlot, ...]] = None) -> Tuple[NavItem, ..
 
 
 def shell_css() -> str:
-    """Shell 的 CSS（Preview 暫用）：桌機／平板＝原左側側欄、手機＝頁首 sticky 五等分導覽，兩者不同時出現。"""
+    """Shell 的 CSS（Preview 暫用）：桌機／平板＝原左側側欄、手機＝文件流內頁首五等分導覽，兩者不同時出現。"""
     mobile, touch, bar = MOBILE_MAX_PX, TOUCH_MIN_PX, TOP_NAV_HEIGHT_PX
     return f"""
 <style>
@@ -80,12 +80,12 @@ def shell_css() -> str:
 .uv3-statusbar{{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:12px;line-height:1.5;opacity:.9;margin:0 0 .25rem 0}}
 .uv3-statusbar .uv3-tag{{font-weight:700;letter-spacing:.06em;border:1px solid currentColor;border-radius:4px;padding:0 5px;cursor:help}}
 .uv3-footer{{font-size:12px;opacity:.7;margin-top:1.2rem}}
-/* 頁首導覽：桌機／平板完全不顯示；手機佔用文件流，sticky 不覆蓋登入／首屏 */
+/* 頁首導覽：桌機／平板完全不顯示；手機佔用文件流（不吸頂、不貼定位），位於 Streamlit 自帶 stHeader 之下、不覆蓋它 */
 .st-key-{TOP_KEY}{{display:none !important}}
 @media (max-width:{mobile}px){{
   [data-testid="stSidebar"],[data-testid="stSidebarCollapsedControl"],[data-testid="stExpandSidebarButton"]{{display:none !important}}
   .st-key-{TOP_KEY}{{display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;gap:0 !important;
-    position:sticky;top:env(safe-area-inset-top);z-index:999990;width:100%;max-width:100%;min-height:{bar}px;
+    width:100%;max-width:100%;min-height:{bar}px;
     box-sizing:border-box;overflow-x:hidden;margin:0;padding:0;
     background:var(--background-color,#ffffff);color:inherit;border-bottom:1px solid rgba(128,128,128,.45)}}
   .st-key-{TOP_KEY} [class*="st-key-uv3-nav-"],.st-key-{TOP_KEY} [data-testid="stElementContainer"]{{gap:0 !important;margin:0 !important;min-width:0 !important}}

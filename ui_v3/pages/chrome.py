@@ -2,7 +2,7 @@
 """全站共用 Navigation Shell 的畫面（BL-0536 Shell 批；選型 Route C 見 `docs/v2/80` 第 17 節）。
 
 - 導覽：`st.navigation(position="hidden")` 只負責 routing／頁登錄（沿用 `app_preview`）；側欄與手機頁首 S1 導覽由本檔自畫
-  （`st.sidebar`＋`st.page_link`；頁首五格由 `st.container(key=…, horizontal=True)` 在正常文流內 sticky 呈現）。
+  （`st.sidebar`＋`st.page_link`；頁首五格由 `st.container(key=…, horizontal=True)` 在文件流內呈現（不吸頂，隨頁面捲動移走））。
   五頁全部可見；已掛載的頁是真連結（`st.page_link`），未掛載的頁是**不可點的文字項**（`aria-disabled`、標「開發中」），
   沒有 renderer、沒有空殼頁、沒有假資料；🤖 在 Phase 7 前不可進（登錄表建構時就擋）。
 - Status Bar：純文字「PREVIEW」＋（有缺資料時）資料狀態一句＋更新時間（不放 chip 形式元素；客戶 2026-11-03 裁示第一項）；內容全來自 `ShellStatus`（既有 health／provenance），沒有自造狀態；

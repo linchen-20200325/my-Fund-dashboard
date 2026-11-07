@@ -3,7 +3,7 @@
 
 涵蓋：導覽（五頁、順序、只有已掛載頁可進、未掛載頁可見但不可進、無空殼頁、🤖 不可進）、Status Bar／側欄資料狀態區
 （內容只來自既有 health；全取得時不寫「正常」；沒有取得時間寫缺資料、不推估）、更新資料 CTA（本批不可用＋原因）、
-Responsive（斷點、頁首導覽與側欄不同時出現、觸控高度、safe-area、無底部 overlay——靜態 CSS 檢查；真實 390／1280 量測見
+Responsive（斷點、頁首導覽與側欄不同時出現、觸控高度、無吸頂／無底部 overlay——靜態 CSS 檢查；真實 390／1280 量測見
 `docs/evidence/bl0536_shell_h5_2026-11-03/`）、字樣（Shell 新字樣一律 pending、不外漏工程資訊）、Missing（complete／partial／
 failure／not configured／all missing）。⚠️ AppTest 不載入瀏覽器 CSS，版面以 Playwright evidence 另證。
 負控一律在記憶體內現編，不寫檔、不把負控字串寫進文件。
@@ -264,7 +264,10 @@ def test_css_switches_between_sidebar_and_top_nav_at_one_breakpoint():
     assert f".st-key-{nav.TOP_KEY}" in base
     assert "display:none !important" in base.split(f".st-key-{nav.TOP_KEY}")[1][:80]
     assert 'stSidebar"]' in mobile and "display:none" in mobile
-    assert "position:sticky" in mobile and "top:env(safe-area-inset-top)" in mobile
+    top_rule = mobile.split(f".st-key-{nav.TOP_KEY}{{", 1)[1].split("}", 1)[0]
+    assert "display:flex !important" in top_rule and "width:100%" in top_rule                    # 文件流內一排五格
+    assert "position:" not in top_rule and "z-index" not in top_rule and "top:" not in top_rule  # 非 sticky／fixed／overlay：不吸頂、不壓 Streamlit 自帶 stHeader
+    assert "sticky" not in css
     assert "flex-wrap:nowrap" in mobile and "overflow-x:hidden" in mobile and "width:100%" in mobile
     # 格高：下限 TOP_NAV_HEIGHT_PX（≥ 觸控下限 48），且 `height:auto` 讓字放大時格子跟著內容長（固定高度會在 190% 字體把文字裁掉）
     assert f"min-height:{nav.TOP_NAV_HEIGHT_PX}px" in mobile and "height:auto" in mobile
