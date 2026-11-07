@@ -28,6 +28,8 @@
 
 ## 2. 唯一 NOW：#1164 已合併後的驗收證據／交接一致性核對
 
+唯一下一接手點：先依 GitHub 最新狀態核對未結文件 PR 的 CI／QA 與合併結果，再接續 BL-0545 已核准範圍內的唯讀健康覆蓋率取證；#1164 已合併，不重做程式。
+
 **#1163、#1164 均已合併；不重做 S1／S2 選型，不重做舊 PR QA，不重修 37 個 tests、sticky 或 fixture JSON EOF，也不重開同功能 Code PR。**
 
 - Claude Code 負責 Code／測試／必要非作者技術 QA；ChatGPT 負責獨立 GitHub Gate、規格、文件與符合條件的 Auto-Ship。ChatGPT 不能僅靠留言聲稱已啟動外部 Claude 工作階段。
