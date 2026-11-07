@@ -4,6 +4,8 @@
 
 ## 0. 已確定／尚未確定
 
+> **2026-11-07 後續正式裁示覆蓋本檔歷史待選字樣：`DEC-2026-11-07-02`。** 客戶對「S1：五頁籤固定橫排、全部可見、不左右滑動？」回覆逐字為「可以」。**S1 DESIGN APPROVED**。以下 §6～§8 原「S1 候選／尚未核准」文字保留為先前提案史實，**自此不再把 S1／S2 當作待客戶二選一**；§7.2 的功能／瀏覽器／真機測試仍全為 NOT RUN，frozen 44／57／CONSTITUTION 法定適用性及真正非作者獨立 QA 仍 **UNVERIFIED**。不得誤讀成 Code 或合併已准。
+
 - **已核准產品方向**：New UI2 **手機**頁首橫向五頁籤，順序固定 🌍／💼／🔍／🤖／⚙️；僅 supersede `DEC-2026-10-27-11` 的**手機導航位置形式**（底部 → 頂部）。桌機側欄、登入／OAuth、Active Sheet、五頁 IA、🤖 Phase 7 前可見不可進都不變。
 - **事實勘誤**：44 不含 `底部`／`bottom` 字面強制條款；44 第二節 2.1 的 768 是欄數斷點，不是導覽形式條款。原盤點列出 44 :5627 帳號入口「導覽抽屜或精簡帳號控制」、:5384 與 :5551 的手機第一屏條件；均須維持且重驗，**不能自行宣稱 44 已合法 amended**。
 - **目前程式**：`ui_v3/shell/nav.py` 仍是手機 bottom-nav（`MOBILE_MAX_PX=768`、`TOUCH_MIN_PX=48`、`BOTTOM_NAV_HEIGHT_PX=60`），`ui_v3/pages/chrome.py` 與 `ui_v3/design/tokens.py`、navigation shell tests、visual fidelity tests 有相依；尚未改程式或測試。
@@ -72,9 +74,9 @@
 
 **初步建議 S1 為最小可驗候選**，因使用者核准的核心是「手機導覽改到頁首，五頁水平排列」，不是新開任何投資邏輯；但 S1 與已落盤的「頁籤可橫向捲動」要求存在差異，**須先完成客戶精確線框／字樣 Gate，不能在本 PR 視為 S1 已獲核准**。若後續必須保留可滑動，依 S2→S3 的合法性 Gate；不得偷偷改 44 文義。
 
-## 7. 精確 Shell 線框候選與測試契約（僅供 Gate；不是已核准 UI）
+## 7. 精確 Shell 線框候選與測試契約（~~僅供 Gate；不是已核准 UI~~ → 2026-11-07 S1 形狀與既有短字樣已裁；實作／視覺量測未 PASS）
 
-**適用範圍**：New UI2 Preview-only `ui_v3`，五頁登錄表保持不變；沒有完成任何 Streamlit／Cloud／手機 WebView 實測。
+**適用範圍**：New UI2 Preview-only `ui_v3`，五頁登錄表保持不變；依 `DEC-2026-11-07-02` 採 S1 **五格同列、全部可見、無局部與整頁橫向滑動**。沒有完成任何 Streamlit／Cloud／手機 WebView 實測；登入入口若尚未實作，**不得造假**。
 
 ### 7.1 構圖／字樣／權責
 
@@ -113,7 +115,7 @@
 | 正式禁區／資料層 | `ui_v3` Preview shell＋必要的定向測試 | `ui_v2`／Old UI、frozen 44／57、services、OAuth、NAV／FX、Rule／Risk Cap、OneBrain、正式入口、Cloud cutover diff=0 |
 | CI／Visual Fidelity | Fast／Schema／Slow／Visual、必要獨立 QA | 四項最新 head job conclusion=success；390 與桌機 production-like screenshot；不能用 deterministic fixture 圖當正式 Cloud 驗收 |
 
-**留在 Gate 的兩項未決**：① 44「任何一段都不出現橫向捲動」是否允許 S2 局部頁籤滑動；② S1 不滑動版是否作為最終精確線框（需依現行客戶裁示程序核准）。**這兩項未解以前不開 Code PR，不將此文件簽為 QA PASS。**
+**2026-11-07 最新 Gate 判定**：② **S1 已由客戶核准（`DEC-2026-11-07-02`）**，不可再回問 S1／S2 選型；① 原 S2 的局部滑動歧義對**已選 S1**不再構成要實作的功能，但 44 其餘欄數／首屏／帳號條款與上位合法程序仍須**真正非作者獨立 QA**，且任何實際 DOM 溢出／觸控／WebView／首屏均 **NOT RUN**。未過 QA／CI／合法 Gate 仍不開 Code PR、不把此檔簽為 PASS。
 
 ## 8. 既有 Code／測試實際依賴與最小施工差異（2026-11-07 唯讀核對；**沒有動程式**）
 
@@ -139,4 +141,4 @@
 4. 390×844 與 1280×800 瀏覽器實測，並補 375／374、768／769 與字體縮放／鍵盤 focus；局部滑動時需量測 `documentElement.scrollWidth <= clientWidth` 和容器本身的捲動與鍵盤可操作性，兩者分開記；有資料時須可見結論 chip＋主圖／主數字。WebView／真機未量測一律 `NOT RUN`。
 5. 同 PR 完成定向測試、4 個 CI job、真正非作者 UI／治理 QA 與 production-like 截圖；**不得由本文件的技術清單替代客戶線框、法規適用性與實機驗收**。
 
-**單一下一步**：這一份文件盤點已把「可以先問程式碼什麼」縮成明確差異清單。Code 目前仍停在 `DEC-2026-11-07-01` 的條件授權之前，無需交 Claude 重做同一份文件／技術準備。
+**單一下一步（2026-11-07 S1 後續）**：選型已裁，不再派 Claude 重做文件研究；由非作者驗收 #1163 中 S1 相容性、44／57／CONSTITUTION 適用程序與這份證據，確認最新 head 四項 CI 與 review 狀態後才可合併。依原條件授權，合併／Gate 通過後 Claude Code 僅可做 Preview-only 頂部 S1 Shell，並補實測。
