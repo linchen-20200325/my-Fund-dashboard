@@ -16,34 +16,34 @@
 
 | 項目 | 2026-11-07 查到的狀態 | 對應證據 |
 |---|---|---|
-| main | `b227ae5c8c94bb322eb24c3c1412ec2683819dd8`（#1166 一般 merge commit） | GitHub 2026-11-07 觀測快照，每次重新查 |
+| main | `b34dd2eb9ff329d559e471f9a52ab1aaf56238a7`（#1168 merge；2026-11-07 歷史快照） | 當前使用前仍須重查 GitHub |
 | #1163 | **merged=true**；**歷史 merge SHA `025922382ef3921fc7b6858cb733084935fbf066`**（是 #1164 之前的 commit，不是當前 main HEAD） | [PR #1163](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1163)；B／S1 設計文件已進 main |
-| Open PR | #1166 **merged=true**，merge SHA `b227ae5c8c94bb322eb24c3c1412ec2683819dd8`；另有本交接文件 PR #1167 Open（head `ae9608df`，最新狀態須再查） | [#1166](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1166)／[#1167](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1167)；不得把 #1166 再當 Draft |
+| Open PR | 本次核對僅 #1167 仍 Open；#1166 merge `b227ae5c`、#1168 merge `b34dd2eb` 已完成 | [#1167](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1167)；合併後重查，不把此列視為即時狀態 |
 | #1164 已合併 head CI | [run 42359253829](https://github.com/linchen-20200325/my-Fund-dashboard/actions/runs/42359253829)：Fast／Schema／Slow／Visual **success** | 最後 head `4f045c26` 的結論；**不是 merge commit 的 main CI** |
 | Code | ≤768px 五格同列頁首／無橫滑／≥48px；769px+ 原側欄；僅 🌍 可進、🤖 不開放；無效 sticky 已修 | #1164 **已 merged 到 main**，但 Preview-only ≠ Cloud 正式上線 |
 | 視覺證據 | #1164 已合入 Chromium 合成 fixture 的 374／375／390／768／769／1280 及 190% 模擬 JSON／PNG | `docs/evidence/bl0544_s1_chromium_fixture_2026_11_07/`；**不代表**正式 Cloud／真機／WebView |
 | QA／review | #1164 0 unresolved threads；GitHub 3 則 `COMMENTED` review 並非明確非作者 QA 核准；最新 head 完整 QA 證據 **NOT VERIFIED** | **已 merge ≠ QA 自動 PASS**；留下事後稽核缺口，不得否認合併事實 |
-| main CI | #1166 merge `b227ae5c` 對應逐 job CI 未查到完成證據 | **NOT VERIFIED**，不能拿 #1166 PR head 四綠替代 |
+| main CI | #1168 merge 的 main push CI 逐 job 結論本次 NOT VERIFIED；PR head 四項 success 不能替代 main CI | 必須依最新 SHA 重新查 |
 | 清理線 #1152／#1153／#1154 | 三 PR 均已合併；#1165 交接修復也已合併（`7a3ab87c`） | 不重做、也不把已 merged 的 PR 當 Open |
 
-## 2. 唯一 NOW：BL-0545／#1166 文件驗收與合法唯讀資料 Gate
+## 2. 唯一 NEXT：BL-0545 真實覆蓋率合法輸入 Gate
 
-唯一下一接手點：先獨立驗收本進度 PR #1167 最新 CI／合併條件並完成文件存檔；接著 BL-0545 只讀探針須先取得客戶授權並選定合法輸入與身份對照，未授權前維持 NOT VERIFIED，不改 Grade、正式准入或資料來源。
+唯一下一接手點：使用者稍後選擇方式 A（自己的合法 Google 登入 session）或方式 B（自願提供匿名基金代碼清單），再以已合併的 Phase 1 唯讀探針取得真實三層分母；目前使用者明確指示暫不提供輸入，故維持 NOT VERIFIED，不執行 live、不得請求憑證或虛構結果。
 
 **GitHub 已合併**：#1163（S1 設計）、#1164（S1 Preview-only Code）、#1165（零記憶 HANDOFF 修復，merge SHA `7a3ab87c268b5e8ca7c39947e37717071840cbcf`）。不重做已合併 PR；原 37 tests／sticky／JSON EOF 歷史失敗不當作現在的阻塞。
 
-- **#1166 已正式 merged**：最後 head `e16a5bbb` 四項 CI success，merge SHA `b227ae5c`；新增 `docs/evidence/bl0545_active_sheet_coverage_probe_status_2026_11_07.md`，僅是已合併研究證據，沒有實測個人 Active Sheet 覆蓋率。main push CI 與 #1166 PR head CI 必須區分。
-- **BL-0545 真實持倉覆蓋率 NOT VERIFIED**：沒有合法使用者 Active Sheet session、access token 或持倉清單，也沒有已授權可執行的五維探針。#1166 §7 列出 Decision Gates：新增只讀探針程式、DG2 canonical vs production `resolve_full_keys` 去重口徑、輸入用本人登入還是匿名清單；stale/conflict/unsupported 的正式准入定義與 FX guard 均不得從探針建置授權推導。缺資料不填 0，不用服務帳戶或公開基金樣本冒充個人持倉。
+- **#1166、#1168 均已正式 merged**：#1166 merge `b227ae5c` 是研究證據；#1168 merge `b34dd2eb` 是依 `DEC-2026-11-07-03` 核准的 Phase 1 唯讀探針，最後 head `32f0a54f` 四項 PR CI success、非作者 QA 必修 0（以上為 PR 證據，不替代 main push CI）。正式 Live 模式 NOT IMPLEMENTED；真實 Active Sheet 覆蓋率 NOT VERIFIED；branch protection API 403，required checks NOT VERIFIED。
+- **BL-0545 真實持倉覆蓋率 NOT VERIFIED**：沒有合法使用者 Active Sheet session、access token 或持倉清單；#1168 已依 `DEC-2026-11-07-03` 核准並合併 Phase 1 離線／匿名清單唯讀五維探針，`scripts/bl0545_coverage_probe.py` 已在 main，live 模式 NOT IMPLEMENTED。production `resolve_full_keys` 是主分組，DG2 canonical 僅 shadow_diff；真實 Active Sheet 覆蓋率及其分母 NOT VERIFIED，正式准入未定義；缺值不填 0、不以樣本冒充個人持倉。
 - **#1164 合併後仍未驗**：正式 Streamlit Cloud 390/1280、真機／WebView/safe-area、OS 字放大、讀屏與實資料畫面；最後 head 的非作者完整 QA 未在 GitHub review 清楚證實。Chromium 合成 fixture 不是正式 production PASS；Preview 帳號入口 NOT IMPLEMENTED。歸於 BL-0544 post-merge evidence gap，不重開原 Code PR。
-- **遠端分支**：本次 GitHub 列出 main、data、push-assets、#1166 的 evidence branch，以及四組 probe trigger/results（12 條）；`probe/*-trigger` 雖無獨有提交但被 workflows 用作按鈕，`probe/*-results` 存證據；`main`、`data`、`push-assets` 必留。先前 3 條歷史清理候選已不在遠端列舉中，**本輪沒有執行刪除，也未驗其刪除原因／者**。
+- **遠端分支**：2026-11-07 查見 main、data、push-assets、本 PR 文件分支及四組 probe trigger/results；後八組為觸發／證據用途，不因未有獨有提交刪除。未執行分支清理。
 - **分工**：ChatGPT 獨立 GitHub Gate、產品／治理、文件、已授權 Auto-Ship；Claude Code 只做 Code、技術測試、實測、必要非作者技術 QA（需使用者把提示語交付給外部 Claude session）。每批最多三項安全工作；不得為消除待辦擅改 frozen 44／57／CONSTITUTION、金融 Grade、資料來源、OAuth、Risk Cap、OneBrain 或 Phase 7。
 
 ## 3. NEXT／LATER（只安排已有安全條件的批次）
 
 | 順序 | 工作 | Gate／owner |
 |---|---|---|
-| NOW | 本交接 PR #1167 文件驗收，接續 BL-0545 最小只讀探針 Decision Gate | ChatGPT 驗收 #1167；尚無客戶授權時不派 Claude 改 Code |
-| NEXT | BL-0545 真實 Active Sheet 五維分母探針 | 先完成 #1166 文件 PR；探針程式與 Active Sheet 取數欠合法環境／授權，依正式 Decision Gate，NOT VERIFIED 不冒充 PASS |
+| NOW | #1167 本次 docs-only 進度修正、獨立審查與 CI Gate | ChatGPT／專案 AI：合併前依最新 GitHub 狀態核證；不得以文件宣稱 PR 已合併 |
+| NEXT | BL-0545 使用者合法輸入後取真實三層分母 | Phase 1 已合併；使用者暫不提供輸入。方式 A 本人 session／方式 B 匿名清單；live NOT IMPLEMENTED、真實覆蓋 NOT VERIFIED |
 | LATER | BL-0542 💼 我的資產 G-3～G-5 | UI 設計部分核准，資料／配息／整頁接線 Gate 未全授權 |
 | LATER | BL-0530 找基金 ISIN → MoneyDJ deterministic identity | research-only；無已核准 source 時不得啟用 mapping |
 | LATER | 設定登入、BL-0534 frozen amendment、BL-0535 cutover、OneBrain／Phase7 | 各走正式授權、獨立 QA、必要人工／法規 Gate |
