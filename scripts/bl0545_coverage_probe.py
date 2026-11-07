@@ -225,9 +225,9 @@ def _cwd_csv_evidence() -> Dict[str, Any]:
     try:
         if f.is_file():
             return {"cwd_mapping_csv_present": True,
-                    "cwd_mapping_csv_sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
+                    "cwd_mapping_csv_sha256_prefix32": hashlib.sha256(f.read_bytes()).hexdigest()[:32]}
     except OSError:
-        return {"cwd_mapping_csv_present": True, "cwd_mapping_csv_sha256": None}
+        return {"cwd_mapping_csv_present": True, "cwd_mapping_csv_sha256_prefix32": None}
     return {"cwd_mapping_csv_present": False}
 
 

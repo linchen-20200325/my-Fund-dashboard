@@ -532,7 +532,7 @@ def test_r1_provenance_parser_constant_all_paths(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     d = _run(_rows(("A", "ACTI171")))["identity"]["primary_provenance"]
     assert d["parser"] == PARSER and d["mapping_source"] == "builtin"
-    assert d["cwd_mapping_csv_present"] is False and "cwd_mapping_csv_sha256" not in d
+    assert d["cwd_mapping_csv_present"] is False and "cwd_mapping_csv_sha256_prefix32" not in d
     i = _run(_rows(("A", "ACTI171")), mapping={})["identity"]["primary_provenance"]
     assert i["parser"] == PARSER and i["mapping_source"] == "injected" and "cwd_mapping_csv_present" not in i
     body = "input_code,public_code,page_type,note\nZZZ111,YYY222,yp010001,x\n"
@@ -541,7 +541,7 @@ def test_r1_provenance_parser_constant_all_paths(monkeypatch, tmp_path):
     import hashlib
     assert c["parser"] == PARSER and c["mapping_source"] == "csv+builtin"
     assert c["cwd_mapping_csv_present"] is True
-    assert c["cwd_mapping_csv_sha256"] == hashlib.sha256(body.encode("utf-8")).hexdigest()
+    assert c["cwd_mapping_csv_sha256_prefix32"] == hashlib.sha256(body.encode("utf-8")).hexdigest()[:32]
     assert str(tmp_path) not in json.dumps(c)
 
 
@@ -559,3 +559,54 @@ def test_fixture_mapping_non_dict_is_input_error(tmp_path, capsys):
     fp.write_text(json.dumps({"schema": probe.FIXTURE_SCHEMA, "mapping": ["x"], "holdings": []}), encoding="utf-8")
     assert probe.main(["--fixture", str(fp)]) == 2
     assert "mapping" in capsys.readouterr().err
+
+
+# ───────────────────────── R2:provenance 通過洩漏檢查 ─────────────────────────
+
+def _write_fx(tmp_path):
+    fx = {"schema": probe.FIXTURE_SCHEMA, "holdings": [{"fund_code": "ZZZ111"}], "funds": {"YYY222": FULL_USD}}
+    fp = tmp_path / "fx.json"
+    fp.write_text(json.dumps(fx), encoding="utf-8")
+    return fp
+
+
+def test_r2_cwd_csv_prefix_survives_render_and_cli(monkeypatch, tmp_path):
+    import hashlib
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    body = "input_code,public_code,page_type,note\nZZZ111,YYY222,yp010001,x\n"
+    (work / "fund_code_mapping.csv").write_text(body, encoding="utf-8")
+    fp, op = _write_fx(tmp_path), tmp_path / "o.json"
+    assert probe.main(["--fixture", str(fp), "--out", str(op)]) == 0
+    prov = json.loads(op.read_text(encoding="utf-8"))["identity"]["primary_provenance"]
+    assert prov["cwd_mapping_csv_sha256_prefix32"] == hashlib.sha256(body.encode("utf-8")).hexdigest()[:32]
+    assert prov["parser"] == PARSER and prov["mapping_source"] == "csv+builtin"
+
+
+def test_r2_no_csv_no_field(monkeypatch, tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    fp, op = _write_fx(tmp_path), tmp_path / "o.json"
+    assert probe.main(["--fixture", str(fp), "--out", str(op)]) == 0
+    prov = json.loads(op.read_text(encoding="utf-8"))["identity"]["primary_provenance"]
+    assert prov["cwd_mapping_csv_present"] is False and "cwd_mapping_csv_sha256_prefix32" not in prov
+
+
+def test_r2_plus_not_accepted_by_tag_whitelist():
+    assert "+" not in probe._RE_TAG.pattern
+    meta = {"coverage": {"source_tag": "csv+builtin"}}
+    out = _run(_rows(("A", "AAA111")), {"AAA111": {**FULL_USD, "dimension_meta": meta}})
+    assert _fund(out, "AAA111")["dimensions"]["coverage"]["source_tag"] == "redacted_source_tag"
+
+
+def test_r2_every_provenance_string_passes_leak_guard(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "fund_code_mapping.csv").write_text("input_code,public_code\nZZZ111,YYY222\n", encoding="utf-8")
+    variants = [_run(_rows(("A", "ZZZ111"))), _run(_rows(("A", "ZZZ111")), mapping={})]
+    for out in variants:
+        for v in out["identity"]["primary_provenance"].values():
+            if isinstance(v, str):
+                probe.assert_no_leak(v)
+        probe.render_json({k: x for k, x in out.items() if k != "_calls"})
