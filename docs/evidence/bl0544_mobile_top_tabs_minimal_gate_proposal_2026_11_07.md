@@ -21,13 +21,13 @@
 
 **建議：B（先精確定位、再做單點決定）**。此處 B 指「合法修正路線」，與客戶已核准的**手機 UI 方案 B**是不同選項；不可混淆。如果客戶或上位治理指出 B 無法構成合法 44 amendment，必須回到 C 或按正式程序提案，不能逕自跳過。
 
-## 2. 建議的最小施工授權範圍（仍待客戶核准）
+## 2. 最小施工授權範圍（原提案歷史；**S1 已由 `DEC-2026-11-07-02` 核准，治理／QA Gate 仍未過**）
 
 只授權 **Preview-only** 的 `ui_v3` shell 導覽外觀變更：
-1. 手機尺寸（以現行 `MOBILE_MAX_PX=768` 為待核查實作斷點）將固定底部五入口改為**頁首可橫向捲動五頁籤**；桌機 sidebar 保留；不註冊空殼頁。
+1. 手機尺寸（以現行 `MOBILE_MAX_PX=768` 為待核查實作斷點）將固定底部五入口改為~~**頁首可橫向捲動五頁籤**~~ → **依較新 `DEC-2026-11-07-02`，S1 頁首五格同列、全部可見、不可左右滑動**；桌機 sidebar 保留；不註冊空殼頁。
 2. 五頁名稱、順序、`🤖` 禁入、≤2 次互動、共用 routing 與 APPROVED_WORDING 不變。頁首右側精簡登入入口不得被覆蓋；不改 OAuth callback/session/token 或 Active Sheet 身分規則。
 3. 避免頁面橫向溢出與首屏遮擋；顧及 safe-area／WebView／鍵盤／螢幕閱讀器，`48px` 觸控區與 active/focus 語意；只改導覽 shell 必要檔案與對應 tests、tokens；**不改頁面資料內容、任何金融邏輯或正式 Cloud cutover**。
-4. 測試與驗收：390／768／769／1280px（包含 768/769 邊界）；390 首屏結論燈仍可見且不暗中調高 ≤5 預算；側欄、頁籤 scrolling、帳號入口、🤖 disabled、路由及 Visual Fidelity；真實 WebView／手機測試無法執行者標未驗，不得當 PASS。
+4. 測試與驗收：390／768／769／1280px（包含 768/769 邊界）；390 首屏結論燈仍可見且不暗中調高 ≤5 預算；側欄、~~頁籤 scrolling~~ → **S1 頁籤容器與整頁皆不可橫向捲動（`DEC-2026-11-07-02`）**、帳號入口、🤖 disabled、路由及 Visual Fidelity；真實 WebView／手機測試無法執行者標未驗，不得當 PASS。
 5. 範圍外項目都不授權：`ui_v2`／Old UI、正式上線切換、UI 第六頁、新資料源、配息／NAV／FX、Risk Cap、健康准入、OneBrain/Phase 7。正式版面必須經精確線框／字樣 Gate、獨立 QA 與 CI。
 
 ## 3. 文件責任與最短路徑
@@ -123,7 +123,7 @@
 
 | 真實檔案／符號 | 目前原始碼證據 | **若 Gate 日後通過**的最小處置 |
 |---|---|---|
-| `ui_v3/shell/nav.py`：`shell_css`, `MOBILE_MAX_PX`, `TOUCH_MIN_PX`, `BOTTOM_KEY` | ≤768px 固定底部、桌機側欄；`position:fixed; bottom:0`；48px 觸控下限、60px 底欄及 `padding-bottom` 避讓 | 只替換**導覽位置／CSS**，消除底部 overlay／頁尾避讓舊依賴；保留 768 邊界、48px 下限、對比與焦點狀態。S1／S2 尚未裁定，**不可先寫 overflow-x 或偷偷調閾值** |
+| `ui_v3/shell/nav.py`：`shell_css`, `MOBILE_MAX_PX`, `TOUCH_MIN_PX`, `BOTTOM_KEY` | ≤768px 固定底部、桌機側欄；`position:fixed; bottom:0`；48px 觸控下限、60px 底欄及 `padding-bottom` 避讓 | 只替換**導覽位置／CSS**，消除底部 overlay／頁尾避讓舊依賴；保留 768 邊界、48px 下限、對比與焦點狀態。~~S1／S2 尚未裁定~~ → **`DEC-2026-11-07-02` 已核准 S1，禁 S2 局部滑動**；不可偷偷調閾值、縮小觸控或修改正式短標 |
 | `ui_v3/pages/chrome.py`：`render_navigation`, `disabled_bottom_html`, `_now_key` | `st.navigation(position="hidden")` 路由，`st.page_link` 活頁、未掛載項為 `aria-disabled` 無 URL；手機 DOM 掛於 `st.container(key=nav.BOTTOM_KEY,...)` | 保留 routing 與未掛載保護；移至已核准頁首區時審查 DOM 順序與 PREVIEW Status Bar、不多做第二套導航、不讓不可進頁變可點。**尚未證明 `aria-current` 會由 Streamlit 提供** |
 | `ui_v3/shell/registry.py`：`IA_PAGES` | 五頁 IA，只有 `mkt` 已 `registered=True`；`ai` 禁註冊、其餘缺正式整頁實作 | **保持原封不動**，不可為了測試新頁籤而新增空殼 renderer 或開 Phase 7 |
 | `shared/ui_semantics/rules.py`／`ui_v3/viewmodels/preview_wording.py` | 19 個 `shell_*` 正式字樣取 `APPROVED_WORDING`；短字串為市場／資產／找基金／AI／設定；已核准字樣不放 pending table | **保持原封不動**，本批不造新標籤、狀態符號或平行字樣表；若佈局裝不下，回 UI Gate，不縮到不能辨識 |
@@ -136,7 +136,7 @@
 ### 8.1 施工順序（條件式，沒有授權立即開始）
 
 1. 獨立驗 44 §2.1 的「四個**視窗寬度段**」及「不把**整頁**推寬」與**局部導覽容器滾動**是否可區分；同時核 44 之十九首屏與帳號入口、57／CONSTITUTION 程序。若仍有歧義，`LEGAL_GATE_UNVERIFIED`，不得自認合規。
-2. 依正式 UI Gate 確認 **S1 或 S2 的精確畫面與字樣**。S1 非橫向滑動，可能需要修 80 §18.2 所列的原「滾動」驗收方向；S2 必須先解上項歧義。兩條不能同時做成互相衝突的 CSS。
+2. ~~依正式 UI Gate 確認 **S1 或 S2 的精確畫面與字樣**~~ → **`DEC-2026-11-07-02` 已核准 S1 精確形狀與既有正式短標**；不得回問選型或寫 S2 的 `overflow-x:auto`。80 §18.2 舊「滾動」已附 supersession 指標。**真實渲染能否符合斷點／首屏／無障礙仍須獨立 QA 與裝置量測**，不可把設計核准當功能驗收。
 3. 先讓 `nav.shell_css()`／`chrome.render_navigation()` 的定向守衛具備新布局測試，再改 Preview shell；只有 🌍 可進、其他五頁槽位仍保留相同可見／禁入狀態；不影響原 Status Bar／資料／認證。
 4. 390×844 與 1280×800 瀏覽器實測，並補 375／374、768／769 與字體縮放／鍵盤 focus；局部滑動時需量測 `documentElement.scrollWidth <= clientWidth` 和容器本身的捲動與鍵盤可操作性，兩者分開記；有資料時須可見結論 chip＋主圖／主數字。WebView／真機未量測一律 `NOT RUN`。
 5. 同 PR 完成定向測試、4 個 CI job、真正非作者 UI／治理 QA 與 production-like 截圖；**不得由本文件的技術清單替代客戶線框、法規適用性與實機驗收**。
