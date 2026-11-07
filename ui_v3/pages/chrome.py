@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """全站共用 Navigation Shell 的畫面（BL-0536 Shell 批；選型 Route C 見 `docs/v2/80` 第 17 節）。
 
-- 導覽：`st.navigation(position="hidden")` 只負責 routing／頁登錄（沿用 `app_preview`）；側欄與手機底部導覽由本檔自畫
-  （`st.sidebar`＋`st.page_link`；底部導覽是 `st.container(key=…, horizontal=True)` 以 CSS 固定在視窗底）。
+- 導覽：`st.navigation(position="hidden")` 只負責 routing／頁登錄（沿用 `app_preview`）；側欄與手機頁首 S1 導覽由本檔自畫
+  （`st.sidebar`＋`st.page_link`；頁首五格由 `st.container(key=…, horizontal=True)` 在文件流內呈現（不吸頂，隨頁面捲動移走））。
   五頁全部可見；已掛載的頁是真連結（`st.page_link`），未掛載的頁是**不可點的文字項**（`aria-disabled`、標「開發中」），
   沒有 renderer、沒有空殼頁、沒有假資料；🤖 在 Phase 7 前不可進（登錄表建構時就擋）。
 - Status Bar：純文字「PREVIEW」＋（有缺資料時）資料狀態一句＋更新時間（不放 chip 形式元素；客戶 2026-11-03 裁示第一項）；內容全來自 `ShellStatus`（既有 health／provenance），沒有自造狀態；
@@ -101,17 +101,17 @@ def disabled_side_html(item: nav.NavItem) -> str:
             f'<span class="uv3-nav-soon">{W.span(item.soon_key)}</span></div>')
 
 
-def disabled_bottom_html(item: nav.NavItem) -> str:
+def disabled_top_html(item: nav.NavItem) -> str:
     label = escape(f"{item.title}（{W.text(item.soon_key)}）")
-    return (f'<div class="uv3-bn-disabled" role="link" aria-disabled="true" aria-label="{label}" data-nav="{escape(item.slug)}">'
-            f'<span class="uv3-bn-icon">{escape(item.icon)}</span><span>{W.span(item.short_key)}</span>'
-            f'<span class="uv3-bn-soon">{W.span(item.soon_key)}</span></div>')
+    return (f'<div class="uv3-tn-disabled" role="link" aria-disabled="true" aria-label="{label}" data-nav="{escape(item.slug)}">'
+            f'<span class="uv3-tn-icon">{escape(item.icon)}</span><span>{W.span(item.short_key)}</span>'
+            f'<span class="uv3-tn-soon">{W.span(item.soon_key)}</span></div>')
 
 
 # ───────────────────────────── Streamlit 畫面 ─────────────────────────────
 
 def render_navigation(pages: Mapping[str, object], current_slug: Optional[str] = None) -> None:
-    """畫側欄（桌機／平板）與底部導覽（手機）。`pages`：已掛載頁的 `slug → st.Page`。兩者都在 DOM，CSS 依斷點二選一。"""
+    """畫側欄（桌機／平板）與 S1 頁首五格（手機）。`pages`：已掛載頁的 `slug → st.Page`。兩者都在 DOM，CSS 依斷點二選一。"""
     import streamlit as st
 
     items = nav.nav_items()
@@ -124,13 +124,13 @@ def render_navigation(pages: Mapping[str, object], current_slug: Optional[str] =
                     st.page_link(pages[item.slug], label=item.name, icon=item.icon or None)
             else:
                 st.markdown(disabled_side_html(item), unsafe_allow_html=True)
-    with st.container(key=nav.BOTTOM_KEY, horizontal=True, gap="small"):
+    with st.container(key=nav.TOP_KEY, horizontal=True, gap="small"):
         for item in items:
             if item.available:
-                with st.container(key=_now_key("bottom", item.slug, current_slug)):
+                with st.container(key=_now_key("top", item.slug, current_slug)):
                     st.page_link(pages[item.slug], label=W.text(item.short_key), icon=item.icon or None, width="stretch")
             else:
-                st.markdown(disabled_bottom_html(item), unsafe_allow_html=True)
+                st.markdown(disabled_top_html(item), unsafe_allow_html=True)
 
 
 def _now_key(where: str, slug: str, current_slug: Optional[str]) -> str:

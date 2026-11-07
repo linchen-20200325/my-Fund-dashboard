@@ -8,7 +8,7 @@
   未掛載的項目**可見但不可進**：沒有任何 renderer、沒有空殼頁、不放假資料。
 - 版面值（斷點、觸控高度）是 Preview 暫用的樣式值，不是 design token（`design/tokens.py` 值未定）。
 - 舊 B 線（`ui_v2/shell_nav.py`）只作 IA／操作經驗參考：這裡不 import、不複製其 presentation code；
-  兩邊都取「≤768 切底部導覽」是 44 第二節 2.1 的同一個客戶斷點，不是搬運。
+  兩邊都取 44 第二節 2.1 的 ≤768 斷點；本版依 BL-0544／DEC-2026-11-07-02 改為手機頁首 S1 五格，不搬運底部呈現。
 """
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ from typing import Optional, Tuple
 
 from ui_v3.shell.registry import IA_PAGES, PageSlot
 
-MOBILE_MAX_PX = 768          # 44 第二節 2.1「≤768：單欄」；≤ 此值顯示底部導覽、隱藏側欄；> 此值相反（兩者不同時出現）
+MOBILE_MAX_PX = 768          # 44 第二節 2.1：≤768 手機頁首、>768 原桌機側欄（兩者不同時出現）
 TOUCH_MIN_PX = 48            # 觸控目標下限（Apple HIG／Material 取 44～48）
-BOTTOM_NAV_HEIGHT_PX = 60    # 底部導覽列高度（不含 safe-area）
-BOTTOM_KEY = "uv3-bottom-nav"
+TOP_NAV_HEIGHT_PX = 60       # S1 頂部導覽最小高度；在文件流內（不吸頂、不貼定位；隨頁面捲動移走），不壓住首屏／頁尾
+TOP_KEY = "uv3-top-nav"
 SIDEBAR_KEY = "uv3-sidebar-nav"
 
 
@@ -39,7 +39,7 @@ class NavItem:
     name: str            # 完整頁名（已核准；不含圖示）
     title: str           # 圖示＋空白＋頁名（＝ registry 的 title，原字）
     available: bool      # True＝可進；False＝可見但不可進（開發中；不是空殼頁）
-    short_key: str       # 手機底部導覽短字樣在規則表 `APPROVED_WORDING` 的鍵
+    short_key: str       # 手機頁首導覽短字樣在規則表 `APPROVED_WORDING` 的鍵
     soon_key: str        # 未掛載時的標籤鍵：🤖 用「尚未開放」（Phase 7 前不可進）、其餘用「開發中」（客戶 2026-11-03，`DEC-2026-11-03-11`）
 
 
@@ -54,8 +54,8 @@ def nav_items(pages: Optional[Tuple[PageSlot, ...]] = None) -> Tuple[NavItem, ..
 
 
 def shell_css() -> str:
-    """Shell 的 CSS（Preview 暫用）：桌機／平板＝左側固定側欄、手機＝固定底部導覽，兩者不同時出現。"""
-    mobile, touch, bar = MOBILE_MAX_PX, TOUCH_MIN_PX, BOTTOM_NAV_HEIGHT_PX
+    """Shell 的 CSS（Preview 暫用）：桌機／平板＝原左側側欄、手機＝文件流內頁首五等分導覽，兩者不同時出現。"""
+    mobile, touch, bar = MOBILE_MAX_PX, TOUCH_MIN_PX, TOP_NAV_HEIGHT_PX
     return f"""
 <style>
 .uv3-pending{{border-bottom:1px dashed rgba(128,128,128,.8)}}
@@ -80,29 +80,32 @@ def shell_css() -> str:
 .uv3-statusbar{{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:12px;line-height:1.5;opacity:.9;margin:0 0 .25rem 0}}
 .uv3-statusbar .uv3-tag{{font-weight:700;letter-spacing:.06em;border:1px solid currentColor;border-radius:4px;padding:0 5px;cursor:help}}
 .uv3-footer{{font-size:12px;opacity:.7;margin-top:1.2rem}}
-/* 底部導覽：預設（桌機／平板）完全不顯示 */
-.st-key-{BOTTOM_KEY}{{display:none !important}}
+/* 頁首導覽：桌機／平板完全不顯示；手機佔用文件流（不吸頂、不貼定位），位於 Streamlit 自帶 stHeader 之下、不覆蓋它 */
+.st-key-{TOP_KEY}{{display:none !important}}
 @media (max-width:{mobile}px){{
   [data-testid="stSidebar"],[data-testid="stSidebarCollapsedControl"],[data-testid="stExpandSidebarButton"]{{display:none !important}}
-  .st-key-{BOTTOM_KEY}{{display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;gap:0 !important;position:fixed;
-    left:0;right:0;bottom:0;z-index:999990;min-height:{bar}px;overflow:hidden;padding-bottom:env(safe-area-inset-bottom);
-    background:#ffffff;border-top:1px solid rgba(128,128,128,.45);color:#262730}}
-  .st-key-{BOTTOM_KEY} [class*="st-key-uv3-nav-"],.st-key-{BOTTOM_KEY} [data-testid="stElementContainer"]{{gap:0 !important;margin:0 !important}}
-  .st-key-{BOTTOM_KEY} > div{{flex:1 1 0 !important;min-width:0 !important;width:auto !important}}
-  .st-key-{BOTTOM_KEY} a[data-testid="stPageLink-NavLink"],.st-key-{BOTTOM_KEY} .uv3-bn-disabled{{display:flex;flex-direction:column;align-items:center;
-    justify-content:center;gap:1px;box-sizing:border-box;height:{bar}px;min-height:0;padding:2px 0;margin:0;text-align:center;border-radius:0;font-size:12px;line-height:1.2;
-    color:inherit;text-decoration:none;border-top:3px solid transparent}}
-  .st-key-{BOTTOM_KEY} a[data-testid="stPageLink-NavLink"] p{{font-size:12px !important;margin:0}}
-  .st-key-{BOTTOM_KEY} [class*="st-key-uv3-nav-now-bottom"] a[data-testid="stPageLink-NavLink"]{{font-weight:700;border-top:3px solid currentColor;
+  .st-key-{TOP_KEY}{{display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;gap:0 !important;
+    width:100%;max-width:100%;min-height:{bar}px;
+    box-sizing:border-box;overflow-x:hidden;margin:0;padding:0;
+    background:var(--background-color,#ffffff);color:inherit;border-bottom:1px solid rgba(128,128,128,.45)}}
+  .st-key-{TOP_KEY} [class*="st-key-uv3-nav-"],.st-key-{TOP_KEY} [data-testid="stElementContainer"]{{gap:0 !important;margin:0 !important;min-width:0 !important}}
+  .st-key-{TOP_KEY} > div{{display:flex !important;flex:1 1 0 !important;min-width:0 !important;width:100% !important}}
+  /* 未掛載項是 st.markdown（stMarkdown 預設 shrink-to-fit，實測 30～40px 寬、低於觸控下限且五格不等寬）→ 逐層撐滿格寬 */
+  .st-key-{TOP_KEY} [data-testid="stMarkdown"],.st-key-{TOP_KEY} [data-testid="stMarkdown"] > div,.st-key-{TOP_KEY} [data-testid="stMarkdownContainer"],
+  .st-key-{TOP_KEY} .uv3-tn-disabled{{width:100% !important;min-width:0 !important}}
+  /* stMarkdownContainer 預設帶負 margin-bottom（約 -1rem）→ 外層量到的高度比內容矮，字放大時內容超出頁首被裁；歸零讓格高跟著內容長 */
+  .st-key-{TOP_KEY} [data-testid="stMarkdownContainer"]{{margin-bottom:0 !important}}
+  .st-key-{TOP_KEY} a[data-testid="stPageLink-NavLink"],.st-key-{TOP_KEY} .uv3-tn-disabled{{display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:1px;box-sizing:border-box;height:auto;min-height:{bar}px;min-width:0;padding:2px 0;margin:0;
+    text-align:center;border-radius:0;font-size:12px;line-height:1.2;color:inherit;text-decoration:none;
+    border-bottom:3px solid transparent}}
+  .st-key-{TOP_KEY} a[data-testid="stPageLink-NavLink"] p{{font-size:12px !important;margin:0;white-space:normal}}
+  .st-key-{TOP_KEY} [class*="st-key-uv3-nav-now-top"] a[data-testid="stPageLink-NavLink"]{{font-weight:700;border-bottom:3px solid currentColor;
     text-decoration:underline;text-underline-offset:3px}}
-  .st-key-{BOTTOM_KEY} .uv3-bn-disabled{{opacity:.55;cursor:not-allowed;font-size:12px}}
-  .st-key-{BOTTOM_KEY} .uv3-bn-icon{{font-size:20px;line-height:1}}
-  .st-key-{BOTTOM_KEY} .uv3-bn-soon{{font-size:10px}}
-  /* 內容不被底部導覽遮住：頁尾可捲到導覽之上（含 safe-area） */
-  .stMainBlockContainer,.block-container{{padding-bottom:calc({bar}px + 24px + env(safe-area-inset-bottom)) !important}}
-}}
-@media (max-width:{mobile}px) and (prefers-color-scheme:dark){{
-  .st-key-{BOTTOM_KEY}{{background:#0e1117;color:#fafafa}}
+  .st-key-{TOP_KEY} a[data-testid="stPageLink-NavLink"]:focus-visible{{outline:2px solid currentColor;outline-offset:-3px}}
+  .st-key-{TOP_KEY} .uv3-tn-disabled{{opacity:.55;cursor:not-allowed;font-size:12px}}
+  .st-key-{TOP_KEY} .uv3-tn-icon{{font-size:20px;line-height:1}}
+  .st-key-{TOP_KEY} .uv3-tn-soon{{font-size:10px}}
 }}
 </style>
 """

@@ -3,7 +3,7 @@
 
 涵蓋：導覽（五頁、順序、只有已掛載頁可進、未掛載頁可見但不可進、無空殼頁、🤖 不可進）、Status Bar／側欄資料狀態區
 （內容只來自既有 health；全取得時不寫「正常」；沒有取得時間寫缺資料、不推估）、更新資料 CTA（本批不可用＋原因）、
-Responsive（斷點、底部導覽與側欄不同時出現、觸控高度、safe-area、內容不被遮住——靜態 CSS 檢查；真實 390／1280 量測見
+Responsive（斷點、頁首導覽與側欄不同時出現、觸控高度、無吸頂／無底部 overlay——靜態 CSS 檢查；真實 390／1280 量測見
 `docs/evidence/bl0536_shell_h5_2026-11-03/`）、字樣（Shell 新字樣一律 pending、不外漏工程資訊）、Missing（complete／partial／
 failure／not configured／all missing）。⚠️ AppTest 不載入瀏覽器 CSS，版面以 Playwright evidence 另證。
 負控一律在記憶體內現編，不寫檔、不把負控字串寫進文件。
@@ -146,7 +146,7 @@ def test_disabled_nav_items_are_not_links_and_say_under_development():
     for item in nav.nav_items():
         if item.available:
             continue
-        for html in (chrome.disabled_side_html(item), chrome.disabled_bottom_html(item)):
+        for html in (chrome.disabled_side_html(item), chrome.disabled_top_html(item)):
             assert 'aria-disabled="true"' in html and "<a " not in html and "href" not in html
             assert W.text(item.soon_key) in html and item.title in html
 
@@ -256,17 +256,49 @@ def test_nav_and_viewmodel_modules_import_without_streamlit():
 
 # ───────────────────────────── Responsive（靜態 CSS 檢查） ─────────────────────────────
 
-def test_css_switches_between_sidebar_and_bottom_nav_at_one_breakpoint():
+def test_css_switches_between_sidebar_and_top_nav_at_one_breakpoint():
     css = nav.shell_css()
-    assert nav.MOBILE_MAX_PX == 768 and nav.TOUCH_MIN_PX >= 44 and nav.BOTTOM_NAV_HEIGHT_PX >= nav.TOUCH_MIN_PX
+    assert nav.MOBILE_MAX_PX == 768 and nav.TOUCH_MIN_PX == 48 and nav.TOP_NAV_HEIGHT_PX >= nav.TOUCH_MIN_PX
     base, _, mobile = css.partition(f"@media (max-width:{nav.MOBILE_MAX_PX}px)")
     assert mobile, "沒有手機斷點"
-    assert f".st-key-{nav.BOTTOM_KEY}" in base and "display:none !important" in base.split(f".st-key-{nav.BOTTOM_KEY}")[1][:80]   # 桌機不顯示底部導覽
-    assert 'stSidebar"]' in mobile and "display:none" in mobile                                                                   # 手機不顯示側欄
-    assert "position:fixed" in mobile and "bottom:0" in mobile and "env(safe-area-inset-bottom)" in mobile
-    assert "padding-bottom:calc(" in mobile and "block-container" in mobile                                                       # 內容不被導覽遮住
-    assert "font-weight:700" in css and "text-decoration:underline" in mobile                                                     # active 不只靠顏色
-    assert "overflow" not in css.split("<style>")[1].split("[data-testid=\"stSidebarCollapseButton\"]")[0]
+    assert f".st-key-{nav.TOP_KEY}" in base
+    assert "display:none !important" in base.split(f".st-key-{nav.TOP_KEY}")[1][:80]
+    assert 'stSidebar"]' in mobile and "display:none" in mobile
+    top_rule = mobile.split(f".st-key-{nav.TOP_KEY}{{", 1)[1].split("}", 1)[0]
+    assert "display:flex !important" in top_rule and "width:100%" in top_rule                    # 文件流內一排五格
+    assert "position:" not in top_rule and "z-index" not in top_rule and "top:" not in top_rule  # 非 sticky／fixed／overlay：不吸頂、不壓 Streamlit 自帶 stHeader
+    assert "sticky" not in css
+    assert "flex-wrap:nowrap" in mobile and "overflow-x:hidden" in mobile and "width:100%" in mobile
+    # 格高：下限 TOP_NAV_HEIGHT_PX（≥ 觸控下限 48），且 `height:auto` 讓字放大時格子跟著內容長（固定高度會在 190% 字體把文字裁掉）
+    assert f"min-height:{nav.TOP_NAV_HEIGHT_PX}px" in mobile and "height:auto" in mobile
+    assert nav.TOP_NAV_HEIGHT_PX >= nav.TOUCH_MIN_PX == 48
+    assert " height:" + f"{nav.TOP_NAV_HEIGHT_PX}px" not in mobile and ";height:" + f"{nav.TOP_NAV_HEIGHT_PX}px" not in mobile   # 不得留固定高度
+    # 未掛載項是 st.markdown：必須逐層撐滿格寬、並歸零 stMarkdownContainer 的負 margin-bottom（真瀏覽器實測：否則五格不等寬、高度被低估）
+    assert '[data-testid="stMarkdown"]' in mobile and "width:100% !important" in mobile
+    assert '[data-testid="stMarkdownContainer"]{margin-bottom:0 !important}' in mobile
+    import re
+
+    assert not re.search(r"(?<![-\w])bottom:\s*0", mobile) and "position:fixed" not in mobile   # 沒有貼底定位（`margin-bottom:0` 不算）
+    assert "padding-bottom:calc(" not in mobile                    # 不再有底部 overlay 的避讓假空間
+    assert "font-weight:700" in css and "text-decoration:underline" in mobile
+    assert ":focus-visible" in mobile and "outline:" in mobile
+    assert "overflow-x:auto" not in mobile and "overflow-x:scroll" not in mobile
+    assert "overflow" not in css.split("<style>")[1].split('[data-testid="stSidebarCollapseButton"]')[0]
+
+
+def test_top_nav_is_not_a_second_router_and_uses_all_five_approved_labels():
+    from ui_v3.pages import chrome
+    import inspect
+
+    render_src = inspect.getsource(chrome.render_navigation)
+    assert "nav.TOP_KEY" in render_src and "nav.BOTTOM_KEY" not in render_src
+    assert "st.page_link" in render_src and "disabled_top_html" in render_src
+    assert [W.text(i.short_key) for i in nav.nav_items()] == ["市場", "資產", "找基金", "AI", "設定"]
+    assert {i.slug for i in nav.nav_items() if i.available} == {"mkt"}
+    assert all(not i.available for i in nav.nav_items() if i.slug != "mkt")
+    css = nav.shell_css()
+    assert ".st-key-uv3-bottom-nav" not in css
+    assert "position:fixed" not in css
 
 
 def test_sidebar_has_no_collapse_control_and_no_second_nav_on_desktop():
@@ -342,7 +374,7 @@ def test_app_renders_shell_with_five_pages_status_bar_cta_and_footer(monkeypatch
 
 def test_app_has_exactly_one_navigable_page_and_no_empty_shell_pages(monkeypatch):
     at = run(monkeypatch)
-    # 導覽連結只有 🌍（側欄一個＋底部一個）；未掛載頁沒有 renderer、沒有 `st.Page`
+    # 導覽連結只有 🌍（側欄一個＋頁首一個）；未掛載頁沒有 renderer、沒有 `st.Page`
     links = [e for e in at.get("page_link")] if hasattr(at, "get") else []
     assert len(links) == 2, links
     assert {l.proto.label for l in links} == {"市場與趨勢", "市場"}
