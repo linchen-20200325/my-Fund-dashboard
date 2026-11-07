@@ -2450,6 +2450,19 @@
 | 施工授權 | **只完成 S1 設計裁示**。原 `DEC-2026-11-07-01` 的條件式 Preview-only `ui_v3` Shell 施工範圍不變；仍需 #1163 **真正非作者治理／適用性 QA**、最新 head CI、合併／交接一致性及必要驗收。QA 未通過前不叫 Claude Code 動工、不可動 Old UI／`ui_v2`／OAuth／Active Sheet／金融公式／Risk Cap／OneBrain／Phase 7／frozen 44。 |
 | 來源／狀態 | 本次 ChatGPT 對話中客戶回答「可以」，前一題已具體描述 S1；`BL-0544`、`docs/evidence/bl0544_mobile_top_tabs_minimal_gate_proposal_2026_11_07.md`、PR #1163。**DESIGN S1 APPROVED；LEGAL／INDEPENDENT QA UNVERIFIED；CODE NOT STARTED。** |
 
+### DEC-2026-11-07-03｜BL-0545 核准新增唯讀覆蓋率探針（Phase 1：匿名代號清單／離線 fixture）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-07（Asia/Taipei） |
+| 決策者／逐字原話 | **客戶**：「核准唯讀探針」（PR #1167 留言 issuecomment-6706943888）。**要點轉述不冒充逐字，逐字僅引號內**；下列「核准範圍」「不授權」是對該授權射程的整理。 |
+| 核准範圍 | 新增 BL-0545 專用、獨立、唯讀、非 production decision 的覆蓋率測量探針 `scripts/bl0545_coverage_probe.py`；Phase 1 只支援使用者自備匿名基金代號清單與離線 fixture（含呼叫端注入的 fetcher）。主分組鍵沿用 production `services/v2_tables/fund_keys.py::resolve_full_keys`；DG2 canonical identity（`services/fund_identity.py::resolve_fund_identity`，`shared/fund_identity.DG2_SHADOW_ENABLED` 預設 False）僅作平行差異報告，不影響主分組。輸出三層分母（全體唯一基金／抓取成功／各維適用）、五維分項狀態、缺值與抓取失敗原因、來源／時間／版本證據，並明確標 NOT VERIFIED／NOT RUN。Active Sheet 讀取若將來實作，只能沿用既有 OAuth 唯讀路徑（**本批不實作、不呼叫**）；不得要求或保存密碼／token。 |
+| 不授權 | 新增或替換 production 資料來源；寫回 Google Sheet；改 OAuth／登入／scope；讀取或儲存 token／密碼／環境變數憑證；改 Grade／`compute_4d_health`／公式／門檻／權重／Risk Cap／FX provider；接正式 UI／OneBrain／投資決策；缺值填 0；把未驗證當通過；把 fixture／公開樣本當真實 Active Sheet 覆蓋率；改 frozen `docs/v2/44`／`57`／CONSTITUTION。**仍未授權**：live Active Sheet 讀取、stale／conflict 的日期或差距門檻（探針一律標 `not_evaluated`）、「正式准入」定義（輸出固定 `admission: "NOT DEFINED"`）、`SUPPORTED_FX` 是否成為守門條件。 |
+| 證據來源 | PR #1167 留言 issuecomment-6706943888；`docs/evidence/bl0545_active_sheet_coverage_probe_status_2026_11_07.md`（#1166，第 4 節協定與 T1～T10、第 7 節裁示點 5）。本批施工說明見 `docs/evidence/bl0545_coverage_probe_phase1_2026_11_07.md`。 |
+| 技術邊界 | 單檔獨立腳本，無 production 呼叫端；腳本本身不 import streamlit；預設離線；live 抓取模式 **NOT IMPLEMENTED**；維度結果只由唯讀呼叫 `compute_4d_health` 的回傳導出，不自行重算分數；協定 T3 依本次限定改為 shadow 比較。 |
+| 可逆性 | 可逆：刪除探針腳本、測試與本批文件即還原，未觸及任何 production 路徑。 |
+| supersedes | 無。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
