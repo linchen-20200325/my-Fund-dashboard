@@ -8,9 +8,9 @@
 
 | 項 | 2026-11-07 查核 |
 |---|---|
-| Repository／main | `linchen-20200325/my-Fund-dashboard`；`b215d13b8def1715005d68087b266058f812046b`（#1162 以一般 merge commit 合入；2026-11-07 GitHub 查核） |
-| main CI | #1162 **合併前 head** `69fded71` Fast／Schema／Slow／Visual 四項 success；合併後 main `b215d13b` 的 push CI 在本批尚未全部核實 success，不得繼承前 head 的結果 |
-| Open PR（2026-11-07 GitHub 實查） | 原 #1150／#1160 保留 Draft 作歷史；#1161（`5782ba89`）與 #1162（`b215d13b`）已合入 main；#1163 是 BL-0544 最小合法方案 B 的**待獨立 QA Draft 文件 PR**；#1151／#1152／#1154／#1157／#1158／#1159 仍開放，狀態以 GitHub 為準 |
+| Repository／main | `linchen-20200325/my-Fund-dashboard`；`e1e05ad38ea1d3df0c6093a96d1d2b68c20f5bf5`（#1152／#1154 均以一般 merge commit 合入；2026-11-07 GitHub 查核） |
+| main CI | 新 main `e1e05ad38` 的 Fast／Schema／probe（2026-11-07 本次）仍有 in_progress；不把前次 PR 或其他 SHA 的 CI success 冒稱新 main 完整成功 |
+| Open PR（2026-11-07 GitHub 實查） | 原 #1150／#1160 保留 Draft 作歷史；#1161（`5782ba89`）與 #1162（`b215d13b`）已合入 main；#1163 是 BL-0544 最小合法方案 B 的**待獨立 QA Draft 文件 PR**；#1151／#1157／#1158／#1159 仍開放；#1152／#1154 已正常合併，狀態以 GitHub 為準 |
 | 已知檢查 | #1162 最終 head `69fded71` 四項 CI success、非作者獨立 QA 與 HANDOFF 增量 QA 必修 0，已正常合併。BL-0544 顧客已同意方案 B（`DEC-2026-11-07-01`），但合法適用性／精確線框／獨立 QA **仍待 Gate**；#1158 僅作歷史證據 |
 | 文件整合 | #1153（BL-0543／H14）、#1161 登入設計與 #1162 頂部分頁／健康覆蓋裁示已合入 main；#1163 為 BL-0544 方案 B 核准與必要文件收斂的 Draft，**沒有改 frozen 44／57 或程式**，不得當成施工完成 |
 
@@ -18,7 +18,7 @@
 
 | 項 | 狀態 |
 |---|---|
-| #1152／#1154 | 清理 Work（Draft）；#1153 已合入 main（merge commit `be6e1e34`）；合併前須重查 head CI 與獨立 QA |
+| #1152／#1154 | 清理 Work 已合入 main（merge commits `0fa8deb3`／`e1e05ad3`）；#1153 早已合入 main（`be6e1e34`）；後續不得當成仍開放的 Draft |
 | 工具盤點 ≠ 死碼確認 | 靜態可達性工具輸出只是候選清單，刪除前仍須逐項人工與 caller 實測 |
 | 分支保護 | 讀取 HTTP 403、rulesets=[]：必要檢查 **未驗證**，不得宣稱已驗證 |
 | 證據位置 | `BL-0543`；歷史檔 H14 `docs/evidence/history/2026-11-05_cleanup_handoff_superseded.md`（已在 main）；本 PR 的舊 HANDOFF 全文見 `docs/evidence/history/2026-11-06_handoff_before_top_tabs_health_ruling.md` |
