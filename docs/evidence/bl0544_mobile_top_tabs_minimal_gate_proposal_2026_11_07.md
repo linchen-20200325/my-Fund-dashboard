@@ -128,7 +128,7 @@
 | `ui_v3/design/tokens.py` | `nav.bottom`、`nav.item` 仍是**值為 None**的設計 token 名稱，非 production 數值 | 僅在正式 UI contract 要求改名／定值時一併修改其測試；**不能把 `nav.bottom` 沿用作新頂欄的正式語意** |
 | `ui_v3/app_preview.py` | 模組文件仍稱手機底欄，`main()` 沿用 routing／renderer | 實作批若產生已核准新行為，**只同步 docstring**，不得動正式入口或 cutover |
 | `tests/ui_v3/test_ui_v3_navigation_shell.py` | `test_css_switches_between_sidebar_and_bottom_nav_at_one_breakpoint` 明確斷言 `BOTTOM_NAV_HEIGHT_PX`、`bottom:0`、底部避讓；`test_disabled_nav_items_are_not_links_and_say_under_development` 覆蓋不可點；AppTest 有真頁註冊檢查 | 逐條改**過期底欄斷言**為核准的新頂欄契約，維持原有 IA／disabled／字樣／Missing／狀態守衛；不得為求綠燈直接刪測試 |
-| `tests/ui_v3/test_ui_v3_design_tokens.py`、`tests/visual_fidelity/vf_config.py` | token 守衛可能與 `nav.bottom` 綁定；Visual Fidelity viewport 現僅 390×844、1280×800（見既有清冊 §3） | 新測 375／374、768／769 由**額外定向證據**補足；原 390／桌機截圖保留。若更改 VF 配置引起其他工作流行為改變，另核最小範圍 |
+| `tests/ui_v3/test_ui_v3_design_tokens.py`、`tests/visual_fidelity/vf_config.py` | `tests/ui_v3/test_ui_v3_design_tokens.py:30` **確實斷言** `nav.bottom` 必存在；`tests/visual_fidelity/vf_config.py:21–24` 的 `VIEWPORTS` **只有** 390×844、1280×800（2026-11-07 main 逐檔回讀） | 新測 375／374、768／769 由**額外定向證據**補足；原 390／桌機截圖保留。若更改 VF 配置引起其他工作流行為改變，另核最小範圍 |
 | `docs/evidence/bl0536_shell_h5_2026-11-03/measure.js` | 歷史 Chromium 測量腳本硬查 `.st-key-uv3-bottom-nav`，用底欄頂緣作首屏下限 | **不要改寫歷史測量證據**；在新 UI Code PR 另存量測版本，改按 viewport 真實可視範圍、頁首佔用與 chart 起點計算；不要把舊底欄測量冒充新驗收 |
 
 ### 8.1 施工順序（條件式，沒有授權立即開始）
