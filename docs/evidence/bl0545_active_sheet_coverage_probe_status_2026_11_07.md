@@ -34,7 +34,7 @@
 |---|---|---|---|---|
 | F1 | `compute_4d_health` 名為 4D、實為五維（coverage／sharpe／trend／volatility／fx_risk） | `services/health/grade.py::compute_4d_health` | **成立** | 內部 `_dims` 字典五鍵；`n_total` 為字典長度 |
 | F2 | 最低維度規則：`GRADE_4D_MIN_FACTORS` 且須有 coverage 或 Sharpe 至少一個核心維度才輸出字母等第 | `services/health/grade.py::compute_4d_health`；常數 `shared/signal_thresholds.py::GRADE_4D_MIN_FACTORS` | **成立** | 條件為「已算出維度數不少於該常數」且「coverage 或 sharpe 至少一個非 None」。本文件**不引述該常數的數值**，不重述門檻 |
-| F3 | 2/5 的字母不可被說成 5/5 | 同上；回傳值內 `coverage` 子字典含 `n_scored`／`n_applicable`／`n_total`／`missing`／`ratio` | **已變（方向為補強）** | #1157 當時寫「原始覆蓋 … 必須外露」；目前 main 已有揭露欄位：`services/health/report.py::_grade_coverage_label`（「評分覆蓋」欄）、`services/health/action.py` 的覆蓋旗標、`ui/tab2_single_fund.py` 的覆蓋顯示。**但**這些揭露只涵蓋 scored／missing／N/A 三態，見 F9 |
+| F3 | 2/5 的字母不可被說成 5/5 | 同上；回傳值內 `coverage` 子字典含 `n_scored`／`n_applicable`／`n_total`／`missing`／`ratio` | **成立（已落地）** | #1157 寫的是「必須外露」的要求，不是「目前沒有」；目前 main 已落地揭露欄位：`services/health/report.py::_grade_coverage_label`（「評分覆蓋」欄）、`services/health/action.py` 的覆蓋旗標、`ui/tab2_single_fund.py` 的覆蓋顯示。**但**這些揭露只涵蓋 scored／missing／N/A 三態，見 F9 |
 | F4 | 批次報表路徑 `ma_dir=None`，trend 維只能靠 1Y 報酬回退 | `services/health/report.py::build_health_analysis_row` | **成立** | 呼叫 `compute_4d_health` 時 `ma_dir=None` |
 | F4b | （#1157 未提）其他 `compute_4d_health` caller 同樣不傳 MA 方向 | `services/health/replacement.py`（替換判定內部呼叫）、`ui/tab2_single_fund.py`（個基卡） | **新增發現（成立）** | 兩處呼叫亦為 `ma_dir=None`。依目前讀碼，production 內**沒有任何 caller 傳入實際 MA 方向**；`_score_trend` 的 `up`／`down` 分支在 production 路徑上是否曾被觸發：**NOT VERIFIED**（只確認了這三個 production 呼叫點的引數，未做全 repo 動態追蹤） |
 | F5 | FX 歷史波動提供器只支援 USD | `services/fx_regime_service.py::SUPPORTED_FX`；`fx_regime_by_ccy` | **成立（附註）** | 常數內容為單一 USD。附註：`SUPPORTED_FX` 在 production 程式碼中**只有定義、沒有被 `fx_regime_by_ccy` 引用來做把關**；實際限制來自該函式內寫死只填 `_CACHE["USD"]`。兩者目前一致，但**常數本身不是守門條件**（若日後只擴充常數而不改函式，不會生效） |
@@ -48,16 +48,16 @@
 
 ## 3. 合法取得 Active Sheet 持倉的現有路徑與憑證前提
 
-### 3.1 現有路徑（只描述，不新增程式）
+### 3.1 現有路徑（以下是對既有程式的描述；本文件不新增程式）
 
 | 路徑 | 檔案＋符號 | 憑證前提 | 與 BL-0545 的關係 |
 |---|---|---|---|
 | 個人 OAuth 登入 | `infra/personal_oauth.py`（`begin_authorization`／`complete_authorization`／`confirm_pending_login`／`ensure_fresh`／`logout`） | 部署 secrets 內的 Google OAuth client 設定（`load_client_config`）；使用者本人在瀏覽器完成授權；scope 為最小唯讀 | token 只存在使用者 session 的 runtime；不寫檔、不寫 Sheet |
 | Active Sheet 狀態機 | `shared/active_sheet.py`（`set_pending`／`activate_pending`／`get_active`） | 需要同一 session 已有正式登入帳號 sub；驗證成功才成為 Active；換帳號即失效 | 持倉資料來源的唯一合法選定入口；未選定時不得自動用 `POLICY_SHEET_ID`、不得自動選第一本、不得沿用舊 session（J-13） |
-| 個人 Active Sheet 唯讀讀取 | `repositories/personal_policy_reader.py::load_workbook_tables`（目標由呼叫端注入 `(sheet_id, access_token)` 與 `account_sub`） | 需要上述 session 的 access token；本檔不讀設定、不讀環境變數、不讀服務帳戶，無 fallback | 回傳保單分頁列（含 `fund_code` 等欄）；只有讀取呼叫 |
+| 個人 Active Sheet 唯讀讀取 | Active Sheet 路徑為 `services/v2_tables/alo_holdings.py::load_alo_tables_active`，其底層為 `repositories/personal_policy_reader.py::load_workbook_tables(target, *, account_sub, mask)`（`target` 為呼叫端注入的 `(sheet_id, access_token)`）。**同檔 `load_alo_tables`（服務帳戶＋`POLICY_SHEET_ID` 舊路徑，現僅 `refetch_nav` 使用）不是 Active Sheet 路徑** | 需要上述 session 的 access token；本檔不讀設定、不讀環境變數、不讀服務帳戶，無 fallback | 回傳保單分頁列（含 `fund_code` 等欄）；只有讀取呼叫 |
 | session 組裝 | `services/v2_tables/personal_session.py`、`services/v2_tables/alo_holdings.py`、`ui_v3/adapters/assets_source.py` | 同上 | 組出 `fund_code` 對照與持倉表給資產頁；皆為既有唯讀消費者 |
 | 服務帳戶＋部署固定 Sheet | `repositories/policy_supplement_repository.py`（`POLICY_SHEET_ID`）、`repositories/policy/*` | 服務帳戶金鑰＋部署 secret | **不是** Active Sheet 路徑；依 J-7／J-13 不得作為個人持倉的替代或 fallback。**不可**用於 BL-0545 的 Active Sheet 覆蓋率 |
-| 使用者自備代號清單 | `scripts/audit_6d_coverage.py --from-file`（亦支援 `--from-checkpoint`、命令列代號） | 無需 Google 憑證；需要可連 MoneyDJ 的網路 | 該腳本刻意**不**讀 Google Sheet 政策；它抓的是三個 6D 候選維度，不是五維健康評分，**不能直接當五維覆蓋率探針** |
+| 使用者自備代號清單 | `scripts/audit_6d_coverage.py --from-file`（亦支援 `--from-checkpoint`、命令列代號） | 無需 Google 憑證；需要可連 MoneyDJ 的網路 | 該腳本刻意**不**讀 Google Sheet 政策；它抓的是三個 6D 候選維度，不是五維健康評分，只輸出費用率、規模、匯率三項文字；其去重是自己的字串 strip 加 upper，**不是** DG2／`resolve_full_keys`。**不能當五維覆蓋率探針，也不能產出第 4 節協定 JSON** |
 
 ### 3.2 在沒有使用者登入下，哪些步驟不可能
 
@@ -67,10 +67,12 @@
 4. 臆造持倉：持倉代號是使用者私人資料，不可猜測、不可用公開熱門基金代替。
 5. 另查：本環境 `.streamlit/` 僅有 `config.toml` 與 `secrets.toml.example`，沒有實際 secrets 檔（NOT VERIFIED 的是 Streamlit Cloud 部署端另行注入的 secrets，本環境看不到）。
 
-### 3.3 合法的唯讀探針執行方式（兩種擇一，皆不新增程式碼）
+### 3.3 合法的唯讀探針執行方式（兩種擇一；兩者都需要先有探針程式）
+
+**據實說明：目前 repo 內不存在可直接產出第 4 節協定 JSON 的探針**（沒有去重到 canonical 身份、proxy／unsupported 判讀、五維狀態計數的現成可執行物）。方式 A、B 都須先有一支只讀探針程式；該程式是否可新增見第 7 節裁示點 5。以下只說明「誰在哪裡以什麼授權執行才合法」。
 
 - **方式 A：使用者在自己的登入 session 內執行。** 由使用者以自己的帳號登入、選定 Active Sheet 後，在該 session 內以既有唯讀路徑取得持倉列，再由使用者本人（或使用者授權的當下工作階段）執行探針協定（第 4 節）。最小授權即現有 J-1 的唯讀 scope，**不得**新增寫入 scope、不得持久化 token。
-- **方式 B：使用者自行提供匿名化基金代號清單。** 使用者自行從自己的 Sheet 匯出「基金代號」欄（可去除保單編號、金額等其他欄位），一行一個，交由 `scripts/audit_6d_coverage.py --from-file` 或等價的唯讀探針消費。此方式不需要任何 Google 憑證，但產出的**身份去重與「保單持倉列」對應需由使用者提供對照**（匿名化後無法還原 `policy_id`）。
+- **方式 B：使用者自行提供匿名化基金代號清單。** 使用者自行從自己的 Sheet 匯出「基金代號」欄（可去除保單編號、金額等其他欄位），一行一個，交由（待核准新增的）只讀探針消費；現有 `scripts/audit_6d_coverage.py --from-file` 只能取得費用率、規模、匯率三項文字，不能替代。此方式不需要任何 Google 憑證，但產出的**身份去重與「保單持倉列」對應需由使用者提供對照**（匿名化後無法還原 `policy_id`）。
 - 兩種方式都需要：可連到 MoneyDJ 等既有合法來源的網路；以及探針的**輸入、輸出、時間戳**留存為 Evidence（第 4 節）。
 
 ## 4. 可重現的探針協定（調查協定，不是新產品規格，不新增門檻）
@@ -80,6 +82,7 @@
 1. **原始持倉列**（保留，不丟棄）：每列至少 `policy_id`、`fund_code`（Sheet「基金代號」欄原值），其餘欄位視使用者匿名化需求而定。
 2. **基金身份去重**：以 `(policy_id, fund_code)` 保留原始保單持倉列；再把 `fund_code` 對應到 canonical 基金身份。去重規則**引用 repo 既有規則，不自創**：
    - Sheet「基金代號」欄的代號依 `DEC-2026-10-28-05`／`DEC-2026-10-29-01`，以 `services/fund_identity.py::resolve_fund_identity(..., input_source="sheet_fund_code_column")` 的語意判定：只有 `verification_status` 為 `base_resolved_attributes_unverified` 的結果才有 `canonical_key`，可據以合併；`unresolved`、`namespace_unknown_suffix_not_stripped`、`moneydj_suffix_unverified_not_stripped`、`sheet_code_contract_violation`、`exception_distinct_series_needs_decision` 等狀態**一律不合併**，以完整原始代碼（逐字相同才算同一檔）各自計為獨立身份並標明原因。
+   - 身份解析會先對輸入做 `strip()` 並轉大寫（`services/fund_identity.py::resolve_fund_identity` 內經由 `services/v2_tables/fund_keys.py::_resolve_one`，另要求 ASCII）；探針不得另寫不同的正規化。
    - 禁止用名稱相似性合併；禁止從後綴、幣別、名稱推斷屬性（沿用 DG2 裁示：未知就是 Unknown）。
    - 注意：`DG2_SHADOW_ENABLED` 目前為關閉；production 路徑的對照鍵為 `services/v2_tables/fund_keys.py::resolve_full_keys`（Sheet `fund_code` → MoneyDJ `full_key`，對不上回錯誤、不截斷、不猜）。探針去重應採**哪一個鍵**作為「唯一基金」的最終定義，是**需要客戶或總管明確指定的點**（見第 7 節），本文件不替它選。
 3. **探針執行時點**：記錄 `fetched_at`（探針實際執行時間，UTC，含時區）。
@@ -142,7 +145,8 @@
 
 欄位規則：
 
-- **五個互斥狀態**（`not_applicable`／`unsupported`／`missing`／`stale`／`conflict`）加上 `scored`，對每一檔、每一維**恰好屬於一個**。維度層計數必須滿足：`scored_n + not_applicable + unsupported + missing + stale + conflict` 等於 `fetch_success`（抓取成功的基金數）；`applicable_n` 為扣除 `not_applicable` 後的基金數。**抓取失敗的基金不進任一維計數，單獨記在 `fetch_failed`**，且 `fetch_success + fetch_failed + not_attempted` 必須等於 `unique_funds`（`not_attempted` 即下一條的身份無法解析者）。
+- **null 規則**：「尚未量測／不適用於本輸出」一律用 null；T1 空清單同樣各維計數用 null。
+- **五個互斥狀態**（`not_applicable`／`unsupported`／`missing`／`stale`／`conflict`）加上 `scored`，對每一檔、每一維**恰好屬於一個**。維度層計數必須滿足：`scored_n + not_applicable + unsupported + missing + stale + conflict` 等於 `fetch_success`（抓取成功的基金數）；`applicable_n` 為扣除 `not_applicable` 後的基金數，因此 `unsupported`、`missing`、`stale`、`conflict` 都計入 `applicable_n`（協定約定，比照 production 把 missing 計入適用分母的慣例；不是新門檻，也不是新准入規則）。**抓取失敗的基金不進任一維計數，單獨記在 `fetch_failed`**，且 `fetch_success + fetch_failed + not_attempted` 必須等於 `unique_funds`（`not_attempted` 即下一條的身份無法解析者）。
 - 身份無法解析的代碼：計入 `unique_funds` 並標 `identity_unresolved`，其 `fetch_status` 為 `not_attempted`，**不得**悄悄從分母移除（輸出的 `population` 需另含 `not_attempted` 計數）。
 - **proxy 標記**：該維若使用替代資料（例如以 6M 數值代 1Y、以其他幣別代該幣別、以報酬回退代 MA 方向），`proxy` 必為 true 並在 `reason_code` 說明；**不得**把 proxy 計為與原生同口徑的 scored 而不揭露。
 - **目前程式能自然產出的狀態**：現行 `compute_4d_health` 只輸出 scored／missing／n/a（見 F9）。`unsupported`、`stale`、`conflict` 若要在探針中出現，必須由**探針自身的判讀層**依證據標記（例如非 USD 外幣標 `unsupported`，因現行 provider 僅支援 USD），並在 `reason_code` 註明這是探針標籤，不是 production 輸出。本協定**不定義**判 stale／conflict 的日期或差距門檻；若需要，須另行請客戶裁示。
@@ -162,7 +166,7 @@
 
 | # | 輸入 | 預期輸出（結構性） |
 |---|---|---|
-| T1 | 空清單 | `unique_funds` 為 0，各維計數皆 0 或 null，不得除以 0 產生比率；不得輸出任何覆蓋比率 |
+| T1 | 空清單 | `unique_funds` 為 0，各維計數皆 null，不得除以 0 產生比率；不得輸出任何覆蓋比率 |
 | T2 | 同一 `fund_code` 出現在兩個不同 `policy_id` | `holding_rows` 為 2、`unique_funds` 為 1；`per_fund[0].policy_rows` 含兩個項目；該基金只抓取一次 |
 | T3 | 兩個 `fund_code` 字串不同但 DG2 判為同一 `canonical_key` | 合併為一檔，`identity_status` 為 `base_resolved_attributes_unverified`；若判為 `namespace_unknown…`／`…not_stripped`，則**不合併**，兩檔各自計 |
 | T4 | 台幣計價基金 | fx_risk 狀態為 `not_applicable`，不進 fx_risk 的 `applicable_n`，也不進 missing |
@@ -173,9 +177,11 @@
 | T9 | 任一輸出 | 維度計數合計等於 `fetch_success`；任何不等即判探針輸出無效並停止，不得補數 |
 | T10 | 輸出檔本身 | 不含 token、client secret、原始 sheet id、Email、內網位址；`active_sheet_id_hash` 為雜湊 |
 
+補充：`DEC-2026-10-29-06` 部分 supersede J-13 的導覽目的地字面（「前往 ⚙️ 設定」），只影響該字面；「不自動用 `POLICY_SHEET_ID`、不自動選第一本、不沿用舊 session 值」照舊。
+
 ## 5. 結論與限制
 
-1. **現況事實**：#1157 的承重事實在目前 main 大致仍成立；唯一明顯的「已變」是覆蓋揭露欄位已存在於報表與個基卡（F3），但現行揭露只覆蓋 scored／missing／N/A 三態。
+1. **現況事實**：#1157 的承重事實在目前 main 大致仍成立；未發現與 #1157 敘述不一致之處；F3 的覆蓋揭露要求已落地於報表、action 旗標與個基卡，但現行揭露只涵蓋 scored／missing／N/A 三態。
 2. **新增發現（單組、未獨立複驗）**：F4b（三個 production 呼叫點皆 `ma_dir=None`）與 F5 附註（`SUPPORTED_FX` 只有定義、不是守門條件）。
 3. **無法回答的問題（NOT VERIFIED）**：Active Sheet 內有多少唯一基金、多少抓得到、五維各自命中多少。原因單一：沒有合法的使用者憑證／持倉清單。
 4. **BL-0545 的下一步**取決於使用者以第 3.3 節方式 A 或 B 提供輸入；在此之前**不得**以任何合成或猜測資料宣稱覆蓋率。
@@ -194,3 +200,4 @@
 2. **stale／conflict／unsupported 的判定依據**：現行 production 不產出這三態；若要成為正式准入欄位，需客戶裁示定義（本協定刻意不定義日期或差距門檻）。
 3. **探針由誰執行**：方式 A（使用者登入 session）或方式 B（使用者提供匿名化代號清單），以及方式 B 下是否接受「無法還原保單層級對應」。
 4. **`SUPPORTED_FX` 是否應成為真正的守門條件**：目前為文件性常數；屬產品／程式行為變更，須另案，不在 BL-0545 展示方向的授權內。
+5. **是否授權在 BL-0545 範圍內新增只讀探針腳本**（不改 Grade／公式／UI／OAuth、不新增資料來源、不寫回 Sheet），及其 Gate 判斷。**推薦：授權**，限定為只讀、輸出符合第 4 節協定、不含任何門檻或准入判定，並經獨立稽核。理由：現況沒有任何可產出協定 JSON 的程式，不新增就無法取得真實分母，BL-0545 會停在 NOT VERIFIED；風險面窄，因為不碰評分、UI、OAuth 與資料來源。若客戶認為新增腳本屬需 Gate 的行為，請裁示後再動工。
