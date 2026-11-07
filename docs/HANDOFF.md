@@ -41,9 +41,11 @@
 
 ## 4. 接手點與禁止事項
 
-**BL-0544 2026-11-07 新增明確阻塞（GitHub 逐條初核，非獨立 QA）**：44 §2.1 明寫「**任何一段都不出現橫向捲動**」，與 80 §18.2／既有候選的「局部可橫向滑動五頁籤」有**未解歧義／潛在真衝突**。不可把「整頁不溢出」當充分證據。方案 B 的 successor 路線已選，但**合法性尚未通過**。在 #1163 裡已將 80 §18 的過期「必先 amendment」標 superseded，提出精確頁首五頁籤候選 S1（不滑動）／S2（局部滑動）／S3（必要時正式 44 amendment）和 NOT RUN 測試矩陣，詳 `docs/evidence/bl0544_mobile_top_tabs_minimal_gate_proposal_2026_11_07.md` §6～7；**S1 不是新客戶裁示，需正式線框 Gate 核准；S2 需核 44 適用性，均未獲動工許可**。
+**2026-11-07 最新客戶裁示 `DEC-2026-11-07-02`（逐字回答「可以」）**：客戶已核准 **S1 手機頂部五頁籤固定同列、全部可見、不左右滑動**。不再詢問 S1／S2；S2 的局部頁籤滾動不屬現行施工範圍，原版型歧義不再是所選 S1 的實作要求。但合法程序的**非作者獨立 QA**、frozen 44 首屏／帳號／斷點相容性與真實裝置、登入、安全區／可達性驗收仍未通過；**S1 DESIGN APPROVED ≠ Code Gate PASS**。本次新增 DEC、BL-0544 指標、80 §18 及 evidence §0／§7 狀態核准，不修改 44 或任何 Code。
 
-唯一下一接手點：先完成 #1163（BL-0544 客戶已裁方案 B）之非作者**合法適用性稽核**，逐條核 frozen 44／57／CONSTITUTION、導覽與登入／首屏／斷點、並完成精確 Preview 線框與字樣 Gate；無直接衝突才保留 frozen 44 不動，Gate 通過且文件正式合併後，才依 `DEC-2026-11-07-01` 條件式授權 Claude Code 施工 **Preview-only `ui_v3` 手機頁首五頁籤 Shell 單切片**。若真衝突停手走正式 amendment；BL-0545 的 Active Sheet 覆蓋率唯讀實測另批處理，未經 Gate 不進入程式實作。
+**BL-0544 2026-11-07 新增明確阻塞（GitHub 逐條初核，非獨立 QA）**：44 §2.1 明寫「**任何一段都不出現橫向捲動**」，與 80 §18.2／既有候選的「局部可橫向滑動五頁籤」有**未解歧義／潛在真衝突**。不可把「整頁不溢出」當充分證據。方案 B 的 successor 路線已選，但**合法性尚未通過**。在 #1163 裡已將 80 §18 的過期「必先 amendment」標 superseded，提出精確頁首五頁籤候選 S1（不滑動）／S2（局部滑動）／S3（必要時正式 44 amendment）和 NOT RUN 測試矩陣，詳 `docs/evidence/bl0544_mobile_top_tabs_minimal_gate_proposal_2026_11_07.md` §6～7；~~S1 不是新客戶裁示，需正式線框 Gate 核准；S2 需核 44 適用性，均未獲動工許可~~ → **`DEC-2026-11-07-02` 已核准 S1；S2 不實作，但 Code 仍須非作者合法／治理 QA 與正式合併後才授權**。
+
+唯一下一接手點：**S1 已裁示，勿重做選型或文件研究**；先完成 #1163 之真正非作者**合法適用性與治理 QA**、逐條核 frozen 44／57／CONSTITUTION 及手機首屏／登入入口／斷點與既有正式字樣的相容性，並確認最新 head 四項 CI、mergeability 與正式合併。無真實衝突且程序允許時保持 44 不動。全部通過後才依 `DEC-2026-11-07-01`、`-02` 的條件授權 Claude Code 施工 **Preview-only `ui_v3` 手機頂部 S1 五格同列、不滑動 Shell 單切片**；實作後量測 374／375／390／768／769／1280、WebView、safe-area、48px、390 首屏及截圖；未實測不得標 PASS。若真衝突停手走正式 amendment；BL-0545 的 Active Sheet 覆蓋率唯讀實測另批處理，未經 Gate 不進入程式實作。
 
 - 先讀 `CLAUDE.md` → `PROJECT_RULES.md` → `docs/DECISIONS.md`／`docs/BACKLOG.md` → 本檔；產品規格回查 frozen `docs/v2/44`、子法 1＋57、`docs/v2/67`／`75`／`79`／`80`／`81`／`82`。
 - Old UI 唯讀參考、`ui_v2` maintenance-only；不改 production data source、公式、FX 觀測日、Risk Cap、身份與原始持倉；不直接 push main；每批最多三項安全工作；變更 Model／Mode／Effort 必須先依 Hard-Stop Gate。
