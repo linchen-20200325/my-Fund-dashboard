@@ -117,26 +117,26 @@
 
 ## 8. 既有 Code／測試實際依賴與最小施工差異（2026-11-07 唯讀核對；**沒有動程式**）
 
-取證基準為 main \`d0a0af20390af66171f7c75c46aaff9c18a28e0f\`，僅記錄**現存原始碼／測試**及未來的必要差異；這份工程影響盤點不是 B 方案的合法性簽核、不是線框客戶核准，也不構成另一張 Code 派工單。
+取證基準為 main `d0a0af20390af66171f7c75c46aaff9c18a28e0f`，僅記錄**現存原始碼／測試**及未來的必要差異；這份工程影響盤點不是 B 方案的合法性簽核、不是線框客戶核准，也不構成另一張 Code 派工單。
 
 | 真實檔案／符號 | 目前原始碼證據 | **若 Gate 日後通過**的最小處置 |
 |---|---|---|
-| \`ui_v3/shell/nav.py\`：\`shell_css\`, \`MOBILE_MAX_PX\`, \`TOUCH_MIN_PX\`, \`BOTTOM_KEY\` | ≤768px 固定底部、桌機側欄；\`position:fixed; bottom:0\`；48px 觸控下限、60px 底欄及 \`padding-bottom\` 避讓 | 只替換**導覽位置／CSS**，消除底部 overlay／頁尾避讓舊依賴；保留 768 邊界、48px 下限、對比與焦點狀態。S1／S2 尚未裁定，**不可先寫 overflow-x 或偷偷調閾值** |
-| \`ui_v3/pages/chrome.py\`：\`render_navigation\`, \`disabled_bottom_html\`, \`_now_key\` | \`st.navigation(position="hidden")\` 路由，\`st.page_link\` 活頁、未掛載項為 \`aria-disabled\` 無 URL；手機 DOM 掛於 \`st.container(key=nav.BOTTOM_KEY,...)\` | 保留 routing 與未掛載保護；移至已核准頁首區時審查 DOM 順序與 PREVIEW Status Bar、不多做第二套導航、不讓不可進頁變可點。**尚未證明 \`aria-current\` 會由 Streamlit 提供** |
-| \`ui_v3/shell/registry.py\`：\`IA_PAGES\` | 五頁 IA，只有 \`mkt\` 已 \`registered=True\`；\`ai\` 禁註冊、其餘缺正式整頁實作 | **保持原封不動**，不可為了測試新頁籤而新增空殼 renderer 或開 Phase 7 |
-| \`shared/ui_semantics/rules.py\`／\`ui_v3/viewmodels/preview_wording.py\` | 19 個 \`shell_*\` 正式字樣取 \`APPROVED_WORDING\`；短字串為市場／資產／找基金／AI／設定；已核准字樣不放 pending table | **保持原封不動**，本批不造新標籤、狀態符號或平行字樣表；若佈局裝不下，回 UI Gate，不縮到不能辨識 |
-| \`ui_v3/design/tokens.py\` | \`nav.bottom\`、\`nav.item\` 仍是**值為 None**的設計 token 名稱，非 production 數值 | 僅在正式 UI contract 要求改名／定值時一併修改其測試；**不能把 \`nav.bottom\` 沿用作新頂欄的正式語意** |
-| \`ui_v3/app_preview.py\` | 模組文件仍稱手機底欄，\`main()\` 沿用 routing／renderer | 實作批若產生已核准新行為，**只同步 docstring**，不得動正式入口或 cutover |
-| \`tests/ui_v3/test_ui_v3_navigation_shell.py\` | \`test_css_switches_between_sidebar_and_bottom_nav_at_one_breakpoint\` 明確斷言 \`BOTTOM_NAV_HEIGHT_PX\`、\`bottom:0\`、底部避讓；\`test_disabled_nav_items_are_not_links_and_say_under_development\` 覆蓋不可點；AppTest 有真頁註冊檢查 | 逐條改**過期底欄斷言**為核准的新頂欄契約，維持原有 IA／disabled／字樣／Missing／狀態守衛；不得為求綠燈直接刪測試 |
-| \`tests/ui_v3/test_ui_v3_design_tokens.py\`、\`tests/visual_fidelity/vf_config.py\` | token 守衛可能與 \`nav.bottom\` 綁定；Visual Fidelity viewport 現僅 390×844、1280×800（見既有清冊 §3） | 新測 375／374、768／769 由**額外定向證據**補足；原 390／桌機截圖保留。若更改 VF 配置引起其他工作流行為改變，另核最小範圍 |
-| \`docs/evidence/bl0536_shell_h5_2026-11-03/measure.js\` | 歷史 Chromium 測量腳本硬查 \`.st-key-uv3-bottom-nav\`，用底欄頂緣作首屏下限 | **不要改寫歷史測量證據**；在新 UI Code PR 另存量測版本，改按 viewport 真實可視範圍、頁首佔用與 chart 起點計算；不要把舊底欄測量冒充新驗收 |
+| `ui_v3/shell/nav.py`：`shell_css`, `MOBILE_MAX_PX`, `TOUCH_MIN_PX`, `BOTTOM_KEY` | ≤768px 固定底部、桌機側欄；`position:fixed; bottom:0`；48px 觸控下限、60px 底欄及 `padding-bottom` 避讓 | 只替換**導覽位置／CSS**，消除底部 overlay／頁尾避讓舊依賴；保留 768 邊界、48px 下限、對比與焦點狀態。S1／S2 尚未裁定，**不可先寫 overflow-x 或偷偷調閾值** |
+| `ui_v3/pages/chrome.py`：`render_navigation`, `disabled_bottom_html`, `_now_key` | `st.navigation(position="hidden")` 路由，`st.page_link` 活頁、未掛載項為 `aria-disabled` 無 URL；手機 DOM 掛於 `st.container(key=nav.BOTTOM_KEY,...)` | 保留 routing 與未掛載保護；移至已核准頁首區時審查 DOM 順序與 PREVIEW Status Bar、不多做第二套導航、不讓不可進頁變可點。**尚未證明 `aria-current` 會由 Streamlit 提供** |
+| `ui_v3/shell/registry.py`：`IA_PAGES` | 五頁 IA，只有 `mkt` 已 `registered=True`；`ai` 禁註冊、其餘缺正式整頁實作 | **保持原封不動**，不可為了測試新頁籤而新增空殼 renderer 或開 Phase 7 |
+| `shared/ui_semantics/rules.py`／`ui_v3/viewmodels/preview_wording.py` | 19 個 `shell_*` 正式字樣取 `APPROVED_WORDING`；短字串為市場／資產／找基金／AI／設定；已核准字樣不放 pending table | **保持原封不動**，本批不造新標籤、狀態符號或平行字樣表；若佈局裝不下，回 UI Gate，不縮到不能辨識 |
+| `ui_v3/design/tokens.py` | `nav.bottom`、`nav.item` 仍是**值為 None**的設計 token 名稱，非 production 數值 | 僅在正式 UI contract 要求改名／定值時一併修改其測試；**不能把 `nav.bottom` 沿用作新頂欄的正式語意** |
+| `ui_v3/app_preview.py` | 模組文件仍稱手機底欄，`main()` 沿用 routing／renderer | 實作批若產生已核准新行為，**只同步 docstring**，不得動正式入口或 cutover |
+| `tests/ui_v3/test_ui_v3_navigation_shell.py` | `test_css_switches_between_sidebar_and_bottom_nav_at_one_breakpoint` 明確斷言 `BOTTOM_NAV_HEIGHT_PX`、`bottom:0`、底部避讓；`test_disabled_nav_items_are_not_links_and_say_under_development` 覆蓋不可點；AppTest 有真頁註冊檢查 | 逐條改**過期底欄斷言**為核准的新頂欄契約，維持原有 IA／disabled／字樣／Missing／狀態守衛；不得為求綠燈直接刪測試 |
+| `tests/ui_v3/test_ui_v3_design_tokens.py`、`tests/visual_fidelity/vf_config.py` | token 守衛可能與 `nav.bottom` 綁定；Visual Fidelity viewport 現僅 390×844、1280×800（見既有清冊 §3） | 新測 375／374、768／769 由**額外定向證據**補足；原 390／桌機截圖保留。若更改 VF 配置引起其他工作流行為改變，另核最小範圍 |
+| `docs/evidence/bl0536_shell_h5_2026-11-03/measure.js` | 歷史 Chromium 測量腳本硬查 `.st-key-uv3-bottom-nav`，用底欄頂緣作首屏下限 | **不要改寫歷史測量證據**；在新 UI Code PR 另存量測版本，改按 viewport 真實可視範圍、頁首佔用與 chart 起點計算；不要把舊底欄測量冒充新驗收 |
 
 ### 8.1 施工順序（條件式，沒有授權立即開始）
 
-1. 獨立驗 44 §2.1 的「四個**視窗寬度段**」及「不把**整頁**推寬」與**局部導覽容器滾動**是否可區分；同時核 44 之十九首屏與帳號入口、57／CONSTITUTION 程序。若仍有歧義，\`LEGAL_GATE_UNVERIFIED\`，不得自認合規。
+1. 獨立驗 44 §2.1 的「四個**視窗寬度段**」及「不把**整頁**推寬」與**局部導覽容器滾動**是否可區分；同時核 44 之十九首屏與帳號入口、57／CONSTITUTION 程序。若仍有歧義，`LEGAL_GATE_UNVERIFIED`，不得自認合規。
 2. 依正式 UI Gate 確認 **S1 或 S2 的精確畫面與字樣**。S1 非橫向滑動，可能需要修 80 §18.2 所列的原「滾動」驗收方向；S2 必須先解上項歧義。兩條不能同時做成互相衝突的 CSS。
-3. 先讓 \`nav.shell_css()\`／\`chrome.render_navigation()\` 的定向守衛具備新布局測試，再改 Preview shell；只有 🌍 可進、其他五頁槽位仍保留相同可見／禁入狀態；不影響原 Status Bar／資料／認證。
-4. 390×844 與 1280×800 瀏覽器實測，並補 375／374、768／769 與字體縮放／鍵盤 focus；局部滑動時需量測 \`documentElement.scrollWidth <= clientWidth\` 和容器本身的捲動與鍵盤可操作性，兩者分開記；有資料時須可見結論 chip＋主圖／主數字。WebView／真機未量測一律 \`NOT RUN\`。
+3. 先讓 `nav.shell_css()`／`chrome.render_navigation()` 的定向守衛具備新布局測試，再改 Preview shell；只有 🌍 可進、其他五頁槽位仍保留相同可見／禁入狀態；不影響原 Status Bar／資料／認證。
+4. 390×844 與 1280×800 瀏覽器實測，並補 375／374、768／769 與字體縮放／鍵盤 focus；局部滑動時需量測 `documentElement.scrollWidth <= clientWidth` 和容器本身的捲動與鍵盤可操作性，兩者分開記；有資料時須可見結論 chip＋主圖／主數字。WebView／真機未量測一律 `NOT RUN`。
 5. 同 PR 完成定向測試、4 個 CI job、真正非作者 UI／治理 QA 與 production-like 截圖；**不得由本文件的技術清單替代客戶線框、法規適用性與實機驗收**。
 
-**單一下一步**：這一份文件盤點已把「可以先問程式碼什麼」縮成明確差異清單。Code 目前仍停在 \`DEC-2026-11-07-01\` 的條件授權之前，無需交 Claude 重做同一份文件／技術準備。
+**單一下一步**：這一份文件盤點已把「可以先問程式碼什麼」縮成明確差異清單。Code 目前仍停在 `DEC-2026-11-07-01` 的條件授權之前，無需交 Claude 重做同一份文件／技術準備。
