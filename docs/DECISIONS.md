@@ -2388,7 +2388,7 @@
 | 現行效果 | 最小方案 D 可實作；實作若碰到須新正式產品語意者即停手請示。 |
 | 仍未授權 | B1；A1；NAV 組裝搬遷；NAV 10 日新規則；FX 閘門開放；正式 UI 接線；OneBrain；`DEC-2026-11-05-02` 所列 G-3～G-5。 |
 | 理由／背景（agent 讀法） | `docs/BACKLOG.md` BL-0542 G-2 進度登記「產生器無 `not_attempted` 代碼，市值基準無法在不偽造下傳入（缺口）」；D 即針對此缺口。D 動到生產者契約，屬 data semantics 等級，依 `DEC-2026-10-16-05` 風險分級須至少 1 組真正獨立稽核（文件組讀法）。 |
-| 實作狀態（技術狀態，非裁示） | **實作中，位於尚未合併的開放 PR；撰寫本筆時尚未合併，不宣稱完成。** （PR 與 merge sha 於合併後補登）<br>**2026-11-05 狀態更新**（上句保留）：D 已實作於開放 PR（尚未合併；PR 與 merge sha 於合併後補登）；獨立稽核已通過、無必修項（總管轉達）；稽核建議的小幅修正（str 子類別拒收、補兩項測試、契約風險註記）已套用，3.11 五檔 553 passed。實作面開放項（fx_pending 結論、Python 3.12+ 浮點敏感性與 `page_model_sha256`、`no_data` 契約風險）登記於 `docs/BACKLOG.md` BL-0542 與稽核文件補註，皆 **not authorised**、非裁示。 |
+| 實作狀態（技術狀態，非裁示） | ~~**實作中，位於尚未合併的開放 PR；撰寫本筆時尚未合併，不宣稱完成。** （PR 與 merge sha 於合併後補登）~~<br>**2026-11-08 更正（有意識的更正，不是漏刪；純技術狀態事實更正，非客戶裁示；決策者：文件組／AI 總管讀法，可被客戶推翻）**：上句與下方「2026-11-05 狀態更新」中的「開放 PR、尚未合併」在寫下當時為真，現已過期 —— `services/v2_domain/allocation_evidence.py` 已在 `origin/main`，merge `861628cc` 為 `origin/main` 祖先（`git merge-base --is-ancestor 861628cc origin/main` 驗證，基準 `7ac7c935`）。其餘欄位（客戶裁示、仍未授權等）一字未改。<br>**2026-11-05 狀態更新**（上句保留）：D 已實作於開放 PR（尚未合併；PR 與 merge sha 於合併後補登）；獨立稽核已通過、無必修項（總管轉達）；稽核建議的小幅修正（str 子類別拒收、補兩項測試、契約風險註記）已套用，3.11 五檔 553 passed。實作面開放項（fx_pending 結論、Python 3.12+ 浮點敏感性與 `page_model_sha256`、`no_data` 契約風險）登記於 `docs/BACKLOG.md` BL-0542 與稽核文件補註，皆 **not authorised**、非裁示。 |
 | evidence／source | 無逐字 evidence 檔，不補造。文件落點：`docs/BACKLOG.md` BL-0542；`docs/evidence/g3_market_basis_data_contract_audit_2026_11_05.md` 第 9、10 節（轉接層跨層債務、選項）。 |
 | provenance | **要點轉述（非逐字）**：客戶指示經總管轉交，轉述者為總管；無逐字存檔，客戶可推翻。 |
 | 影響範圍 | 文件 `docs/DECISIONS.md`；D 實作另限 `services/v2_domain/allocation_evidence.py` 與必要的 adapter 契約及其 tests（以 PR 為準）。不改公式、`ui_v2`／`ui_v3` 頁面、守衛、frozen。 |
