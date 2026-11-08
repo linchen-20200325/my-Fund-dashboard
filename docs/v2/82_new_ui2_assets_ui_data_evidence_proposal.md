@@ -376,7 +376,7 @@ B 不是任意抽新 facade 的授權：只有已確認符合 `ui_v3` import bou
 
 ## 11. 2026-11-09 New UI2 💼 我的資產線框草稿（客戶選「線框＝A」；設計草稿，非核准最終線框、非 UI 施工授權）
 
-> **位階與來源**：客戶 2026-11-09 裁示（派工單轉述；**要點轉述，非逐字**；repo 內尚無逐字存檔，`docs/DECISIONS.md` 登記由另組同批處理，登記後以該 DEC 編號為準）：D2-A＝B、D2-B＝收緊 C、D2-C＝B；「淨投資金額」語意＝B；💼 線框＝A。D2-A／D2-B／D2-C 各選項的內容由另組登記的 DEC 載明，**本檔不轉述、不引申**；本節只落實下面兩件事：
+> **位階與來源**：客戶 2026-11-09 裁示（派工單轉述；**要點轉述，非逐字**；~~repo 內尚無逐字存檔，`docs/DECISIONS.md` 登記由另組同批處理，登記後以該 DEC 編號為準~~（2026-11-09 更新，有意識，非漏刪：已登記為 `DEC-2026-11-09-01`，以該 DEC 為準）：D2-A＝B、D2-B＝收緊 C、D2-C＝B；「淨投資金額」語意＝B；💼 線框＝A。D2-A／D2-B／D2-C 各選項的內容由 `DEC-2026-11-09-01` 載明，**本檔不轉述、不引申**；本節只落實下面兩件事：
 > 1. **使用者面名稱**：一律稱「**淨投資金額**」，不稱「成本」；`cost_twd`、`cost_orig_ccy` 僅是內部既有欄名。淨投資金額**不視為**總市值、本金、已實現損益基礎或配置分母。本檔 §0～§10 與 `docs/v2/44`、`73` 內既有的「成本」是當時寫下的內部名稱，**不改寫、不逐處更正**；New UI2 使用者面讀作「淨投資金額」。
 > 2. **線框＝A**：先規劃新版 390px／1280px 線框草稿供客戶審；**不是**核准最終線框，**不授權**任何 Streamlit／`ui_v3` 實作。
 >
@@ -506,7 +506,7 @@ B 不是任意抽新 facade 的授權：只有已確認符合 `ui_v3` import bou
 | A00 | 頁級來源狀態 | `alo_holdings.load_alo_tables_active`（`ActiveSourceError`、`skipped_tabs`、`skipped_holdings`）；`ui_v3/adapters/assets_source.py` 的 `source_state` | 位置〔已核准〕；內容〔待裁示〕；β 結論〔不顯示〕（G-1、BL-0411） |
 | A10 | 主圖區（狀態卡） | `allocation_evidence`（`source_coverage`、`denominator`、`chart_comparability`，內部候選）；`settings_store.load_user_settings` | 位置與 U2〔已核准〕；狀態卡內容〔待裁示〕；圖本身〔不顯示〕 |
 | A10-α | 各類別淨投資金額（金額表） | `holdings.category_values(market=False)`、`CategoryEvidence.value_twd` | 〔待裁示 T1〕（D2-C 契約候選逐類核可前不具效力） |
-| A20 | 四項摘要 | `ui_v2/asset/overview.py::summary_strip`（現為硬編碼 Missing） | 位置與四格〔已核准〕；值〔不顯示〕（G-4） |
+| A20 | 四項摘要 | `ui_v2/asset/overview.py::summary_strip`（現為硬編碼 Missing） | 位置與四格〔已核准〕；值〔不顯示〕（G-4）。摘要標籤＝程式現行標籤，沿 §0.1／§9 說明，不代表核准新文案 |
 | A30 | 偏離／未評估 | `services/v2_domain/deviation.py`（原子）；組合版在 `ui_v2`，待 PORT | 位置〔已核准〕；結果〔不顯示〕（G-1） |
 | A40 | 配息／近期事件 | `nav_dividend.build_dividend_table`；推估 `services/dividend_calendar.py`（未獲准） | 位置〔已核准 U1〕；內容〔不顯示〕（G-3、BL-0534） |
 | A50 | 完整持倉列 | `alo_holdings.build_alo_tables`（`holding`）；`holdings.aggregate_holding_rows` | 展開〔已核准 U4〕；欄位〔待裁示 T6〕；DIRECT 持倉〔待裁示 T9〕 |
@@ -537,7 +537,7 @@ B 不是任意抽新 facade 的授權：只有已確認符合 `ui_v3` import bou
 - **T7**　A30 在偏離結果不顯示時，是否保留佔位列或整塊隱藏。
 - **T8**　逐檔區間價格報酬是否在 A51 顯示（價格報酬與跨新版 1Y 含息為不同口徑，後者仍待裁）。
 - **T9**　DIRECT 持倉在 New UI2 的顯示（evidence E3 X13；hld 頁未決題）。
-- **T10**　淨投資金額合計是否可顯示；本草稿不顯示（可能被誤讀為總資產）。
+- **T10**　淨投資金額合計是否可顯示；本草稿不顯示（可能被誤讀為總資產）。註：各類別淨投資金額小計（A10-α 候選，見 T1）與「淨投資金額總合計（不顯示）」是兩件不同的事；小計是否顯示仍屬 T1 待裁示，不因此放寬合計不顯示。
 - **原 Gate（原樣保留，不代裁）**：G-1～G-5、NAV 10 日（D7）、組合市值損益、正式配置分母、跨新版 1Y 含息、390／1280 真實像素與首屏預算實測（U3）。
 
 **停止點**：本節為設計草稿，**停在客戶 UI Review Gate，不得接續 Streamlit 實作**。客戶審後若核准線框，仍須各 Gate 另行處理，才可談 PORT、adapter 或畫面程式。
