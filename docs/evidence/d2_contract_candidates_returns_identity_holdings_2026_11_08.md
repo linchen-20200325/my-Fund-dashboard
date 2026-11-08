@@ -1,6 +1,6 @@
 # D2 正式資料契約候選整理：報酬算法（A）／基金身份（A）／持倉占比（C）
 
-> **基準 `origin/main` 85a158bb；單組作者草稿；獨立 QA 已完成一輪並已回修（非 QA 通過）；候選非核准；不構成正式 Schema／契約／裁示。**
+> **基準 `origin/main` 85a158bb；單組作者草稿；獨立 QA 已完成一輪並已回修（非 QA 通過；本輪最後小修由專案 AI 自驗 delta）；候選非核准；不構成正式 Schema／契約／裁示。**
 > 本檔彙整三份作者草稿（E1 報酬、E2 身份、E3 持倉；原文不改寫，只調整標題層級並加註記），並附「對 #1177 草案的更正」與「下一批最值得核准事項」。
 > 客戶 2026-11-08 方向（經總管轉達的**要點轉述，非逐字，客戶可推翻**）：報酬算法選 A、基金身份選 A、持倉占比選 C；**只授權整理正式資料契約候選與裁示登記，不授權新公式、程式施工、FX 開閘或啟動 OneBrain**。登記見 `docs/DECISIONS.md` `DEC-2026-11-08-05`。
 > 標記沿用三草稿：FACT／【F】＝可由所引檔案重現；INFERENCE／【I】＝作者推得；NOT VERIFIED／【NV】＝未查證。三部分各自有分類欄（Required／Optional／Excluded／Pending），皆為**作者候選**，客戶逐類核可前不具效力。
@@ -67,7 +67,7 @@
 | 12 | 缺漏原因白話全句 `label` | `⬜ 資料未備／無法判定（原因）`；有值時為口徑字串＋可能的「⚠️ 數值異常大」警語 | 同上 | — | 屬呈現層；`67` §5.2 第 3 點（執行組讀法，可推翻）：`value_text` 類字串不得當值來源 | Excluded（全句）；但**字樣「資料未備／無法判定」沿用**（Q4） | FACT／INFERENCE |
 | 13 | 窗內配息筆數 `div_count_in_window` | 整數或 `None`（`None`＝窗口未建，非 0） | `calc_metrics.ret_1y_div_count`（從還原表 `Dividend>0` 數） | 配息型且＝0→`dividend_data_missing`（配息資料未備） | 配息閘門屬 1B 落地內容（**依據出自程式註解**，裁示原文逐字未核對）【舊站範圍】；收入契約【候選】 | Optional | FACT |
 | 14 | 配息型判斷（`is_dividend_fund`／`dividend_policy`） | 閘門輸入：配息型＋窗內 0 筆→不判 | `services/fund_total_return.py::is_dividend_fund`；`exp_profile.py` `dividend_policy`（A1 A12） | 判斷缺→配息閘門無法啟動 | 配息頻率對照表為客戶 2026-09-26 定案（檔註，DEC 編號 NOT VERIFIED，A1 A12）；納入 Digest【待裁】 | Optional／Pending | FACT／NOT VERIFIED |
-| 15 | MoneyDJ 官方 1Y `official_1y_pct` | 百分點（MoneyDJ 頁面值）；僅 `perf_source=="wb01"` 時取 `perf["1Y"]`；送對帳時才 ÷100 轉小數 | `resolve_1y_total_return` | 缺→只少一個對照，不影響自算值 | **只作對帳**【既裁】1B；引 DEC：`DEC-2026-10-23-02` | Optional（僅對帳；**不得當主值**） | FACT |
+| 15 | MoneyDJ 官方 1Y `official_1y_pct` | 百分點（MoneyDJ 頁面值）；僅 `perf_source=="wb01"` 時取 `perf["1Y"]`；送對帳時才 ÷100 轉小數 | `resolve_1y_total_return` | 缺→只少一個對照，不影響自算值；**另見 §2 M3：在 `fetch_fund_from_moneydj_url` 路徑，wb01 只回部分期間時 `perf["1Y"]` 可能仍是 wb07 值而被當官方值（讀碼，未實跑）** | **只作對帳**【既裁】1B；引 DEC：`DEC-2026-10-23-02` | Optional（僅對帳；**不得當主值**） | FACT |
 | 16 | 對帳結果 `ret_1y_reconcile` | `agree`／`disagree`／`a_missing`／`b_missing`／`both_missing` | `services/reconcile.py::reconcile_fund_annual_return`；`fund_service.finalize_fund_metrics` 注入 | 缺→少第二算法交叉檢查 | 對帳義務＝`CLAUDE.md` §4.3；**容差（abs 0.005／rel 0.05，小數制）是否為客戶核准門檻 NOT VERIFIED**；僅舊站 | Optional | FACT／NOT VERIFIED |
 | 17 | 離譜值旗標 `is_implausible_1y` | 布林；超出 `RET_1Y_PLAUSIBLE_*` 範圍→label 加警語 | `services/fund_total_return.py` | — | 該範圍的核准依據 NOT VERIFIED（A1 C9） | Optional／Pending | FACT／NOT VERIFIED |
 | 18 | 輸入淨值序列的來源與歷史合併 | 舊站序列合併 Google Sheet `nav_history`（同日 live 勝出）；vNext 關閉（`NAV_HISTORY_PROVENANCE_VERIFIED=False`）；A 鏈 waterfall 對不完整結果不快取 | `docs/v2/69` G-NAV-2、G-NAV-9（引，未重驗） | 同一基金新舊站輸入序列不同→1Y 可能不同 | 【待裁】`docs/v2/69` G-NAV-2（source precedence）／BL-0524 | Pending | 引文，NOT VERIFIED |
@@ -88,7 +88,7 @@
 |---|---|---|---|---|---|---|---|---|
 | M1 | 列數窗價格報酬 `ret_1w／ret_1m／ret_3m／ret_6m／ret_1y` | `services/fund_service.py::calc_metrics` 內 `_ret(n)`：n＝6／22／65／130／252 列；`(now−s[−n])/s[−n]×100`，`round(,2)` | **以列數**，無日曆跨度護欄；稀疏／週頻序列時「1M」可能不是一個月（G-RET-3，引，未重驗；BL-0520 實測週頻 22 列＝22 週，引） | **否**（純淨值；`ret_1y_total` 才是含息） | 原幣 | 列數不足或基準≤0→`None` | 舊站健診／衛星戰情室（引 `69`）、tab2 快照（引） | 【待裁】BL-0524／D2；FACT（公式）／引文（出現處） |
 | M2 | MoneyDJ 官方績效 `perf["1M"／"3M"／"6M"／"1Y"／"3Y"／"5Y"]`（wb01） | `repositories/fund/fund_orchestration.py`（`fetch_performance_wb01`；`perf_source="wb01"`）；`ui/views/page_03_research.py::PERF_PERIODS` 顯示 | 由 MoneyDJ 頁面定義（本組未讀其期間定義）【NOT VERIFIED】 | 程式註解稱「含息總報酬率 wb01（MoneyDJ 說明：已考慮配息）」；`fund_total_return.py` 檔頭稱「官方複利」。【FACT 為註解字面；MoneyDJ 實際定義 NOT VERIFIED】 | 原幣（引 `69`） | 境內基金 `_fetch_domestic_perf` 恆回空（引 `69`，未重驗） | ⑧ 單檔深度、舊健診表 | 1Y 僅作對帳【既裁】1B；1M／3M／6M 作為主值**無核准紀錄**【NOT VERIFIED，A1 C5】 |
-| M3 | wb07 同類比較備援 `perf["1Y"]` | `fund_orchestration.py`：先由 `peer_compare` 取基金列首值寫入 `perf["1Y"]`，wb01 有回才覆蓋並設 `perf_source="wb01"` | 未定義 | 不明 | 原幣 | wb01 缺時 `perf["1Y"]` 可能殘留 wb07 值、`perf_source` 非 wb01 | `page_03_research.py::_perf_lines` 讀 `perf` 顯示（不分來源） | 【FACT】程式路徑；【INFERENCE】⑧ 的「近 1 年」在 wb01 缺時可能顯示 wb07 值而不標來源，**本組未實跑**；**更嚴重變體（讀碼推論，未實跑）**：`fund_orchestration` 先把 wb07 `peer_compare` 首值寫入 `perf["1Y"]`，`fetch_performance_wb01` 只要回非空 dict（例如只抓到 1M／3M，沒有 1Y）即設 `perf_source="wb01"`，但 `perf["1Y"]` 仍是 wb07 值；`resolve_1y_total_return` 的 `official_1y_pct`（只看 `perf_source=="wb01"`）與 `finalize_fund_metrics` 的對帳判斷 `_is_wb01` 會因此把 wb07 值當成官方 wb01 值（兩處 `perf` 組裝路徑皆如此）。 |
+| M3 | wb07 同類比較備援 `perf["1Y"]` | `fund_orchestration.py`（**僅 `fetch_fund_from_moneydj_url` 路徑**）：先由 `peer_compare` 取基金列首值寫入 `perf["1Y"]`，wb01 有回才覆蓋並設 `perf_source="wb01"` | 未定義 | 不明 | 原幣 | wb01 缺時 `perf["1Y"]` 可能殘留 wb07 值、`perf_source` 非 wb01 | `page_03_research.py::_perf_lines` 讀 `perf` 顯示（不分來源） | 【FACT】程式路徑；【INFERENCE】⑧ 的「近 1 年」在 wb01 缺時可能顯示 wb07 值而不標來源，**本組未實跑**；**更嚴重變體（讀碼推論，未實跑）**：`fund_orchestration` 先把 wb07 `peer_compare` 首值寫入 `perf["1Y"]`，`fetch_performance_wb01` 只要回非空 dict（例如只抓到 1M／3M，沒有 1Y）即設 `perf_source="wb01"`，但 `perf["1Y"]` 仍是 wb07 值；`resolve_1y_total_return` 的 `official_1y_pct`（只看 `perf_source=="wb01"`）與 `finalize_fund_metrics` 的對帳判斷 `_is_wb01` 會因此把 wb07 值當成官方 wb01 值（此情境在 `fetch_fund_from_moneydj_url` 路徑成立；`_fetch_fund_single` 路徑只有 `result["perf"].update(perf_wb01)` 與設 `perf_source`，未見把 wb07 寫進 `perf["1Y"]`——讀碼，未窮舉、未實跑）。 |
 | M4 | 官方優先、缺才自算的混用欄 `_period_ret` | `ui/helpers/fund/checkup.py::_period_ret`：先 `moneydj_raw.perf[key]`，缺才 `metrics[ret_1m／ret_3m]` | wb01 與列數窗混用 | 否／不明（混） | 原幣 | 兩者皆缺→`None` | 基金體檢表「近 1M／3M／6M」 | 同一欄兩種口徑（B §體檢表）；【待裁】BL-0524 |
 | M5 | 使用者自選日曆窗價格報酬 `return_pct` | `services/v2_domain/nav_metrics.py::return_pct`（`(末/首−1)×100`，單位百分點，不另 round）；`ui_v2/hld/logic.py::fund_metrics` 切區間後呼叫（鍵「區間報酬率」） | 使用者自選起迄日；首末兩筆；筆數<2 或首值≈0→`None` | **否**（只用 `nav_orig_ccy`；配息另算「配息佔淨值比」） | 原幣（`_ccy`） | 無列→`⬜ 資料未備`；最早 `nav_date` 晚於區間起點（`fund_profile` 未接時推定）→`⬜ 資料未備`；筆數不足→不適用字樣 | 新版預覽 HLD-7（`ui_v2`／`ui_v3`，非 `app.py` 入口） | 【待裁】；FACT。輸入含 NaN 的行為：`return_pct([nan,1,2])`＝nan（A1 引 audit V8），nav 表路徑已擋非有限值 |
 | M6 | 持有期間簡單加總／帳本 TWD 報酬 | T7 帳本（引 `69` G-RET-2） | 買入日起 | 不明 | TWD | — | 💼 持股層 | **不屬基金層**【既裁】1B；持倉域另判 |
@@ -480,7 +480,7 @@
 
 **推薦：B（僅契約文字，不施工）。** 理由：與既有裁示同向、不新增規則；代價是契約與實作暫有落差，須明標。
 
-### 題二｜1 年含息輸出缺的欄位，契約要先認哪幾個？（E1 §0 結論 5、§1 列 3／5／7～9；報酬）
+### 題二｜1 年含息輸出缺的欄位，契約要先認哪幾個？（E1 §0 結論 5、§1 列 3、5、7、8、9；報酬）
 
 **白話背景**：現有輸出只有 `window_days`，沒有窗口起訖日、資料末端日期（as_of）、取得時間，也不含計價幣別與算法版本；NAV 列另有 `nav_date`／`fetched_at`。沒有這些，1Y 數字無法說明「截至哪天、取自哪個窗口、是原幣還是 TWD」。補欄要改程式。**另請留意**：1Y 含息的公式層另有 BL-0427 (1)(3)(4)(5) 未裁，不在本題內，須走 Decision Gate；本題只問欄位。
 
