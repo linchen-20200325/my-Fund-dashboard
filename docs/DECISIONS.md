@@ -2570,6 +2570,24 @@
 | 現行效果 | 合併後 `PROJECT_RULES.md` §13.6 生效，為 New UI2 施工前檢查 Gate；僅治理文件，不改任何程式、閘門或既有 DEC 範圍。 |
 | provenance | 客戶兩句原話經 ChatGPT 轉達、repo 無逐字存檔、QA 無法驗證（要點轉述）；比較流程、能力分類與技術界線為 ChatGPT 整理。此筆文件尚待專案 AI 非作者 QA 與 PR CI 驗收，合併前不視為 main 已生效。 |
 
+### DEC-2026-11-09-01｜D2 三題與「淨投資金額」用語、💼 我的資產線框規劃：D2-A=B／D2-B=收緊後 C／D2-C=B／淨投資金額=B／線框=A
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-09（Asia/Taipei） |
+| 決策者／原話 | **客戶**裁示，經總管轉達（repo 內無逐字存檔，**要點轉述，非逐字**；客戶可推翻）。要點五項：(1) D2-A 採 B；(2) D2-B 採「收緊後的 C」；(3) D2-C 採 B；(4)「淨投資金額」語意採 B；(5)「💼 我的資產」線框採 A（先規劃新版線框）。 |
+| ① 客戶已核准的**文件方向**（以下各項的內容為文件組依 `d2_contract_candidates` 該檔「下一批最值得核准事項」三題之方案 B／C／B 及總管派工單整理，**不是客戶逐字**） | **(1) D2-A＝B（基金代號格式檢查）**：Sheet「基金代號」欄維持 MoneyDJ 基本代碼契約。遇網址、帶後綴代碼或格式異常，契約文字應要求：標示違反欄位契約、保留原始輸入、不靜默截斷／剝除／改寫、不擴張至其他來源／欄位／代碼命名空間。**尚未實作**：production 目前尚未完成來源傳遞／檢查接線（見 evidence 題一；`DG2_SHADOW_ENABLED=False`），契約與實作暫有落差，須明標。僅改契約文字，不啟用 DG2 Shadow，不改 resolver／consumer。<br>**(2) D2-B＝收緊後的 C（1Y 含息證據欄位）**：不把 `as_of`、幣別直接列為新 Required。僅當**同時**成立：①基金身份與取數鍵可一致對應；②NAV 序列與計算使用資料一致；③日期與幣別來源可追溯；④無未解釋的跨來源／跨 share class／期間衝突，才可把 NAV 的日期／幣別當 1Y 含息輸出的同源證據。證據不足則對應欄位維持 Pending／無法判定：不由 `window_days` 推測窗口起日、不以讀檔當下時間冒充 `fetched_at`、不自行補幣別或資料末端日期。窗口起訖日、取得時間、算法版本仍依原 Gate 保留 Pending。**此裁示只處理證據欄位與文件語意，不代表核准舊站 1Y 含息算法延伸至 New UI2**；BL-0427 公式與日期窗口未決事項照舊，不改 350 天門檻或任何計算。<br>**(3) D2-C＝B（別名來源）**：契約只收既有 `mapping_source` 作來源追溯；不把 alias 表全部內容升格為正式契約；不把 MoneyDJ `page_type` 升格為本次必備契約；不建立新 alias 維護者／版本制度／更新流程；保留「不同部署環境可能使用不同 mapping」的限制揭露。<br>**(4) 淨投資金額＝B（用語）**：對使用者、線框與新契約文字一律稱「淨投資金額」，**不得稱「成本」**；程式內部名稱 `cost_twd`／`cost_orig_ccy` 只作既有實作事實與追溯，不因本裁示改名或推定新財務定義；不視為總資產市值、投入本金、已實現損益基礎或正式配置分母。<br>**(5) 💼 我的資產線框＝A**：客戶核准「**先規劃新版線框**」，**不是核准最終線框，也不是授權 UI 施工**（線框本身寫在 `docs/v2/82`，本筆只登記裁示）。 |
+| ② 與實況核對（文件組實查，唯讀） | `mapping_source` 實際值域（`services/v2_tables/fund_keys.py`：`builtin`／`csv+builtin`／`injected`；`scripts/bl0545_coverage_probe.py` 另將不在此三值者歸為 `unknown`，那是離線探針的歸類、不是 `fund_keys` 的輸出）。其中 `builtin` 無法分辨「csv 不存在」與「csv 讀取失敗而退回內建表」（該檔檔頭自陳）。`mapping_source` 出自身份解析的 `provenance`（Shadow 路徑），**不是**每筆輸出都帶的欄位；契約只收它作「來源追溯」，不另發明值域。以上為文件組讀碼（單組、未經第二組驗證）。 |
+| ③ 尚未核准（明確） | 正式 Schema／producer／adapter；補欄的任何程式施工；`resolver`／`consumer` 改動；啟用 `DG2_SHADOW_ENABLED`；1Y 含息公式、窗口、門檻、跨新版適用（BL-0427 照舊待裁）；「淨投資金額」的正式財務定義；類別占比與分母（延後，同 `DEC-2026-11-08-05`）；最終線框與任何 UI 施工。D2 三類的 Required／Optional／Excluded／Pending 仍是**作者候選，除本筆明列的方向外，客戶逐類核可前不具效力**。 |
+| 不授權事項 | Python／Streamlit 施工；新金融公式、新報酬窗、新門檻；正式 UI 切換；DG2 production 啟用；FX 閘門開放（`FX_OBS_DATE_RULE_VERIFIED` 維持 `False`）；OneBrain、Decision Digest、Claude API、Provider、Phase 7；改 Sheet schema；改 NAV source precedence；改 frozen `docs/v2/44`／`57`／CONSTITUTION；改 workflow、cron、保留分支；新增「過期」「衝突」正式狀態詞（承 `DEC-2026-11-08-04` Q4）。 |
+| 理由／背景（agent 推論，不冒充裁示） | 承 `DEC-2026-11-08-05`：該筆列的三題待核准事項，本筆為客戶對其中三題的回覆（題一→D2-A、題二→D2-B、題三→D2-C）；D2-B 的「收緊」使方案 C 不再默許由 NAV 欄位組合補證，須逐條證明同源。 |
+| evidence／source | `docs/evidence/d2_contract_candidates_returns_identity_holdings_2026_11_08.md`（已就地標示本筆核准與 Pending）；`docs/v2/82_new_ui2_assets_ui_data_evidence_proposal.md`（線框，另組撰寫）；`DEC-2026-10-29-01`（Sheet 代碼契約）、`DEC-2026-10-23-02`（1B，落地範圍限舊站）、`DEC-2026-11-08-04`／`-05`；BL-0427、BL-0545。 |
+| 影響範圍 | 僅文件：`docs/DECISIONS.md`、`docs/evidence/d2_contract_candidates_...`（標註）、`docs/BACKLOG.md`（檔尾索引）、`docs/HANDOFF.md`（現況句）。不新增 BL 列、不改任何 BL 狀態；不動任何 code／workflow／cron／閘門。 |
+| supersedes | **不 supersede、不改寫任何歷史 DEC。** 僅就 `DEC-2026-11-08-05` ④ 列與 evidence「下一批最值得核准事項」三題的「待客戶核准」現況，以本筆標示客戶已回覆（舊句保留、劃線標更正於 evidence 檔）；`-05` 本文不動。 |
+| 可逆性 | 可逆：客戶可隨時推翻或改裁；純文件、無程式影響。 |
+| provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；①的各項內容為文件組整理、②為文件組讀碼（單組）；本筆由專案 AI 文件組單組寫成，**作者非獨立 QA、未經第二組驗證**。 |
+
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
