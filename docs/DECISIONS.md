@@ -2463,6 +2463,32 @@
 | 可逆性 | 可逆：刪除探針腳本、測試與本批文件即還原，未觸及任何 production 路徑。 |
 | supersedes | 無。 |
 
+### DEC-2026-11-07-04｜分工調整：Merge PR 與 QA 稽核交給專案 AI（Claude Code）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-07（Asia/Taipei；留言時間 2026-11-07T12:53:32Z）；登記日 2026-11-08 |
+| 決策者／逐字原話 | **客戶**：「你還是把Merge PR 跟QA稽核給專案AI好了 ，你效率不太好」（逐字，僅此一句；來源 [PR #1167 留言 issuecomment-6707193906](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1167#issuecomment-6707193906)，留言標題「客戶最新分工裁示」）。以下 owner 分工為該留言要點，**要點轉述**，不冒充逐字。 |
+| owner 分工（要點轉述） | **Claude Code／專案 AI**：施工、測試、組織並執行 QA／非作者獨立技術稽核、PR 修復、最新 head CI 查核、符合現有 Auto-Ship Gate 後的 PR merge、post-merge 驗證與 SSOT／HANDOFF 更新；**作者不可充當自己變更的獨立稽核者**，須另組非作者 QA。**ChatGPT**：產品與架構、UI／UX、金融語意、資料契約、需求規劃、三方案比較、客戶裁示整理、提示語與必要的唯讀 GitHub 交叉核查；**不再主導 QA 或執行 PR merge**，除非客戶重新指派。 |
+| 不降低任何 Gate | 全部 QA、review、branch protection、change gate、Auto-Ship、frozen、Stop Gate 保留。這是**責任調整，不是降低驗收標準或新增無條件合併授權**；merge 仍須符合既有 Auto-Ship 前提（最新 head CI 逐項結論、風險分級的獨立稽核、合併後驗證）。 |
+| supersedes | 只取代以下兩處的**分工句**（舊句保留並加刪除線，不刪）：(1) `docs/HANDOFF.md` 第 2 節「分工」：「ChatGPT 獨立 GitHub Gate、產品／治理、文件、已授權 Auto-Ship；Claude Code 只做 Code、技術測試、實測、必要非作者技術 QA（需使用者把提示語交付給外部 Claude session）」；(2) `PROJECT_RULES.md` 第 9 點中「ChatGPT 負責……獨立 GitHub 驗收及符合既有 Auto-Ship 授權的合併」「Claude Code（專案 AI）負責所有 CODE／Python／Streamlit 技術施工」「由客戶手動轉貼」這幾句。第 9 點其餘（每小時靜默巡檢、實際查 GitHub、通知節流、保存到 GitHub）**不取代**。 |
+| 位階 | 受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄；`CLAUDE.md` §-2 規則 3／4／6 與 `PROJECT_RULES.md` 第 8 節風險分級照舊，「作者不可自驗」不因本筆放寬。 |
+| 可逆性 | 可逆：客戶可隨時重新指派。 |
+| provenance | 逐字僅引號內一句；其餘為留言要點轉述。supersedes 範圍為專案 AI 讀法。 |
+
+### DEC-2026-11-08-01｜遠端 10 條非 main 分支全部保留
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-08（Asia/Taipei） |
+| 決策者／原話 | **客戶**裁示（經派工單轉達，repo 內無逐字存檔，**要點轉述**）：現存 10 條非 main 分支全部保留；不停用 cron、不刪除證據、不改 workflow。 |
+| 10 條分支 | `data`、`push-assets`、`probe/fx-obs-date-trigger`、`probe/fx-obs-date-results`、`probe/moneydj-basic-trigger`、`probe/moneydj-basic-results`、`probe/moneydj-nav-trigger`、`probe/moneydj-nav-results`、`probe/twse-eps-trigger`、`probe/twse-eps-results`（2026-11-08 `git ls-remote --heads origin` 實查：main 加這 10 條）。 |
+| 理由／背景（agent 推論，不冒充裁示） | 2026-11-08 唯讀稽核（單組產出，未經第二組驗證）：workflow 依賴這些分支；results 分支含 main 沒有的證據——`probe/moneydj-nav-results` 的 9 份、`probe/twse-eps-results` 的 17／18 份僅存在於分支。刪除會損失不可由 main 重建的證據。 |
+| 影響範圍 | 不執行任何分支清理或 cron／workflow 停用；`docs/HANDOFF.md` 第 2 節「遠端分支」列索引本筆。未來若要清理其中任一條，須先確認其證據已入 main 並另取客戶裁示。 |
+| supersedes | 無。補充 `docs/HANDOFF.md` 原「未執行分支清理」之現況句，不改其他條文。 |
+| 可逆性 | 可逆（保留為預設狀態）。 |
+| provenance | 要點轉述（總管派工單）；分支清單為 `git ls-remote` 實查；證據份數為稽核轉述，本組未重數。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -2638,3 +2664,4 @@
 - 第四節 `DEC-2026-10-29-03`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_dg2_fund_product_holding_ruling.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；摘要分段為執行組讀法；由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-29-04`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_context_compaction_gate.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-11-05-02`～`-04`：客戶指示皆經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；三筆的客戶裁示欄為總管轉達要點，照寫不增刪；`-02` 的 PR／merge sha 對照為文件組查證 git 所得（PR #1150 未合併、`-01` 保留，未讀其內容）；#1155 稽核「發現缺口」的描述依派工單，本組只核對 #1155 已合併、標題相符；`-03` 的事實欄為稽核文件第 3 節轉記，單組、未重驗各程式碼事實；`-04` 的實作狀態為派工單所述，本組未查該 PR；由文件組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-11-07-04`、`DEC-2026-11-08-01`：`-07-04` 的留言存在與逐字句已對照 GitHub 留言 issuecomment-6707193906，owner 分工為留言要點、supersedes 範圍為專案 AI 讀法；`-08-01` 客戶裁示經總管派工單轉達，無逐字存檔，證據份數（9／17／18）為稽核轉述、本組未重數；兩筆由專案 AI 單組寫成，未經第二組驗證。
