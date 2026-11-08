@@ -1,6 +1,6 @@
 # OneBrain Decision Gate 路線（D1～D10）與三風險最小影響查核（2026-11-08）
 
-> **性質**：docs-only 研究整理。基準 `origin/main` `7ac7c935`。**全文所有「建議／一鍵問法」皆為提案，非客戶裁示、非施工授權**（`CLAUDE.md` §-1：登記不構成動工授權）。
+> **性質**：docs-only 研究整理。基準 `origin/main` `7ac7c935`（回修後對 `5729b324` 亦重驗承重宣稱）。**全文所有「建議／一鍵問法」皆為提案，非客戶裁示、非施工授權**（`CLAUDE.md` §-1：登記不構成動工授權）。
 > **來源**：承接 `docs/evidence/onebrain_evidence_coverage_gap_audit_2026_11_08.md`（下稱 AUD）§8 的 D1～D10；底稿為兩份單組唯讀產出，經總管抽樣核對，本文再由文件組對承重宣稱重跑 `git grep`／`git show`（見 §6）。
 > **揭露（`CLAUDE.md` §-2 規則 6）**：單組整理，**未經第二組獨立驗證**；標「NOT VERIFIED」者為未查證或原文即如此；全稱句（「0 caller」「不可達」）為 `git grep` 結果，動態 import 未驗。
 > **不做的事**：不改公式、不刪功能、不啟動 Phase 7／Digest／Provider、不改 code／workflow／frozen／`CLAUDE.md`、不改任何 BL 狀態。
@@ -13,8 +13,8 @@
 |---|---|---|
 | 1 | Decision Gate 共 10 題，**無一題是施工授權**；推薦路線 C（先定資料規則、暫不寫 Digest 程式）延續 AUD §7 | RECOMMENDATION |
 | 2 | 建議問客戶的順序：**批次 0**（D8 有時效最先，D1、D10、D3(a)）→ 批次 1（D3(b)+D7、D5、D4-3）→ 批次 2（D2）→ 批次 3（D6）；D4 的 Risk Cap／減碼 trigger 可延後且不阻擋其他題 | RECOMMENDATION |
-| 3 | **R1**（`nav_metrics` 遇 NaN 靜默）：純技術修補；**僅 Preview（`ui_v2`）與測試可達，`app.py` 不可達**；正式組表路徑已在上游擋掉非有限值。本批**未授權施工** | FACT＋INFERENCE |
-| 4 | **R2**（未設定級別→「持有」）：字面與 `PROJECT_RULES.md` 13.1／`docs/v2/67` §5.4 衝突，但該線 **`app.py` 不可達**（legacy／dead code 候選，已登記 BL-0428／BL-0445）；屬**金融語意 Decision Gate**（退役或改為「無法判定」） | FACT＋INFERENCE |
+| 3 | **R1**（`nav_metrics` 遇 NaN 靜默）：純技術修補；**僅 Preview（`ui_v2`）與測試可達，`app.py` 不可達**；正式組表路徑已在上游擋掉非有限值（推論）。**改 NaN 行為會改變被 parity／golden 測試與摘要常數釘住的輸出，需連動測試與摘要常數，不只是契約對齊**（仍不涉公式／門檻）。本批**未授權施工** | FACT＋INFERENCE |
+| 4 | **R2**（未設定級別→「持有」）：字面與 `PROJECT_RULES.md` 13.1／`docs/v2/67` §5.4 衝突，但該線 **`app.py` 不可達**（legacy／dead code 候選；BL-0278／BL-0329 登記不可達、BL-0445 列 `verdict_to_actions` 為 dead code retirement 候選、BL-0428(7) 承接「σ 無法判定沿用預設動作」，但「未設定級別→持有」本身無專屬登記）；屬**金融語意 Decision Gate**（退役或改為「無法判定」） | FACT＋INFERENCE |
 | 5 | **R3**（過期 NAV 計入市值）：`ui_v2` 已有 10 日降級、`ui_v3` 市值基準 blocked；**Old UI T7「組合當前市值」未見任何 NAV 日期檢查，且 `app.py` 可達**；屬**金融語意／門檻 Decision Gate** | FACT＋INFERENCE |
 | 6 | 「純文件同步」有一項可自行處理：`DEC-2026-11-05-04` 實作狀態過期句（已於本 PR 更正，不需客戶決定；見 §5） | FACT |
 
@@ -65,7 +65,7 @@
 | C 等契約收斂再組 Digest | 先走 D2～D10，不新增程式 | 無可跑產出，進度取決於客戶裁示 |
 
 推薦 C（AUD §7 稱研究建議、非施工授權）；`docs/HANDOFF.md` 唯一 NEXT 仍是 BL-0545 合法輸入 Gate。
-**一鍵問法**：「Digest（AI 的完整決策輸入）要現在動工，還是先把資料規則定清楚？**建議選 C：先定規則、暫不寫程式**。原因：目前九類資料中八類還沒有『必備／選備』清單，也沒有新鮮度與衝突的判定標準；現在先做外殼，等於替您預設答案，之後要拆掉重做。代價是短期看不到新畫面。請回覆 A／B／C。」
+**一鍵問法**：「Digest（AI 的完整決策輸入）要現在動工，還是先把資料規則定清楚？**建議選 C：先定規則、暫不寫程式**。原因：各類資料都還有待裁的差額（見 D2 表），『必備／選備』清單未逐類核可，新鮮度與衝突的判定標準也未定；現在先做外殼，等於替您預設答案，之後要拆掉重做。代價是短期看不到新畫面。請回覆 A／B／C。」
 
 **D2｜Required／Optional／Excluded（僅整理「已核准」與「差額」，不創造新清單）**
 
@@ -88,9 +88,9 @@ Digest schema 版本／fingerprint：75 §6 明寫不在本輪拍死。
 
 **D3｜狀態字彙與 stale／conflict 門檻（拆 (a)／(b)）**
 
-(a) 純對照表：只對齊既有字彙名稱（67 §5.3 的四態、Cell status `not_ready`／`fetch_failed`／`inconsistent`、設定頁四類、`market_view` `reason_code`、`NAV_STATES`／`SRC_*`／`VAL_*`、`threshold_pending`、「⬜ 無法判定」「未定義」），**不新增狀態、不改任何判定**；凡無法一對一者（例：NAV 過期併入「資料未備」，無獨立 stale）一律列入 (b)，不替客戶決定。AUD R6 稱至少 5 套並存，「恰好 5 套」未逐一點算（NOT VERIFIED）。
+(a) 純對照表：只對齊既有字彙名稱（67 §5.3 的四態、Cell status `not_ready`／`fetch_failed`／`inconsistent`、設定頁四類、`market_view` `reason_code`、`NAV_STATES`／`SRC_*`／`VAL_*`、`threshold_pending`、「⬜ 無法判定」「未定義」），**不新增狀態、不改任何判定**；凡無法一對一者（例：NAV 過期併入「資料未備」，無獨立 stale）一律列入 (b)，不替客戶決定。`docs/v2/67` §5.3 稱「狀態字彙至少三套」；AUD R6 稱至少 5 套並存，兩者皆未逐一點算「恰好幾套」（NOT VERIFIED）。
 (b) 需裁示：`stale_after` 逐來源值（67 §8.5「仍待」；79 §7.2）；`expected_lag`／`frequency`；conflict 判定（容差、何謂同 as-of 不一致）；是否新增獨立 `stale` 狀態（新字樣另受 `APPROVED_WORDING` Gate，`DEC-2026-11-03-07`）；PIT 取哪一欄（`CLAUDE.md` §2.3）；月度 `[STALE: XXd]` 標籤沿用與否（79 §7.2）；NAV 10 日併入 D7。BL-0369（`◷` 徽章色調）是另一件事，不併入。
-**一鍵問法**：(a)「請問可否由我們把各處不同說法的資料狀態做一張對照表給您看，**不新增任何狀態、不改判定**？建議同意。原因：目前至少五套說法並存，不對齊就無法統一顯示。」(b)「過期與不一致的判斷標準要怎麼定？**建議按來源逐一定（日報、月報、基金淨值各自依其發布週期論證），而非一個全站數字；不一致時不顯示任何一方的值，並保留被捨棄的來源與差異**。原因：各來源更新週期差很多，統一數字會誤判。我們會先附各來源實際發布延遲的事實，再請您定天數。」
+**一鍵問法**：(a)「請問可否由我們把各處不同說法的資料狀態做一張對照表給您看，**不新增任何狀態、不改判定**？建議同意。原因：目前至少三套說法並存（`docs/v2/67` §5.3），不對齊就無法統一顯示。」(b)「過期與不一致的判斷標準要怎麼定？**建議按來源逐一定（日報、月報、基金淨值各自依其發布週期論證），而非一個全站數字；不一致時不顯示任何一方的值，並保留被捨棄的來源與差異**。原因：各來源更新週期差很多，統一數字會誤判。我們會先附各來源實際發布延遲的事實，再請您定天數。」
 
 **D4｜Risk Cap、減碼 trigger、Rule ID（拆三項）**
 
@@ -126,7 +126,7 @@ G-2 已於 2026-11-05 授權（`DEC-2026-11-05-02`），不在本 Gate；該 DEC
 
 **D8｜FX 閘門開放證據軌與冬令探測（最先問）**
 現況：`FX_OBS_DATE_RULE_VERIFIED=False`（`services/v2_tables/market_indicator.py`，AUD V10）→ 非 TWD 基金市值 `fx_absent`。時效：冬令錯位期重跑約 2026-11-02～11-24 有效，錯過等明年 3 月；結果須經獨立稽核才開閘（BL-0217）。repo 內有無重跑結果 NOT VERIFIED。另需 EUR／JPY／CNY 各自驗證。
-**一鍵問法**：「匯率『哪一天的收盤價算當天』的規則，需要在冬令時段（到約 11 月 24 日）用真實資料再測一次，錯過要等明年三月。**建議現在授權重跑探測並由獨立複核者看結果，先不開閘；結果出來再問您是否開放**。原因：有期限，且重跑只取證據、不改任何顯示或公式。」
+**一鍵問法**：「匯率『哪一天的收盤價算當天』的規則，需要在冬令時段（到約 11 月 24 日）用真實資料再測一次，錯過要等明年三月。**建議現在授權重跑探測並由獨立複核者看結果，先不開閘；結果出來再問您是否開放**。原因：有期限，且重跑預期只取證據、不改任何顯示或公式（**未驗**：BL-0217 寫探測排程已停用，重跑實際做法與是否動到排程尚待確認）。」
 
 **D9｜BL-0545 合法輸入與分母口徑**
 現況：Phase 1 唯讀探針已合併（#1168，`DEC-2026-11-07-03`）；live 模式 NOT IMPLEMENTED；真實覆蓋率 NOT VERIFIED；使用者暫不提供輸入。待裁：合法輸入（A 本人合法登入 session／B 自願匿名基金代碼清單）、分母口徑（`resolve_full_keys` vs DG2 canonical）。不得虛構覆蓋率、請求憑證或自行實作 live。
@@ -134,7 +134,7 @@ G-2 已於 2026-11-05 授權（`DEC-2026-11-05-02`），不在本 Gate；該 DEC
 
 **D10｜授權鏈重確認與 `-04` 實作狀態同步**
 兩半：(i) 同步實作狀態＝純文件事實更正（已於本 PR 處理，見 §5）；(ii) 重新確認 `DEC-2026-11-05-02` 授權鏈（僅要點轉述、無逐字 evidence、「不補造」）＝需客戶表態。
-**一鍵問法**：「資產頁『完整證據』元件開工當時的授權只留下摘要紀錄，沒有您的原話。**建議兩步：我們先把文件裡已過期的『實作狀態』更正（不需您決定，已做）；另請您用一句話確認當時三項授權（配置核心下沉、完整證據生產者、預覽載入端）確實是您同意的**。原因：這個元件已被後續工作引用，授權鏈若有缺口，之後改動無法回頭追溯。」
+**一鍵問法**：「資產頁『完整證據』元件開工當時的授權只留下摘要紀錄，沒有您的原話。**建議兩步：我們先把文件裡已過期的『實作狀態』更正（不需您決定，已做）；另請您用一句話確認當時三項授權（配置核心下沉、完整證據生產者、預覽載入端）確實是您同意的；並確認 `DEC-2026-11-05-04`（方案 D：僅在完整證據元件增加 NAV 輸入狀態證據，其餘仍未授權）亦是您同意的**。原因：這個元件已被後續工作引用，授權鏈若有缺口，之後改動無法回頭追溯。」
 
 ---
 
@@ -144,17 +144,17 @@ G-2 已於 2026-11-05 授權（`DEC-2026-11-05-02`），不在本 Gate；該 DEC
 
 | 風險 | 一句結論 | 可達性 | 現有降級 | 影響等級 | 裁示類型 |
 |---|---|---|---|---|---|
-| R1 `nav_metrics` 遇 NaN 靜默 | 函式本身對 NaN 靜默；正式組表路徑上游已擋非有限值 | **僅 Preview（`ui_v2`）與測試；`app.py` 不可達** | 上游 `nav_dividend` `math.isfinite`＋`contract` 拒非有限 | 低（防線缺口，靠上游擋） | **純技術修補**（不改公式、不涉門檻）；**本批未授權施工** |
-| R2 未設定級別→「持有」 | 與 13.1／67 §5.4 字面衝突；該線不可達 | **`app.py` 不可達**（僅測試可達） | 角色欄「⬜ 未設定」＋底註揭露 | 不可達 legacy；若重新掛載才流入 | **金融語意 Decision Gate**（BL-0428／BL-0445 承接） |
+| R1 `nav_metrics` 遇 NaN 靜默 | 函式本身對 NaN 靜默；正式組表路徑上游已擋非有限值 | **僅 Preview（`ui_v2`）與測試；`app.py` 不可達** | 上游 `nav_dividend` `math.isfinite`＋`contract` 拒非有限（推論） | 低（防線缺口，靠上游擋） | **純技術修補**（不改公式、不涉門檻；但會改變被 parity／golden 釘住的輸出，需連動測試與摘要常數）；**本批未授權施工** |
+| R2 未設定級別→「持有」 | 與 13.1／67 §5.4 字面衝突；該線不可達 | **`app.py` 不可達**（僅測試可達） | 角色欄「⬜ 未設定」＋底註揭露 | 不可達 legacy；若重新掛載才流入 | **金融語意 Decision Gate**（相關登記 BL-0428(7)／BL-0445／BL-0278／BL-0329，未專案承接此點） |
 | R3 過期 NAV 計入市值 | 新路徑已降級；**Old UI T7 未見日期檢查** | Old UI＝**`app.py` 可達**；`ui_v2`／`ui_v3`＝Preview | `ui_v2` >10 日不納入；`ui_v3` 市值基準 blocked | Old UI 可能流入正式路徑；其餘 Preview | **金融語意／門檻 Decision Gate** |
 
 ### 2.1 R1｜`nav_metrics` 遇 NaN 靜默
 
 - **FACT（實跑，乾淨 `git archive` 副本）**：`drawdown_pct([1,nan,2])=0.0`、`drawdown_pct([1,2,nan])=0.0`、`return_pct([1,nan,2])=100.0`、`return_pct([1,2,nan])=nan`（非 `None`）、`vol_pct([1,nan,2,3])=nan`。函式內無 `isfinite` 檢查（`services/v2_domain/nav_metrics.py`）。
-- **入口與可達性（FACT）**：`services/v2_domain/nav_metrics.py` 僅經 `ui_v2/v2_domain_shim.py` 再匯出 → `ui_v2/hld/logic.py` re-export（`return_pct`／`drawdown_pct`／`vol_pct`）→ **唯一計算呼叫點**同檔 `_build_page_model` 內 `return_pct(navs)`／`vol_pct(navs)`／`drawdown_pct(navs)`。`ui_v3` 無 caller；Old UI（`ui/`、`app.py`）0 caller。測試 `tests/test_v2_domain_port.py`、`tests/ui_v2/test_hld_logic.py` 皆無 NaN 案例。`app.py` 無 `ui_v2`／`ui_v3` import；僅能經 `ui_v2/app_preview.py`、`ui_v3/app_preview.py` 以 `streamlit run` 啟動（Preview）。
-- **現有降級（FACT）**：`services/v2_tables/nav_dividend.py` 逐值 `float()`＋`math.isfinite`，非有限計入「非有限數值」skipped 且該日不寫；`services/v2_tables/contract.py` 對「浮點」欄拒非有限（`nav_row_problems`）。→ 經 hld source 的正式組表＝已被擋（INFERENCE）。
+- **入口與可達性（FACT）**：`services/v2_domain/nav_metrics.py` 僅經 `ui_v2/v2_domain_shim.py` 再匯出 → `ui_v2/hld/logic.py` re-export（`return_pct`／`drawdown_pct`／`vol_pct`）→ **唯一計算呼叫點**同檔 `_build_page_model` 內 `return_pct(navs)`／`vol_pct(navs)`／`drawdown_pct(navs)`。`ui_v3` 無 caller；Old UI（`ui/`、`app.py`）0 caller。`tests/ui_v2/test_hld_logic.py` 無 NaN 案例，但 **`tests/test_v2_domain_port.py` 有**：第 53 行 `NAN`、第 144 行 `[NAN,1.0,2.0]`／`[1.0,NAN,2.0]`／`[1.0,2.0,NAN]` 餵 hld 三指標，第 262–267 行 parity 測試（L2 本體與搬遷前逐案相同）與約第 528 行 `hld_nav` 摘要常數釘住現行 NaN 行為。`app.py` 無 `ui_v2`／`ui_v3` import；僅能經 `ui_v2/app_preview.py`、`ui_v3/app_preview.py` 以 `streamlit run` 啟動（Preview）。
+- **現有降級（FACT）**：`services/v2_tables/nav_dividend.py` 逐值 `float()`＋`math.isfinite`，非有限計入「非有限數值」skipped 且該日不寫；`services/v2_tables/contract.py` 對「浮點」欄拒非有限（`nav_row_problems`）。→ 經 hld source 的正式組表＝已被擋（推論，INFERENCE）。
 - **影響等級**：僅 Preview／測試；函式契約層面「靜默」屬防線缺口。
-- **裁示類型**：純技術修補（函式內對 NaN 回 `None` 或 fail loud）；`return_pct` 末值 NaN 回 `nan` 與「算不出來回 `None`」不一致，屬契約對齊，不涉公式與門檻。**純技術、無金融語意裁示需求，但本批未授權施工**；若日後施工，屬 Preview 範圍。
+- **裁示類型**：純技術修補（函式內對 NaN 回 `None` 或 fail loud）；`return_pct` 末值 NaN 回 `nan` 與「算不出來回 `None`」不一致，屬契約對齊，不涉公式與門檻；**但改 NaN 行為會改變被 parity／golden 測試與 `hld_nav` 摘要常數釘住的輸出，施工需連動測試與摘要常數，不只是「契約對齊」**。**純技術、無金融語意裁示需求，但本批未授權施工**；若日後施工，屬 Preview 範圍。
 - **未驗**：Preview 注入式資料（`docs/evidence/*/launch_injected_data.py`）不經 `nav_dividend`；`hld/live.py` 之後是否改寫 nav 值未逐行驗；`return_pct` 回 `nan` 後 UI 格式化行為未驗；未跑 hld 全流程；未查 `cache/nav` 預存序列是否經其他路徑進表。
 
 ### 2.2 R2｜未設定級別→「持有」
@@ -162,16 +162,17 @@ G-2 已於 2026-11-05 授權（`DEC-2026-11-05-02`），不在本 Gate；該 DEC
 - **FACT（可達性）**：`services/decision_matrix.py` 唯一 production import 為 `services/realtime_signal.py`（`compute_realtime_dashboard`）← `ui/tab1_macro.py`（`_render_realtime_decision_dashboard`，行 1613 定義、2711 呼叫；1626 import）← `render_macro_tab`（行 1787）。`app.py` 行 156 import、行 636 呼叫的是 `ui.views.page_01_macro.render_market_overview`，**不是** `render_macro_tab`；`git grep "render_macro_tab("` 於非測試檔僅命中 `ui/tab1_macro.py` 自身定義與註解。該頁檔頭明言決策矩陣「搬去 ②、本頁不畫」。`mcp_server`／`scripts`／`ui_v2`／`ui_v3` 0 caller。
 - **行為（底稿，本次未重跑）**：tier 非 core／satellite 時回 `ACTION_HOLD`（「持有」）；未知 verdict→「預設持有」；`summarize_actions([])` 的 `core_hold_pct=0.0`。若該頁被掛載：角色欄「⬜ 未設定」、建議欄「持有」、底註寫「配置級別未設定時，系統維持持有」——以「持有」呈現而非「無法判定」。
 - **條文逐字**：PR 13.1 禁止「不得把 Missing 轉成 0／中性／HOLD／安全／未觸發」；67 §5.4(1)「不得 Missing → 0；Missing → neutral；not evaluated → safe；unavailable → HOLD（客戶原話）」；67 §8.3「資料未備時不得出現續抱」；`DEC-2026-10-24-09`「Missing／Unknown 不得被另一個單軸訊號繞過後重新產生行動」。
-- **既有登記**：`decision_matrix` 註解稱「客戶 2026-10-12 裁示：未設定 fail-closed HOLD」（`DECISIONS.md` 未找到該逐字條目，**未驗**）；`DEC-2026-10-23-08` 載明決策矩陣「σ 無法判定時沿用預設動作」本批不改、交 BL-0428；BL-0428（待客戶裁示）、BL-0278、BL-0329、BL-0445（dead code retirement gate 候選）。`DEC-2026-10-24-12`（DG-6）僅擴及 `switch_advisor`／`check_replacement_recommendation`，決策矩陣屬「其餘平行引擎未核准」。
-- **判定**：字面衝突＋現況不可達；非「語意不同」。影響等級＝不可達的 legacy 程式碼。**裁示類型＝金融語意 Decision Gate**（退役，或改為「無法判定」）；BL-0428／BL-0445 已承接。
+- **註解逐字（FACT）**：`services/decision_matrix.py` 約 104 行註解「未設定級別 fail-closed：不論 σ／配息，一律不給調整建議（維持持有）」——**HOLD 無裁示標註，`DECISIONS.md` 亦查無**；另約 107 行「未設定不當衛星（客戶 2026-10-12 裁示）」——該裁示標註只屬「未設定不當衛星」這句，**不是 HOLD**（`DECISIONS.md` 未找到該 2026-10-12 逐字條目，**未驗**）。
+- **既有登記**：`DEC-2026-10-23-08` 載明決策矩陣「σ 無法判定時沿用預設動作」本批不改、交 BL-0428；BL-0428(7)（待客戶裁示；談的是 σ 無法判定時沿用預設動作，**未明列「未設定級別→持有」**）、BL-0278／BL-0329（登記 `decision_matrix` 疑似不可達）、BL-0445（僅將 `decision_matrix.verdict_to_actions` 列為 dead code retirement 候選）。`DEC-2026-10-24-12`（DG-6）僅擴及 `switch_advisor`／`check_replacement_recommendation`，決策矩陣屬「其餘平行引擎未核准」。
+- **判定**：字面衝突＋現況不可達；非「語意不同」。影響等級＝不可達的 legacy 程式碼。**裁示類型＝金融語意 Decision Gate**（退役，或改為「無法判定」）；相關登記為 BL-0428(7)、BL-0445、BL-0278、BL-0329，**皆未專案承接「未設定級別→持有」本身**。
 - **未驗**：動態 import／session 路徑；2026-10-12 裁示原文；BL-0278「無 production 呼叫」僅 grep 複核一致。
 
 ### 2.3 R3｜過期 NAV 計入市值
 
 - **FACT（共用層）**：`services/v2_domain/holdings.py` 的 `latest_nav_row` 僅取 max(`nav_date`)，不看多舊；`basis_value_with_reason` 有 nav 列即 units×nav（×匯率），無 nav 列時才查 `stale_provider`（在過期名單→`MissingReason(nav_stale)`，市值 `None`）。
-- **ui_v2 路徑（FACT）**：`ui_v2/alo/live.py` `NAV_MAX_AGE_DAYS = thresholds.NAV_NOT_READY_DAYS`（10）；`assemble_nav` 以 `(today - day).days > max_age_days` 判 `too_old`，過期者不交進 `nav`，`dataset["nav_not_ready"]` 帶最後淨值日 → 過期被擋、非計入。≤10 日者計入，無額外標示（`hld` 黃燈處理未逐項驗）。
+- **ui_v2 路徑（FACT）**：`ui_v2/alo/live.py` `NAV_MAX_AGE_DAYS = thresholds.NAV_NOT_READY_DAYS`（10）；`assemble_nav` 以 `(today - day).days > max_age_days` 判 `too_old`，過期者不交進 `nav`，`dataset["nav_not_ready"]` 帶最後淨值日 → 過期被擋、非計入。≤10 日者計入，無額外標示（`ui_v2/thresholds.py` 註解稱 hld 超 10 日亦為中性灰「⬜ 資料未備」、不再用過期淨值算數；hld 逐項實作未驗）。
 - **ui_v3 路徑（FACT）**：`ui_v3/adapters/assets_source.py` `evaluate()` 市值基準 → `STATUS_BLOCKED`，不呼叫生產者；其餘分支傳 `nav_not_ready=None`、`nav_provenance=None`，故即使日後解除 blocked，`stale_provider` 無名單＝不會過濾舊 nav（INFERENCE）；`allocation_evidence` 的 gate `stale_nav_degradation_unjudged` 僅在「有 `nav_stale` 原因」時加入，舊 nav 仍被計入時不會觸發（底稿讀碼，行 1174 附近）。
-- **Old UI（`app.py` 可達；FACT＋未驗）**：`ui/tab3_t7_ledger.py` 的 `_latest_nav_fx_t7` 取 `_nav_now`（`from fund_fetcher import get_latest_nav`），無則 fallback 序列最後值；`get_latest_nav`（`repositories/fund/fx_and_main.py`）前 50 行未見日期檢查；「組合當前市值 (TWD)」以 `st.metric` 直接顯示；該檔 grep `stale`／`nav_date`／`過期` 未見 NAV 老舊揭露（該檔 3000+ 行未逐行讀完）。→ **可能顯示未標過期的市值**（INFERENCE）。
+- **Old UI（`app.py` 可達；FACT＋未驗）**：`ui/tab3_t7_ledger.py` 的 `_latest_nav_fx_t7` 取 `_nav_now`（`from fund_fetcher import get_latest_nav`），無則 fallback 序列最後值；`get_latest_nav`（`repositories/fund/fx_and_main.py`）簽章為 `float | None`、不帶日期（FACT），其 fallback 為 `_latest_nav_fx_t7` 內 `series.dropna().iloc[-1]` 的未做日期檢查之序列末值（FACT）；「組合當前市值 (TWD)」以 `st.metric` 直接顯示；該檔 grep `stale`／`nav_date`／`過期` 未見 NAV 老舊揭露（該檔 3000+ 行未逐行讀完）。→ **可能顯示未標過期的市值**（INFERENCE）。
 - **影響等級**：Old UI＝可能流入正式路徑；`ui_v2`＝Preview（已有 10 日降級）；`ui_v3`＝Preview 且市值未啟用。
 - **裁示類型**：金融語意／門檻 Gate（過期天數門檻、是否標示、降級樣式；`ui_v2` 的 10 日是既有客戶裁示 2026-10-13，Old UI 是否套用須裁示）；與 D7、D6 G-1 同源。
 - **未驗**：Old UI `_nav_now` 資料來源是否本身已排除過期；`hld` 市值欄位是否另有顯示；`assets_source` 其他分支；2026-10-13 裁示原文本次未重讀。
