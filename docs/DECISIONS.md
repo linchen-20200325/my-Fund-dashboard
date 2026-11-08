@@ -2489,6 +2489,22 @@
 | 可逆性 | 可逆（保留為預設狀態）。 |
 | provenance | 要點轉述（總管派工單）；分支清單為 `git ls-remote` 實查；證據份數為稽核轉述，本組未重數。 |
 
+### DEC-2026-11-08-02｜D8 FX 閘門維持關閉、不立即以相同方法重跑；OneBrain D1 採方案 C（資料契約先行）；推進 D3(a) 唯讀對照表
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-08（Asia/Taipei） |
+| 決策者／原話 | **客戶**裁示，經總管派工單轉達（repo 內無逐字存檔，**客戶指示經總管轉交的要點轉述，非逐字**；客戶可推翻）。要點五項：(1) D8 FX 閘門維持關閉；(2) 不使用相同方法立即重跑 FX 探測；(3) 先整理 D8 尚缺的精準證據與可行補證方法；(4) OneBrain 採 D1 方案 C 為正式規劃方向：資料契約先行，Decision Digest 後續再建；(5) 推進 D3(a)：盤點既有資料狀態字彙、建唯讀對照表。 |
+| 決策內容摘要 | **D8**：`FX_OBS_DATE_RULE_VERIFIED` 維持 `False`、FX 閘門維持關閉；不以與 2026-11-08 探測相同的方法立即重跑；先產出缺口與補證方法文件。本筆只照客戶字面，**不**推論補證方法是什麼、是否補跑、何時補跑。**D1**：採方案 C，正式規劃方向為 Data Sources → Validation／Normalization → Deterministic Domain Logic → Complete Evidence → Decision Digest → OneBrain；UI ViewModel ≠ Decision Digest；AI 只讀現有、有來源／日期／資料健康資訊的決策證據；先收斂各資料域 Required／Optional／Excluded 語意，再考慮 Digest schema 與生產者；研究候選欄位不得直接升格為正式契約。**D3(a)**：盤點既有資料狀態字彙、建唯讀對照表（純文件）。 |
+| 現行效果 | (1) FX 閘門仍關閉，非 TWD 基金市值照既有行為；(2) D1 方案 C＝**規劃方向已核准**；(3) D3(a) 對照表與 D8 缺口／補證文件為**文件產出**，僅登記與整理。 |
+| 仍未授權（明確） | **正式 Decision Digest 施工＝未授權**；**Phase 7／Provider／Claude API runtime＝未授權**；**D2（各資料域 Required／Optional／Excluded 逐域契約）與正式 Digest schema＝未核准**；**FX 開閘＝未核准**；**D8 冬令補跑（任何方法）＝未授權**；D3(b)／D7（`stale_after`、conflict、NAV 10 日語意）、D4、D5、D6、D9 與 D10：**本次未逐項核准者仍保留原 Gate**。不改 frozen `docs/v2/44`／`57`／CONSTITUTION；不改 code／workflow／cron／閘門／保留分支。 |
+| 理由／背景（agent 推論，不冒充裁示） | `docs/evidence/onebrain_decision_gate_route_and_risk_check_2026_11_08.md` §1.2 對 D1 的研究建議為 C、對 D8 的原提案為「授權重跑探測」；本次客戶對 D8 的裁示與該提案不同（維持關閉、不立即以相同方法重跑），以客戶裁示為準，提案不再作為 D8 的建議路徑。原提案文字保留於該 evidence。 |
+| evidence／source | `docs/evidence/onebrain_decision_gate_route_and_risk_check_2026_11_08.md`（D1～D10，研究提案）；`docs/evidence/fx_obs_date_winter_probe_2026_11_08.md`（D8 探測結果，證據不足以開閘）；`docs/evidence/fx_d8_gap_and_supplementary_plan_2026_11_08.md`（D8 缺口與補證方法）；`docs/evidence/data_state_vocabulary_crosswalk_d3a_2026_11_08.md`（D3(a) 唯讀對照表）；`docs/v2/75_onebrain_ai_architecture.md`；BL-0527、BL-0217、BL-0545。後兩份 evidence 由他組與本筆同批撰寫，**引用路徑待整合時檔案到位**。 |
+| 影響範圍 | 僅登記：`docs/DECISIONS.md`、`docs/BACKLOG.md`（檔尾索引；BL-0527、BL-0217 列內補更正字樣，狀態不變）、`docs/HANDOFF.md`。不新增 BL 列；不動任何 code／workflow／cron／閘門。 |
+| supersedes | **只取代 `DEC-2026-11-08-02` 之前的下列「提案／暫行下一步」性質文字之效力**（舊句保留並加刪除線，不刪）：(1) `onebrain_decision_gate_route_and_risk_check_2026_11_08.md` D8 一鍵問法的「建議現在授權重跑探測」之建議；(2) `docs/BACKLOG.md` BL-0217 內「重跑方式」之操作指引；(3) `docs/HANDOFF.md` 第 3 節對 D8「冬令補跑窗口……是否補跑待獨立稽核與決策者」之下一步句。以上三者皆非客戶裁示，為研究提案或交接指引；本筆不取代任何先前客戶裁示。 |
+| 可逆性 | 可逆：客戶可隨時推翻或改裁；FX 閘門預設關閉；D1 方案 C 是規劃方向，未產生任何程式。 |
+| provenance | 要點轉述（經總管派工單轉達，非逐字）；「現行效果／仍未授權」欄為整理；「理由／背景」欄為 agent 推論；supersedes 範圍為文件組讀法，可被客戶推翻。 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -2665,3 +2681,4 @@
 - 第四節 `DEC-2026-10-29-04`：客戶原文已逐字存檔（`docs/evidence/decisions/2026-10-29_context_compaction_gate.md`，無遮蔽），引號內文字逐字；執行組仍未見客戶對話本身；由執行組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-11-05-02`～`-04`：客戶指示皆經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；三筆的客戶裁示欄為總管轉達要點，照寫不增刪；`-02` 的 PR／merge sha 對照為文件組查證 git 所得（PR #1150 未合併、`-01` 保留，未讀其內容）；#1155 稽核「發現缺口」的描述依派工單，本組只核對 #1155 已合併、標題相符；`-03` 的事實欄為稽核文件第 3 節轉記，單組、未重驗各程式碼事實；`-04` 的實作狀態為派工單所述，本組未查該 PR；由文件組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-11-07-04`、`DEC-2026-11-08-01`：`-07-04` 的留言存在與逐字句已對照 GitHub 留言 issuecomment-6707193906，owner 分工為留言要點、supersedes 範圍為專案 AI 讀法；`-08-01` 客戶裁示經總管派工單轉達，無逐字存檔，證據份數（9／17／18）為稽核轉述、本組未重數；兩筆由專案 AI 單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-11-08-02`：客戶指示經總管派工單轉達，repo 內無逐字存檔，本組未見客戶對話本身；五項要點照寫、不增補；D8 補證方法與是否補跑本筆不寫；兩份引用的 evidence（fx_d8_gap_and_supplementary_plan／data_state_vocabulary_crosswalk_d3a）由他組同批撰寫，撰寫時未到位、路徑待整合時核對；supersedes 範圍為文件組讀法；由文件組單組寫成，未經第二組驗證。
