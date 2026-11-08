@@ -1155,3 +1155,4 @@
 - 2026-11-02 New UI2 架構方向（#1119，docs-only；`DEC-2026-11-02-03`）：BL-0533 新增（open；Decision Gate；dependency #1119 合併）；BL-0531、BL-0525、BL-0532 列尾補 New UI2 指標；快速索引〈待客戶裁示〉加 BL-0533。BACKLOG §3 列數統計未重算；由文件組單組寫成，未經第二組驗證。
 - 2026-11-02 New UI2 Architecture Proposal 落盤（docs-only）：BL-0533 狀態更新（劃線保留舊字）、列內追加 BL-0533-NG1～NG5（待客戶裁示）。未新增 BL 列，BACKLOG §3 列數統計未重算；由文件組單組寫成，未經第二組驗證。
 - 2026-11-02 New UI2 NG／Final UI Contract 一次裁示落盤（docs-only；`DEC-2026-11-02-05`～`-08`）：BL-0533 closed；BL-0531 子項改已裁示（母列 open）；BL-0532 列尾補記；BL-0534～BL-0536 新增；快速索引已同步。BACKLOG §3 列數統計未重算；由執行組單組寫成，未經第二組驗證。
+- 2026-11-08 OneBrain Evidence 覆蓋差距稽核研究結案（docs-only；`docs/evidence/onebrain_evidence_coverage_gap_audit_2026_11_08.md`）：研究索引，**未新增 BL 列、未改 BL-0527／BL-0545 狀態**；**研究結案不代表 Phase 7 開工，不構成動工授權**。真實 Active Sheet 覆蓋率仍 NOT VERIFIED；方案 A／B／C 的推薦（C）為研究建議，非裁示。由文件組單組整理，底稿兩份單組稽核，未經第二組獨立驗證。
