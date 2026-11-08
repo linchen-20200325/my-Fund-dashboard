@@ -105,8 +105,8 @@
 | GitHub Discussion Persistence Gate（協作助手與客戶的討論結論須在下一個相關實作批次前落 GitHub SSOT） | 第 12 節 12.2（`DEC-2026-10-27-19`） |
 | Public Repository Personal Name Redaction Rule（公開 repo 不得出現外部教材作者／老師真實姓名） | 第 12 節 12.3（`DEC-2026-10-27-20`） |
 | Cross-View Data Consistency Gate（同 canonical instrument＋metric＋as-of＋currency／share class ＝ 各 view 同一值；禁止各頁自選來源或平行計算；衝突不得靜默選一） | 第 13 節 13.3（`DEC-2026-10-28-01`） |
-| New UI2 Legacy Capability Review Gate（每頁先唯讀盤點 Old UI／正式入口 `[新]`／`ui_v2`／共用資料層，再決定重用／抽取／重設；不得照搬版型） | 第 13 節 13.6（`DEC-2026-11-08-06`） |
 | Anti-Bloat / Minimum Governance Overhead（最小充分 audit／PR／evidence、BACKLOG 不碎片化、完成後停止、少回報） | 第 13 節 13.4（`DEC-2026-10-28-04`） |
+| New UI2 Legacy Capability Review Gate（每頁先唯讀盤點 Old UI／正式入口 `[新]`／`ui_v2`／共用資料層，再決定重用／抽取／重設；不得照搬版型） | 第 13 節 13.6（`DEC-2026-11-08-06`） |
 | Context Efficiency 與 Context Compaction Gate（自動 compact 建議、最小必要讀取、frozen 44 局部讀取、compact 後恢復順序、compaction 六觸發／保留／可丟棄、GitHub = 長期記憶） | 第 11 節 11.1（`DEC-2026-10-28-02`、`DEC-2026-10-29-04`） |
 | Visual Fidelity Gate（功能測試／CI／QA 全綠 ≠ UI Stage 完成；UI PR 要有 production-like Cloud screenshot 正式確認，CI deterministic screenshot 只是自動安全網） | 第 7 節指標；本文 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九其九（`DEC-2026-10-29-05`） |
 | GitHub Durable Memory Contract（Conversation 不是 SSOT；Batch 結案前檢查五類文件同步；HANDOFF 只是索引） | 第 6 節 6.1.1 末尾指標（`DEC-2026-10-29-06`） |
@@ -865,18 +865,18 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 3. **工程資訊不得進一般 UI。** 環境變數名、Python exception、traceback、internal reason code、module path 一律不顯示；改用人類可理解語意（例：「利率資料來源尚未設定」之類的語意句；實際字樣以 `shared/ui_semantics/rules.py` 與各頁已核准字樣為準）。開發者診斷層預設收合。🌍 已有機器守衛（`tests/ui_v3/`）；本條為全站通則的唯一權威位置。
 4. **Presentation Compression ≠ Information Loss。** UI 精簡不代表資料精簡：UI 不顯示的資料，不得因此不抓、刪 adapter／provenance／health／deterministic result／未來 OneBrain evidence，或停止測試；完整資料留在資料、domain、evidence 層。
 
-### 13.6 長期規則：New UI2 Legacy Capability Review Gate（客戶 2026-11-08 正式要求，`DEC-2026-11-08-06`；永久）
+### 13.6 長期規則：New UI2 Legacy Capability Review Gate（客戶 2026-11-08 正式要求，`DEC-2026-11-08-06`；永久；要點轉述，客戶原話經 ChatGPT 轉達、repo 無逐字存檔）
 
-> **適用**：`ui_v3` 現在的 💼 我的資產，以及此後每一個 New UI2 頁面的規劃、接線、改良與驗收；已完成 Preview 的 🌍 市場與趨勢於下次相關改良時也必須對照。此為**施工前檢查 Gate**，不是舊版程式或版型的移植授權。本節不變更任何已核准的頁序、線框、金融公式、資料來源、風險門檻或 Phase 7 Gate。
+> **適用**：`ui_v3` 現在的 💼 我的資產，以及此後每一個 New UI2 頁面在已有任務時的規劃、接線、改良與驗收；已完成 Preview 的 🌍 市場與趨勢於下次相關改良時也必須對照。此為**施工前檢查 Gate**（只在已有任務時啟動；不授權主動盤點全 UI，不構成動工授權，`CLAUDE.md` §-1），不是舊版程式或版型的移植授權。本節不變更任何已核准的頁序、線框、金融公式、資料來源、風險門檻或 Phase 7 Gate。
 
-1. **先查舊能力，才談新設計。** 完成 GitHub Verification Gate 後，按任務相關性唯讀檢查三條 UI 線：A＝Old UI 原有正式頁；B＝曾掛在正式入口的部分 `[新]` 頁（即使引用舊程式亦不等於完整搬遷）；C＝`ui_v2`／`ui_v3` 新介面；另查 `services/`、`repositories/`、`shared/` 等共用資料／Domain 層。盤點現成取數／讀取、代碼映射、驗證、金融計算、Missing／錯誤隔離、來源／日期／幣別／freshness、使用者設定、互動能力與回歸測試；依任務只查必要範圍，避免重做全庫稽核。
-2. **逐項判斷，不直接照搬。** 對照已核准的 New UI2 wireframe／SSOT，為相關能力記錄「舊實作與路徑、輸入／輸出與資料契約、已驗證證據、缺口、目標處理」。目標處理限依證據選：① **直接重用**共用服務／正式 Domain；② **抽取或最小改良**已驗證邏輯到單一 shared／domain SSOT（保持既有 consumer 行為，依 Gate 授權）；③ **重新設計呈現或不沿用**不符合現代 UI、尚未驗證或金融語意不符的能力。未驗證的舊程式只能作候選，不宣稱已核准。
+1. **先查舊能力，才談新設計。** 完成 GitHub Verification Gate 後，按任務相關性唯讀檢查三條 UI 線：A＝Old UI 原有正式頁；B＝目前掛在正式入口的 `[新]` 並行預覽頁（`app.py` `st.tabs` 第 6～9 格；即使引用舊程式亦不等於完整搬遷）；C＝`ui_v2`／`ui_v3` 新介面；另查 `services/`、`repositories/`、`shared/` 等共用資料／Domain 層。盤點現成取數／讀取、代碼映射、驗證、金融計算、Missing／錯誤隔離、來源／日期／幣別／freshness、使用者設定、互動能力與回歸測試；依任務只查必要範圍，避免重做全庫稽核。
+2. **逐項判斷，不直接照搬。** 對照已核准的 New UI2 wireframe／SSOT，為相關能力記錄「舊實作與路徑、輸入／輸出與資料契約、已驗證證據、缺口、目標處理」（記錄寫在既有 PR 描述或 BL，不另生大型稽核報告，13.4）；💼 尚無核准線框時先走草稿先行（BL-0536-G2）。目標處理限依證據選：① **直接重用**共用服務／正式 Domain（金融公式／門檻類仍受第 5 點限制；舊站既有算法適用範圍不自動擴及 New UI2）；② **抽取或最小改良**已驗證邏輯到單一 shared／domain SSOT（保持既有 consumer 行為，依 Gate 授權；不得為抽取而修改 Old UI 檔案（`DEC-2026-11-02-02`）；抽取須有獨立稽核（`DEC-2026-11-02-05` NG-2 範圍））；③ **重新設計呈現或不沿用**不符合現代 UI、尚未驗證或金融語意不符的能力。未驗證的舊程式只能作候選，不宣稱已核准。
 3. **以新版使用情境最佳化。** 手機第一屏、桌面操作、可理解的資訊階層、觸控與無障礙、漸進揭露、資料健康／來源可追溯性須符合新版正式裁示；不移植 Old UI layout、navigation、component hierarchy、文案或權限。現行核准設計優先，不以舊 UI 存在為由重新設計已裁示部分。
-4. **先比較三條可行路徑。** 由產品／治理層至少比較「直接重用／抽取改良／重設或維持缺值」，依正確性、風險、速度、Token／維護成本推薦 minimum-cost correct path；沒有必要時不新增第二套取數器、平行公式或重複元件。
-5. **資料與 AI 分離、保留 Stop Gate。** UI 不自行抓取或重算正式金融值；只呈現已核准、可追溯的資料與 deterministic 結果。缺 NAV、FX、日期、身份證據、占比分母或授權時標示缺漏與原因，不能補 0、偷換來源、畫成完整 100% 或自行產生投資行動。舊站既有算法的**適用範圍不可自動擴及 New UI2**；涉及新資料來源、正式 schema／契約、金融公式／門檻、OAuth、寫入、重大 UI 變更、OneBrain／Digest／Phase 7，仍先停手請客戶核准。
-6. **最小證據與分工。** 利用已有盤點（例如 #1177／#1178 的 D2 草案及 `docs/v2/80` reuse matrix）作索引，只補實際缺口，不再產出重複的大型稽核報告。ChatGPT 負責跨舊／新能力比較、UI／UX 與資料契約設計；Claude Code 在**另行獲授權後**施工、非作者 QA、CI、合併與正式文件同步。功能已實作 ≠ Preview 已驗 ≠ 正式 Cloud／真機已驗；逐層如實標記。
+4. **先比較三條可行路徑。** 依 9.2 辦理，預設內部比較、不外呈；由產品／治理層至少比較「直接重用／抽取改良／重設或維持缺值」，依正確性、風險、速度、Token／維護成本推薦 minimum-cost correct path；沒有必要時不新增第二套取數器、平行公式或重複元件。
+5. **資料與 AI 分離、保留 Stop Gate。** UI 不自行抓取或重算正式金融值；只呈現已核准、可追溯的資料與 deterministic 結果。缺 NAV、FX、日期、身份證據、占比分母或授權時標示缺漏與原因，不能補 0、偷換來源、畫成完整 100% 或自行產生投資行動。舊站既有算法的**適用範圍不可自動擴及 New UI2**；依第 4 節與既有 DEC，下列仍須停手請客戶核准：新資料來源、正式 schema／契約、金融公式／門檻、OAuth、寫入、重大 UI 變更、OneBrain／Digest／Phase 7。
+6. **最小證據與分工。** 利用已有盤點（例如 #1177／#1178 的 D2 草案及 `docs/v2/80` reuse matrix）作索引，只補實際缺口，不再產出重複的大型稽核報告。ChatGPT 或專案 AI 依當次分工；施工、非作者 QA、CI、合併與正式文件同步由 Claude Code 在另行授權後執行（現行分工見 `DEC-2026-11-07-04`、本檔第 15 節）。功能已實作 ≠ Preview 已驗 ≠ 正式 Cloud／真機已驗；逐層如實標記。
 
-**頁別快速指標（不是新 wireframe）**：🌍 市場／趨勢資料與圖表；💼 持倉帳本、成本／淨投資金額、配置、報酬、配息、缺值；🔍 搜尋、低基期、單檔深掘、健診及比較；🤖 只研究證據與舊分析能力、Phase 7 前不啟用；⚙️ Sheet／OAuth／資料健康與通知設定。每頁的正式呈現仍以其已核准線框及 DEC 為準。
+各頁職責以 13.2 第 1 點為唯一權威。
 
 ## 第 14 節｜已裁示的治理衝突（2026-10-16 收斂）~~與尚待程序完成者~~（2026-10-16 全結，`DEC-2026-10-16-14`；有意識的狀態變更，不是漏刪；2026-10-16；決策者：客戶（#8 核准裁示，`DEC-2026-10-16-14`））
 
