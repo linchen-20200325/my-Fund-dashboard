@@ -20,7 +20,7 @@
 ## 1. 範圍、基準與方法、盲點
 
 - **範圍**：9 個資料域（市場與總體；基金基本資料／NAV／績效；持倉／資產配置；配息／事件；FX／利率／景氣；基金身份與跨源對應；資料健康／Missing／Freshness；Deterministic Rules／Risk Cap／Action State；Supporting／Counter-evidence）。
-- **方法**：(1) 契約側：`docs/v2/66/67/75/79/80/82`、`docs/DECISIONS.md` 相關 DEC、`docs/BACKLOG.md` 相關 BL、`docs/evidence/` 既有稽核。(2) 程式側：`git grep`／`git show origin/main`，並把 `origin/main` 以 `git archive` 解到 scratchpad 實跑 `nav_metrics`。(3) 本文件整理者對 14 條承重宣稱重跑指令（第 2 節）。
+- **方法**：(1) 契約側：`docs/v2/66/67/75/79/80/82`、`docs/DECISIONS.md` 相關 DEC、`docs/BACKLOG.md` 相關 BL、`docs/evidence/` 既有稽核。(2) 程式側：`git grep`／`git show origin/main`，並把 `origin/main` 以 `git archive` 解到 scratchpad 實跑 `nav_metrics`。(3) 本文件整理者對 15 條承重宣稱重跑指令（第 2 節）。
 - **盲點（必讀）**：
   1. 兩份底稿皆單組；「文件不存在／0 命中」類全稱句以字面符號為準，**改名、動態組字串、別名不在內**。
   2. `docs/DECISIONS.md`（體積大）僅讀相關 DEC，未通讀；`BACKLOG` 僅讀相關列。
@@ -53,7 +53,7 @@
 | V14 | `app.py`／`ui/` 不引用 `ui_v2`／`ui_v3` | `git grep -n "ui_v2\|ui_v3" origin/main -- app.py ui` | 0 命中 | 相符 |
 | V15 | `mcp_server` 輸出含 UI 字樣 | `git grep -n "action_text\|action_light" origin/main -- mcp_server` | `tools_macro.py:64` 取 `icon, level, _color, action_text = composite_verdict(total)`；輸出含 `action_light` | 相符 |
 
-**未重驗（保留底稿原文，標 NOT VERIFIED）**：`open_gates` 實為 10 碼（本文件僅確認檔內有多個 `unjudged`／`unverified` 字面，未逐碼點算）；`INDICATOR_SPECS` 7 鍵（未點算）；`DOMAIN_ORDER` 12 個 domain（本文件只確認其存在與前 12 個常數排列）；Old UI 各 caller 的 `app.py` 可達性；`docs/v2/67/79/80/82` 與各 DEC 的逐字內容（契約側僅抽樣 `67` §5、§8.6 與 `DEC-2026-11-05-02/-04`、`BL-0527`）；底稿所述的測試 passed／skipped 數（326／21）。
+**未重驗（保留底稿原文，標 NOT VERIFIED）**：`open_gates` 碼數改以實數為準（計法見本段下方），不採底稿的 10。**open gate 計法（本文件實數）**：`allocation_evidence.py` 的 `_CHART_AFFECTING_GATES` 有 8 碼，其上方註解另列 3 碼（`tolerance_unset_effect_unjudged`、`omitted_row_reason_codes_undefined`、`non_holding_read_error_effect_unjudged`，刻意不在該集合內），合計 **11**。仍未驗：`INDICATOR_SPECS` 7 鍵（未點算）；`DOMAIN_ORDER` 12 個 domain（本文件只確認其存在與前 12 個常數排列）；Old UI 各 caller 的 `app.py` 可達性；`docs/v2/67/79/80/82` 與各 DEC 的逐字內容（契約側僅抽樣 `67` §5、§8.6 與 `DEC-2026-11-05-02/-04`、`BL-0527`）；底稿所述的測試 passed／skipped 數（326／21）。
 
 ## 3. 差距矩陣（9 域）
 
@@ -77,14 +77,14 @@
 
 | 域 | 是否有 deterministic calculation | Complete Evidence 生產者 | Digest 正式契約 | R／O／E | 缺口風險、依賴、必要決策 |
 |---|---|---|---|---|---|
-| 市場與總體 | 有：`normalization.normalize_pair`、`market_summary.first_screen_summary`、`periods.slice_period`、`freshness.delay_days`；Old `composite_score`、`calc_macro_phase` | **NOT IMPLEMENTED**。CONNECTED(ui_v3 Preview)：`ui_v3/adapters/market_page.py`；CONNECTED(ui_v2)：`ui_v2/mkt/source.py`；Old UI 消費 `fetch_all_indicators`（可達性 NOT VERIFIED） | NOT IMPLEMENTED | 待 Gate（無逐鍵規則；regime 聚合規則另走 Formula Gate） | NASDAQ／MSCI／成交量／市場統計／EPS-PE 僅回 Missing；`stale_after` 門檻未定（BL-0369）；各指標 provider 缺（`67` §5.6-2）；BL-0501 待客戶。需決策：stale 門檻、provider 表、聚合規則 |
-| 基金基本資料／NAV／績效 | 有：`nav_metrics`、Old `fund_service`、`fund_total_return`、`reconcile.py` | **NOT IMPLEMENTED**（NAV／績效層級）；僅 💼 證據內嵌 `NavFact`。CONNECTED(Old UI)：`ui/tab2_single_fund.py`；CONNECTED(ui_v2)：`ui_v2/hld/logic.py` | NOT IMPLEMENTED | 待 Gate | 報酬口徑多套（BL-0524）；NAV 10 日規則僅存 `ui_v2/thresholds.py`、無專屬 DEC（`DEC-2026-11-05-03` 五待決）；真實頁面覆蓋 NOT VERIFIED。需決策：報酬口徑、NAV 新鮮度語意 |
-| 持倉／資產配置 | 有：成本／市值基準、類別加總、`exceeds`、`deviation`、`rule_filter`、`target_sum` | **EXISTS IN REPO，未 CONNECTED**：`allocation_evidence.py`（`SCHEMA_VERSION=2`，檔頭自稱「INTERNAL CANDIDATE, not approved vocabulary」）；市值面未接線（`BLOCKED_MARKET_BASIS`） | 通則 CONTRACT APPROVED；本域無 Digest 契約（NOT IMPLEMENTED） | 部分：Missing≠0、covered-only≠完整 100%、未設定≠讀取失敗（引 `DEC-2026-11-04-02`、`DEC-2026-10-24-09`）；其餘（G-1 分母公式、G-3～G-5、11 項 open gate）待 Gate | 授權鏈為要點轉述、無逐字（`DEC-2026-11-05-02/-04` 自述「不補造」）；`DEC-04` 文字落後程式（V9）；過期 NAV 仍計市值（僅記 gate）。需決策：G-1～G-5 |
-| 配息／事件 | 有：吃本金判定、Old 除息日推估 | **NOT IMPLEMENTED**。CONNECTED(ui_v2)：`ui_v2/{exp,hld}/source.py`；CONNECTED(Old UI)：`ui/tab_manage.py` | NOT IMPLEMENTED（`67` §8.11：納入與否「隨 Digest schema Gate」） | 待 Gate（delivery metadata 屬 Excluded，已核准） | `pay_date` 語意 amendment 未起草（BL-0534）；date_status 四態無正式契約。需決策：配息日期語意（G-3） |
+| 市場與總體 | 有：`normalization.normalize_pair`、`market_summary.first_screen_summary`、`periods.slice_period`、`freshness.delay_days`；Old `composite_score`、`calc_macro_phase` | **NOT IMPLEMENTED**。CONNECTED(ui_v3 Preview)：`ui_v3/adapters/market_page.py`；CONNECTED(ui_v2)：`ui_v2/mkt/source.py`；Old UI 消費 `fetch_all_indicators`（可達性 NOT VERIFIED） | NOT IMPLEMENTED | 待 Gate（無逐鍵規則；regime 聚合規則另走 Formula Gate） | NASDAQ／MSCI／成交量／市場統計／EPS-PE 僅回 Missing；`stale_after` 門檻未定（出處：`docs/v2/67` §8.5 與 `79` UI-8，BL-0531 後續項 (5)；BL-0369 是另一件事：市場總覽 ② 核心卡 `◷` 徽章與 47 `Q-05` 的色調門檻）；各指標 provider 缺（`67` §5.6-2）；BL-0501 待客戶。需決策：stale 門檻、provider 表、聚合規則 |
+| 基金基本資料／NAV／績效 | 有：`nav_metrics`、Old `fund_service`、`fund_total_return`、`reconcile.py` | **NOT IMPLEMENTED**（NAV／績效層級）；僅 💼 證據內嵌 `NavFact`。CONNECTED(Old UI；`app.py` 可達性 NOT VERIFIED)：`ui/tab2_single_fund.py`；CONNECTED(ui_v2)：`ui_v2/hld/logic.py` | NOT IMPLEMENTED | 待 Gate | 報酬口徑多套（BL-0524）；NAV 10 日規則僅存 `ui_v2/thresholds.py`、無專屬 DEC（`DEC-2026-11-05-03` 五待決）；真實頁面覆蓋 NOT VERIFIED。需決策：報酬口徑、NAV 新鮮度語意 |
+| 持倉／資產配置 | 有：成本／市值基準、類別加總、`exceeds`、`deviation`、`rule_filter`、`target_sum` | **EXISTS IN REPO，未 CONNECTED**：`allocation_evidence.py`（`SCHEMA_VERSION=2`，檔頭自稱「INTERNAL CANDIDATE, not approved vocabulary」）；市值面未接線（`BLOCKED_MARKET_BASIS`） | 通則 CONTRACT APPROVED；本域無 Digest 契約（NOT IMPLEMENTED） | 部分：Missing≠0、covered-only≠完整 100%、未設定≠讀取失敗（引 `DEC-2026-11-04-02`、`DEC-2026-10-24-09`）；其餘（G-1 分母公式、G-3～G-5、11 項 open gate（計法：`_CHART_AFFECTING_GATES` 8 碼＋註解列另 3 碼，見第 2 節））待 Gate | 授權鏈為要點轉述、無逐字（`DEC-2026-11-05-02/-04` 自述「不補造」）；`DEC-04` 文字落後程式（V9）；過期 NAV 仍計市值（僅記 gate）。需決策：G-1～G-5 |
+| 配息／事件 | 有：吃本金判定、Old 除息日推估 | **NOT IMPLEMENTED**。CONNECTED(ui_v2)：`ui_v2/{exp,hld}/source.py`；CONNECTED(Old UI；`app.py` 可達性 NOT VERIFIED)：`ui/tab_manage.py` | NOT IMPLEMENTED（`67` §8.11：納入與否「隨 Digest schema Gate」） | 待 Gate（delivery metadata 屬 Excluded，已核准） | `pay_date` 語意 amendment 未起草（BL-0534）；date_status 四態無正式契約。需決策：配息日期語意（G-3） |
 | FX／利率／景氣 | v2 僅取數與列轉換；Old 有 `composite_score`、`identify_regime` | **NOT IMPLEMENTED**；`allocation_evidence` 只內嵌 `FxFact`。CONNECTED(ui_v2)：`ui_v2/mkt|set` | NOT IMPLEMENTED | 待 Gate | FX 閘門需冬令探測（BL-0217，約 2026-11-02～11-24，repo 內尚無重跑結果）；EUR／JPY／CNY 需各自驗證；`mcp_server` 輸出含 UI 字樣。需決策：開閘證據軌 |
 | 基金身份與跨源對應 | 有（純字串規則＋通路表） | **NOT IMPLEMENTED**（`evaluate_suffix_evidence` 是比較器，非生產者）。DG2：EXISTS IN REPO，shadow，旗標預設關 | NOT IMPLEMENTED（欄位群僅在 `67` §8.6 Identity 列） | 部分：shadow 階段規則已核准（`DEC-2026-10-28-05`）；canonical key 採用與跨類別 identifier 待 Gate | canonical identity consumer 在 production 為 0；幣別／share class 多為 Unknown；ISIN→identity 來源未核准（BL-0530 research）。需決策：何時由 shadow 轉用 |
-| 資料健康／Missing／Freshness | 有：`delay_days`（純）；`page_health.main_reason` 優先序（呈現用） | **NOT IMPLEMENTED**（無統一健康 Evidence）；💼 專屬評估在 `allocation_evidence`。CONNECTED(ui_v2、ui_v3 Preview、Old UI) | NOT IMPLEMENTED | 部分：Missing≠0／neutral／safe／HOLD（`PROJECT_RULES` 13.1）；健康 Grade／覆蓋／准入三軸分開（`DEC-2026-11-06-02`）；其餘待 Gate | 狀態字彙對照表缺（BL-0527-1）；stale／conflict 門檻未裁（探針一律 `not_evaluated`）；`ui_v2/health.py` 含判定邏輯、屬呈現層不得當資料源。需決策：字彙對照、門檻、准入準則 |
-| Deterministic Rules／Risk Cap／Action State | 有（使用者門檻比較；Old 規則碼）；**無** Risk Cap、減碼 trigger、Action State 產出 | **NOT IMPLEMENTED**（Risk Cap／Action State）。Old 規則 CONNECTED(Old UI)；`rule_filter`／`deviation` CONNECTED(ui_v2) | NOT IMPLEMENTED（六行動詞語意與 System Action State 通則為 CONTRACT APPROVED，Rules／Risk Cap 未定義前恆為「無法判定」） | 待 Gate | Risk Cap 與減碼 trigger 待客戶（BL-0495／0496）；`rule_version`／Rule ID 格式 Gate（BL-0527-4）。需決策：Risk Cap、trigger、Rule ID 格式 |
+| 資料健康／Missing／Freshness | 有：`delay_days`（純）；`page_health.main_reason` 優先序（呈現用） | **NOT IMPLEMENTED**（無統一健康 Evidence）；💼 專屬評估在 `allocation_evidence`。CONNECTED(ui_v2、ui_v3 Preview、Old UI) | NOT IMPLEMENTED | 部分：Missing≠0／neutral／safe／HOLD（`PROJECT_RULES` 13.1）；健康 Grade／覆蓋／准入三軸分開（`DEC-2026-11-06-02`）；其餘待 Gate | 狀態字彙對照表缺（`docs/v2/67` §5.6 第 1 項）；stale／conflict 門檻未裁（探針一律 `not_evaluated`）；`ui_v2/health.py` 含判定邏輯、屬呈現層不得當資料源。需決策：字彙對照、門檻、准入準則 |
+| Deterministic Rules／Risk Cap／Action State | 有（使用者門檻比較；Old 規則碼）；**無** Risk Cap、減碼 trigger、Action State 產出 | **NOT IMPLEMENTED**（Risk Cap／Action State）。Old 規則 CONNECTED(Old UI；`app.py` 可達性 NOT VERIFIED)；`rule_filter`／`deviation` CONNECTED(ui_v2) | NOT IMPLEMENTED（六行動詞語意與 System Action State 通則為 CONTRACT APPROVED，Rules／Risk Cap 未定義前恆為「無法判定」） | 待 Gate | Risk Cap 與減碼 trigger 待客戶（BL-0495／0496）；`rule_version`／Rule ID 格式 Gate（`docs/v2/67` §5.6 第 4 項）。需決策：Risk Cap、trigger、Rule ID 格式 |
 | Supporting／Counter-evidence | 無 | **NOT IMPLEMENTED**（V4） | NOT IMPLEMENTED（輸出需含「最大反證」之方向已核准；定義未裁） | 待 Gate | 反證的投資語意定義未裁（BL-0542 G-1 新待決題 (b)）；若把 `EvidenceSupport` 當反證語意不符。需決策：反證定義 |
 
 ## 4. 與 BL-0545 的關係
@@ -129,7 +129,7 @@
 | `docs/evidence/new_ui2_spec_supersession_data_capability_review_2026_11_06.md` | 舊規格取代索引、各資料可取得性 | 索引性質，非 SSOT |
 | `docs/v2/82` §8、`docs/v2/69/70/71` | 💼 逐元件追溯；跨 view 分歧；DG-2；舊線 AI 盤點 | 單組；僅部分域 |
 
-### 6.2 新差距 G 清單（本研究判讀；「查無文件」不宣稱窮舉）
+### 6.2 新差距 G 清單（**INFERENCE，本研究判讀，非既有文件主張**；本研究判讀；「查無文件」不宣稱窮舉）
 
 | # | 差距 | 備註 |
 |---|---|---|
@@ -178,10 +178,10 @@
 |---|---|---|---|
 | D1 | 方案方向（A／B／C）本身，以及是否啟動任何 Digest 相關施工 | 屬產品方向與 Phase 7 範圍 | 新決策（本文件不起草 DEC） |
 | D2 | 各域 Required／Optional 逐項清單與 Digest schema 版本／fingerprint | `67` §8.6 僅通則；三分隨 Digest 實作調整 | BL-0527 |
-| D3 | 狀態字彙對照表與 stale／conflict／`stale_after` 門檻 | 無門檻則 Health 兩態無法產出 | BL-0527-1／-3、BL-0369、BL-0545 |
-| D4 | Risk Cap、減碼 trigger、Rule ID／`rule_version` 格式 | Rules／Risk Cap 未定義前 Action State 恆為「無法判定」 | BL-0495／0496、BL-0527-4 |
+| D3 | 狀態字彙對照表與 stale／conflict／`stale_after` 門檻 | 無門檻則 Health 兩態無法產出 | `docs/v2/67` §5.6 第 1／3 項（BL-0527）、`67` §8.5／`79` UI-8（BL-0531 後續項 (5)）、BL-0369（卡片 `◷` 徽章／47 `Q-05`，另案）、BL-0545 |
+| D4 | Risk Cap、減碼 trigger、Rule ID／`rule_version` 格式 | Rules／Risk Cap 未定義前 Action State 恆為「無法判定」 | BL-0495／0496、`docs/v2/67` §5.6 第 4 項 |
 | D5 | 反證（counter-evidence）的投資語意定義 | 無定義則無法有生產者 | BL-0542 G-1 (b) |
-| D6 | 💼 G-1（分母公式）、G-3（配息日期語意）、G-4、G-5 與 11 項 open gate | 現有生產者的詞彙仍是內部候選 | BL-0542 |
+| D6 | 💼 G-1（分母公式）、G-3（配息日期語意）、G-4、G-5 與 11 項 open gate（計法：`_CHART_AFFECTING_GATES` 8 碼＋註解列另 3 碼，見第 2 節） | 現有生產者的詞彙仍是內部候選 | BL-0542 |
 | D7 | NAV 10 日規則的跨頁語意（五待決 (a)～(e)） | 影響 Digest 的 stale／too_old 欄 | `DEC-2026-11-05-03` |
 | D8 | FX 閘門開放之證據軌與冬令探測結果 | 非 TWD 市值與景氣目前實質無資料 | BL-0217 |
 | D9 | BL-0545 覆蓋率所需的合法輸入與分母口徑 | 覆蓋率仍 NOT VERIFIED | BL-0545、`DEC-2026-11-07-03` |
