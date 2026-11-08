@@ -1,4 +1,4 @@
-# D3(a)｜資料狀態字彙「唯讀對照表」（回修版：依獨立 QA 一輪意見修訂；單組作者）
+# D3(a)｜資料狀態字彙「唯讀對照表」（回修第二輪版：依獨立 QA 兩輪意見修訂；單組作者）
 
 > 基準 origin/main aabd5eb8；單組作者草稿，未經獨立 QA；不構成正式契約或裁示。
 
@@ -9,13 +9,13 @@
 
 ## 0. 結論先行
 
-1. **已查到的詞彙族共 17 組**（A～Q，定義見第 2 節；「組」是本檔為閱讀分的詞彙來源，不是官方分類），**逐列 110 列**（含回修新增的 Q 組 7 列、P9～P13、N2b）。逐列對照判定（**嚴格讀法**：字面相同或程式有映射都不算語意一致，見第 1 節）：**可 23、否 40、不能判定 47**（計數方法見第 4 節 (d)，附重算指令）。原版（97 列）為 可 37／否 27／不能判定 33；差異來自 15 列由「可」下修，以及新增列。
+1. **已查到的詞彙族共 17 組**（A～Q，定義見第 2 節；「組」是本檔為閱讀分的詞彙來源，不是官方分類），**逐列 110 列**（含回修新增的 Q 組 7 列、P9～P13、N2b）。逐列對照判定（**嚴格讀法**：字面相同或程式有映射都不算語意一致，見第 1 節）：**可 17、否 40、不能判定 53**（計數方法見第 4 節 (d)，附重算指令）。原版（97 列）為 可 37／否 27／不能判定 33；第一輪回修版（110 列）為 可 23／否 40／不能判定 47；第二輪再下修 A8、A10、B5、B8、F1（可→不能判定）、J2（否→不能判定）、D1（可→否）。
 2. **已有一條「核准過的中樞」**：`shared/ui_semantics/rules.py` 的 `ENTRIES`（11 個規則鍵）＋三張既有程式對照（`STATUS_TO_KEY`、`FRESHNESS_TO_KEY`、`CHIP_KIND_TO_KEY`）＋ `BETA_LEVELS`。凡已查到「程式碼或核准文件明文指到這 11 鍵之一」者，本檔標「可」並附出處；**沒有明文的，不因字面相似就標可**。
 3. **同字不同義（最需要 D3(b)／D7 看的）**：
    - `undetermined`：在 view model 的 `status` 欄對到規則鍵 `undetermined`（`⬜ 無法判定`），在 `freshness_state` 欄對到 `threshold_pending`（`⬜ 門檻待裁示`）——兩條不同的對照表。
    - `inconsistent`：Cell 狀態（`exp_profile`，多來源幣別不一致）與 ui_v2 市場比較設定（`mkt/logic.py::REASON_INCONSISTENT`，兩鍵一致性憑證對不上）是**兩件不同的事**。
    - `SRC_*`：`allocation_evidence`（來源涵蓋度狀態，5 個英文代碼）與 `fund_total_return`（「1Y 來源」顯示標籤，中文字串）**前綴相同、型別不同、用途不同**。
-   - 「尚未設定」（`⛔`，來源或設定沒設，規則鍵 `not_configured`）與「未設定」（`⬜`，使用者參數留空，規則鍵 `user_param_unset`）：已核准文件明文分開，字面只差一個「尚」字。
+   - 「尚未設定」（`⛔`，來源或設定沒設，規則鍵 `not_configured`）與「未設定」（`⬜`，使用者參數留空，規則鍵 `user_param_unset`）：已核准文件明文分開；另有第三種用法（掛在 `⬜ 不適用：` 與 `⬜ 資料未備：` 底下的 `尚未設定…` 句型），見 A10 (6)。
 4. **「不是最新／◷」沒有一條端到端的核准鏈，且已查到至少三種觸發來源**：規則表 A7 要求「只有正式門檻判為舊才用」；而 44 第七節第三小節之七其四明列 ◷ 的三個觸發——(1) 新鮮度徽章畫成黃的那一段、(2) `SET-1` 超過新鮮度上限的筆（上限是**使用者自設參數** `set_max_age_days`）、(3) 顯示最後一筆有效值時（Q 組）。New UI2 的 `market_summary` 則明文不產生 stale。NAV 超過 10 日在 ui_v2 持股頁被併入「資料未備」，沒有獨立 stale 詞（與 `docs/v2/67` §5.3 一致）。這些**皆屬 D3(b)＋D7**，本檔只記事實。
 5. **三軸分類**：本檔**沒有**提供「資料取得／新鮮度／一致性」三軸分組表。理由：本組查到的既有文件中，`DEC-2026-11-06-02` 的「三軸」指的是**「原字母評級／覆蓋完整／正式准入」**（那是健康維度，不是這三軸），且查到的其他文件沒有把這三個字當成一組已定義的分類（見第 4 節 (a)）。依客戶指示「不得自創分類」，故不提供。
 
@@ -27,6 +27,7 @@
 
 **第 (5) 欄判定定義（本檔自訂，只為讀表，不是新分類）**：
 - **可**＝程式碼或已核准文件**明文**建立了對向，且**兩邊定義一致**，兩邊也沒有合併或分岔；附出處。**嚴格讀法（回修版）**：程式碼有映射、或字面相同，**都不等於語意一致**；該列自己的 (3)(6) 欄若記載了多對一、成因較寬、對向未定或同字不同義，就不得標「可」。
+- **一致套用的三條（回修第二輪明文化）**：(i) 該列 (6) 欄若記載「同字不同義」或「同名不同目標」，不得標可；(ii) 名稱不同的來源概念併入同一個畫面字樣，各來源列標否；(iii) 名稱相同、詞對詞的配對（例：E1／F3／G4 對 A3），只要 (6) 沒有 (i)(ii) 的記載才可標可。
 - **A 組（規則表）各列的判定＝對其 (5) 欄所列各個對向的整體**：任一對向不成立，A 列就不是「可」；各配對的細節在對向那一列。
 - **否**＝已查到語意不同、一對多／多對一（含「不同名稱的來源概念併入同一個畫面字樣」），或對向詞不存在。
 - **不能判定**＝沒有核准的對照依據，程式與文件證據也不足以斷言相同或相異。
@@ -48,9 +49,9 @@
 | A5 | `not_applicable` ⬜ `⬜ 不適用` | `rules.py::ENTRIES["not_applicable"]` | 〔F〕「無法判定族的一種」；44 原字為 `⬜ 不適用：<原因>`，本列只收字首 | 44 第五節第一小節業務例外列；客戶 2026-10-16 裁示第 7 點（黃→灰） | **否**：C3、D3、E2 三處皆指向它 | 〔F〕三個來源名（業務例外／算不出來／徽章不適用）落到同一字樣——來源端多對一，不影響本列；〔回修〕改為否：C3「業務例外」、D3「算不出來」、E2「不適用」三個名稱不同的來源概念併入同一字樣（多對一）；且 79 §11 稱 A4 含此詞 |
 | A6 | `fetch_failed` ⛔ `⛔ 取數失敗` | `rules.py::ENTRIES["fetch_failed"]`；`STATUS_TO_KEY["failed"]`；`CHIP_KIND_TO_KEY["failed"]`；`BETA_LEVELS` | 〔F〕「上游取數失敗；≠ 查無」（79 §11）；〔F〕note：「已執行取數或連線之後失敗的才是 fetch_failed；兩者不混用」 | 44 §5.5 系統錯誤列；79 §11；44 之七其四 | **否**：B3（僅 reason 非 not_configured 時）、B11、D4（見該列保留）、E3、F2、G1、J3 | 〔F〕一般畫面組合形式 `⛔ <中文資料類> 取數失敗`（`FETCH_FAILED_SCREEN_FORM`）與 `⛔ 此區塊暫時無法判定`（`FETCH_FAILED_SAME_SOURCE_TEXT`，屬系統錯誤族）是同一族的不同句型；〔回修〕改為否：E3、G1、J3 配對各自成立，但 B3（一對二分流）、C4／D4（定義含計算失敗）、F2（取數失敗但已改用預存值）使 A6 整體不是一對一 |
 | A7 | `stale` ◷ `◷ 不是最新` | `rules.py::ENTRIES["stale"]`；`FRESHNESS_TO_KEY["stale"]` | 〔F〕「只有正式門檻判為舊才用，門檻未裁示時見 threshold_pending」；44 的用法是「在原有文字前加 ◷」 | 79 §11；44 之七其四；門檻 **尚待 Gate**（67 §8.5「仍待」；BL-0531 後續項） | **不能判定**：詞對詞有（B4、B7 指向它），但**已查到的實際產生處**與規則表定義不同源，見 F4 | 〔F〕New UI2 `market_summary` 明文不產生 stale（見 N1）；〔F〕ui_v3 `market_page` 的 `domain_state` 只回 ok／missing／failed。→ 目前沒有查到 New UI2 路徑上真的送出 stale 的程式 |
-| A8 | `threshold_pending` ⬜ `⬜ 門檻待裁示` | `rules.py::ENTRIES["threshold_pending"]`；`FRESHNESS_TO_KEY["undetermined"]` | 〔F〕80 §5：門檻未裁示時只顯示天數與此字樣。〔F〕note 自陳：tone＝灰是**推論**（無任何來源逐字寫它的顏色，「總管可推翻」） | 80 §5；44 之十九其四第 1 條；門檻 **尚待 Gate**（D3(b)） | **可**：B8、N1 | 〔F〕唯一的灰色 tone 推論；本檔不處理 |
-| A9 | `neutral`（無符號無字樣） | `rules.py::ENTRIES["neutral"]`；`CHIP_KIND_TO_KEY["neutral"]` | 〔F〕中性 chip（資料日、延遲天數之類 metadata）；字樣由 view model 的 `label_key` 給 | 80 §5 status chips 列 | **可**：不是資料狀態，無對向詞 | 列入只為完整對應 `CHIP_KIND_TO_KEY`；〔回修〕改為可：與 B10 chip `neutral` 同為 80 §5 明文一對一；它不是資料狀態，列入只為完整 |
-| A10 | `not_configured` ⛔ `⛔ 尚未設定` | `rules.py::ENTRIES["not_configured"]`；`REASON_NOT_CONFIGURED`；`NOT_CONFIGURED_FORM`；`NOT_CONFIGURED_RATES_SOURCE_TEXT`（`⛔ 利率資料來源尚未設定`） | 〔F〕成因是某個設定沒設、**沒有執行取數**；永遠不寫成取數失敗；`entry_for_status("failed", "not_configured")` 才分流到此列 | DEC-2026-10-19-05（44 之十二其二第 1 條）；DEC-2026-11-03-09（利率來源句） | **可**：F1（`KIND_UNCONFIGURED`）；B3 在 `reason_code=not_configured` 時指向它 | 〔F〕「尚未設定」另有**第三種用法**：掛在 `⬜ 不適用：` 底下的使用者參數缺值句——`ui_v2/alo/logic.py::TEXT_NA_NO_TARGET`＝`⬜ 不適用：尚未設定目標`（另有 `TEXT_NO_TARGET`、`TEXT_NO_TOLERANCE`）、44 `SET-1` 空狀態 `⬜ 不適用：尚未設定上限`、44 `MKT-4` `⬜ 不適用：尚未設定觀察窗`、`ui_v2/exp/logic.py::TEXT_NO_CONDITION`（`尚未設定條件`）、`ui_v2/hld/logic.py::TEXT_NO_RULES`（`尚未設定門檻`）；它們屬 ⬜ 族、不是 ⛔ 的 A10，但字面都含「尚未設定」；〔F〕ui_v3 `market_page::domain_state` 靠比對字串 `未設定 FRED_API_KEY` 才判為 not_configured（`MISSING_FRED_API_KEY_TEXT`，docstring 稱測試鎖）——分流依據是原文字串而非獨立代碼 |
+| A8 | `threshold_pending` ⬜ `⬜ 門檻待裁示` | `rules.py::ENTRIES["threshold_pending"]`；`FRESHNESS_TO_KEY["undetermined"]` | 〔F〕80 §5：門檻未裁示時只顯示天數與此字樣。〔F〕note 自陳：tone＝灰是**推論**（無任何來源逐字寫它的顏色，「總管可推翻」） | 80 §5；44 之十九其四第 1 條；門檻 **尚待 Gate**（D3(b)） | **不能判定**：B8、N1 | 〔F〕唯一的灰色 tone 推論；本檔不處理；〔回修二〕改為不能判定：(5) 欄所列對向 B8 已改為不能判定；N1 配對本身成立 |
+| A9 | `neutral`（無符號無字樣） | `rules.py::ENTRIES["neutral"]`；`CHIP_KIND_TO_KEY["neutral"]` | 〔F〕中性 chip（資料日、延遲天數之類 metadata）；字樣由 view model 的 `label_key` 給 | 80 §5 status chips 列 | **可**：→ B10（chip `neutral`，80 §5 明文一對一） | 列入只為完整對應 `CHIP_KIND_TO_KEY`；〔F〕它不是資料狀態（不影響此配對） |
+| A10 | `not_configured` ⛔ `⛔ 尚未設定` | `rules.py::ENTRIES["not_configured"]`；`REASON_NOT_CONFIGURED`；`NOT_CONFIGURED_FORM`；`NOT_CONFIGURED_RATES_SOURCE_TEXT`（`⛔ 利率資料來源尚未設定`） | 〔F〕成因是某個設定沒設、**沒有執行取數**；永遠不寫成取數失敗；`entry_for_status("failed", "not_configured")` 才分流到此列 | DEC-2026-10-19-05（44 之十二其二第 1 條）；DEC-2026-11-03-09（利率來源句） | **不能判定**：F1（`KIND_UNCONFIGURED`）；B3 在 `reason_code=not_configured` 時指向它 | 〔F〕「尚未設定」另有**第三種用法**：掛在 `⬜ 不適用：` 底下的使用者參數缺值句——`ui_v2/alo/logic.py::TEXT_NA_NO_TARGET`＝`⬜ 不適用：尚未設定目標`（另有 `TEXT_NO_TARGET`、`TEXT_NO_TOLERANCE`）、44 `SET-1` 空狀態 `⬜ 不適用：尚未設定上限`、44 `MKT-4` `⬜ 不適用：尚未設定觀察窗`、`ui_v2/exp/logic.py::TEXT_NO_CONDITION`（`尚未設定條件`）、`ui_v2/hld/logic.py::TEXT_NO_RULES`（`尚未設定門檻`）；它們屬 ⬜ 族、不是 ⛔ 的 A10，但字面都含「尚未設定」；〔F〕ui_v3 `market_page::domain_state` 靠比對字串 `未設定 FRED_API_KEY` 才判為 not_configured（`MISSING_FRED_API_KEY_TEXT`，docstring 稱測試鎖）——分流依據是原文字串而非獨立代碼；〔回修二〕改為不能判定：(5) 欄所列對向 B3 為否（一對二分流），且本欄記載「尚未設定」另有第三種同字用法；另 `ui_v2/alo/logic.py::TEXT_NEVER_SET`＝`⬜ 資料未備：尚未設定過`（已驗證存在）是又一種含「尚未設定」的句型，掛在 ⬜ 資料未備底下 |
 | A11 | `user_param_unset` ⬜ `⬜ 未設定` | `rules.py::ENTRIES["user_param_unset"]` | 〔F〕使用者自己的參數留空（G3†：系統不代填）；不是取數失敗、不是尚未設定的資料來源；**不計入資料狀態件數、不進 β 排序**（DEC-2026-10-20-01）。〔F〕note 自陳 tone＝灰是推論 | 44 SET-3；44 第四節第五小節 `user_setting`；DEC-2026-10-20-01 | **否**：與 A10／F1「尚未設定」字面相近但已核准文件明文分開，不可互映 | 〔F〕note 登記已知落差：ui_v2 資產配置／標的探索那幾格現行畫 ◇（BL-0382，未裁）；〔F〕同一件事（使用者參數沒填）在 ui_v2 另有 `⬜ 不適用：尚未設定…` 句型（見 A10 (6)），與 A11 的 `⬜ 未設定` 是兩套字面 |
 
 ### B 組｜New UI2 view model 的狀態鍵（`ui_v3/viewmodels/common.py`、`components.py`；對照表在 `rules.py`）
@@ -61,10 +62,10 @@
 | B2 | `status="missing"` | `common.py::STATUS_MISSING`；`ui_v3/adapters/market_page.py::domain_state`（`資料未備`→missing） | 〔F〕market_view 的「資料未備」在 adapter 轉成 missing，並帶 `reason_code`（無則用字串 `missing`） | 80 §6；`STATUS_TO_KEY` | **可**：→ A3 | 〔F〕adapter 的 reason fallback 是 `domain.get("reason_code") or STATUS_MISSING`，即「原因」欄可能就是 `missing` 本身 |
 | B3 | `status="failed"` | `common.py::STATUS_FAILED`；`rules.py::entry_for_status` | 〔F〕`failed` 配 `reason_code=not_configured` → A10，其餘 → A6；`not_configured` 配在非 failed 的 status 上會 `ValueError` | 80 §6；44 之十二其二第 1 條 | **否**：一對二（依 `reason_code` 分流），是已核准設計，但不是一對一 | — |
 | B4 | `status="stale"` | `common.py::STATUS_STALE`；`STATUS_TO_KEY["stale"]` | 〔F〕詞彙存在；〔F〕`market_page.py::_meta_status` 對 `ok／missing／failed` 以外的 meta 狀態一律降為 `undetermined` | 80 §6 | **不能判定**：詞對詞 → A7（`STATUS_TO_KEY`） | 〔I〕adapter 路徑上沒有查到產生 `stale` 的程式；〔I〕`_meta_status` 的降級會讓任何真的 stale 的 meta 變成 undetermined——是否合理屬 D3(b)，本檔不判；〔回修〕改為不能判定：對向 A7 本身不能判定，且 adapter 路徑沒有查到產生者 |
-| B5 | `status="undetermined"` | `common.py::STATUS_UNDETERMINED`；`STATUS_TO_KEY` | 〔F〕五值之一 | 80 §6 | **可**：→ A4 | 與 B8（freshness 欄的同名值）指向不同鍵，見 B8 |
+| B5 | `status="undetermined"` | `common.py::STATUS_UNDETERMINED`；`STATUS_TO_KEY` | 〔F〕五值之一 | 80 §6 | **不能判定**：→ A4 | 與 B8（freshness 欄的同名值）指向不同鍵，見 B8；〔回修二〕改為不能判定：依第 1 節 (i)，(6) 已記載同名不同目標；且對向 A4 為不能判定 |
 | B6 | `freshness_state="fresh"` | `common.py::FRESH_FRESH`；`FRESHNESS_TO_KEY["fresh"]=None` | 〔F〕fresh 不加任何標記，也不寫「正常」 | 80 §5／§6 | **不能判定**：→ 「不加標記」（`entry_for_freshness` 回 None） | 對向不是詞；〔回修〕改為不能判定：`fresh` 屬 common.py 自陳「待客戶裁示覆核」的最小集合，核准依據只到 80 點名的 `undetermined` |
 | B7 | `freshness_state="stale"` | `common.py::FRESH_STALE`；`FRESHNESS_TO_KEY["stale"]` | 〔F〕common.py 註解自陳：「規格缺口：80 只點名 `undetermined`，未列舉其他值；取最小集合（fresh／stale／undetermined），待客戶裁示覆核」 | 80 §6（只點名 `undetermined`） | **不能判定**：詞對詞 → A7；**但整組值域本身未經核准** | 〔F〕值域是執行組最小集合，不是核准字彙；〔回修〕改為不能判定：對向 A7 不能判定，且值域未經核准 |
-| B8 | `freshness_state="undetermined"` | `common.py::FRESH_UNDETERMINED`；`FRESHNESS_TO_KEY["undetermined"]="threshold_pending"` | 〔F〕門檻未裁示＝undetermined | 80 §5／§6；門檻尚待 Gate | **可**：→ A8（不是 A4） | ⚠️ 與 B5 同名、不同目標；呈現層必須依欄位而非依字面對照 |
+| B8 | `freshness_state="undetermined"` | `common.py::FRESH_UNDETERMINED`；`FRESHNESS_TO_KEY["undetermined"]="threshold_pending"` | 〔F〕門檻未裁示＝undetermined | 80 §5／§6；門檻尚待 Gate | **不能判定**：→ A8（不是 A4） | ⚠️ 與 B5 同名、不同目標；呈現層必須依欄位而非依字面對照；〔回修二〕改為不能判定：依第 1 節 (i)，(6) 已記載同名不同目標（status 欄的 `undetermined`→A4，freshness 欄的→A8）；原版標可與規則不一致 |
 | B9 | chip kind `attention` | `components.py::CHIP_KINDS`；`CHIP_KIND_TO_KEY` | 〔F〕六個 kind 之一 | 80 §5 | **可**：→ A2 | — |
 | B10 | chip kind `neutral` | 同上 | 〔F〕六個 kind 之一 | 80 §5 | **可**：→ A9 | — |
 | B11 | chip kinds `missing／undetermined／failed／stale` | 同上；`CHIP_KIND_TO_KEY` | 〔F〕`failed`→`fetch_failed`（chip 層沒有 not_configured 分岔） | 80 §5 | **不能判定**：分別 → A3／A4／A6／A7 | 〔F〕分岔只存在於 `status`（B3），chip 層沒有；兩層粒度不同；〔回修〕改為不能判定：四個 kind 中 `stale` 的對向 A7 不能判定；整列不得標可 |
@@ -82,7 +83,7 @@
 
 | ID | (1) | (2) | (3) | (4) | (5) | (6) |
 |---|---|---|---|---|---|---|
-| D1 | `來源缺` | `ui_v2/health.py::_MISSING_EMPTY_KINDS`；44 §5.5 | 〔F〕「這一塊依賴的來源一筆資料也沒有」；正式模式模板 `◇ 資料未備：<中文資料名> 尚無資料` | 44 §5.5；DEC-2026-10-17-03 | **可**：模板已落字 → A3 | — |
+| D1 | `來源缺` | `ui_v2/health.py::_MISSING_EMPTY_KINDS`；44 §5.5 | 〔F〕「這一塊依賴的來源一筆資料也沒有」；正式模式模板 `◇ 資料未備：<中文資料名> 尚無資料` | 44 §5.5；DEC-2026-10-17-03 | **否**：模板已落字 → A3 | —；〔回修二〕改為否：`來源缺` 與 `部分缺` 在 `ui_v2/health.py::_MISSING_EMPTY_KINDS` 併入同一個 ◇ 字樣（不同名稱併入同一字樣），標準同 A5／C3／D3／E2；同名詞對詞的 E1／F3／G4 保留可 |
 | D2 | `部分缺` | `ui_v2/health.py::_MISSING_EMPTY_KINDS`；`ui_v2/set/logic.py::STATUS_BADGE_LITERALS` | 〔F〕「來源只涵蓋區間的一部分；本塊照畫、缺的期間留白、標題掛徽章」；徽章色為黃 | 44 §5.5 | **否**：規則表沒有對應鍵（不是別名缺口，是尚無詞） | 〔F〕`ui_v2/health.py` 把它與 `來源缺` 一起歸入 `◇`（`_MISSING_EMPTY_KINDS`）；44 §5.5 徽章色為黃，A3 為灰——同一歸類下顏色不同 |
 | D3 | `算不出來` | 44 §5.5 | 〔F〕「來源齊，但規則的前提不成立」；模板 `⬜ 不適用：<一句話原因>`，灰 | 44 §5.5 | **否**：→ A5 | 與 C3 同指向 A5；〔回修〕改為否：同 C3 |
 | D4 | `系統錯誤`（空狀態） | 44 §5.5 | 〔F〕「取數或計算本身失敗」；模板 `⛔ 取數失敗：<訊息原文>` | 44 §5.5 | **不能判定**：44 已落字為「取數失敗」，但定義含「計算本身失敗」，比 A6（上游取數失敗）寬；是否算語意衝突未見核准文件裁示 | 見 C4；本檔不判 |
@@ -97,13 +98,13 @@
 | E4 | `推估`（黃） | 同上 | 〔I〕與 provenance 旗標 `is_estimated` 有關（67 §5.3 列出 `is_revised`、`is_estimated`）；本組未讀其產生處 | 44 §5.2 | **否**：規則表沒有對應鍵 | 不在 D3 的缺值／新鮮度／一致性範圍，列入只為完整 |
 | E5 | `修正過`（黃） | 同上 | 〔I〕同 E4（`is_revised`） | 44 §5.2 | **否**：同上 | 同上 |
 | E6 | `部分缺`（黃） | 同上 | 〔F〕與 D2 同詞 | 44 §5.2 | **否**：同 D2 | 同 D2 |
-| E7 | `未定義`（黃） | 同上 | 〔F〕七字面之一；本組未讀其產生處 | 44 §5.2 | **不能判定**：詞面與 `allocation_evidence.NOT_DEFINED`（`not_defined`）相似，但未見任何文件明文對照，不推斷 | 同 K、P 組的內部代碼，不得因字面相似視為同義；與 A3「資料未備」亦有「未備／未定義」同義風險，未見文件對照，不推斷（交叉引用：A11、P12 的 `unset`） |
+| E7 | `未定義`（黃） | 同上 | 〔F〕七字面之一；〔F〕**現存產生處**：`ui_v2/mkt/logic.py::_freshness_badge` 在 `rows` 為空、或 `freshness_badge_text(delay)` 回 None（即 delay ≤ 0）時回傳 `_status_badge("未定義")`；〔F〕`freshness_badge_text` docstring 自陳：「`即時`／`當日` 兩級的判定門檻 `44` 沒有定（`47` Q-05）。本檔不自行發明門檻——delay <= 0 時回 None，由呼叫端掛一枚 `未定義` 狀態徽章」 | 44 §5.2 | **不能判定**：詞面與 `allocation_evidence.NOT_DEFINED`（`not_defined`）相似，但未見任何文件明文對照，不推斷 | 同 K、P 組的內部代碼，不得因字面相似視為同義；與 A3「資料未備」亦有「未備／未定義」同義風險，未見文件對照，不推斷（交叉引用：A11、P12 的 `unset`）；〔F〕同為「新鮮度不判」的情形，`ui_v2/hld/live.py` 對 N＝0 輸出 `當日`（`FRESHNESS_TODAY_TEXT if days == 0`），而 mkt 頁對 delay ≤ 0 輸出 `未定義` 徽章——**兩頁行為不同**（見 N2、N2b）；〔F〕`未定義` 在此承擔「新鮮度門檻未定」，與 New UI2 的 `⬜ 門檻待裁示`（A8）情境相近，但未見文件對照，不推斷 |
 
 ### F 組｜設定與診斷頁「各頁資料狀態總表」四類（`ui_v2/page_health.py::KINDS`）
 
 | ID | (1) | (2) | (3) | (4) | (5) | (6) |
 |---|---|---|---|---|---|---|
-| F1 | `尚未設定`（`KIND_UNCONFIGURED`，不加符號） | `ui_v2/page_health.py`；`ui_v2/health.py::LINE_NOT_CONFIGURED` | 〔F〕「鍵＝哪一個設定」；與取數失敗永遠分開數 | 44 之十三其七 | **可**：→ A10 | 見 A11 |
+| F1 | `尚未設定`（`KIND_UNCONFIGURED`，不加符號） | `ui_v2/page_health.py`；`ui_v2/health.py::LINE_NOT_CONFIGURED` | 〔F〕「鍵＝哪一個設定」；與取數失敗永遠分開數 | 44 之十三其七 | **不能判定**：→ A10 | 見 A11；〔回修二〕改為不能判定：`尚未設定` 一詞另有第三種用法（`⬜ 不適用：尚未設定…`、`⬜ 資料未備：尚未設定過`，見 A10 (6)）；F1 指向的 A10 本身為不能判定；並見 A11 |
 | F2 | `取數失敗`（⛔） | 同上 `KIND_FETCH` | 〔F〕鍵＝哪一類資料；含「改用預存淨值」句型（`TEXT_MAIN_RETREAT`） | 44 之十三其七；DEC-2026-10-18-02（BL-0375） | **不能判定**：→ A6 | 〔F〕「取數失敗，改用 <日期> 的預存淨值」是**已取得替代值**的失敗，與 A6「上游取數失敗」並置；〔回修〕改為不能判定：「取數失敗，改用預存淨值」是否仍屬 A6，文件未裁示 |
 | F3 | `資料未備`（◇） | 同上 `KIND_MISSING` | 〔F〕鍵＝哪一類資料 | 同上 | **可**：→ A3 | — |
 | F4 | `不是最新`（◷） | 同上 `KIND_STALE`；`TEXT_MAIN_STALE`＝`◷ 主要原因：部分只顯示最後有效資料` | 〔F〕「整頁只算一項」（`STALE_KEY="整頁"`）；〔F〕`health.py` docstring：`◷` 由呼叫端依該頁既有標示交進來，「目前只有持倉體檢有『淨值取自預存序列』這一種」（該段寫於 3-C 之前，狀態行已退場）；〔F〕**44 第七節第三小節之七其四明列 ◷ 的三個觸發**：(1) 新鮮度徽章畫成黃的那一段、(2) `SET-1` 超過新鮮度上限的筆、(3) 顯示最後一筆有效值時（見 Q 組）；〔F〕總表 `KIND_STALE` 實際由哪一個觸發填入，本組未逐處追 | 44 之七其四；44 之十三其七 | **不能判定**：與 A7 同符號同字樣，但 44 之七其四有三種觸發，其中 (2) 的上限是**使用者自設參數**、(3) 是**預存序列**，都不是規則表 A7 所稱的「正式門檻」；它們與 A7 是否為同一件事，文件未裁示 | 〔F〕A7 的定義（正式門檻）與已查到的三種觸發（徽章日數黃段、使用者自設上限、顯示最後有效值）不同；〔I〕要把它們視為同一詞是語意決定，屬 D3(b)，本檔不替客戶選 |
@@ -144,7 +145,7 @@
 | ID | (1) | (2) | (3) | (4) | (5) | (6) |
 |---|---|---|---|---|---|---|
 | J1 | `ok` | `exp_profile.py::STATUS_OK`；`ui_v2/exp/live.py::profile_cell_note` | 〔F〕值照畫、掛來源標示；有失敗來源時標示寫出失敗來源 | `PARTIAL_FAILURE_POLICY="accept"`（規則 12，docstring） | **可**：→ A1 | — |
-| J2 | `not_ready` → 畫面 `⬜ 資料未備：<原因>` | `exp_profile.py::STATUS_NOT_READY`；`ui_v2/exp/live.py::profile_cell_note` | 〔F〕docstring：「基本資料缺值保留並 ⬜資料未備」；〔F〕`profile_cell_note`：與 `inconsistent` 同走 `STATE_MISSING` | 客戶裁示（`exp_profile.py` 檔頭） | **否**：→ A3 | 〔F〕字面是 `⬜ 資料未備`（`logic.ND_TEXT`），正式字樣為 `◇ 資料未備`；本檔未查到此畫面是否經 `ui_v2/symbols.py` 換字，不推斷；〔回修〕改為否：與 J4 併入同一畫面字樣，且 ⬜／◇ 字面未實跑確認 |
+| J2 | `not_ready` → 畫面 `⬜ 資料未備：<原因>` | `exp_profile.py::STATUS_NOT_READY`；`ui_v2/exp/live.py::profile_cell_note` | 〔F〕docstring：「基本資料缺值保留並 ⬜資料未備」；〔F〕`profile_cell_note`：與 `inconsistent` 同走 `STATE_MISSING` | 客戶裁示（`exp_profile.py` 檔頭） | **不能判定**：→ A3 | 〔F〕字面是 `⬜ 資料未備`（`logic.ND_TEXT`），正式字樣為 `◇ 資料未備`；本檔未查到此畫面是否經 `ui_v2/symbols.py` 換字，不推斷；〔回修〕改為否：與 J4 併入同一畫面字樣，且 ⬜／◇ 字面未實跑確認；〔回修二〕改為不能判定：理由為 ⬜／◇ 字面未實跑確認（屬未驗，不得標否）；另與 J4 併入同一畫面字樣，見 J4 |
 | J3 | `fetch_failed` → `⛔ 取數失敗：<原因>` | `exp_profile.py::STATUS_FAILED`；`profile_cell_note` | 〔F〕L1 `failed`（取不到）才是此狀態；頁面回來但不符身分判準 → ⬜，不是 ⛔（docstring） | 客戶裁示（檔頭） | **可**：→ A6 | — |
 | J4 | `inconsistent` → 畫面 `⬜ 資料未備：<原因>` | `exp_profile.py::STATUS_INCONSISTENT`；`profile_cell_note` | 〔F〕「多來源幣別不一致 → ⬜」；`reason` 為「各來源幣別不一致（…）」 | 客戶裁示（檔頭）；docstring「畫面以 ⬜ 呈現」 | **否**：被併入 J2 的同一畫面字樣，沒有獨立詞；語意（來源衝突）與 A3（來源缺）不同 | ⚠️ **D3(b) conflict 的既有實例**：已存在「不一致」狀態，但沒有獨立顯示詞，也沒有容差定義（幣別為字串比對，非數值） |
 
@@ -190,8 +191,8 @@
 | ID | (1) | (2) | (3) | (4) | (5) | (6) |
 |---|---|---|---|---|---|---|
 | N1 | `FRESHNESS_THRESHOLD_PENDING`＝`"threshold_pending"` | `services/v2_domain/market_summary.py` | 〔F〕「門檻未裁示，本模組只給事實……不判新、舊、正常、過期」；〔F〕各序列給 `elapsed_days` 與此唯一狀態；〔F〕「門檻裁示前本模組不產生任何其他新鮮度狀態」；〔F〕值刻意等於規則表鍵 `threshold_pending`（一致性由測試鎖，docstring 自述） | BL-0536-H4、BL-0369；DEC-2026-11-03-01 Q5 B | **可**：→ A8 | 〔F〕經過天數為負（觀測日晚於取得日）照實回報，不改 0 也不改 None；如何呈現留給呈現層——此為既有的「不一致」邊角，**D3(b) 可能碰到** |
-| N2 | 新鮮度徽章 `當日`／`延遲 {n} 日` | `ui_v2/hld/live.py::FRESHNESS_TODAY_TEXT`、`FRESHNESS_DELAY_TEXT` | 〔F〕N＝0 與 N≥1 的字面（44 §5.2 新鮮度字面） | 44 §5.2 | **否**：是新鮮度事實的顯示，不是狀態詞；規則表無對應鍵 | 與 A8（只顯示天數與 `⬜ 門檻待裁示`）並存於兩代 UI |
-| N2b | 新鮮度徽章 `即時`（44 §5.2 `新鮮度` 列 `即時`／`當日`／`延遲 N 日` 的第一個值） | 44 §5.2 | 〔F〕44 列出；〔F〕本組以 `git grep -n -E "\"即時\"" origin/main -- 'ui_v2/*.py' 'ui_v2/**/*.py'` 查字串字面，無命中（只代表該字面未出現，不代表邏輯不存在） | 44 §5.2 | **不能判定** | `即時` 與 `當日` 的邊界未見文件說明 |
+| N2 | 新鮮度徽章 `當日`／`延遲 {n} 日` | `ui_v2/hld/live.py::FRESHNESS_TODAY_TEXT`、`FRESHNESS_DELAY_TEXT` | 〔F〕N＝0 與 N≥1 的字面（44 §5.2 新鮮度字面）；〔F〕`hld/live.py` 對 N＝0 輸出 `當日`（`days == 0`）；〔F〕mkt 頁 `freshness_badge_text` 對 delay ≥ 1 回 `延遲 N 日`、delay ≤ 0 回 None 並改掛 `未定義` 徽章（E7） | 44 §5.2 | **否**：是新鮮度事實的顯示，不是狀態詞；規則表無對應鍵 | 與 A8（只顯示天數與 `⬜ 門檻待裁示`）並存於兩代 UI；〔F〕兩頁對 N＝0 的處理不同（hld：`當日`；mkt：`未定義` 徽章） |
+| N2b | 新鮮度徽章 `即時`（44 §5.2 `新鮮度` 列 `即時`／`當日`／`延遲 N 日` 的第一個值） | 44 §5.2 | 〔F〕44 列出；〔F〕`ui_v2/mkt/logic.py::freshness_badge_text` docstring：`即時`／`當日` 兩級的判定門檻 44 沒有定（47 Q-05），程式不自行發明門檻；〔F〕本組以 `git grep -n -E "\"即時\"" origin/main -- 'ui_v2/*.py' 'ui_v2/**/*.py'` 查字串字面，無命中（只代表字面未出現，不代表邏輯不存在） | 44 §5.2 | **不能判定** | `即時` 與 `當日` 的邊界門檻 44 未定；hld 頁輸出 `當日`、mkt 頁輸出 `未定義` 徽章，兩頁行為不同（見 N2、E7） |
 | N3 | `NAV_NOT_READY_DAYS = 10`；超過 → `⬜ 資料未備` | `ui_v2/thresholds.py`；`ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW`（別名）；`ui_v2/alo/live.py::assemble_nav` | 〔F〕唯一字面值在 `ui_v2/thresholds.py`；〔F〕持股頁嚴格 `>`；〔F〕與舊介面 `MJ_FRESH_DAYS_*`（2／7）是不同兩套（`thresholds.py` 註解） | 客戶 2026-10-13 裁示（持股）；**跨頁語意尚待 D7**（evidence 文件 D7 (a)～(e)） | **否**：這是一個「數值門檻」，不是詞；其結果被併入 A3 | 本檔不處理數值 |
 
 ### O 組｜New UI2 畫面實際使用的狀態相關字樣（`rules.py::APPROVED_WORDING` 與 `ui_v3/viewmodels/preview_wording.py`）
@@ -234,7 +235,7 @@
 | Q2 | `SET-1` 比較欄 `外` → 畫面 `◷ 外` | `ui_v2/set/logic.py::TEXT_OUT`；`ui_v2/sections.py::SET_TEXT_OUT`、`mark_set1_rows`、`_set_is_out` | 〔F〕`mark_set1_rows` docstring：「超過新鮮度上限的筆，文字前加 ◷；顏色照舊」（44 之七其四）；〔F〕上限由使用者輸入（G3†，鍵 `set_max_age_days`） | 44 之七其四；`DEC-2026-10-17-07` (b-2) | **不能判定**：符號與 A7 相同，但判斷依據是使用者自設參數，不是規則表要求的「正式門檻」；兩者是否同一件事文件未裁示 | 屬 D3(b) 的門檻語意；本檔不提案 |
 | Q3 | `SET-0` 黃燈 `◷ N 類資料超過你設的上限`；`③` 注意行 `{kind}：距今 {days} 日，超過你設的上限` | `ui_v2/sections.py::SET_OVERDUE_TEXT`、`SET_ATTENTION_TEXT`、`set_attention`、`set_conclusion` | 〔F〕N＝`SET-1` 逾期類數（一列一類）；〔F〕`set_attention` 只讀 `SET-1` 已算出的結果，不另判；〔F〕注意行前綴 ◷、tone 黃 | 44 之八其二 (b-2) 第 3 條 | **不能判定**：同 Q2 | 字面用「超過你設的上限」，與 A7「不是最新」字樣不同 |
 | Q4 | 使用者參數 `set_max_age_days`（一般畫面換字為「新鮮度上限日數」） | `ui_v2/plain.py`（鍵名對照）；`ui_v2/set/logic.py::MAX_AGE_KEY`；`ui_v2/set/spec.py`（歸屬 `SET-1`） | 〔F〕使用者參數，整數；留空時 `SET-1` 比較欄為 `⬜ 不適用：尚未設定上限` | 44 `SET-1`、`SET-3` | **否**：是參數不是狀態；本檔不記其值或預設 | 留空屬「使用者參數沒填」，卻用 `⬜ 不適用：尚未設定上限` 句型，見 A10 (6) |
-| Q5 | 44 之七其四明列的 ◷ 三個觸發：(1) 新鮮度徽章畫成黃的那一段、(2) `SET-1` 超過新鮮度上限的筆、(3) 顯示最後一筆有效值時 | `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之七其四（「不是最新」列） | 〔F〕三者並列，文字前加 `◷`、顏色照舊 | 44 之七其四；`DEC-2026-10-17-03` | **不能判定**：三個觸發的判斷依據不同（徽章日數、使用者上限、預存序列），與 A7 的關係未見文件對照 | F4、Q2、Q3 各對應其中之一；〔F〕(1) 的日數出處本組未追到單一位置 |
+| Q5 | 44 之七其四明列的 ◷ 三個觸發：(1) 新鮮度徽章畫成黃的那一段、(2) `SET-1` 超過新鮮度上限的筆、(3) 顯示最後一筆有效值時 | `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之七其四（「不是最新」列） | 〔F〕三者並列，文字前加 `◷`、顏色照舊 | 44 之七其四；`DEC-2026-10-17-03` | **不能判定**：三個觸發的判斷依據不同（徽章日數、使用者上限、預存序列），與 A7 的關係未見文件對照 | F4、Q2、Q3 各對應其中之一；〔F〕(1)：44 §5.2 `新鮮度` 列只寫「中性至黃，只映射日數」，**未給黃色日數門檻**；〔F〕現行 ui_v2 **未找到**產生黃色新鮮度徽章的程式：`mkt/logic.py::_freshness_badge` 恆回「中性」tone、`hld/live.py` 的過期徽章用灰 `NOT_READY_TONE`；`ui_v2/health.py::_STALE_TONE`（`黃`）只是讀取端的判讀（`_is_stale_badge`），不是產生處；**(1) 的產生處標「未驗」（此為 grep 與讀檔結果，非窮舉；`alo`／`exp` 頁未逐檔確認）** |
 | Q6 | 新鮮度徽章 `當日`／`延遲 {n} 日`（及 44 §5.2 的 `即時`） | `ui_v2/hld/live.py::FRESHNESS_TODAY_TEXT`、`FRESHNESS_DELAY_TEXT`；44 §5.2 | 〔F〕N＝0 與 N≥1 的字面；`即時` 見 N2b | 44 §5.2 | **否**：新鮮度事實的顯示，不是狀態詞 | 與 N2 同一組詞，為完整另列 |
 | Q7 | 資產配置 `內`／`外`（容許帶） | `ui_v2/alo/logic.py::TEXT_IN`、`TEXT_OUT`；`ui_v2/sections.py::ALO_TEXT_OUT` | 〔F〕配置占比相對目標的容許帶內／帶外（ALO-0），與資料新鮮度無關 | 44 `ALO-0` | **否**：同字（內／外）不同義，不得與 Q1／Q2 對照 | 同字不同義 |
 
@@ -271,7 +272,7 @@
 4. **B5／B8／P2**：`undetermined` 三處同字，指向不同規則鍵或候選語意。
 5. **inconsistent**：J4（來源幣別）與 H7（使用者設定兩鍵憑證）同字不同義。
 6. **SRC_\***：L1～L5（涵蓋度狀態）與 M 組（來源標籤）同前綴不同物。
-7. **A10／A11／F1／G5／Q4**：「尚未設定」有三種用法——⛔ 尚未設定（A10，來源或設定沒設、沒執行取數）、⬜ 未設定（A11，使用者參數留空）、掛在 `⬜ 不適用：` 底下的 `尚未設定目標／上限／觀察窗／條件／門檻`（`alo/logic.py::TEXT_NA_NO_TARGET`、`TEXT_NO_TARGET`、`TEXT_NO_TOLERANCE`、44 `SET-1`／`MKT-4` 空狀態、`exp/logic.py::TEXT_NO_CONDITION`、`hld/logic.py::TEXT_NO_RULES`）；A11 不進 β，但 G5 的「未設定或不適用」一級與 A11 的關係未見文件明文。
+7. **A10／A11／F1／G5／Q4**（另含 `alo/logic.py::TEXT_NEVER_SET`＝`⬜ 資料未備：尚未設定過`）：「尚未設定」有三種用法——⛔ 尚未設定（A10，來源或設定沒設、沒執行取數）、⬜ 未設定（A11，使用者參數留空）、掛在 `⬜ 不適用：` 底下的 `尚未設定目標／上限／觀察窗／條件／門檻`（`alo/logic.py::TEXT_NA_NO_TARGET`、`TEXT_NO_TARGET`、`TEXT_NO_TOLERANCE`、44 `SET-1`／`MKT-4` 空狀態、`exp/logic.py::TEXT_NO_CONDITION`、`hld/logic.py::TEXT_NO_RULES`）；A11 不進 β，但 G5 的「未設定或不適用」一級與 A11 的關係未見文件明文。
 8. **C4／D4**：系統錯誤的定義含「計算失敗」，與 A6「上游取數失敗」不同寬。
 9. **A3 vs `ND_TEXT`**：正式 `◇ 資料未備` 與程式常數 `⬜ 資料未備` 並存；經 `ui_v2/symbols.py` 在渲染時換字（docstring 自述，本組未實跑畫面）。
 10. **O1／O3／O5**：`資料不足`、`此圖目前沒有可畫的資料`、`缺資料`（暫擬）與 `資料未備`、`無法判定` 之間的邊界未見文件對照。
@@ -329,7 +330,7 @@ git show origin/main:<path>   # 逐檔讀取：rules.py、ui_v2/health.py、ui_v
 - **未執行任何測試或畫面**；所有「測試鎖」皆為 docstring 自述。
 - **未查證**：67 §5.3「至少三套」與 AUD R6「至少 5 套」中「套」的點算方式（兩者原文即未逐一點算）。本檔分了 17 組，**這是本組為閱讀所分，不等於官方「套數」**，不得引用為任何一方的點算結果。
 
-**計數方法（第 0 節數字）**：在第 2 節各表中，以第 (5) 欄開頭粗體詞統計：
+**計數方法（第 0 節數字）**：在第 2 節各表中，以第 (5) 欄開頭粗體詞統計（**須在 `docs/evidence/` 目錄下執行**，檔名為相對路徑）：
 
 ```
 awk -F'|' '/^\| [A-Q][0-9]+b? \|/{ if ($7 ~ /^ *\*\*可/) k++; else if ($7 ~ /^ *\*\*否/) n++; else if ($7 ~ /^ *\*\*不能判定/) u++; t++ } END{print "rows="t" 可="k" 否="n" 不能判定="u}' data_state_vocabulary_crosswalk_d3a_2026_11_08.md
@@ -337,7 +338,7 @@ awk -F'|' '/^\| [A-Q][0-9]+b? \|/{ if ($7 ~ /^ *\*\*可/) k++; else if ($7 ~ /^ 
 
 ### (e) 單組揭露（§-2 規則 6）
 
-- 本版為**回修版**：獨立 QA 已完成一輪，本組逐項以 `git grep origin/main` 重驗後修訂；回修內容**尚未經第二輪 QA**。本檔由**單一作者組**產出；所有〔I〕推論只是待驗事項，不得作為後續動作的前提。
+- 本版為**回修第二輪版**：獨立 QA 已完成兩輪，本組逐項以 `git grep origin/main` 重驗後修訂（第二輪新增驗證：`TEXT_NEVER_SET`、`freshness_badge_text`、`_freshness_badge`、`hld/live.py` 對 N＝0 的處理、`health.py::_STALE_TONE` 均已讀原始碼）；第二輪修訂**尚未經第三輪 QA**。本檔由**單一作者組**產出；所有〔I〕推論只是待驗事項，不得作為後續動作的前提。
 - 第 (5) 欄的「可／否／不能判定」是本組依第 1 節自訂定義作的判斷；**「可」僅在查到明文出處且兩邊定義一致時才標**，「否」「不能判定」是保守判斷，非客戶裁示。
-- 第 0 節「110 列、可 23／否 40／不能判定 47」為本組以上列 awk 指令計得；獨立 QA 請重跑並核對，數字若有出入以重跑結果為準。
+- 第 0 節「110 列、可 17／否 40／不能判定 53」為本組以上列 awk 指令計得；獨立 QA 請重跑並核對，數字若有出入以重跑結果為準。
 - 本檔沒有新增任何狀態、字樣、數值或門檻；凡本檔出現的字樣皆為既有代碼或文件的轉錄，並已標明其核准狀態（核准／暫擬／內部候選／已停用）。
