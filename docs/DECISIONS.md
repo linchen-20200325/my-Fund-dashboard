@@ -2527,7 +2527,7 @@
 | 日期 | 2026-11-08（Asia/Taipei） |
 | 決策者／原話 | **客戶**裁示，經總管派工單轉達（repo 內無逐字存檔，**要點轉述，非逐字**；客戶可推翻）。要點五項：(Q1) 優先整理基金身份、淨值與績效；(Q2) 由專案 AI 先提必備／選備／不納入候選、客戶逐類核可；(Q3) 舊 UI 先比較五項（單檔深掘、多檔健診、基金體檢表、低基期篩選、目前帳本）；(Q4) 缺資料沿用既有「資料未備／無法判定」，不新增「過期／衝突」正式詞、不改門檻；(Q5) FX 閘門保持關閉，非台幣基金仍可整理原幣資料，只把無法可靠換算者標「無法判定」，不得整檔判不可用。 |
 | 決策內容摘要 | 採用 Q1–Q5 推薦方向。本次授權範圍＝**唯讀資料盤點、分析、候選清單與純文件草案**。**約束**：Q4 不新增「過期／衝突」正式詞、不改門檻；Q5 非台幣基金不得整檔判不可用，只把無法可靠換算者標「無法判定」。 |
-| 現行效果 | 產出四份文件草案（`docs/evidence/d2_draft_A1_fund_identity_nav_perf_2026_11_08.md`、`d2_draft_A2_holdings_dividend_2026_11_08.md`、`d2_draft_B_old_ui_to_new_ui_compare_2026_11_08.md`、`d2_draft_C_customer_decision_list_2026_11_08.md`），均為作者草稿，待獨立 QA 與客戶逐類核可。 |
+| 現行效果 | 產出四份文件草案（`docs/evidence/d2_draft_A1_fund_identity_nav_perf_2026_11_08.md`、`d2_draft_A2_holdings_dividend_2026_11_08.md`、`d2_draft_B_old_ui_to_new_ui_compare_2026_11_08.md`、`d2_draft_C_customer_decision_list_2026_11_08.md`），均為作者草稿，獨立 QA 已完成一輪並已回修（非 QA 通過）、待客戶逐類核可。 |
 | 不授權事項（明確） | 本筆**不代表**正式 Required／Optional／Excluded 契約、Digest schema、Rule、Provider、Runtime 獲准；草案逐類正式規格另交客戶核准；**FX 閘門維持關閉**（`FX_OBS_DATE_RULE_VERIFIED` 仍為 `False`）；不改程式、公式、門檻、匯率閘門；不啟動 OneBrain、Phase 7、Claude API runtime；不核准 D3(b)／D7／D6 等任何未逐項裁示的 Gate；**不授權** Risk Cap、基金評等、新資料來源或探測、改動 frozen `docs/v2/44`／`57`／CONSTITUTION、改動 workflow／cron／保留分支；**不新增**「過期」「衝突」正式狀態詞、**不改**任何門檻（Q4）；**不得**因匯率無法換算而整檔判不可用（Q5）。 |
 | 理由／背景（agent 推論，不冒充裁示） | 承 `DEC-2026-11-08-02`（D1 方案 C 資料契約先行），先以唯讀草案縮小客戶逐類核可的工作量。 |
 | evidence／source | 上列四份草案；`DEC-2026-11-08-02`。 |

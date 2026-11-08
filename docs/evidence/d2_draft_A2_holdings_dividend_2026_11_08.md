@@ -168,7 +168,7 @@
 | R-4 | 配息表的寫入前提：每個來源、每一筆都須通過日期、金額、幣別的出處證據；過不了＝不寫、記原因（寧可缺、不猜） | 【F】`nav_dividend::DIV_EX_DATE_EVIDENCE`、`DIV_AMOUNT_EVIDENCE`、`DIV_CCY_EVIDENCE`；【I】資料量因此較保守，覆蓋率未驗 |
 | R-5 | 使用者參數留空＝「未設定」、不代填；不算資料狀態件數 | 【F】已核准規則鍵 `user_param_unset`（crosswalk A11） |
 | R-6 | 通知送達／重試／渲染 metadata 與通知偏好不進 Digest fingerprint | 【F】67 §8.11 第 1、3 點（轉錄自 79 第 17 節；該節自稱單組轉錄、須獨立稽核才視為已驗，【NV】） |
-| R-7 | 「沒配息」與「沒抓到」分開：`none_confirmed` 需全部來源自報成功且無列 | 【F】`DIV_OUTCOME_*`；【NV】字彙本身未見客戶核准 |
+| R-7 | 「沒配息」與「沒抓到」分開：`none_confirmed` 為每個跑過的來源都回報成功取數且無列，另需 `none_evidenced`（每個回空的來源都有認得同一代碼的證據）才算確認沒配息 | 【F】`DIV_OUTCOME_*`；【NV】字彙本身未見客戶核准 |
 
 ### 5.2 有資料但還不能正式用來做投資判斷
 
