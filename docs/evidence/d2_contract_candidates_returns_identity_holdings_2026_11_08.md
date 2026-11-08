@@ -1,26 +1,27 @@
 # D2 正式資料契約候選整理：報酬算法（A）／基金身份（A）／持倉占比（C）
 
-> **基準 `origin/main` 85a158bb；單組作者草稿；非作者獨立 QA 進行中；候選非核准；不構成正式 Schema／契約／裁示。**
+> **基準 `origin/main` 85a158bb；單組作者草稿；獨立 QA 已完成一輪並已回修（非 QA 通過）；候選非核准；不構成正式 Schema／契約／裁示。**
 > 本檔彙整三份作者草稿（E1 報酬、E2 身份、E3 持倉；原文不改寫，只調整標題層級並加註記），並附「對 #1177 草案的更正」與「下一批最值得核准事項」。
 > 客戶 2026-11-08 方向（經總管轉達的**要點轉述，非逐字，客戶可推翻**）：報酬算法選 A、基金身份選 A、持倉占比選 C；**只授權整理正式資料契約候選與裁示登記，不授權新公式、程式施工、FX 開閘或啟動 OneBrain**。登記見 `docs/DECISIONS.md` `DEC-2026-11-08-05`。
 > 標記沿用三草稿：FACT／【F】＝可由所引檔案重現；INFERENCE／【I】＝作者推得；NOT VERIFIED／【NV】＝未查證。三部分各自有分類欄（Required／Optional／Excluded／Pending），皆為**作者候選**，客戶逐類核可前不具效力。
+> **用語**：「成本」一詞在客戶確認「淨投資金額＝成本」前，一律指「淨投資金額（暫稱成本）」，不是已確認的成本語意。
 > **閱讀約定**：各部內文的「§n」「第 n 節」「列 n」一律指**該部自己的節號**（三部節號各自從 0 起算、互不指涉）；原文中「待總管／文件組另行登記」「本檔不寫入 DECISIONS」等句寫於登記前，現已以 `DEC-2026-11-08-05` 登記，原句保留不改。
 
 ## 0. 結論先行（白話；只取自三份草稿，不新增結論）
 
-**報酬算法（方案 A）。** 「1 年含息報酬」的算法**已有客戶裁示**（`DEC-2026-10-23-02` 1B：配息還原淨值法為唯一正式算法、官方值只對帳、資料不足顯示「資料未備／無法判定」），所以能形成契約候選；但該裁示的落地範圍寫明是舊站，**延伸到新資料契約尚需客戶正式核准**。1 個月、3 個月、6 個月與價格報酬**沒有核准的唯一算法**，只能並列現況、各標算法名稱。現有 1Y 含息輸出還**缺窗口起訖日、資料末端日期、取得時間**（算法版本欄是否需要尚未裁），補欄要改程式，不在本次授權內。同一基金的「1Y」現況至少並存五套數字，契約若不逐欄標口徑會被混讀；因此**目前不可用於正式 AI 投資判斷**。
+**報酬算法（方案 A）。** 「1 年含息報酬」的算法**已有客戶裁示**（`DEC-2026-10-23-02` 1B：配息還原淨值法為唯一正式算法、官方值只對帳、資料不足顯示「資料未備／無法判定」），所以能形成契約候選；但該裁示的落地範圍寫明是舊站，**延伸到新資料契約尚需客戶正式核准**。此外 `docs/BACKLOG.md` BL-0427（待客戶裁示）另登記該算法的公式層未決題：配息落在非淨值日時還原偏低、日曆日頻序列 `window_days`≈251 恆 unavailable、350 天只是下限而擋不住稀疏序列、配息日期取值口徑（(1)(3)(4)(5)，皆屬正式公式／窗口定義、未授權改）。1 個月、3 個月、6 個月與價格報酬**無唯一核准算法**，只能並列現況、各標算法名稱。現有 1Y 含息輸出**尚缺窗口起訖日、資料末端日期、取得時間**，也不含計價幣別與算法版本（算法版本欄是否需要尚未裁）；補欄要改程式，不在本次授權內。同一基金的「1Y」現況至少並存五套數字，契約若不逐欄標口徑會被混讀。
 
-**基金身份（方案 A）。** 契約候選只收現行取數鍵：輸入的 `fund_code`、取數用的 `full_key`、解析成功旗標 `ok`（共 3 個 Required 候選）；標準化基金身份（`base_fund_code`／`canonical_key` 等）繼續 Shadow、不影響 production、不升格為正式身份，不改 Sheet schema 與 NAV 來源優先序。尚未裁的最大問題：**`full_key` 能不能帶通路後綴**（今日程式接受，而既有裁示要求 Sheet 欄遇後綴標 `sheet_code_contract_violation`，但 production 路徑打不出這個標記）。別名表是否屬契約、MoneyDJ 頁型是否入契約、標準化代碼轉正所需的 Stage-2 驗證（V1～V13）皆未備；因此**身份在跨畫面認同上仍靠舊鍵，標準化身份不可用於正式 AI 投資判斷**。
+**基金身份（方案 A）。** 契約候選只收現行取數鍵：輸入的 `fund_code`、取數用的 `full_key`、解析成功旗標 `ok`（共 3 個 Required 候選）；標準化基金身份（`base_fund_code`／`canonical_key` 等）尚在 Shadow、不影響 production、不升格為正式身份，不改 Sheet schema 與 NAV 來源優先序。尚未裁的最大問題：**取數用代碼（`full_key`）能不能帶通路後綴**（今日程式接受，而既有裁示要求 Sheet 欄遇後綴標 `sheet_code_contract_violation`，但 production 路徑打不出這個標記；Shadow 旗標預設關閉時該 hook 根本不執行）。別名表是否屬契約、MoneyDJ 頁型是否入契約、標準化代碼轉正所需的 Stage-2 驗證（V1～V13）皆未備；跨畫面認同目前仍靠現行取數鍵。
 
-**持倉（占比方案 C＝延後）。** 暫不收「類別占比契約」（延後不等於排除，不刪既有程式與歷史計算）。能形成契約候選的是：持有單位、台幣成本、幣別、類別、**各類別成本金額**（成本基準不讀淨值與匯率，不受 FX 閘門影響，非台幣基金的成本亦可入）、來源完整性與缺資料原因。仍不可用於正式 AI 投資判斷的是：**任何占比／分母／完整 100%**、**市值面**（受 NAV 10 日規則與 FX 閘門擋住）、「**淨投資金額＝成本**」語意（repo 文件未見明文）、以及**真實使用者持倉覆蓋率（NOT VERIFIED）**。歷史授權鏈（`DEC-2026-11-05-02`／`-04`）仍為「未重新追認」。
+**持倉（占比方案 C＝延後）。** 暫不收「類別占比契約」（延後不等於排除，不刪既有程式與歷史計算）。能形成契約候選的是：持有單位、台幣淨投資金額（暫稱成本）、幣別、類別、**各類別淨投資金額（暫稱成本）**（此基準不讀淨值與匯率，不受 FX 閘門影響，非台幣基金亦可入；**但依賴類別名稱設定 `bucket_names`**，未設定時全部歸「未分類」）、來源完整性與缺資料原因。目前缺口／限制：**占比／分母／完整 100% 尚未裁（延後）**、**市值面**受 NAV 10 日規則與 FX 閘門擋住、「**淨投資金額＝成本**」語意 repo 文件未見明文（作者已降為備註，非阻塞）、**真實使用者持倉覆蓋率 NOT VERIFIED**。歷史授權鏈（`DEC-2026-11-05-02`／`-04`）仍為「未重新追認」，其規則不得寫成「已追認」。
 
 ### 三類總覽表
 
-| 類別 | 客戶方向（要點轉述） | 已能形成契約候選的 | 候選規模（作者自計） | 主要缺口／待裁 | 仍不可用於正式 AI 投資判斷的 | 詳見 |
+| 類別 | 客戶方向（要點轉述） | 已能形成契約候選的 | 候選規模（作者自計） | 主要缺口／待裁 | 目前缺口／限制 | 詳見 |
 |---|---|---|---|---|---|---|
-| 報酬算法 | 方案 A：1Y 含息列入契約候選（請客戶確認可延伸），其他期間與價格報酬並列標算法、不選唯一正式 | 1Y 含息 `value_pct`／`ccy`／`source`／`window_days`／`status`／`reason` 等 | 24 列（Required 8 列） | 跨新版適用待核准；窗口起訖日、資料末端日期、取得時間缺口；1M／3M／6M 口徑未裁（BL-0524） | 1M／3M／6M／價格報酬（無唯一算法）；TWD 換算後報酬（無輸出、FX 閘門關閉）；多套「1Y」並存 | 第一部 |
-| 基金身份 | 方案 A：只收現行取數鍵；標準化身份續 Shadow；不改 Sheet schema／NAV 優先序 | `fund_code`、`full_key`、`ok`（Required）；診斷欄為 Optional | 27 列（Required 3、Optional 7、Excluded 15、Pending 2） | `full_key` 可否帶後綴（S7）；別名表（K11）、頁型（K12）；Stage-2 條件 V1～V13 | 標準化身份、通路後綴、ISIN、share class 等一律 Excluded／Unknown | 第二部 |
-| 持倉 | 方案 C：延後類別占比契約；只整理單位、成本、類別金額與缺資料原因 | 單位數、台幣成本、幣別、類別、各類別成本金額、來源完整性、缺資料原因 | 30 個候選欄位（§2.A 11＋§2.B 5＋§2.C 6＋§2.D 8） | 「淨投資金額＝成本」語意（X10）；根層資料時點缺；11 項 open gate；授權鏈未追認 | 占比／分母／完整 100%；市值面與 FX；覆蓋率 | 第三部 |
+| 報酬算法 | 方案 A：1Y 含息列入契約候選（請客戶確認可延伸），其他期間與價格報酬並列標算法、不選唯一正式 | 1Y 含息 `value_pct`／`ccy`／`source`／`window_days`／`status`／`reason` 等 | 24 列（Required 8 列） | 跨新版適用待核准；BL-0427 公式層未決；窗口起訖日、資料末端日期、取得時間缺口；1M／3M／6M 口徑未裁（BL-0524） | 1M／3M／6M／價格報酬無唯一核准算法；無 TWD 換算後報酬輸出（FX 閘門關閉）；多套「1Y」並存 | 第一部 |
+| 基金身份 | 方案 A：只收現行取數鍵；標準化身份續 Shadow；不改 Sheet schema／NAV 優先序 | `fund_code`、`full_key`、`ok`（Required）；診斷欄為 Optional | 27 列（Required 3、Optional 4、Excluded 15、Pending 5） | `full_key` 可否帶後綴（S7）；別名表（K11）、頁型（K12）；幣別／出處／名稱歸 NAV／profile 契約（K13～K15）；Stage-2 條件 V1～V13 | 標準化身份、通路後綴、ISIN、share class 等為 Excluded／Unknown；標準化代碼尚在 Shadow | 第二部 |
+| 持倉 | 方案 C：延後類別占比契約；只整理單位、成本、類別金額與缺資料原因 | 單位數、台幣淨投資金額（暫稱成本）、幣別、類別、各類別淨投資金額（暫稱成本；依賴 `bucket_names`）、來源完整性、缺資料原因 | 30 列候選項目（§2.A 11＋§2.B 5＋§2.C 6＋§2.D 8） | 「淨投資金額＝成本」語意（X10）；根層資料時點缺；11 項 open gate；授權鏈未追認 | 占比／分母／完整 100% 延後；市值面與 FX；覆蓋率 NOT VERIFIED | 第三部 |
 
 ---
 
@@ -36,10 +37,10 @@
 #### 0. 結論先行
 
 1. 【FACT】方案 A 的字面（`d2_draft_C_customer_decision_list` 題 1）：1 年含息報酬照已有裁示列入契約（請客戶確認可延伸）；1M／3M／6M 與價格報酬並列、各標算法名稱，**不選唯一正式算法**。本檔照此分兩張表：§1「1 年含息」候選欄位；§2「1M／3M／6M／價格報酬」只列現況並存。
-2. 【FACT】**「客戶選方案 A」在 repo 內尚無對應 DEC**：`docs/DECISIONS.md` 只有 `DEC-2026-11-08-04`（Q1–Q5 方向，未提題 1 方案），`git grep` 方案 A／題 1 無相關登記。本檔所有「方案 A」依據僅為任務單轉述【NOT VERIFIED，待總管／文件組另行登記】。
-3. 【FACT】1Y 含息的**算法裁示已存在**：`DEC-2026-10-23-02` 1B（基金層唯一 SSOT＝配息還原淨值法、官方值只對帳、資料不足→「⬜ 資料未備／無法判定」、不得 fallback 為純 NAV／0／中性／估算）。【FACT】同筆「影響範圍」寫明落地在 `services/`、`ui/` **舊站 consumer**，**不改 `ui_v2/`**；`DEC-2026-10-23-06` 同為 `ui_v2/` 不改。⇒ **跨新版契約是否適用，裁示沒有講，本檔不擴大解讀**，一律標「擬沿用的唯一正式算法候選（跨新版適用範圍仍需正式核准）」。
+2. 【FACT】**「客戶選方案 A」在 repo 內尚無對應 DEC**：`docs/DECISIONS.md` 只有 `DEC-2026-11-08-04`（Q1–Q5 方向，未提題 1 方案），`git grep` 方案 A／題 1 無相關登記。本檔所有「方案 A」依據僅為任務單轉述【NOT VERIFIED，待總管／文件組另行登記】。（**已登記，見 `DEC-2026-11-08-05`**；本句寫於登記前。）
+3. 【FACT】1Y 含息的**算法裁示已存在**：`DEC-2026-10-23-02` 1B（基金層唯一 SSOT＝配息還原淨值法、官方值只對帳、資料不足→「⬜ 資料未備／無法判定」、不得 fallback 為純 NAV／0／中性／估算）。【FACT】同筆「影響範圍」寫明落地在 `services/`、`ui/` **舊站 consumer**，**不改 `ui_v2/`**；`DEC-2026-10-23-06` 同為 `ui_v2/` 不改。⇒ **跨新版契約是否適用，裁示沒有講，本檔不擴大解讀**，一律標「擬沿用的唯一正式算法候選（跨新版適用範圍仍需正式核准）」。 【FACT】另 `docs/BACKLOG.md` BL-0427（待客戶裁示）登記該算法公式層未決：(1) 配息落在非淨值日時還原低估；(3) 日曆日頻序列 `window_days`≈251 恆 unavailable；(4) 350 天只是下限、擋不住稀疏序列；(5) 配息日期取值口徑（`date` 優先、缺才退 `ex_date`，而 MoneyDJ 解析器中 `date` 為配息基準日、`ex_date` 為除息日）；皆「正式公式／窗口定義，未授權改」。故「唯一正式算法候選」不等於公式層已定案。
 4. 【FACT】既有 1Y 含息實作只在舊站：`services/fund_total_return.py::resolve_1y_total_return` 與 `services/fund_service.py::calc_metrics`／`calculate_fund_total_return`；`git grep resolve_1y_total_return|ret_1y_total|compute_1y_total_return -- services/v2_tables services/v2_domain ui_v2 ui_v3` **0 命中**（本次重跑）。新版線 C 沒有對應輸出。
-5. 【FACT】**契約候選欄位有三個缺口**（既有 `resolve_1y_total_return` 輸出沒有）：窗口起訖日、資料末端日期（as_of）、取得時間；它只輸出 `window_days`。補這些要改程式，**不在本次授權內**，只登記為缺口（§1 列 7～9）。
+5. 【FACT】**契約候選欄位有缺口**（既有 `resolve_1y_total_return` 輸出沒有）：窗口起訖日、資料末端日期（as_of）、取得時間；它只輸出 `window_days`；另輸出也不含計價幣別（列 3）與算法版本（列 5）。補這些要改程式，**不在本次授權內**，只登記為缺口（§1 列 3、5、7～9）。
 6. 【FACT】更正前稿：`d2_draft_A1` C4 把 6 個字串都稱為 `reason` 值；實際 `UNAVAILABLE_REASON_TEXT` 有 6 個**文字鍵**，但 `reason` **只會輸出 5 種**（`no_series`／`no_restored_value`／`window_short`／`window_unknown`／`dividend_data_missing`）；`dividend_data_missing_unaligned` 只是 `dividend_data_missing` 的白話變體（`_unavailable(..., text_key=...)`，`reason` 仍是 `dividend_data_missing`）。
 7. 【INFERENCE】最大風險不是缺欄位，而是「同一基金同名『1Y』並存多套數字」（§3），契約若不逐欄標算法，會被混讀。
 
@@ -53,18 +54,18 @@
 | # | 候選資料 | 內容與單位 | 來源 | 缺漏原因／缺值影響 | 依據（支持度） | 候選分類 | 標記 |
 |---|---|---|---|---|---|---|---|
 | 1 | 基金身份 `fund_code` | 列主鍵 | 持倉 Sheet「基金代號」／呼叫端（A1 A1） | 無法掛到基金 → 結論只能「無法判定」 | 【候選】；身份鍵以何者為準＝題 2（D2／D9）【待裁】 | Required | FACT（既有欄）／INFERENCE（分類） |
-| 2 | 1Y 含息報酬值 `value_pct` | 百分點；`calc_metrics` 內 `round((adj_end/adj_start−1)×100, 2)`；**原幣**淨值還原，無 TWD 換算 | `resolve_1y_total_return` ← `calc_metrics`→`calculate_fund_total_return`（Adj_NAV＝NAV×累積因子，因子＝1＋配息/當日 NAV） | `status=unavailable` 時 `value_pct=None`；**不補 0、不退純 NAV、不外推年化** | 算法【既裁】`DEC-2026-10-23-02` 1B（舊站範圍）；收入新契約／跨新版【待裁】（方案 A 要求客戶確認可延伸；`DEC-2026-10-23-02` 影響範圍＝舊站、不改 `ui_v2/`） | Required；**擬沿用的唯一正式算法候選（跨新版適用範圍仍需正式核准）** | FACT |
-| 3 | 計價幣別 `ccy`（說明報酬基準為原幣） | 字串；本值為原幣百分比，非 TWD 報酬 | `nav.ccy`／`fund_profile.ccy`（A1 A9）；`resolve_1y_total_return` **輸出不含 ccy** | 幣別缺或衝突→該檔淨值整批不寫（`nav_dividend.py`）→ 1Y 無從算 | Q5（原幣可整理）【既裁，要點轉述】；本欄列入 1Y 契約【候選】 | Required（說明「原幣」基準；缺則百分比不可被誤讀為 TWD） | FACT（輸出無 ccy）／INFERENCE（分類） |
+| 2 | 1Y 含息報酬值 `value_pct` | 百分點；`calc_metrics` 內 `round((adj_end/adj_start−1)×100, 2)`；**原幣**淨值還原，無 TWD 換算 | `resolve_1y_total_return` ← `calc_metrics`→`calculate_fund_total_return`（Adj_NAV＝NAV×累積因子，因子＝1＋配息/當日 NAV） | `status=unavailable` 時 `value_pct=None`；**不補 0、不退純 NAV、不外推年化** | 算法【既裁】`DEC-2026-10-23-02` 1B（舊站範圍）；公式層另有 BL-0427 (1)(3)(4)(5) 未裁【待裁】；收入新契約／跨新版【待裁】（方案 A 要求客戶確認可延伸；`DEC-2026-10-23-02` 影響範圍＝舊站、不改 `ui_v2/`） | Required；**擬沿用的唯一正式算法候選（跨新版適用範圍仍需正式核准）** | FACT |
+| 3 | 計價幣別 `ccy`（說明報酬基準為原幣） | 字串；本值為原幣百分比，非 TWD 報酬 | `nav.ccy`／`fund_profile.ccy`（A1 A9）；`resolve_1y_total_return` **輸出不含 ccy** | 幣別缺或衝突→**新版 nav 表**該檔淨值整批不寫（`nav_dividend.py`）；舊站 `calc_metrics`→`resolve_1y_total_return` 不使用 `ccy`，故不會因幣別缺而算不出 1Y | Q5（原幣可整理）【既裁，要點轉述】；「把 `ccy` 列為 1Y 契約 Required」是**作者候選，不是現有行為**【候選】 | Required（說明「原幣」基準；缺則百分比不可被誤讀為 TWD） | FACT（輸出無 ccy）／INFERENCE（分類） |
 | 4 | 計算口徑標識 `source` | 字串：有值＝`自算（還原含息淨值）`（`SRC_SELF_RESTORED`）；無值＝`—`（`SRC_NONE`） | 常數定義於 `services/fund_total_return.py` | 缺口徑→不同口徑的值被混讀（G-RET-2 病徵） | 純 NAV／外推不得掛「含息」名【既裁】1B；收入契約【候選】 | Required | FACT |
 | 5 | 算法版本／識別碼（algorithm id／rule_version） | **既有輸出沒有**；`rule_version` 全 repo 零命中（`docs/v2/67` §5.3 表） | — | 無此欄→口徑只靠 `source` 文字辨識 | 【待裁】是否需要＝Digest／Rule 層議題（`67` §8.6 Rule 群、BL-0527）；本檔**不新增** | Pending | FACT（無此欄）／NOT VERIFIED（是否需要） |
-| 6 | 窗口天數 `window_days`（←`ret_1y_window_days`） | 整數日曆天；窗首＝倒數第 252 列淨值日（列數 ≥252 時）或整段序列（<252 列且跨度 ≥30 天時）至末筆 | `calc_metrics`；門檻 `RET_1Y_RESTORED_MIN_WINDOW_DAYS`＝350（`shared/signal_thresholds.py`） | 窗口 <350 天→`window_short`；有值但無窗口證據→`window_unknown`；不讓短窗值冒充一年 | 350 天為既有 SSOT 常數【既有，核准依據 NOT VERIFIED】（A1 C4）；收入契約【候選】 | Required（沒有期間的報酬無法解讀；A1 C8 同向） | FACT |
+| 6 | 窗口天數 `window_days`（←`ret_1y_window_days`） | 整數日曆天；窗首＝倒數第 252 列淨值日（列數 ≥252 時）或整段序列（<252 列且跨度 ≥30 天時）至末筆 | `calc_metrics`；門檻 `RET_1Y_RESTORED_MIN_WINDOW_DAYS`＝350（`shared/signal_thresholds.py`） | 窗口 <350 天→`window_short`；有值但無窗口證據→`window_unknown`；不讓短窗值冒充一年 | 350 天為既有 SSOT 常數【既有，核准依據 NOT VERIFIED】（A1 C4）；BL-0427 (3)(4) 登記此窗口定義的未決題（恆 unavailable／擋不住稀疏）；收入契約【候選】 | Required（沒有期間的報酬無法解讀；A1 C8 同向） | FACT |
 | 7 | 窗口起訖日（起日、迄日） | **既有輸出沒有**；`calc_metrics` 內部有 `_window_start_dt`，未輸出 | — | 缺→只能靠 `window_days` 回推，不可驗證起日 | 【待裁】：是否要求輸出＝需改程式，**本次不授權**，僅登記缺口 | Pending（缺口） | FACT（內部有、輸出無） |
 | 8 | 資料末端日期 `as_of`（最後淨值日） | **`resolve_1y_total_return` 輸出沒有**；來源淨值列有 `nav_date`（Preview `contract.NAV_FIELDS`；舊站 `nav_date`） | NAV 序列 | 缺→1Y 值無法對應「截至哪天」 | `67` §8.6 把 as_of 列 Required 例【既有文件，非核准清單】；由誰提供【待裁】 | Required 候選（缺口） | FACT／INFERENCE |
 | 9 | 取得時間 `fetched_at` | **輸出沒有**；NAV 列有 `fetched_at`（`contract.NAV_FIELDS`） | NAV 列 | 缺→無法判斷資料多舊 | 【待裁】（Freshness 門檻另案：`stale_after` 值待裁，`67` §8.5） | Optional／Pending | FACT |
-| 10 | 健康狀態 `status` | 既有二值：`ok`／`unavailable` | `resolve_1y_total_return` | `unavailable`＝缺資料 | 沿用既有字樣【既裁】Q4（`DEC-2026-11-08-04`：不新增「過期／衝突」、不改門檻）；是否採 `ok`／`unavailable` 當契約狀態字彙＝D3(a)／(b)【待裁】 | Required | FACT |
+| 10 | 健康狀態 `status` | 既有二值：`ok`／`unavailable` | `resolve_1y_total_return` | `unavailable`＝缺資料 | Q4（`DEC-2026-11-08-04`）管的是缺資料字樣與不新增「過期／衝突」詞、不改門檻，**不直接核准 `ok`／`unavailable` 兩值**；是否採 `ok`／`unavailable` 當契約狀態字彙＝D3(a)／(b)【待裁】 | Required | FACT |
 | 11 | 缺漏原因碼 `reason` | **只會輸出 5 種**：`no_series`、`no_restored_value`、`window_short`、`window_unknown`、`dividend_data_missing` | `_unavailable()` | 對應白話原因見 `UNAVAILABLE_REASON_TEXT` | 原因碼為既有；1B 要求「資料不足→資料未備／無法判定」【既裁】；收入契約【候選】 | Required（當 `status=unavailable`） | FACT |
 | 12 | 缺漏原因白話全句 `label` | `⬜ 資料未備／無法判定（原因）`；有值時為口徑字串＋可能的「⚠️ 數值異常大」警語 | 同上 | — | 屬呈現層；`67` §5.2 第 3 點（執行組讀法，可推翻）：`value_text` 類字串不得當值來源 | Excluded（全句）；但**字樣「資料未備／無法判定」沿用**（Q4） | FACT／INFERENCE |
-| 13 | 窗內配息筆數 `div_count_in_window` | 整數或 `None`（`None`＝窗口未建，非 0） | `calc_metrics.ret_1y_div_count`（從還原表 `Dividend>0` 數） | 配息型且＝0→`dividend_data_missing`（配息資料未備） | 配息閘門屬 1B 落地內容【既裁，舊站範圍】；收入契約【候選】 | Optional | FACT |
+| 13 | 窗內配息筆數 `div_count_in_window` | 整數或 `None`（`None`＝窗口未建，非 0） | `calc_metrics.ret_1y_div_count`（從還原表 `Dividend>0` 數） | 配息型且＝0→`dividend_data_missing`（配息資料未備） | 配息閘門屬 1B 落地內容（**依據出自程式註解**，裁示原文逐字未核對）【舊站範圍】；收入契約【候選】 | Optional | FACT |
 | 14 | 配息型判斷（`is_dividend_fund`／`dividend_policy`） | 閘門輸入：配息型＋窗內 0 筆→不判 | `services/fund_total_return.py::is_dividend_fund`；`exp_profile.py` `dividend_policy`（A1 A12） | 判斷缺→配息閘門無法啟動 | 配息頻率對照表為客戶 2026-09-26 定案（檔註，DEC 編號 NOT VERIFIED，A1 A12）；納入 Digest【待裁】 | Optional／Pending | FACT／NOT VERIFIED |
 | 15 | MoneyDJ 官方 1Y `official_1y_pct` | 百分點（MoneyDJ 頁面值）；僅 `perf_source=="wb01"` 時取 `perf["1Y"]`；送對帳時才 ÷100 轉小數 | `resolve_1y_total_return` | 缺→只少一個對照，不影響自算值 | **只作對帳**【既裁】1B；引 DEC：`DEC-2026-10-23-02` | Optional（僅對帳；**不得當主值**） | FACT |
 | 16 | 對帳結果 `ret_1y_reconcile` | `agree`／`disagree`／`a_missing`／`b_missing`／`both_missing` | `services/reconcile.py::reconcile_fund_annual_return`；`fund_service.finalize_fund_metrics` 注入 | 缺→少第二算法交叉檢查 | 對帳義務＝`CLAUDE.md` §4.3；**容差（abs 0.005／rel 0.05，小數制）是否為客戶核准門檻 NOT VERIFIED**；僅舊站 | Optional | FACT／NOT VERIFIED |
@@ -87,7 +88,7 @@
 |---|---|---|---|---|---|---|---|---|
 | M1 | 列數窗價格報酬 `ret_1w／ret_1m／ret_3m／ret_6m／ret_1y` | `services/fund_service.py::calc_metrics` 內 `_ret(n)`：n＝6／22／65／130／252 列；`(now−s[−n])/s[−n]×100`，`round(,2)` | **以列數**，無日曆跨度護欄；稀疏／週頻序列時「1M」可能不是一個月（G-RET-3，引，未重驗；BL-0520 實測週頻 22 列＝22 週，引） | **否**（純淨值；`ret_1y_total` 才是含息） | 原幣 | 列數不足或基準≤0→`None` | 舊站健診／衛星戰情室（引 `69`）、tab2 快照（引） | 【待裁】BL-0524／D2；FACT（公式）／引文（出現處） |
 | M2 | MoneyDJ 官方績效 `perf["1M"／"3M"／"6M"／"1Y"／"3Y"／"5Y"]`（wb01） | `repositories/fund/fund_orchestration.py`（`fetch_performance_wb01`；`perf_source="wb01"`）；`ui/views/page_03_research.py::PERF_PERIODS` 顯示 | 由 MoneyDJ 頁面定義（本組未讀其期間定義）【NOT VERIFIED】 | 程式註解稱「含息總報酬率 wb01（MoneyDJ 說明：已考慮配息）」；`fund_total_return.py` 檔頭稱「官方複利」。【FACT 為註解字面；MoneyDJ 實際定義 NOT VERIFIED】 | 原幣（引 `69`） | 境內基金 `_fetch_domestic_perf` 恆回空（引 `69`，未重驗） | ⑧ 單檔深度、舊健診表 | 1Y 僅作對帳【既裁】1B；1M／3M／6M 作為主值**無核准紀錄**【NOT VERIFIED，A1 C5】 |
-| M3 | wb07 同類比較備援 `perf["1Y"]` | `fund_orchestration.py`：先由 `peer_compare` 取基金列首值寫入 `perf["1Y"]`，wb01 有回才覆蓋並設 `perf_source="wb01"` | 未定義 | 不明 | 原幣 | wb01 缺時 `perf["1Y"]` 可能殘留 wb07 值、`perf_source` 非 wb01 | `page_03_research.py::_perf_lines` 讀 `perf` 顯示（不分來源） | 【FACT】程式路徑；【INFERENCE】⑧ 的「近 1 年」在 wb01 缺時可能顯示 wb07 值而不標來源，**本組未實跑** |
+| M3 | wb07 同類比較備援 `perf["1Y"]` | `fund_orchestration.py`：先由 `peer_compare` 取基金列首值寫入 `perf["1Y"]`，wb01 有回才覆蓋並設 `perf_source="wb01"` | 未定義 | 不明 | 原幣 | wb01 缺時 `perf["1Y"]` 可能殘留 wb07 值、`perf_source` 非 wb01 | `page_03_research.py::_perf_lines` 讀 `perf` 顯示（不分來源） | 【FACT】程式路徑；【INFERENCE】⑧ 的「近 1 年」在 wb01 缺時可能顯示 wb07 值而不標來源，**本組未實跑**；**更嚴重變體（讀碼推論，未實跑）**：`fund_orchestration` 先把 wb07 `peer_compare` 首值寫入 `perf["1Y"]`，`fetch_performance_wb01` 只要回非空 dict（例如只抓到 1M／3M，沒有 1Y）即設 `perf_source="wb01"`，但 `perf["1Y"]` 仍是 wb07 值；`resolve_1y_total_return` 的 `official_1y_pct`（只看 `perf_source=="wb01"`）與 `finalize_fund_metrics` 的對帳判斷 `_is_wb01` 會因此把 wb07 值當成官方 wb01 值（兩處 `perf` 組裝路徑皆如此）。 |
 | M4 | 官方優先、缺才自算的混用欄 `_period_ret` | `ui/helpers/fund/checkup.py::_period_ret`：先 `moneydj_raw.perf[key]`，缺才 `metrics[ret_1m／ret_3m]` | wb01 與列數窗混用 | 否／不明（混） | 原幣 | 兩者皆缺→`None` | 基金體檢表「近 1M／3M／6M」 | 同一欄兩種口徑（B §體檢表）；【待裁】BL-0524 |
 | M5 | 使用者自選日曆窗價格報酬 `return_pct` | `services/v2_domain/nav_metrics.py::return_pct`（`(末/首−1)×100`，單位百分點，不另 round）；`ui_v2/hld/logic.py::fund_metrics` 切區間後呼叫（鍵「區間報酬率」） | 使用者自選起迄日；首末兩筆；筆數<2 或首值≈0→`None` | **否**（只用 `nav_orig_ccy`；配息另算「配息佔淨值比」） | 原幣（`_ccy`） | 無列→`⬜ 資料未備`；最早 `nav_date` 晚於區間起點（`fund_profile` 未接時推定）→`⬜ 資料未備`；筆數不足→不適用字樣 | 新版預覽 HLD-7（`ui_v2`／`ui_v3`，非 `app.py` 入口） | 【待裁】；FACT。輸入含 NaN 的行為：`return_pct([nan,1,2])`＝nan（A1 引 audit V8），nav 表路徑已擋非有限值 |
 | M6 | 持有期間簡單加總／帳本 TWD 報酬 | T7 帳本（引 `69` G-RET-2） | 買入日起 | 不明 | TWD | — | 💼 持股層 | **不屬基金層**【既裁】1B；持倉域另判 |
@@ -98,7 +99,7 @@
 1. 【FACT】同一基金的「1Y」至少五套並存：**(a)** 還原含息 `ret_1y_total`（SSOT 門檻 350 天後才是 `value_pct`）；**(b)** 252 列價格 `ret_1y`；**(c)** MoneyDJ wb01 `perf["1Y"]`（對帳）；**(d)** 新版預覽自選窗價格報酬 `return_pct`；**(e)** 持有期簡單加總（引 `69` G-RET-2）。
 2. 【FACT】`docs/v2/69` G-RET-2 另記：tab3 表欄與 AI 摘要讀**原始** `ret_1y_total`，繞過 350 天門檻（引，本組未重驗）。【FACT】本次重讀 `resolve_1y_total_return`：門檻只存在於該函式內；`calc_metrics` 直接輸出的 `ret_1y_total` 在窗口 <350 天時仍有值（`_days_span≥30` 即建窗）。⇒ **原始鍵與 SSOT 解析後的值可以不同，契約若收值必須收解析後的 `value_pct`，不是原始鍵**【INFERENCE】。
 3. 【FACT（引 `69`，BL-0520 替身實測）】同一週頻序列：`ret_1y`＝`None`、`ret_1y_total`＝74.5%（窗口 1043 天）、vNext 測試選定日曆窗 17.5%。其意義＝機制已證實並存；**這是替身輸入，不是真實基金證據**，且 74.5% 對應的是 1043 天窗口（「1Y」名稱下窗口遠大於一年；這恰是 G-RET-3 的徵兆）。
-4. 【INFERENCE】`ret_1y_total` 的窗首在列數≥252 時取「倒數第 252 列」，350 天門檻只檢查實際日曆天數**下限**，不檢查上限；週頻或稀疏序列可通過門檻卻非一年。本組**未實跑**，只讀碼；是否構成問題屬 BL-0524／G-RET-3，**本檔不判、不修**。
+4. 【INFERENCE】`ret_1y_total` 的窗首在列數≥252 時取「倒數第 252 列」，350 天門檻只檢查實際日曆天數**下限**，不檢查上限；週頻或稀疏序列可通過門檻卻非一年。本組**未實跑**，只讀碼；是否構成問題屬 BL-0524／G-RET-3，**同一問題亦登記於 BL-0427 (4)**（「350 天只是下限，擋得住窗口太短、擋不住稀疏序列跨度過長」，待客戶裁示、未授權加門檻），**本檔不判、不修**。
 5. 【FACT】對帳函式 `reconcile_fund_annual_return` 的 `source_a` 標籤寫 `self_calc:nav[-1]/nav[-252]-1`（描述純價格式），但 `fund_service.finalize_fund_metrics` 實際餵入的是 `ret_1y_total/100`（還原含息）。⇒ **標籤與實際輸入不一致**【FACT 讀碼】；只登記，不改（改碼不在授權內）。
 6. 【FACT】本檔**不評斷**任何一套較準；契約若並列，必須各自帶「計算口徑標識」，否則不得並列顯示。
 
@@ -140,7 +141,7 @@
 1. 【FACT】現行 production 的基金「取數鍵」只有一個：`services/v2_tables/fund_keys.py::resolve_full_keys` 輸出的 `full_key`（字串，通過 `PURE_CODE_PATTERN`：主碼 3–30 碼大寫英數，可再接一個 `-` 與 2–20 碼大寫英數），`portal` 恆為空字串。
 2. 【FACT】標準化身份（`base_fund_code`／`canonical_key`、`verification_status`、`platform_suffix`、`channel_code` 等）只存在於 shadow：`shared/fund_identity.py::DG2_SHADOW_ENABLED = False`，無 production consumer（`DEC-2026-10-28-05`、`DEC-2026-10-29-01`、`DEC-2026-11-01-02` G-E4）。
 3. 【FACT】客戶選方案 A 的內容（依派工單轉述，非逐字）：契約只收現行取數鍵；標準化基金身份繼續 Shadow Mode，不啟用新 resolver 影響 production；不改 Sheet schema 或 NAV source precedence。`docs/evidence/d2_draft_C_customer_decision_list_2026_11_08.md` 題 2 的方案 A 與此一致。
-4. 【NOT VERIFIED】本 repo（origin/main）的 `docs/DECISIONS.md` 目前只到 `DEC-2026-11-08-04`，**沒有**登記這次「方案 A」裁示；本檔第 7 節只是登記草稿，**未寫入**任何 DEC。
+4. 【NOT VERIFIED】本 repo（origin/main）的 `docs/DECISIONS.md` 目前只到 `DEC-2026-11-08-04`，**沒有**登記這次「方案 A」裁示；本檔第 7 節只是登記草稿，**未寫入**任何 DEC。（**已登記，見 `DEC-2026-11-08-05`**；本句寫於登記前。）
 5. 【INFERENCE】方案 A 下契約的身份欄位只有 `fund_code`（輸入）與 `full_key`（取數用）兩個必收欄，其餘身份欄位一律不收或待決；最大的未解問題是「`full_key` 是否可帶通路後綴」（第 3 節 S7）。
 
 #### 1. 「現行取數鍵」資料契約候選表（共 27 列）
@@ -162,11 +163,11 @@
 | K10 | 解析器名稱 | `provenance.parser` | 診斷 | `fund_keys.py::PARSER_NAME` | 常數【FACT】 | Excluded | 候選 | 無 | 無 |
 | K11 | 別名對照內容 | `repositories/fund/sources.py::_DEFAULT_MAPPING`（內建 12 筆）＋ `load_fund_code_mapping`（`fund_code_mapping.csv`，欄 `input_code,public_code,page_type,note`） | 把輸入別名轉成 MoneyDJ 公開代碼與頁型 | 內建表＋可選 csv | `git ls-tree origin/main` 根目錄**沒有** `fund_code_mapping.csv`【FACT】；執行環境是否另有 csv【NOT VERIFIED】 | Pending | 待裁示（別名表是否為契約的一部分、由誰維護） | 無專屬 DEC；`docs/v2/70` §14 第 8 點 | 別名表不同 → 同一輸入得不同 `full_key`（例 `ACTI171`／`ACTI7`／`ACTI71` 在內建表都指 `ACTI71`）【FACT】 |
 | K12 | MoneyDJ 頁型 | `parse_moneydj_input` → `page_type`（`yp010000` 境內、`yp010001` 境外、`wb01`／`wb02`／`wb05`／`wr01`／`wr02`／`a1_mobile`／`b1_mobile`）；對照表 `page_type` | 取數時選頁 | 網址明示或對照表；裸碼由 `_is_domestic_code` 推斷（對照表→前綴→預設境外） | 推斷不可靠【FACT，`docs/v2/70` §15.3】 | Pending | 待裁示 | `DEC-2026-10-29-01` 第 5 項（shadow 側：網址明示才記，裸碼 Unknown） | 頁型錯 → 首選失敗後互換重試（`get_page_types_to_try`）【FACT】 |
-| K13 | 計價幣別 | `ccy`（`nav` 表）；`declared_ccy` | 淨值原幣 | 持倉列手填或 meta 頁自報（MoneyDJ／TDCC／FundClear） | 缺或不一致 → 該檔淨值整批不寫（A1 草稿 A9） | Optional（屬屬性，不屬身份鍵；歸 NAV 契約，待 A 區核可） | 待裁示 | `DEC-2026-10-28-05`（currency 與 share class 分開、不預設 USD）；A1 草稿 A9、`DEC-2026-11-08-04` Q5 | 缺幣別 → 淨值資料未備；不得補 USD【FACT】 |
-| K14 | 幣別出處 | `ccy_source`（`provenance[fund_code]`） | 幣別是誰說的 | `nav_dividend.py` | 旁路 provenance，不在表欄內【FACT，引 A1 A10】 | Optional | 待裁示 | 同 K13 | 無法追溯 |
-| K15 | 基金名稱 | `fund_name`（`exp_profile`） | 人工核對 | MoneyDJ 基本資料頁（需通過身分判準） | 頁不符判準 → `unrecognized_page`／`not_found` | Optional | 待裁示 | A1 草稿 A8 | 該格資料未備；不影響取數鍵 |
+| K13 | 計價幣別 | `ccy`（`nav` 表）；`declared_ccy` | 淨值原幣 | 持倉列手填或 meta 頁自報（MoneyDJ／TDCC／FundClear） | 缺或不一致 → 該檔淨值整批不寫（A1 草稿 A9） | Pending（屬 NAV 契約，不屬方案 A「只收現行取數鍵」；待該契約核可） | 待裁示 | `DEC-2026-10-28-05`（currency 與 share class 分開、不預設 USD）；A1 草稿 A9、`DEC-2026-11-08-04` Q5 | 缺幣別 → 淨值資料未備；不得補 USD【FACT】 |
+| K14 | 幣別出處 | `ccy_source`（`provenance[fund_code]`） | 幣別是誰說的 | `nav_dividend.py` | 旁路 provenance，不在表欄內【FACT，引 A1 A10】 | Pending（同 K13，歸 NAV 契約） | 待裁示 | 同 K13 | 無法追溯 |
+| K15 | 基金名稱 | `fund_name`（`exp_profile`） | 人工核對 | MoneyDJ 基本資料頁（需通過身分判準） | 頁不符判準 → `unrecognized_page`／`not_found` | Pending（歸 profile 契約，不屬現行取數鍵） | 待裁示 | A1 草稿 A8 | 該格資料未備；不影響取數鍵 |
 | K16 | 持倉身份（保單＋基金） | `(policy_id, fund_url)` 複合鍵；持股鍵 `"{policy_id}::{CODE}"` | 持倉列身份 | Google Sheet 政策分頁（`repositories/policy/v1.py`） | — | Excluded（基金身份契約不收；歸持倉契約） | 已核准其「與基金身份分開」之原則 | `DEC-2026-10-29-01` 第 2 項；`-03` 第 1 項；`CLAUDE.md` §3.1 | 若混入基金身份 → 可能合併不同保單持倉（禁止）【FACT，客戶裁示】 |
-| K17 | 選股池 ISIN | `PoolEntry.isin`；`repositories/pool_repository.py::resolve_isin` | 目前 production 只用於 Morningstar 取 secId／長歷史的查找輔助（`fund_orchestration._pool_secid_or_isin`、`sources._src_morningstar_nav`） | 選股池手填欄，單向（code→ISIN） | 手填、無驗證【FACT，`docs/v2/70` §12、BL-0530】 | Excluded（作為身份來源）；若列入僅能是 Optional 驗證屬性 | 已核准其「不得作為 identity authority」；是否收為屬性待裁示 | `DEC-2026-10-28-05`；`DEC-2026-11-01-02` G-E1；BL-0530 | 缺 ISIN 不影響比對、不警告【FACT，已核准語意】 |
+| K17 | 選股池 ISIN | `PoolEntry.isin`；`repositories/pool_repository.py::resolve_isin` | Morningstar／Yahoo secId 解析與 backfill 救援的**查找輔助**（`fund_orchestration._pool_secid_or_isin`、`sources._src_morningstar_nav` 內 screener 與 SecuritySearch 兩條 ISIN 路徑、`sources._src_yahoo_finance_nav`、`services/nav_history_store.py::backfill_to_gs` 同時試 Yahoo／Morningstar／CnYES）；**不構成身份依據** | 選股池手填欄，單向（code→ISIN） | 手填、無驗證【FACT，`docs/v2/70` §12、BL-0530】 | Excluded（作為身份來源）；若列入僅能是 Optional 驗證屬性 | 已核准其「不得作為 identity authority」；是否收為屬性待裁示 | `DEC-2026-10-28-05`；`DEC-2026-11-01-02` G-E1；BL-0530 | 缺 ISIN 不影響比對、不警告【FACT，已核准語意】 |
 | K18 | Morningstar secId | `PoolEntry.morningstar_secid`；`_MORNINGSTAR_SECID_MAP`（硬編） | Morningstar 取數專用鍵 | 選股池手填、硬編表、名稱搜尋 `results[0]` | 名稱搜尋路徑不驗 ISIN／名稱／幣別／級別【FACT，`docs/v2/70` §12】 | Excluded（來源專屬鍵，不屬身份） | 候選 | `DEC-2026-10-29-01` 第 12 項（本輪不改 `results[0]` 行為） | 缺則該來源不可用，走其他備援 |
 | K19 | FundClear 三碼 | `(organizeCode, fundCode, fundClassCode)`（`repositories/fundclear_offshore.py`）；另有 SmartFundAPI 單碼 `_src_fundclear_nav(code)` | FundClear 歷史淨值定位 | FundClear API | `fundClassCode` 不可傳 `all`【FACT】 | Excluded（獨立命名空間） | 已核准其獨立命名空間、不自動對照 | `DEC-2026-10-29-01` 第 3、7 項；`-03` 第 5 項 | 沒有經驗證 mapping → 無法判定【FACT，客戶裁示】 |
 | K20 | TDCC 基金代碼 | `declared_profile._TDCC_CODE_KEYS = ("基金代碼","境外基金代碼")` | TDCC 3-2 清單比對 | TDCC OpenAPI | 3-2 使用另一套代碼體系（實測例 `GLIACU`、`AGIF-FVGM`），0 命中 → `code_unmapped`，不證明未收錄【FACT，`declared_profile.py` 檔頭】 | Excluded（獨立命名空間） | 候選 | `DEC-2026-10-29-01` 第 7 項（同理適用 FundClear，TDCC 為作者類推【INFERENCE】） | 不以名稱比對補對應【FACT】 |
@@ -178,7 +179,7 @@
 | K26 | 身份屬性（shadow） | `currency`／`share_class`／`distribution_type`／`hedge_status`（預設 `Unknown`） | 判斷兩代碼是否同一檔 | shadow；只在有可靠資料時填 | Unknown 不得視為相同、不同、安全或已確認【FACT，已核准】 | Excluded | 已核准「Unknown 不猜」；進契約為候選 | `DEC-2026-10-28-05` | 多數為 Unknown → 不能判定是否同一 share class |
 | K27 | 儲存鍵（cache／history） | `cache/nav/{full_key}.json`（目前 main 僅見 `cache/nav/TLZF9.json`）；`nav_history` 以代碼（strip／upper）為鍵 | 預存序列與累積序列 | repo 預存檔／Google Sheet | 含 `-` 的鍵**不查**預存檔；改讀 dashed key 備援＝新 fallback，**不核准**【FACT】 | Excluded（儲存細節，不進身份契約） | 已核准「dashed key cache 備援不核准」 | `DEC-2026-10-29-02` 第 2 項；`docs/v2/70` §14 第 2 點 | 無 |
 
-小計：Required 3（K1、K2、K3）、Optional 7（K4、K6、K7、K8、K13、K14、K15）、Excluded 15（K5、K9、K10、K16～K27，其中 K21 核准狀態欄為待裁示）、Pending 2（K11、K12），合計 27——**分類為作者候選，客戶逐類核可前不具效力**。【INFERENCE：計數由作者人工統計，QA 請重數。】
+小計：Required 3（K1、K2、K3；K3 為解析成功旗標 `ok`）、Optional 4（K4、K6、K7、K8）、Excluded 15（K5、K9、K10、K16～K27，其中 K21 核准狀態欄為待裁示）、Pending 5（K11、K12、K13、K14、K15），合計 27——**分類為作者候選，客戶逐類核可前不具效力**。【INFERENCE：計數由作者人工統計，已於整合時以 Python 重數。】
 
 #### 2. 各來源代碼與對照證據（描述事實，不推論）
 
@@ -205,7 +206,7 @@
 | S4 | 通路後綴不得盲目刪除 | 後綴只在**已驗證 mapping** 命中時才視為通路資訊；未知來源或未知後綴不得剝除；後綴對應不同 share class／幣別／配息／避險／NAV series 時不得強制合併，須產生 Exception／Decision Gate；`AGIF-HT5`／`AGIF-HTG` 不得拆成 `AGIF`；不得套通用 `split("-")[0]` | `DEC-2026-10-28-05`；`DEC-2026-10-29-01` 第 3、4 項；`DEC-2026-11-01-01`（三）；`DEC-2026-11-01-02` contract 摘要(5) |
 | S5 | ISIN 角色（**依場景分開，不得一概**） | ① canonical key 與必備欄位：**不是**（`DEC-2026-10-28-05`）。② 找基金搜尋入口：正式 alternate lookup key，但 ISIN 入口目前顯示「尚未啟用」，不進 resolver、不進取數鏈（`DEC-2026-11-01-01`、`-02` G-E1）。③ 一對多或與 code 衝突：`unresolved`，不選第一筆、不設猜測型優先序（`-02` G-E2）。④ 選股池手填 `isin` 欄：**不得**當正式 identity authority（`-02` G-E1）。⑤ ISIN→MoneyDJ 對照來源：research-only（BL-0530），找到候選仍須另走 Source／Identity Gate。⑥ 不要求 Sheet 補 ISIN、缺 ISIN 不警告、不影響 matching | 同左 |
 | S6 | Unknown 不推定 | currency／share class／platform suffix／distribution type／hedge status 分開；禁止 currency＝share class、platform_suffix＝share class；禁止由名稱、後綴或幣別推配息／累積／避險；沒有可靠資料一律 Unknown；Unknown 不得視為相同、不同、安全或已確認；missing ≠ known | `DEC-2026-10-28-05`；`DEC-2026-10-29-03` 理由欄 |
-| S7 | 「`full_key` 可否帶後綴」——**未裁**【NOT VERIFIED】 | 【FACT】`fund_keys.py::_is_pure_code` 接受「主碼＋`-`＋2–20 碼」，所以含後綴的輸入（如 `ACDD01-EQTAL005`）今日仍可得到帶後綴的 `full_key`；【FACT】`DEC-2026-10-29-01` 第 4 項要求 Sheet 欄出現此類輸入標 `sheet_code_contract_violation`，但 hook 逐筆不傳 `input_source`（來源不一，`docs/v2/70` §15.2），production 路徑今日**不會**打這個標記。契約是否在入口拒絕、改標、或維持現況，**客戶未裁**，方案 A 也未涵蓋 | `fund_keys.py`；`docs/v2/70` §15.2 |
+| S7 | 「`full_key` 可否帶後綴」——**未裁**【NOT VERIFIED】 | 【FACT】`fund_keys.py::_is_pure_code` 接受「主碼＋`-`＋2–20 碼」，所以含後綴的輸入（如 `ACDD01-EQTAL005`）今日仍可得到帶後綴的 `full_key`；【FACT】`DEC-2026-10-29-01` 第 4 項要求 Sheet 欄出現此類輸入標 `sheet_code_contract_violation`，但 hook 逐筆不傳 `input_source`（來源不一，`docs/v2/70` §15.2），production 路徑今日**不會**打這個標記。第二層原因：打標記的 hook 受 `DG2_SHADOW_ENABLED`（預設 `False`）把關，旗標關閉時根本不執行；`scripts/bl0545_coverage_probe.py` 雖傳 `input_source`，但屬離線探針、不是 production 路徑。契約是否在入口拒絕、改標、或維持現況，**客戶未裁**，方案 A 也未涵蓋 | `fund_keys.py`；`docs/v2/70` §15.2 |
 | S8 | 外部來源候選 | 不得因 `results[0]` 直接接受；已知身份屬性衝突即拒收、留 evidence、顯示「⬜ 資料來源不一致，暫無法判定」（shadow 階段，尚未接線） | `DEC-2026-10-28-05` |
 | S9 | NAV 與身份分開 | 同 base＋同 NAV date＋同幣別、不同 view 的 NAV 不一致 → source conflict，不得偷偷建第二個 canonical fund；本輪禁止順帶改 NAV precedence | `DEC-2026-10-28-05` |
 | S10 | 這次（2026-11-08）方案 A | 契約只收現行取數鍵；標準化身份繼續 Shadow；不啟用新 resolver 影響 production；不改 Sheet schema 或 NAV source precedence。授權範圍＝整理資料契約候選與裁示登記，**不**授權新公式、程式施工、FX 開閘、啟動 OneBrain | 派工單轉述（非逐字）；repo 尚無 DEC【NOT VERIFIED】；同向約束見 `DEC-2026-11-08-02`、`-04` |
@@ -281,12 +282,12 @@
 
 | # | 結論 | 標記 |
 |---|---|---|
-| 1 | 客戶 2026-11-08 對「持倉占比」選**方案 C＝延後**（暫不收「類別占比契約」）；原話只在派工單轉述，**`origin/main` 的 `docs/DECISIONS.md` 尚無對應 DEC**（`git grep` 「類別占比契約」「持倉占比」於 DECISIONS／HANDOFF／BACKLOG 皆 0 命中）。本稿因此把該裁示當「**要點轉述、尚待登記**」，不另引 DEC 編號。 | 【F】 |
-| 2 | 本輪只整理五件事：(1) 持有單位與成本資料；(2) 成本金額、幣別與來源；(3) 現有可追溯的類別金額；(4) 缺資料原因與未涵蓋範圍；(5) 在合法且已核准規則下哪些金額可被確認。**不定義占比分母、不新增公式／門檻／Schema／狀態詞。** | 【F】 |
-| 3 | 現有程式裡，**唯一不需要匯率與淨值的金額路徑是成本基準**：`holdings.basis_value_with_reason(..., market=False)` 直接回 `float(holding["cost_twd"])`，不讀 `nav`／`market_indicator`。因此「各類別成本金額」在 FX 閘門關閉（`FX_OBS_DATE_RULE_VERIFIED = False`）下**不受影響**。 | 【F】 |
-| 4 | 但「**成本金額可算**」≠「**客戶已核准把它當契約欄位**」：`cost_twd` 來源為保單分頁「淨投資金額」，**它是否等於正式『成本』語意，repo 文件未見明文**（A2 Q2；C 題 3 稱若選成本占比此題變擋路題）。方案 C 不收占比，故本題暫不擋，但**不得**因此把「淨投資金額＝成本」寫成已確認。 | 【F】＋【NV】 |
+| 1 | 客戶 2026-11-08 對「持倉占比」選**方案 C＝延後**（暫不收「類別占比契約」）；原話只在派工單轉述，**`origin/main` 的 `docs/DECISIONS.md` 尚無對應 DEC**（`git grep` 「類別占比契約」「持倉占比」於 DECISIONS／HANDOFF／BACKLOG 皆 0 命中）。本稿因此把該裁示當「**要點轉述、尚待登記**」，不另引 DEC 編號（**已登記，見 `DEC-2026-11-08-05`**；本句寫於登記前）。 | 【F】 |
+| 2 | 本輪只整理五件事：(1) 持有單位與成本資料；(2) 淨投資金額（暫稱成本）、幣別與來源；(3) 現有可追溯的類別金額；(4) 缺資料原因與未涵蓋範圍；(5) 在合法且已核准規則下哪些金額可被確認。**不定義占比分母、不新增公式／門檻／Schema／狀態詞。** | 【F】 |
+| 3 | 現有程式裡，**不需要匯率與淨值的金額路徑是成本基準（作者讀法，未窮舉）**：`holdings.basis_value_with_reason(..., market=False)` 直接回 `float(holding["cost_twd"])`，不讀 `nav`／`market_indicator`。因此「各類別成本金額」在 FX 閘門關閉（`FX_OBS_DATE_RULE_VERIFIED = False`）下**不受影響**。 | 【F】 |
+| 4 | 但「**淨投資金額（暫稱成本）可算**」≠「**客戶已核准把它當契約欄位**」：`cost_twd` 來源為保單分頁「淨投資金額」，**它是否等於正式『成本』語意，repo 文件未見明文**（A2 Q2；C 題 3 稱若選成本占比此題變擋路題）。方案 C 不收占比，故本題暫不擋，但**不得**因此把「淨投資金額＝成本」寫成已確認。 | 【F】＋【NV】 |
 | 5 | 市值面（淨值×單位數×匯率）程式存在，但 New UI2 預覽路徑 `ui_v3/adapters/assets_source.py` 對市值基準**恆回阻擋** `BLOCKED_MARKET_BASIS`、不呼叫生產者；非台幣基金市值在共用層為 `None`＋`fx_absent`。**這是「該筆台幣換算結果無法判定」，不是「整檔不可分析」**（`DEC-2026-11-08-04` Q5）。 | 【F】 |
-| 6 | 已核准且可直接引用的規則只有：缺值不得為 0／完整／可比／安全（`DEC-2026-11-05-04` 客戶裁示欄「另有規則」）；缺必要 FX 使分母不完整時不得顯示誤導性完整 100%（`DEC-2026-11-04-02` 方案 A，僅 UI 呈現）；缺資料沿用「資料未備／無法判定」、非台幣不得整檔判不可用（`DEC-2026-11-08-04` Q4／Q5）；FX 閘門維持關閉（`DEC-2026-11-08-02` 要點 (1)）。其餘（分母公式、完整性契約、過期天數、11 項 open gate）**全部仍是 Decision Gate**。 | 【F】 |
+| 6 | 作者讀為可引用的規則有：缺值不得為 0／完整／可比／安全（`DEC-2026-11-05-04` 客戶裁示欄「另有規則」；**該筆為要點轉述、未重新追認**，`DEC-2026-11-08-03`）；缺必要 FX 使分母不完整時不得顯示誤導性完整 100%（`DEC-2026-11-04-02` 方案 A，僅 UI 呈現）；缺資料沿用「資料未備／無法判定」、非台幣不得整檔判不可用（`DEC-2026-11-08-04` Q4／Q5）；FX 閘門維持關閉（`DEC-2026-11-08-02` 要點 (1)）。其餘（分母公式、完整性契約、過期天數、11 項 open gate）仍是 Decision Gate（作者讀法，未窮舉）。 | 【F】 |
 | 7 | **真實使用者持倉對這些欄位的覆蓋率 NOT VERIFIED**（BL-0545；客戶暫不提供輸入）。本稿所有「有資料」＝「程式有路徑且有契約檢查」，不是真實資料已涵蓋。 | 【F】 |
 
 ---
@@ -317,12 +318,12 @@
 | A5 | 台幣成本 | `cost_twd`（來源「淨投資金額」；`holding_row_problems` 須 > 0） | 成本基準的單檔金額 | 保單分頁「淨投資金額」（欄名另有 `invest_twd` 並存時讀 `invest_twd`，原因字樣會註明） | 無日期欄 | Required（成本金額）；**語意標籤待確認**（C 題 3 原話：「必備，語意標籤待確認」） | 候選；來源規則 U10 出自 `alo_holdings` 檔頭（客戶 2026-09-27 前裁示，逐字【NV】） | `alo_holdings._holding_reasons`；`holdings.basis_value_with_reason`（`market=False` → `float(cost_twd)`） | 空白／0／無法解析（例 `NT$1,000`）／非正整數＝該列**不寫入**，原因寫明（「淨投資金額空白（沒填）」「為 0（不當成本）」「無法解析：<原文>」「不是正整數」）；成本類別值因此少這一筆；不補 0。【F】 |
 | A6 | 原幣成本 | `cost_orig_ccy`＝持有單位數×平均買入單位成本 | 回顯用；現行配置公式不讀它 | 保單分頁（衍生） | 無 | Optional【I】（A2-H3 同判） | 候選 | `alo_holdings._holding_reasons`；`allocation_evidence.RawRowFact`（回顯）；`holdings.HOLDING_SUM_COLUMNS`（同鍵加總） | 任一源欄空白＝該列不寫入。同鍵不同幣別不得相加（`aggregate_holding_rows` 遇 `ccy` 不同＝`HoldingKeyConflict`）。【F】 |
 | A7 | 持有幣別 | `ccy`（來源「幣別」） | 決定是否需匯率（市值面）；成本幣別的標籤 | 保單分頁 | 無 | Required【I】 | 候選（欄位在 `44` §4.1） | `alo_holdings._holding_reasons`「幣別空白」；`contract.holding_row_problems`（`_ccy_problem`） | 空白＝該列不寫入。【F】 |
-| A8 | 類別 | `bucket`（取 `_持倉補充` 的「類別」，**不**取保單分頁的「級別」） | 類別金額的分組鍵 | `_持倉補充` 分頁 | 無 | Required（類別金額需要它）【I】 | 候選（Q8 出自 `alo_holdings` 檔頭，客戶 2026-09-27 前裁示，逐字【NV】） | `alo_holdings` 檔頭 Q8；`holdings.bucket_category`（空白或不在名稱表＝`None`＝未分類） | 空白＝未分類，**保留為獨立類別、不猜**；`unclassified_comparability_unjudged` 是否影響可比＝未裁（open gate #1）。【F】 |
+| A8 | 類別 | `bucket`（取 `_持倉補充` 的「類別」，**不**取保單分頁的「級別」） | 類別金額的分組鍵 | `_持倉補充` 分頁 | 無 | Required（類別金額需要它）【I】 | 候選（Q8 出自 `alo_holdings` 檔頭，客戶 2026-09-27 前裁示，逐字【NV】） | `alo_holdings` 檔頭 Q8；`holdings.bucket_category`（空白或不在名稱表＝`None`＝未分類） | **依賴 `bucket_names`（類別名稱設定）**：`bucket_category(bucket, names)` 在 `names` 未設定時全部進未分類，故本欄可用與否取決於該設定（Pending 依賴）。空白＝未分類，**保留為獨立類別、不猜**；`unclassified_comparability_unjudged` 是否影響可比＝未裁（open gate #1）。【F】 |
 | A9 | 持有起始日 | `opened_on` | 回顯 | `_持倉補充`「持有起始日」 | 日期欄（來源原值） | Optional【I】 | 候選 | `contract.HOLDING_FIELDS`；`HOLDING_SAME_COLUMNS`（hld 規則下兩列不同＝不加總） | 本稿未追到缺值處理的專屬原因碼【NV】。 |
 | A10 | 最後核對日（推定時間） | `last_synced_at`＝「最後核對日」當日 12:00 台灣時間（`YYYY-MM-DDT04:00:00Z`），**推定值** | 唯一可見的「持倉資料新舊」線索 | `_持倉補充` | 推定值，登記於 `ACCEPTANCE.md` 8.1（R1＝B） | Optional（作者候選）；是否需要根層 `as_of`＝D2 | 候選 | `alo_holdings.last_synced_at_from_check_date`；`AllocationEvidence` 無根層 as_of、`HoldingEvidence` 不攜帶此欄（本稿核對） | 非 `YYYY-MM-DD` 格式＝拒收，不以讀取時間冒充。【F】 |
 | A11 | 直接持有（DIRECT） | `policy_id` 恰為 `DIRECT`（去前後空白、大小寫敏感）的列 | 目前**不產生 `holding` 列**，只逐筆警示 `DIRECT_WARNING`「DIRECT 列暫不支援，該筆不計入配置」 | 保單分頁／`_保單資料` | — | Excluded（目前行為）；hld 頁如何顯示＝待裁 | 「不計入配置」＝客戶 U9 裁示；「不產生 `holding` 列」＝**總管暫定、非客戶裁示**（`alo_holdings` 檔頭自述） | `alo_holdings` 檔頭 DIRECT 段；`docs/v2/74` DIRECT 段 | DIRECT 持倉不進分子也不進分母。【F】 |
 
-##### 2.B 成本金額、幣別與來源
+##### 2.B 淨投資金額（暫稱成本）、幣別與來源
 
 | # | 欄位名稱 | 既有程式名稱 | 用途 | 來源 | 日期與健康狀態 | 候選分類 | 核准狀態 | 證據 | 缺值影響 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -338,7 +339,7 @@
 
 | # | 欄位名稱 | 既有程式名稱 | 用途 | 來源 | 日期與健康狀態 | 候選分類 | 核准狀態 | 證據 | 缺值影響 |
 |---|---|---|---|---|---|---|---|---|---|
-| C1 | 類別成本金額（台幣） | `CategoryEvidence.value_twd`（`category_values(..., market=False)` 的加總，浮點累加起點 `0.0`、依持倉順序） | 「各類別成本金額」 | 同 B1 加總 | 無日期 | **Required（金額，不含占比）候選**；成本基準下不受 FX／NAV 影響 | 候選；公式核心是 G1-② 既有 PORT（逐位元組不變由 `tests/test_alo_core_golden.py` 守，轉引【NV】）；**授權鏈為事後補登未追認** | `holdings.category_values`；`allocation_evidence.CategoryEvidence`；`DEC-2026-11-05-02`、`DEC-2026-11-08-03` | 該類別所有列缺值時為 `None`＋原因（成本基準下因列不寫入，通常是類別根本沒出現）。永不為 0。【F】 |
+| C1 | 類別淨投資金額（暫稱成本，台幣）；**依賴 `bucket_names`，未設定則全進「未分類」，列 Pending 依賴** | `CategoryEvidence.value_twd`（`category_values(..., market=False)` 的加總，浮點累加起點 `0.0`、依持倉順序） | 「各類別成本金額」 | 同 B1 加總 | 無日期 | **Required（金額，不含占比）候選**；成本基準下不受 FX／NAV 影響 | 候選；公式核心是 G1-② 既有 PORT（逐位元組不變由 `tests/test_alo_core_golden.py` 守，轉引【NV】）；**授權鏈為事後補登未追認** | `holdings.category_values`；`allocation_evidence.CategoryEvidence`；`DEC-2026-11-05-02`、`DEC-2026-11-08-03` | 該類別所有列缺值時為 `None`＋原因（成本基準下因列不寫入，通常是類別根本沒出現）。永不為 0。【F】 |
 | C2 | 類別金額的來源狀態 | `CategoryEvidence.origin`∈`from_holdings`／`target_without_holdings`／`real_zero_by_rule`／`unproven_zero`；`value_reliable` | 區分「真的 0」與「來源未完整時的 0」 | `allocation_evidence` | 與 B3 同 | Required（證據型）【I】 | 候選（名稱皆「內部候選、非已核准詞彙」） | `allocation_evidence`（`UNPROVEN_ZERO`、`REAL_ZERO_BY_RULE`、`value_reliable`） | 目標有、持倉無、來源未完整時，0 標 `unproven_zero`，不可當成「沒有這類」。【F】 |
 | C3 | 類別持倉件數 | `holding_count`、`valued_holding_count` | 說明該類別值由幾檔組成 | 同上 | — | Optional【I】 | 候選 | `CategoryEvidence` | 件數含被忽略的後續持倉（`CategorySlot.count`）。【F】 |
 | C4 | 未分類類別 | `is_unclassified`／`bucket_category` 回 `None` | 把 bucket 空白或不在名稱表者另列 | — | — | Required（證據型）【I】 | 候選；是否影響可比＝未裁 | open gate `unclassified_comparability_unjudged`；`docs/v2/74` F-19（該檔標為阻擋項；其後續裁示狀態本稿未查【NV】）；BL-0542 G-1 新待決題 (e) | 保留獨立類別，不猜。【F】 |
@@ -353,7 +354,7 @@
 | D2 | 來源讀取不完整 | `source_coverage = incomplete／unknown／failed／not_selected` | 略過分頁／略過列／持倉表讀取失敗／無 Active 來源 | Required（證據型）【I】 | 候選（內部候選詞彙） | `allocation_evidence.SRC_*` |
 | D3 | 單檔市值缺值原因 | `nav_absent`、`nav_stale`、`nav_stale_undated`、`fx_absent`；`KIND_NAV`／`KIND_FX` | 無淨值列／在過期名單／缺匯率（含閘門關閉不寫列） | Pending（僅市值面；本輪暫不納入） | 待裁示（D7／D8） | `holdings.REASON_*` |
 | D4 | NAV 輸入狀態 | `nav_input_state`；逐檔 `nav_state`（`not_assembled`／`failed`／`no_data`／`obtained_rejected`／`cause_unknown`／`present`／`not_required`／`not_evaluated`／`error`） | 市值面 NAV 是否組裝、為何缺 | Pending（市值面）；成本基準下逐檔 `nav_state` 為 `not_required` | **最小方案 D 已授權**（`DEC-2026-11-05-04`，要點轉述；`DEC-2026-11-08-03` 註明未重新追認）；詞彙仍為內部候選 | `allocation_evidence`（`NAV_STATES`）；BL-0542 D 後續狀態段 |
-| D5 | 未涵蓋範圍 | `CoverageFacts.uncovered_categories`／`uncovered_holdings`／`uncovered_value`（`UncoveredAmount.status`＝`not_computable`；有來源完整證明才 `none_uncovered`） | 有類別缺值 | Required（證據型）【I】 | 候選；原則「未涵蓋台幣金額＝不可計算、永不為 0」＝已核准規則的程式化（`DEC-2026-11-05-04` 另有規則） | `allocation_evidence.UncoveredAmount` |
+| D5 | 未涵蓋範圍 | `CoverageFacts.uncovered_categories`／`uncovered_holdings`／`uncovered_value`（`UncoveredAmount.status`＝`not_computable`；有來源完整證明才 `none_uncovered`） | 有類別缺值 | Required（證據型）【I】 | 候選；原則「未涵蓋台幣金額＝不可計算、永不為 0」＝已核准規則的程式化（`DEC-2026-11-05-04` 另有規則；**要點轉述、未重新追認**，`DEC-2026-11-08-03`） | `allocation_evidence.UncoveredAmount` |
 | D6 | 分母不成立 | `denominator.verdict`＝`complete`／`incomplete`／`none`／`non_positive`／`non_finite` | 分母為零、負、NaN／inf 等 | Pending（隨 G-1） | 待裁示 | `allocation_evidence.DEN_*` |
 | D7 | 持倉鍵衝突 | `identity_conflict`（`HoldingKeyConflict`） | 同鍵兩列 `bucket` 或 `ccy` 不同 | Required（證據型）【I】 | 候選；hld／alo 兩套同鍵合併規則並存未收斂（`holdings.py` 檔頭登記） | `holdings.aggregate_holding_rows` |
 | D8 | 缺資料呈現字樣 | 沿用既有「資料未備」「無法判定」；UI 缺必要 FX 使分母不完整時不得顯示誤導性完整 100%，改顯示資料未備與未涵蓋範圍 | 畫面呈現規則 | —（UI 呈現，非資料欄位） | **已核准**：`DEC-2026-11-08-04` Q4；`DEC-2026-11-04-02`（方案 A，僅 UI 設計；`_build_alo2` 現況與之不同，`DEC-2026-11-04-03`「已知落差」，本批不修） | 見左 |
@@ -369,9 +370,9 @@
 | K1 | 單一持倉的**台幣成本** `cost_twd` | 該列通過 `holding_row_problems`（須 > 0、整數、有幣別與單位數） | `alo_holdings._holding_reasons`；`contract.holding_row_problems` | 逐列檢查既有；不補 0 | 【F】 |
 | K2 | 單一持倉的**原幣成本** `cost_orig_ccy` | 同上，且單位數與平均買入單位成本皆非空非 0 | `alo_holdings._holding_reasons` | 既有計算（單位數×平均買入單位成本） | 【F】 |
 | K3 | 同鍵多列的加總成本 | 同鍵兩列 `bucket` 與 `ccy` 皆相同 | `holdings.aggregate_holding_rows`（alo 規則）；`HOLDING_SUM_COLUMNS` | 既有；不同幣別不得相加 | 【F】 |
-| K4 | 各**類別的台幣成本金額** | 成本基準；各列已通過 K1；類別以 `bucket` 為準（空白＝未分類獨立類別）；`source_coverage` 為完整時才標 `value_reliable`（成本基準不讀 NAV／匯率，故**不受 FX 閘門與 NAV 過期影響**） | `holdings.category_values(market=False)`；`allocation_evidence.CategoryEvidence.value_reliable`；FX 閘門維持關閉＝`DEC-2026-11-08-02` 要點 (1) | 公式核心是既有 G1-② PORT（公式不變，`DEC-2026-11-04-03` 客戶裁示 (1)）。**但**：授權鏈為事後補登、未追認（`DEC-2026-11-08-03`）；且「淨投資金額＝成本」語意未確認（見 §0 #4） | 【F】＋【NV】 |
+| K4 | 各**類別的台幣淨投資金額（暫稱成本）** | 成本基準；各列已通過 K1；類別以 `bucket` 為準（空白＝未分類獨立類別）；**並依賴類別名稱設定 `bucket_names`（未設定時全部歸「未分類」）**；`source_coverage` 為完整時才標 `value_reliable`（成本基準不讀 NAV／匯率，故**不受 FX 閘門與 NAV 過期影響**） | `holdings.category_values(market=False)`；`allocation_evidence.CategoryEvidence.value_reliable`；FX 閘門維持關閉＝`DEC-2026-11-08-02` 要點 (1) | 公式核心是既有 G1-② PORT（公式不變，`DEC-2026-11-04-03` 客戶裁示 (1)）。**但**：授權鏈為事後補登、未追認（`DEC-2026-11-08-03`）；且「淨投資金額＝成本」語意未確認（見 §0 #4） | 【F】＋【NV】 |
 | K5 | **非台幣基金的成本金額（台幣）** | `cost_twd` 本身是台幣欄位，成本基準不需匯率 ⇒ 非台幣基金的**成本**仍可入 K4 | `holdings.basis_value_with_reason`（`market=False` 不呼叫 `fx_key_of`）；`DEC-2026-11-08-04` Q5（不得整檔判不可用） | 這與 Q5 一致：只有「需要匯率才算得出的台幣換算結果」才標無法判定 | 【F】；【I】（把它連結到 Q5 是作者讀法） |
-| K6 | 缺值**不被偽造** | 任何缺值＝`None`＋機器原因碼；未涵蓋台幣金額＝`not_computable`；來源未完整時的 0＝`unproven_zero` | `DEC-2026-11-05-04` 客戶裁示「另有規則」；`allocation_evidence`（`UncoveredAmount`、`UNPROVEN_ZERO`） | 已核准原則的程式化 | 【F】 |
+| K6 | 缺值**不被偽造** | 任何缺值＝`None`＋機器原因碼；未涵蓋台幣金額＝`not_computable`；來源未完整時的 0＝`unproven_zero` | `DEC-2026-11-05-04` 客戶裁示「另有規則」；`allocation_evidence`（`UncoveredAmount`、`UNPROVEN_ZERO`） | 作者讀為已核准原則的程式化（來源 `DEC-2026-11-05-04` 為要點轉述、未重新追認） | 【F】 |
 | K7 | **市值**（單位數×淨值，非台幣再乘匯率） | **本輪不確認**：FX 閘門關閉；市值基準在預覽路徑被阻擋；NAV 10 日規則的跨頁語意未裁 | `DEC-2026-11-08-02`；`DEC-2026-11-05-03`（五待決）；`ui_v3/adapters/assets_source.py` | — | 【F】 |
 | K8 | 任何**占比、分母、完整 100%** | **本輪不確認**（方案 C） | 見 §4 | — | 【F】 |
 
@@ -414,7 +415,7 @@
 | 10 | `omitted_row_reason_codes_undefined` | 否 | 略過列原因代碼未定義 | 影響 D1 |
 | 11 | `non_holding_read_error_effect_unjudged` | 否 | 非持倉表讀取錯誤的影響未裁 | 影響 D2 |
 
-【F】計法：8＋3＝11，與 `allocation_evidence` 的 `_CHART_AFFECTING_GATES`（8 碼）與 gate 產生段（另 3 碼）相符。【F】BL-0542 列自述同為 11 項（`fx_obs_date_rule_status_not_provided`／`fx_obs_date_rule_unverified` 並列計入）。逐碼對 Gate 編號**文件未指定**，上表「關係」欄為作者推測【I】。
+【F】計法：8＋3＝11，與 `allocation_evidence` 的 `_CHART_AFFECTING_GATES`（8 碼）與 gate 產生段（另 3 碼）相符。【F】BL-0542 列所列代碼合計 11 個（作者自數；`fx_obs_date_rule_status_not_provided`／`fx_obs_date_rule_unverified` 並列計入）。逐碼對 Gate 編號**文件未指定**，上表「關係」欄為作者推測【I】。
 
 ---
 
@@ -422,7 +423,7 @@
 
 | # | 不得做的解讀 | 為什麼（證據） |
 |---|---|---|
-| N1 | **成本占比 ≠ 市值占比。** 不得把 K4 的類別成本金額（或將來由它算出的任何比例）寫成「各類別占總資產（市值）多少」。 | 成本基準用 `cost_twd`（歷史投入），市值基準用 `units_shares × nav × fx`，兩者數值可大不同；C 題 3 方案 B 的風險即「成本占比可能被誤讀為市值占比」。`allocation_evidence` 刻意不輸出「占總資產 100%」欄，只有 `share_of_covered_pct` 加 `covers_all_holdings`。 |
+| N1 | **淨投資金額（暫稱成本）占比 ≠ 市值占比。** 不得把 K4 的類別成本金額（或將來由它算出的任何比例）寫成「各類別占總資產（市值）多少」。 | 成本基準用 `cost_twd`（歷史投入），市值基準用 `units_shares × nav × fx`，兩者數值可大不同；C 題 3 方案 B 的風險即「成本占比可能被誤讀為市值占比」。`allocation_evidence` 刻意不輸出「占總資產 100%」欄，只有 `share_of_covered_pct` 加 `covers_all_holdings`。 |
 | N2 | **非台幣基金不可整檔判不可分析。** 缺必要換算證據時，只有**相關台幣換算結果**維持無法判定；其原幣資料、台幣成本（K5）、持有單位、類別歸屬仍可整理。 | `DEC-2026-11-08-04` Q5；`DEC-2026-11-08-02` 要點 (1)。 |
 | N3 | **延後 ≠ 排除。** 不得把「本輪不收類別占比契約」寫成「永不收／已否決」，也不得因此刪除 `allocation_evidence` 的占比相關欄位或既有歷史計算。 | 方案 C 原話：延後不等於永久排除；不刪既有正式功能或歷史計算。 |
 | N4 | **不得重定義占比分母**，也不得把 `DenominatorFacts.value_twd`、`covered_value_twd` 稱為「正式分母」。 | G-1 未裁；`DEC-2026-11-04-03` 客戶裁示 (1) 公式不變。 |
@@ -444,14 +445,14 @@
 - 【NV】客戶方案 C 裁示來自派工單轉述，`origin/main` 無對應 DEC；登記時請另行編號。
 - 【NV】`opened_on` 缺值時的專屬原因碼未追到；`cost_orig_ccy` 幣別＝`holding.ccy` 為作者讀法。
 - 【NV】測試未執行；golden 測試（`tests/test_alo_core_golden.py`）與突變測試僅轉引。
-- 【NV】不宣稱窮舉：本稿未使用「全部」「只有 N」作窮舉主張；「無 DEC」「無 BL」皆限於本組實際 `git grep` 的字面符號與範圍（`docs/DECISIONS.md`、`HANDOFF.md`、`BACKLOG.md`），不含別名或動態組字串。
+- 【NV】不宣稱窮舉：本稿部分敘述含「唯一」「只有」「全部」字樣，皆為作者讀法、未經窮舉驗證，不得引為全稱；「無 DEC」「無 BL」皆限於本組實際 `git grep` 的字面符號與範圍（`docs/DECISIONS.md`、`HANDOFF.md`、`BACKLOG.md`），不含別名或動態組字串。
 - **單組作者揭露（`CLAUDE.md` §-2 規則 6）**：本稿由單一作者產出，**尚無獨立 QA**；涉 data semantics，依 `DEC-2026-10-16-05` 風險分級須至少 1 組真正獨立稽核後才視為已驗。本稿標【F】指「可由所引檔案文字重現」，不等於在執行環境中運行驗證。
 
 ---
 
 #### 7. 列數（作者自計）
 
-- §2.A：11 列；§2.B：5 列；§2.C：6 列；§2.D：8 列（候選欄位共 30 列）。
+- §2.A：11 列；§2.B：5 列；§2.C：6 列；§2.D：8 列（候選項目共 30 列）。
 - §3：8 列；§4：14 列；§4.1：11 列；§5：11 列。
 
 ---
@@ -465,43 +466,47 @@
 
 ## 下一批最值得核准事項（最多三題）
 
-> 題目只從三份草稿已列的真阻塞中挑；「正確性／風險／速度／Token 成本」與缺點為作者定性判斷【INFERENCE】。**推薦不是裁示，客戶未裁示前不得採納。**所有方案都**不授權**新公式、程式施工、FX 開閘、OneBrain／Digest 實作；凡需改程式者，核准契約文字後仍須另行授權。
+> 題目只從三份草稿已列的真阻塞中挑（原「淨投資金額是否等於成本」一題，因 E3 自述方案 C 下暫不擋，已降為本節末的「待確認備註」，不再列為三題之一）；「正確性／風險」「成本與速度」與缺點為作者定性判斷【INFERENCE】，已把原本分開的速度與 Token 欄合併。**推薦不是裁示，客戶未裁示前不得採納。**所有方案都**不授權**新公式、程式施工、FX 開閘、OneBrain／Digest 實作；凡需改程式者，核准契約文字後仍須另行授權。
 
-### 題一｜身份入口：契約是否在入口處理 `sheet_code_contract_violation`？（E2 S7、V6；Gate 屬身份／data identity）
+### 題一｜Sheet「基金代號」欄的格式檢查：契約要不要寫進去？（E2 S7、V6；身份）
 
-**白話背景**：Sheet「基金代號」欄客戶已裁示固定為 MoneyDJ 基本代碼，遇 URL、後綴、格式異常要標 `sheet_code_contract_violation` 並保留原值（`DEC-2026-10-29-01` 第 4 項）。但現行 `full_key` 解析接受「主碼＋`-`＋後綴」，且呼叫端不傳輸入來源，所以 production 今天**不會**打這個標記；帶後綴的輸入仍會得到帶後綴的 `full_key`。契約要不要寫這件事，客戶未裁。
+**白話背景**：客戶已裁示該欄固定為 MoneyDJ 基本代碼，遇 URL、後綴、格式異常要標「違反欄位契約」（程式標記名 `sheet_code_contract_violation`）並保留原值（`DEC-2026-10-29-01` 第 4 項）。但現行程式把代碼轉成取數用代碼（`full_key`）時，接受「主碼＋`-`＋後綴」，且呼叫端不傳輸入來源，所以 production 今天**打不出**這個標記；打標記的 Shadow hook 旗標預設也是關閉（`DG2_SHADOW_ENABLED=False`，關閉時不執行）。契約要不要寫這件事，客戶未裁。
 
-| 方案 | 做法 | 正確性 | 風險 | 速度 | Token 成本 | 缺點 |
-|---|---|---|---|---|---|---|
-| A | 契約只描述現況：`full_key` 今日可帶後綴，列為已知缺口，不寫入口規則 | 中 | 低：不改行為；但缺口持續，後綴碼可能被當正式取數鍵 | 快 | 低 | 與 `DEC-2026-10-29-01` 第 4 項並存矛盾，日後仍要裁 |
-| B | 契約寫明：Sheet 欄遇後綴／URL／格式異常須標 `sheet_code_contract_violation`、原值保留、不靜默截斷（僅契約文字；實作另授權，需由能證明來源的呼叫端往下帶，會改 production 介面） | 高 | 中：契約先於實作，會有一段落差 | 中 | 中 | 落地要改介面；落差期間需在契約標「尚未實作」 |
-| C | 契約寫明入口直接拒絕帶後綴輸入（不產 `full_key`） | 取決於後續驗證 | 高：與「不剝除、原值保留」及後綴只在已驗證 mapping 命中時才是通路資訊的既有裁示有張力，屬新行為 | 慢 | 高 | 可能擋掉合法的保險商品代碼輸入 |
+| 方案 | 做法 | 正確性／風險 | 成本與速度 | 缺點 |
+|---|---|---|---|---|
+| A | 契約只描述現況：取數用代碼今日可帶後綴，列為已知缺口，不寫入口規則 | 中／低：不改行為，但後綴碼可能被當正式取數鍵 | 快、低 | 與既有裁示第 4 項並存矛盾，日後仍要裁 |
+| B | 契約文字寫明：Sheet 欄遇後綴／URL／格式異常須標「違反欄位契約」、原值保留、不靜默截斷（僅契約文字；實作另授權，需由能證明來源的呼叫端往下帶，會改 production 介面） | 高／中：契約先於實作，有落差 | 中 | 落地要改介面；落差期間須在契約標「尚未實作」 |
+| C | 契約寫明入口直接拒絕帶後綴輸入（不產出取數用代碼） | 取決於後續驗證／高：與「不剝除、原值保留」及「後綴只在已驗證 mapping 命中時才是通路資訊」有張力，屬新行為 | 慢、高 | 可能擋掉合法的保險商品代碼輸入 |
 
 **推薦：B（僅契約文字，不施工）。** 理由：與既有裁示同向、不新增規則；代價是契約與實作暫有落差，須明標。
 
-### 題二｜1Y 含息輸出缺窗口起訖日、資料末端日期、取得時間、幣別、算法版本欄：是否納入契約候選並另授權補欄？（E1 §0 結論 5、§1 列 3／5／7～9；跨新版適用）
+### 題二｜1 年含息輸出缺的欄位，契約要先認哪幾個？（E1 §0 結論 5、§1 列 3／5／7～9；報酬）
 
-**白話背景**：現有 `resolve_1y_total_return` 只輸出 `window_days`，沒有窗口起訖日、資料末端日期（as_of）、取得時間，也不含計價幣別與算法版本；NAV 列另有 `nav_date`／`fetched_at`。沒有這些欄位，1Y 數字無法說明「截至哪天、取自哪個窗口、是原幣還是 TWD」。補欄要改程式。
+**白話背景**：現有輸出只有 `window_days`，沒有窗口起訖日、資料末端日期（as_of）、取得時間，也不含計價幣別與算法版本；NAV 列另有 `nav_date`／`fetched_at`。沒有這些，1Y 數字無法說明「截至哪天、取自哪個窗口、是原幣還是 TWD」。補欄要改程式。**另請留意**：1Y 含息的公式層另有 BL-0427 (1)(3)(4)(5) 未裁，不在本題內，須走 Decision Gate；本題只問欄位。
 
-| 方案 | 做法 | 正確性 | 風險 | 速度 | Token 成本 | 缺點 |
-|---|---|---|---|---|---|---|
-| A | 只把缺口登記為 Pending，不要求補欄 | 中：消費端無窗口與時點證據 | 低（不改碼）；但數字可被誤讀為更新、更長或 TWD 報酬 | 快 | 低 | 契約的 1Y 欄位不能獨立自證，AI 使用前仍須另補 |
-| B | as_of、窗口起訖日、取得時間、幣別納入契約候選為 Required；算法版本仍 Pending（是否需要屬 Rule／Digest 層議題）；補欄另授權、不改算法與門檻 | 高 | 中：需另授權小幅改碼，並同時確認 1Y 含息跨新版適用 | 中 | 中 | 要先確認跨新版適用，否則欄位無所附麗 |
-| C | 不改輸出，由消費端自 NAV 契約取 as_of／fetched_at 組合 | 中：窗口起訖日無法由 NAV 列還原得知 | 中：組合邏輯分散，各處口徑可能不一 | 中 | 中 | 起訖日仍缺；不屬單一 SSOT |
+| 方案 | 做法 | 正確性／風險 | 成本與速度 | 缺點 |
+|---|---|---|---|---|
+| A | 五欄全部只登記為 Pending，不要求補欄 | 中／低（不改碼）；但數字可被誤讀為更新、更長或 TWD 報酬 | 快、低 | 契約的 1Y 欄位無法自證時點與窗口 |
+| B | as_of、窗口起訖日、取得時間、幣別四欄納入 Required（算法版本維持 Pending）；補欄另授權、不改算法與門檻。**若選 B，E1 §1 列 7 由 Pending 改 Required、列 9 由 Optional／Pending 改 Required，列 3 維持 Required，列 5 維持 Pending** | 高／中：需另授權小幅改碼，並先確認 1Y 含息跨新版適用 | 中 | 要先確認跨新版適用，否則欄位無所附麗 |
+| C | 分階段：先認 as_of 與幣別（由 NAV 契約同一基金的 `nav_date`／`ccy` 組合，契約註明來源、不改輸出）；窗口起訖日、取得時間、算法版本維持 Pending | 中高／中：組合邏輯分散，窗口起訖日仍缺 | 快、低 | 起訖日仍缺，需日後再裁 |
 
-**推薦：B（先核准契約候選；補欄另授權，且不含算法版本）。** 理由：幣別與時點是解讀數字的最低證據；不新增公式。代價是需客戶多確認「跨新版適用」。
+**推薦：C。** 理由：不改碼就能先補最低限度的時點與幣別證據；代價是窗口起訖日仍缺。客戶亦可逐欄勾選（列 3、7、8、9 各自獨立），不必整包決定。
 
-### 題三｜成本口徑：「淨投資金額」是否等於「成本」？（E3 §0 結論 4、X10、N7）
+### 題三｜取數用代碼的別名表與 MoneyDJ 頁型，算不算契約的一部分？（E2 K11／K12；身份）
 
-**白話背景**：持倉的台幣成本欄 `cost_twd` 來源是保單分頁「淨投資金額」，repo 文件未見它等同正式「成本」語意的明文。方案 C 已不收占比，所以此題暫不擋；但各類別成本金額若要對客戶或 AI 說成「成本」，需要答案；日後若選成本占比，此題變成擋路題。
+**白話背景**：同一個輸入代碼經不同別名表會得到不同的取數用代碼（例：`ACTI171`／`ACTI7`／`ACTI71` 在內建表都指 `ACTI71`，單獨呼叫解析器而不套別名表則得三個）；origin/main 根目錄沒有別名檔 `fund_code_mapping.csv`，部署環境是否另有，未查證。頁型（境內／境外）由網址或對照表決定，裸碼是推斷、不可靠。
 
-| 方案 | 做法 | 正確性 | 風險 | 速度 | Token 成本 | 缺點 |
-|---|---|---|---|---|---|---|
-| A | 客戶確認「淨投資金額＝成本」，契約欄位可稱「成本」 | 取決於客戶回答 | 低（若確實相等）；答錯會把他義金額稱成本 | 快 | 低 | 需客戶明確答；答案須登記為正式裁示 |
-| B | 客戶不答也先定命名規則：契約欄位一律用來源原名「淨投資金額」，在確認前不稱「成本」 | 高 | 低 | 快 | 低 | 之後仍要答；對外說明用語較拗口 |
-| C | 維持現況：只標「語意標籤待確認」，不定命名規則 | 中 | 中：不同處可能各自稱「成本」 | 最快 | 最低 | 風險是寫法不一致，後人無規則可循 |
+| 方案 | 做法 | 正確性／風險 | 成本與速度 | 缺點 |
+|---|---|---|---|---|
+| A | 別名表與頁型不入契約；契約註明「取數用代碼的值取決於部署端別名表」 | 中／低：不改行為，但同一輸入可能得不同代碼 | 快、低 | 跨環境結果可能不一致，無契約可查 |
+| B | 契約只加記「所用別名表的出處」（已有 `mapping_source` 診斷欄，E2 K8）；別名表內容與頁型仍不入契約 | 中高／低 | 中、中 | 內容仍無人負責維護 |
+| C | 別名表與頁型整體納入契約，並指定維護者 | 高／中：涉及誰維護、如何版本化，屬新責任 | 慢、高 | 需客戶指定維護者與更新流程 |
 
-**推薦：B。** 理由：不需猜客戶的業務定義、不新增公式；代價是用語暫時不順。
+**推薦：A（暫不入契約，維持現況並明標限制）。** 理由：別名表現況是程式內建＋可選檔，把它升格要先答「誰維護」；先明標限制成本最低。
+
+### 待確認備註（非阻塞，不列為三題之一）
+
+「淨投資金額」是否等於「成本」：E3 自述方案 C（不收占比）下暫不擋；在客戶確認前，本檔一律稱「淨投資金額（暫稱成本）」，不得對外說明為成本（E3 §0 結論 4、X10、N7）。若日後選成本口徑的占比，此題才變成擋路題。
 
 ## 驗證與限制（本檔層級；三部各自的限制見其內文）
 
