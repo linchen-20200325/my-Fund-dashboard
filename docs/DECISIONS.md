@@ -2646,6 +2646,21 @@
 | 可逆性 | 可逆：客戶可隨時推翻或改裁；純文件、無程式影響。 |
 | provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；本筆由專案 AI 文件組單組寫成，**作者非獨立 QA、未經第二組驗證**。 |
 
+### DEC-2026-11-09-05｜國際市場資料監控集中管理：設計方向入庫、舊契約不覆寫
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-09（Asia/Taipei；當日第五則與本題相關方向），以實際 GitHub Merge 另驗 |
+| 決策者／provenance | **客戶；要點轉述（非逐字）**。客戶提供台股 New UI2 HTML 供參考，要求基金儀表板資料集中 Sheet 管理抓取狀態，聚焦國際市場、美股、總經、匯率；後續明確要求**將目前新設計寫入 GitHub，修正舊設計閱讀指向，避免未來讀錯**。 |
+| 已授權範圍 | **docs-only**：把新國際資料監控方向整理成候選設計；在舊 `docs/v2/50`、`docs/v2/80` 加明確導向與不相容警示，避免誤認台股 HTML 為基金 SSOT 或誤認舊設定 Sheet 已涵蓋所有國際資料。可做最小 DEC／BACKLOG／HANDOFF 同步與符合治理的文件 PR。 |
+| 首選設計候選（AI 建議，**非客戶逐欄核准**） | **B**：新獨立監控 Sheet＋重用既有合法資料抓取路徑；GitHub 版本化資料來源與 Gate，Sheet 只顯示真實來源及狀態。候選四分頁 `catalog_status`／`fetch_events`／`coverage_summary`／`data_gaps`；Fetch／Validation／Eligibility 三層分開；詳見 `docs/v2/83_international_market_data_monitor_design.md`。 |
+| 既有契約繼續有效 | `SETTINGS_SHEET_ID` 原四表 `user_setting_log`、`market_indicator`、`fetch_log`、`fetch_log_open` 與 `docs/v2/50` 保留，不新增候選四分頁於同一本；Active Sheet／POLICY／NAV 等未變。frozen 44／79／80 不改行為與五頁 IA；🌍 主頁、⚙️ 資料健康度仍依各自 wireframe／正式契約。 |
+| 明確未裁示／未授權 | 未核准新 Google Sheet ID／權限、正式表頭與 Schema、資料抓取／寫入器、成功率分母、freshness 門檻、新 status／reason_code、額外 API／provider、資料源 precedence、FX 開閘、跨市場正式金融計算、OneBrain／Digest／Phase 7、任何 production code／workflow／Cloud；不代表曾抓取或驗證真實資料。 |
+| 舊設計衝突處置 | **增補前向閱讀提示，不刪歷史，不 supersede 原四表契約**；任何把 83 的候選分頁當作 50 的追加分頁，或把台股 Risk Cap／選股公式套進基金，皆為錯讀。正式改契約須獨立 Decision Gate。 |
+| 下一步 | 僅唯讀逐指標盤點現有 L1／L2、provider／系列／頻率／觀測與公布日／錯誤證據與缺口，供客戶下一輪審核；本 docs 批完工停止。 |
+
+---
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
