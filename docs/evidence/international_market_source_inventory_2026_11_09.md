@@ -307,7 +307,7 @@ Yahoo 與 FRED 的**傳輸實作各只有一份**（`fyc`、`ffred`，指令 V22
 
 - **與 `SETTINGS_SHEET_ID` 的關係**：既有四表（`user_setting_log`、`market_indicator`、`fetch_log`、`fetch_log_open`）使用 `SETTINGS_SHEET_ID`（`get_secret`，無預設，缺值 fail loud）；D83 的方案 B 是**獨立** Sheet，**不得**修改既有 ID、Active Sheet、`POLICY_SHEET_ID`、`NAV_SHEET_ID`、OAuth 或 Secret。
 - **既有 `fetch_log` 不能提供逐指標健康度（讀碼確認）**：(1) 欄位只有 7 欄且沒有 indicator、provider、series id；(2) `source_tier` 值域四個，一次「重新取數」只寫**一列**「市場指標」（`settings_store.py` 的 `open_fetch_log(mi.SOURCE_TIER)`，V10），涵蓋 vix 與三個 FRED 鍵，混成單一 outcome；(3) 逐鍵失敗原文只存在 L2 回傳的 `errors{鍵:原文}` 與 `message` 字串（人讀文字，非結構欄）；(4) 寫入點：L1 的 `close_fetch_log` 休眠，New UI2 第一階段只寫 session 記憶體（`RuntimeFetchStore`）；(5) `WIRED_TABLES`、`WIRED_TIERS` 只是常數清單，不等於 production 有寫入。
-- **writer 受約束**：`is_read_only()` **恆為 True**（客戶 2026-10-26 裁示 J-6：New UI2 第一階段全唯讀、Sheet 零寫入；V11）；L1 寫入函式（`open_fetch_log`、`close_fetch_log`、`append_market_indicator`、`save_user_setting`）存在但休眠；守衛為 `tests/ui_v2/test_readonly_write_surface_guard.py::test_no_settings_sheet_l1_write_calls`（我讀了 docstring 引用，**未跑測試**）。因此**今天沒有任何會把取數事件寫進 Sheet 的 production 程式路徑**（單組讀碼，指令見第 9 節 V10／附錄）。任何新監控 Sheet 的寫入都需要客戶另行裁示，不能沿用既有授權。
+- **writer 受約束**：`is_read_only()` **恆為 True**（~~客戶 2026-10-26 裁示 J-6：New UI2 第一階段全唯讀、Sheet 零寫入~~ → 2026-11-09 更正（有意識，非漏刪）：J-6＝`DEC-2026-10-25-04`（新 B UI 第一階段全部唯讀），SET-5 零寫入與唯讀預設＝`DEC-2026-10-26-03`；V11）；L1 寫入函式（`open_fetch_log`、`close_fetch_log`、`append_market_indicator`、`save_user_setting`）存在但休眠；守衛為 `tests/ui_v2/test_readonly_write_surface_guard.py::test_no_settings_sheet_l1_write_calls`（我讀了 docstring 引用，**未跑測試**）。因此**今天沒有任何會把取數事件寫進 Sheet 的 production 程式路徑**（單組讀碼，指令見第 9 節 V10／附錄）。任何新監控 Sheet 的寫入都需要客戶另行裁示，不能沿用既有授權。
 - **機密與隱私**：D83 §2 要求新表**不得**讀寫私人持倉、密碼、Token；現有 `services/v2_tables/masking.mask_message` 可沿用；新表欄位候選清單沒有持倉欄位（以設計文件為準，未驗實作）。
 - **分層**：資料（取回的值與其出處）、驗證（日期、單位、方向是否被獨立證據支持）、AI（只吃正式、可追溯資料，不得寫回 canonical data）必須分層；Sheet 是狀態 registry，不是市場價格的來源，**也不得人工把 Gate 改成已核准**（D83 §3）。
 - **冷卻與去重**：`source_backoff` 為行程記憶體，Streamlit 重啟即清；若要跨 session 的冷卻紀錄需新持久化；去重可沿用或複製 `settings_sheet_repository` 的寫入前讀主鍵做法。
@@ -347,11 +347,11 @@ Yahoo 與 FRED 的**傳輸實作各只有一份**（`fyc`、`ffred`，指令 V22
 
 | 方案 | 內容 | 風險／成本 |
 |---|---|---|
-| A（推薦） | 先在 repo 內以版本化契約（候選 catalog 與狀態）表達清單與缺口，不新建 Sheet、不寫 Sheet；Sheet 日後只作唯讀投影 | 不碰 J-6 零寫入；最快、最省 |
+| A（推薦） | 先在 repo 內以版本化契約（候選 catalog 與狀態）表達清單與缺口，不新建 Sheet、不寫 Sheet；Sheet 日後只作唯讀投影 | 不碰 J-6（`DEC-2026-10-25-04`）與 SET-5（`DEC-2026-10-26-03`）零寫入；最快、最省 |
 | B | 建獨立監控 Sheet（D83 方案 B），writer 維持停寫，待另行授權 | 需新 secret、權限、header 鎖定；寫入仍須新裁示 |
 | C | 擴充既有 `SETTINGS_SHEET_ID` | 觸及 frozen 44／50 四表與讀寫相容；D83 已列為不建議 |
 
-**推薦 A**：現有證據顯示 `fetch_log` 無法承載逐指標健康度，而 writer 受 J-6 約束，先把契約落在 GitHub 是風險最低的一步。
+**推薦 A**：現有證據顯示 `fetch_log` 無法承載逐指標健康度，而 writer 受 J-6（`DEC-2026-10-25-04`）與 SET-5 零寫入（`DEC-2026-10-26-03`）約束，先把契約落在 GitHub 是風險最低的一步。
 
 ### G3：日期與美元／匯率的正式語意
 
