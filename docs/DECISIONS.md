@@ -2659,6 +2659,25 @@
 | 舊設計衝突處置 | **增補前向閱讀提示，不刪歷史，不 supersede 原四表契約**；任何把 83 的候選分頁當作 50 的追加分頁，或把台股 Risk Cap／選股公式套進基金，皆為錯讀。正式改契約須獨立 Decision Gate。 |
 | 下一步 | 僅唯讀逐指標盤點現有 L1／L2、provider／系列／頻率／觀測與公布日／錯誤證據與缺口，供客戶下一輪審核；本 docs 批完工停止。 |
 
+### DEC-2026-11-09-06｜國際市場資料盤點三題裁示：G1＝A-mod（候選核心監控清單＝研究優先順序）／G2＝A（GitHub 版本化文件，不建 Sheet）／G3＝A-mod（已知資料身分與待驗缺口入庫，不核准正式金融語意）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-09（Asia/Taipei；同日第六則與國際資料監控相關的紀錄，**承接 `DEC-2026-11-09-05`** 與證據報告 `docs/evidence/international_market_source_inventory_2026_11_09.md` 第 8 節 Decision Gate G1／G2／G3），以實際 GitHub Merge 另驗 |
+| 決策者／原話 | **客戶**裁示，經總管轉達（repo 內無逐字存檔，**要點轉述，非逐字**；客戶可推翻）。要點三項：G1＝A-mod、G2＝A、G3＝A-mod。以下各項文字為文件組依總管派工單整理，**不是客戶逐字**。 |
+| ① **客戶實際核准**（僅範圍、優先順序與文件維護方式） | **G1＝A-mod**：先以報告第 4 節 REUSE 8 項（矩陣 ID：A1、A3、A11、D1、C1、C2、C6、C7；成員以報告第 4.1／4.2 節為準）及既有 `INDICATOR_SPECS`（`services/v2_tables/market_indicator.py`）／`market_view`（`services/v2_tables/market_view.py::DOMAIN_ORDER`）正式契約所涉指標，作為第一批**「候選核心監控清單」**。核准的是**候選範圍與研究優先順序**，**不是正式採用指標集合**；61 項盤點保留完整，不刪其餘 EXTRACT 31、REDESIGN 8、NOT VERIFIED 14；與既有正式契約重疊處只建立**引用索引**，不複製新的平行 SSOT。<br>**G2＝A**：現階段以 **GitHub 版本化文件**維護指標清單、來源證據、限制與缺口；**不建立新 Google Sheet、不修改既有 `SETTINGS_SHEET_ID` 四分頁、不新增 Sheet secret／服務帳戶／權限、不建 writer／排程／同步流程、不執行任何 Sheet 寫入**。新獨立監控 Sheet（`docs/v2/83` 方案 B）仍是**未來設計方向、不視為取消**；`catalog_status`／`fetch_events`／`coverage_summary`／`data_gaps` 仍是候選分頁、**不升格**；遵守 J-6（`DEC-2026-10-25-04`）與 SET-5（`DEC-2026-10-26-03`）；新監控 Sheet 不是 canonical data，**不能人工修改資料資格或 Gate**。<br>**G3＝A-mod**：先整理**現有證據能支持**的資料身分、日期欄位、幣別方向與待驗缺口，**不提前核准正式金融語意**。`obs_date`／`release_date`／`fetched_at`／`last_success_at` 分開記錄；沒有來源證據的日期**保持未驗**，**不得以 `fetched_at` 冒充觀測日或公布日**；`DTWEXBGS` 已知身分是廣義貿易加權美元指數，**不得直接稱 ICE DXY**；`DX-Y.NYB` 只保留來源代碼與待驗名稱，**不宣稱**與其他美元指數同計算契約；USD/JPY、EUR/USD 等匯率依**來源實際單位、base／quote 與方向**分開記錄，衝突或證據不足標待驗；Old UI／`ui_v2` 過往名稱與公式只作參考，**不因本裁示自動取得 New UI2 正式准入**。本裁示只授權「**已知定義與未驗缺口入庫**」。 |
+| ② **專案 AI 技術推論**（非客戶裁示，不冒充） | 引用索引的具體寫法（以報告矩陣 ID、符號路徑指向，不另列平行清單）；「REUSE 8 項」與 `INDICATOR_SPECS` 7 鍵、`DOMAIN_ORDER` 12 項為**兩份互不對齊的清單**（報告第 6.1 節已述），本筆**不替它們合併或對齊**；哪些缺口先補證、補證順序，皆為研究建議。報告第 8 節原推薦 G1＝A、G2＝A、G3＝A 為專案 AI 當時推薦；客戶實際採 G1、G3 的「modified」版，**範圍較推薦窄／語意較推薦更保守**，以本筆文字為準。 |
+| ③ **未驗證事項（NOT VERIFIED）** | REUSE 8 項**尚無真實抓取、日期驗證或正式准入證據**（報告第 4.2 節「還缺哪一個最小驗證」逐項照舊；A1 `^GSPC` 時區與時間戳樣態、C1／C2 首次部署取數結果、C6／C7 vintage 路徑等皆未驗）。D1 USD/TWD 的阻礙是 FX 閘門，**不是缺驗證**。REUSE **只表示程式能力具重用價值**。正式母集合、Eligibility 條件、涵蓋率分母**尚未核准**；各 FRED series 的首次發布日與 vintage 追溯能力**未驗**；`DX-Y.NYB`、`DTWEXBGS` 之外的美元指數名稱與計算契約**未驗**。本批文件**未實查任何上游資料**。 |
+| ④ **未核准清單**（維持原狀，不得藉本筆解鎖） | 正式母集合、Eligibility 條件、涵蓋率／成功率／資料完整率及任何正式百分比；新增 `indicator_key`、正式來源或資料契約；新 provider（NASDAQ、MSCI World／EM、歐洲股指等屬 Stop Gate）；新日期轉換規則；全部 FRED series 的首次發布日與 vintage 追溯；FX 前收、匯率回填、幣別換算、正式基金市值計算；`FX_OBS_DATE_RULE_VERIFIED` **維持 `False`**；BL-0545（真實 Active Sheet 覆蓋率）**NOT VERIFIED**、不得與本清單混用分母；BL-0542 G-1～G-5；OneBrain／Decision Digest／Claude API／Phase 7。 |
+| ⑤ 不得回退／不得誤讀 | **不回退** `DEC-2026-11-09-05` 的「既有契約繼續有效」（`SETTINGS_SHEET_ID` 四表、`docs/v2/50`、frozen 44／79／80、五頁 IA、FX Gate 關閉）。「候選核心監控清單」**不等於**正式採用指標集合、正式母集合或可算涵蓋率的分母；「REUSE」**不等於**已抓取成功、已驗日期或已准入；「GitHub 版本化文件」**不等於**新增資料契約；「G2＝A」**不等於**取消獨立監控 Sheet 方向；G3 的「已知身分」入庫**不等於**核准任何金融語意或計算。 |
+| ⑥ 不授權事項 | Python／Streamlit／API／workflow 施工；Sheet 建立、writer、同步、排程；FRED／Yahoo 真實抓取與探測；正式涵蓋率與分母；正式 indicator Schema；新 provider；金融公式、日期切日規則、匯率轉換；FX Gate 開閘；OneBrain／Digest／Phase 7；修改 Old UI／`ui_v2`／`ui_v3`；缺漏以 0／成功／中性／安全替代；關閉 BL-0545 或其他 Gate。 |
+| 理由／背景（agent 推論，不冒充裁示） | 母集合與分母未定前先小範圍、可追溯地整理；Sheet 在 J-6／SET-5 零寫入約束下不具備寫入條件，先把清單、證據與缺口落在 GitHub 風險最低；語意未經證據前，只記錄已知與未驗，避免把名稱相近的美元指數或匯率方向誤合併。 |
+| evidence／source | `docs/evidence/international_market_source_inventory_2026_11_09.md`（第 4、6、7、8 節）；`docs/v2/83_international_market_data_monitor_design.md`；`docs/v2/50_settings_sheet_design.md`；`DEC-2026-11-09-05`、`DEC-2026-10-25-04`（J-6）、`DEC-2026-10-26-03`（SET-5）。作者另讀碼確認 `INDICATOR_SPECS` 有 7 鍵、`DOMAIN_ORDER` 有 12 項、`FX_OBS_DATE_RULE_VERIFIED = False`（2026-11-09，工作樹 HEAD `012c1d83`）。 |
+| 影響範圍 | 僅文件：`docs/DECISIONS.md`、`docs/BACKLOG.md`（原國際資料監控索引條目補一句）、`docs/HANDOFF.md`（原資料監控指標段補一句）。不新增 BL 列、不改任何 BL 狀態；不動任何 code／test／workflow／cron／閘門。 |
+| supersedes | **僅 supersede 證據報告第 8 節 G1／G2／G3 三題的「待客戶裁示」狀態**（該報告原文與其推薦保留，作為歷史證據、**不改寫成事後已核准**；以本筆為準）。**不 supersede、不改寫任何歷史 DEC**；`DEC-2026-11-09-05` 的「下一步」句不動，由本筆承接。 |
+| 可逆性 | 可逆：客戶可隨時推翻或改裁；純文件、無程式影響。 |
+| provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；本筆由專案 AI 文件組單組寫成，**作者非獨立 QA、未經第二組驗證**。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
