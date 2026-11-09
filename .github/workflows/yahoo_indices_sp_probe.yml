@@ -1,0 +1,110 @@
+name: "探測：Yahoo 指數日線（只讀，一次性授權，最多 4 次請求）"
+
+# 目的：客戶 2026-11-09 授權（DEC-2026-11-09-08）方案 B「S＋P」——對 Yahoo chart v8 恰好發出四個請求
+#   ^GSPC 2y／^VIX 2y／^TWII 2y／^VIX 指定日期窗（含 2026-06-03），把原始回應與描述性解析寫成報告。
+# 授權文件：docs/evidence/yahoo_indices_sp_probe_authorization_2026_11_09.md
+#
+# ⚠️ 只讀、一次性：
+#    - 不寫任何試算表、不碰正式行為、不寫 data_cache；報告只推到專用分支
+#      `probe/yahoo-indices-sp-results`（不推 main、不推其他分支、不 force）。
+#    - 結果分支上已有本授權的報告檔 → 「一次性保護」步驟失敗，不發任何請求；
+#      再次執行須重新取得客戶授權（並更換授權代碼）。
+#    - 失敗（限流、封鎖、空回應等）後 30 分鐘內不得重跑；重跑一律須重新授權。
+# ⚠️ 沒有排程。觸發方式只有兩種：手動 `workflow_dispatch`（無輸入參數），
+#    或 push 到「按鈕分支」`probe/yahoo-indices-sp-trigger`（部分整合環境 dispatch API 會回 403）。
+# ⛔ 按鈕分支只當按鈕：內容不被執行，checkout 一律釘 `ref: main`；
+#    與既有 FX 探測的結果分支、按鈕分支完全分開，不混用。
+# ⛔ 不使用 secrets.PROXY_URL、不 import 專案程式碼、不 pip install：腳本只用標準庫，
+#    單次 GET、不重試、不跟隨轉址，並在程式層面以計數器硬性限制實發請求為 4。
+on:
+  push:
+    branches:
+      - probe/yahoo-indices-sp-trigger
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 只為了把報告推到 probe/yahoo-indices-sp-results
+
+concurrency:
+  group: yahoo-indices-sp-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RESULT_BRANCH: probe/yahoo-indices-sp-results
+      AUTH_CODE: yahoo_indices_sp_20261109
+      REPORT_PATH: probe_out/yahoo_indices_sp_20261109.json
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # ⛔ 一律跑 main 上的腳本；按鈕分支的內容永遠不被執行。
+          ref: main
+          # 探測步驟拿不到推送權限；只有最後推送那一步臨時注入認證。
+          persist-credentials: false
+
+      - name: Record executed SHA
+        run: echo "PROBE_EXECUTED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: One-shot guard (fail if report already exists)
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::${AUTH}"
+          agit() { git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" "$@"; }
+          if agit ls-remote --exit-code --heads origin "$RESULT_BRANCH" >/dev/null; then
+            agit fetch --depth=1 origin "$RESULT_BRANCH"
+            if git cat-file -e "FETCH_HEAD:results/${AUTH_CODE}/report.json" 2>/dev/null; then
+              echo "::error::本授權（${AUTH_CODE}）的報告已存在於 ${RESULT_BRANCH}；再次執行須重新授權。0 次請求。"
+              exit 1
+            fi
+          fi
+          echo "一次性保護通過：尚無本授權的報告。"
+
+      - name: Run probe
+        run: python scripts/probe_yahoo_indices_sp.py --out "$REPORT_PATH"
+
+      - name: Commit report to probe/yahoo-indices-sp-results
+        # 探測失敗時報告照樣寫出（失敗原文也要留下來）→ always()；
+        # 但一次性保護失敗（未發任何請求）時不推送任何東西。
+        if: always() && steps.guard.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$REPORT_PATH" ]; then
+            echo "::error::報告檔不存在（$REPORT_PATH），沒有可提交的東西"
+            exit 1
+          fi
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::${AUTH}"
+          agit() { git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" "$@"; }
+          mkdir -p "$RUNNER_TEMP/yahoosp"
+          cp "$REPORT_PATH" "$RUNNER_TEMP/yahoosp/report.json"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git clean -fdxq
+          if agit ls-remote --exit-code --heads origin "$RESULT_BRANCH" >/dev/null; then
+            agit fetch --depth=1 origin "$RESULT_BRANCH"
+            git checkout -B "$RESULT_BRANCH" FETCH_HEAD
+          else
+            git checkout --orphan "$RESULT_BRANCH"
+            git rm -rfq .
+          fi
+          mkdir -p "results/${AUTH_CODE}"
+          cp "$RUNNER_TEMP/yahoosp/report.json" "results/${AUTH_CODE}/report.json"
+          git add "results/${AUTH_CODE}/report.json"
+          git commit -m "探測：Yahoo 指數日線 ${AUTH_CODE} run${GITHUB_RUN_ID} [skip ci]"
+          agit push origin "HEAD:refs/heads/$RESULT_BRANCH"
+          echo "報告已推到 $RESULT_BRANCH：results/${AUTH_CODE}/report.json"
