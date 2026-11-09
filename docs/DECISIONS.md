@@ -2685,7 +2685,7 @@
 | 日期 | 2026-11-09（Asia/Taipei；同日第七則與國際資料監控相關的紀錄，**承接** `DEC-2026-11-09-06` 與離線補證 `docs/evidence/reuse8_offline_evidence_2026_11_09.md` 第 9 節的方案比較），以實際 GitHub Merge 另驗 |
 | 決策者／原話 | **客戶**裁示，經總管轉達（repo 內無逐字存檔，**要點轉述，非逐字**；客戶可推翻）。要點：採用「方案 3 改良版」。以下各項文字為文件組依總管派工單整理，**不是客戶逐字**。 |
 | ① **客戶實際核准**（僅範圍與工作方式） | 先做 Stage 2「**金融語意與資料驗證規格草案**」，**不得升格為正式金融契約**；以 `docs/evidence/international_market_source_inventory_2026_11_09.md` 與 `docs/evidence/reuse8_offline_evidence_2026_11_09.md` 的離線證據為基礎；並為下一批 Yahoo `^GSPC`（A1）、`^VIX`（A3）、`^TWII`（A11）受控唯讀探測**提出最小規格**。完成後停在下一個 Decision Gate。 |
-| ② **專案 AI 技術推論**（非客戶裁示，不冒充） | 草案的欄位設計、待驗項目分類（現象／證據／候選解釋／分辨所需證據）、探測的請求數組合、節流建議值、原始證據保存格式、執行環境選項與推薦，皆為專案 AI 研究建議，見 `docs/evidence/stage2_reuse8_semantics_validation_spec_draft_2026_11_09.md`；該文件第 D.9 節的推薦明標「未經客戶裁示」。 |
+| ② **專案 AI 技術推論**（非客戶裁示，不冒充） | 草案的欄位設計、待驗項目分類（現象／證據／候選解釋／分辨所需證據）、探測的請求數組合、節流建議值、原始證據保存格式、執行環境選項與推薦，皆為專案 AI 研究建議，見 `docs/evidence/stage2_reuse8_semantics_validation_spec_draft_2026_11_09.md`；該文件第 D.9 節的推薦明標「未經客戶裁示」。**範圍出處與性質**：「下一批探測為 Yahoo A1／A3／A11」出處為客戶要點轉述（非逐字）；「D1 與 FRED 不在下一批」為專案 AI 範圍判斷（依 FX Gate 關閉與 FRED 需金鑰、屬另一道 Gate），**未經客戶逐字確認**，客戶可推翻。 |
 | ③ **未驗證事項（NOT VERIFIED）** | 草案內所有候選解釋均為 INFERENCE，未經真實連線驗證；REUSE 8 項仍**無**日期來源驗證完成或正式准入證據；FRED 對共用 L1 的真實連線結果、版次起點、`^GSPC`／`^TWII` 的時區與時間戳樣態皆未驗。草案未做任何外部連線。 |
 | ④ **未核准清單**（維持原狀，不得藉本筆解鎖） | **不批准** Eligibility、正式母集合、涵蓋率／成功率／分母及任何正式百分比、日期轉換規則、FX Gate（`FX_OBS_DATE_RULE_VERIFIED` **維持 `False`**）；不新增 `indicator_key`、Schema、provider、狀態詞；**不啟動** Yahoo 或 FRED 探測；D1（`USDTWD=X`）與 FRED 不在下一批；Sheet 建立與寫入、writer、OneBrain／Digest／Phase 7 仍未授權；BL-0545 仍 NOT VERIFIED。 |
 | ⑤ 不得回退／不得誤讀 | 「規格草案」**不等於**正式金融契約；「提出最小規格」**不等於**授權執行探測；探測日後即使授權並執行，也**不等於**日期規則已驗或可准入。不回退 `DEC-2026-11-09-05`、`DEC-2026-11-09-06` 的任何邊界。 |
