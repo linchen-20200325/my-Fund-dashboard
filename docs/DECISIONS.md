@@ -2697,6 +2697,25 @@
 | 可逆性 | 可逆：客戶可隨時推翻或改裁；純文件、無程式影響。 |
 | provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；本筆由專案 AI 文件組單組寫成，**作者非獨立 QA、未經第二組驗證**。 |
 
+### DEC-2026-11-09-08｜授權 Yahoo 受控唯讀探測方案 B「S＋P」（最多 4 次 HTTP 實發）；建立最小專用腳本與 workflow，探測本身須另行觸發
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-09（Asia/Taipei；承接 `DEC-2026-11-09-07` 所留「下一批探測須客戶另行授權」的 Decision Gate），以實際 GitHub Merge 另驗 |
+| 決策者／原話 | **客戶**裁示，經總管轉達（repo 內無逐字存檔，**要點轉述，非逐字**；客戶可推翻）。要點：採方案 B「S＋P」，最多 4 次 HTTP 實際發送，僅限 `^GSPC`、`^VIX`、`^TWII` 各一次日線（range=2y）與 `^VIX` 一次指定日期窗（含 2026-06-03）；串行、請求間隔至少 5 秒、禁止自動重試、任何失敗立即停止；遇限流或封鎖 30 分鐘內不得重跑，再次執行須重新授權；不抓 FRED 與 USD/TWD；核准建立最小專用腳本與 GitHub Actions workflow。 |
+| ① **客戶實際核准**（僅範圍與工作方式） | 上述四個請求的受控唯讀探測，以及為此建立最小專用腳本、專用 workflow、離線 mock 測試與授權文件。 |
+| ② **專案 AI 技術推論**（非客戶裁示，不冒充） | 以標準庫單次 GET 取代 `infra.proxy.fetch_url`（後者預設帶重試且可能降級直連，無法證明次數上限）、程式層硬上限計數器、一次性保護（結果分支已有本授權報告即拒絕）、獨立結果分支與按鈕分支、報告欄位與白名單標頭，皆為專案 AI 的實作設計，細節見授權文件。 |
+| ③ **未驗證事項（NOT VERIFIED）** | GitHub Actions 是否能直連 Yahoo、Yahoo 實際回應形狀與時間戳樣態、`^GSPC`／`^VIX`／`^TWII` 的日期語意皆未驗；dispatch API 是否回 403 未知（故另備按鈕分支）。本批只建立並離線驗證工具，**未執行探測、未觸發 workflow、未連網**。 |
+| ④ **未核准清單**（維持原狀，不得藉本筆解鎖） | 不批准 Eligibility、正式母集合、涵蓋率／成功率／分母及任何正式百分比、日期轉換規則、FX Gate（`FX_OBS_DATE_RULE_VERIFIED` **維持 `False`**）；不新增 `indicator_key`、Schema、provider、狀態詞；不自動啟動第二批探測；FRED 與 D1（`USDTWD=X`）不在本批；Sheet 建立與寫入、writer、OneBrain／Digest／Phase 7 仍未授權；BL-0545 仍 NOT VERIFIED。 |
+| ⑤ 不得回退／不得誤讀 | 「授權探測」**不等於**日期規則已驗；探測結果為單次描述性證據，不得據以判定永久日期規則。不回退 `DEC-2026-11-09-05`～`-07` 的任何邊界。 |
+| ⑥ 不授權事項 | 超出四個請求的任何取數、重試、其他代號或 range 或 interval、FRED、匯率、寫 Sheet 或 `data_cache`、改正式程式、缺漏以 0／成功／中性／安全替代。重跑（含冷卻期後）須重新授權。 |
+| 理由／背景（agent 推論，不冒充裁示） | `DEC-2026-11-09-07` 已把最小規格與次數上限寫死並停在 Decision Gate；本筆為客戶對該 Gate 的裁示登記。 |
+| evidence／source | `docs/evidence/yahoo_indices_sp_probe_authorization_2026_11_09.md`；`scripts/probe_yahoo_indices_sp.py`；`.github/workflows/yahoo_indices_sp_probe.yml`；`tests/test_probe_yahoo_indices_sp.py`；`DEC-2026-11-09-07`。 |
+| 影響範圍 | 新增腳本、workflow、測試與授權文件；`docs/DECISIONS.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md` 各補索引。不新增 BL 列、不改任何 BL 狀態、不動全域唯一 NEXT（BL-0545）、不動既有 FX 探測腳本或其 workflow 與結果分支。 |
+| supersedes | **不 supersede 任何既有 DEC**；承接 `DEC-2026-11-09-07` 的待裁 Gate。 |
+| 可逆性 | 可逆：客戶可隨時撤回；新增檔可刪除。已推到結果分支的報告屬唯讀證據。 |
+| provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；本筆由專案 AI 單組寫成，**未經第二組驗證**。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
