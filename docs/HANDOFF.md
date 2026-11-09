@@ -4,6 +4,8 @@
 >
 > 舊版錯誤將 #1163 當 Draft 且否認 S1 Code 已動工。舊版原文逐字留存在 `docs/evidence/history/2026-11-07_handoff_before_cold_start_resync.md`（NOT CURRENT）；不可用舊版文件、對話記憶、PR body 或排程回報推翻即時 GitHub 證據。
 
+> **2026-11-09 資料監控設計閱讀指標（DEC-2026-11-09-05）**：使用者要求把國際市場、美股、總經／利率、美元／匯率指標的清單和抓取／可用狀態集中在**候選獨立**系統監控 Sheet；設計與不可混用邊界見 `docs/v2/83_international_market_data_monitor_design.md`。請勿直接修改既有 `SETTINGS_SHEET_ID`（`docs/v2/50` 四表契約）、個人 Active Sheet、New UI2 五頁 IA 或 FX Gate；四個候選分頁／Schema／寫入器及健康度分母**尚未獲實作授權**。**NEXT：僅資料盤點／欄位與來源契約審查，不得進入寫入程式／Cloud。**本句不是當前 GitHub 狀態，必須重查 main／PR／CI。
+>
 ## 0. 無記憶恢復順序（必須重新核查）
 
 1. **只查基金 repo** `linchen-20200325/my-Fund-dashboard`：`main` 完整 SHA、最近 commits、已 merged PR（讀 `merged`、`merge_commit_sha`）；不要拿今天的 main SHA 不同判斷歷史 PR 沒合併。
