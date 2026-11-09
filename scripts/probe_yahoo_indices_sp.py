@@ -37,6 +37,7 @@ import os
 import re
 import sys
 import time
+import zlib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -84,9 +85,15 @@ HEADER_WHITELIST = (
     "x-yahoo-request-id", "server",
 )
 COOLDOWN_STATUSES = (401, 403, 429, 999)
+# 專案 AI 建議值（非客戶裁示）：單一回應讀取與 gzip 解壓縮的位元組上限。
+MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 
 # 交易所時區的後備（僅在回應 meta 缺 exchangeTimezoneName 時**不**使用；缺就記缺）。
 _WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+class ResponseTooLarge(RuntimeError):
+    """回應（或解壓縮後）超過 MAX_RESPONSE_BYTES。"""
 
 
 class HardCapExceeded(RuntimeError):
@@ -112,7 +119,12 @@ class RequestBudget:
 # ---------------------------------------------------------------------------
 # 遮罩
 # ---------------------------------------------------------------------------
-_SENSITIVE_ENV_HINTS = ("TOKEN", "SECRET", "PASSWORD", "PROXY", "KEY", "AUTH", "COOKIE")
+_SENSITIVE_ENV_HINTS = (
+    "AUTHORIZATION", "TOKEN", "SECRET", "PASSWORD", "COOKIE", "PROXY", "API_KEY", "APIKEY",
+    "PRIVATE_KEY", "ACCESS_KEY",
+)
+# 明確非敏感（授權代碼、路徑、分支名）：其值要原樣出現在報告中。
+_NON_SENSITIVE_ENV_NAMES = ("AUTH_CODE", "REPORT_PATH", "RESULT_BRANCH")
 _MASK_PATTERNS = (
     (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=\-]+"), "Bearer ***"),
     (re.compile(r"(?i)\bBasic\s+[A-Za-z0-9+/=]{8,}"), "Basic ***"),
@@ -130,7 +142,10 @@ def _sensitive_env_values(env: Optional[Dict[str, str]] = None) -> List[str]:
     src = os.environ if env is None else env
     vals: List[str] = []
     for k, v in src.items():
-        if v and len(v) >= 6 and any(h in k.upper() for h in _SENSITIVE_ENV_HINTS):
+        ku = k.upper()
+        if ku in _NON_SENSITIVE_ENV_NAMES:
+            continue
+        if v and len(v) >= 6 and any(h in ku for h in _SENSITIVE_ENV_HINTS):
             vals.append(v)
     return sorted(set(vals), key=len, reverse=True)
 
@@ -162,10 +177,13 @@ def default_opener(url: str, headers: Dict[str, str], timeout: float) -> Tuple[i
     req = urllib.request.Request(url, headers=headers, method="GET")
     try:
         with opener.open(req, timeout=timeout) as resp:
-            return resp.status, {k.lower(): v for k, v in resp.getheaders()}, resp.read()
+            body = resp.read(MAX_RESPONSE_BYTES + 1)
+            if len(body) > MAX_RESPONSE_BYTES:
+                raise ResponseTooLarge(f"回應超過 {MAX_RESPONSE_BYTES} bytes")
+            return resp.status, {k.lower(): v for k, v in resp.getheaders()}, body
     except urllib.error.HTTPError as e:
         try:
-            body = e.read()
+            body = e.read(MAX_RESPONSE_BYTES + 1)[:MAX_RESPONSE_BYTES]
         except Exception:  # noqa: BLE001
             body = b""
         return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, body
@@ -191,7 +209,10 @@ class SchemaError(ValueError):
 def _load_json(body: bytes, content_encoding: str = "") -> Any:
     data = body
     if "gzip" in (content_encoding or "").lower():
-        data = gzip.decompress(body)
+        d = zlib.decompressobj(wbits=31)
+        data = d.decompress(body, MAX_RESPONSE_BYTES + 1)
+        if len(data) > MAX_RESPONSE_BYTES or d.unconsumed_tail:
+            raise ResponseTooLarge(f"解壓縮後超過 {MAX_RESPONSE_BYTES} bytes")
     return json.loads(data.decode("utf-8"))
 
 
@@ -334,11 +355,23 @@ def _send_one(
         status, resp_headers, body = opener(url, headers, TIMEOUT_S)
     except HardCapExceeded:
         raise
+    except ResponseTooLarge as e:
+        rec["received_at_utc"] = _utc_iso(now())
+        rec["http_status"] = None
+        rec["error"] = mask(str(e), env)
+        rec["failure_kind"] = "response_too_large"
+        return rec
     except Exception as e:  # noqa: BLE001
         rec["received_at_utc"] = _utc_iso(now())
         rec["http_status"] = None
         rec["error"] = mask(f"{type(e).__name__}: {e}", env)
         rec["failure_kind"] = "exception"
+        return rec
+    if len(body) > MAX_RESPONSE_BYTES:
+        rec["received_at_utc"] = _utc_iso(now())
+        rec["http_status"] = status
+        rec["error"] = f"回應超過 {MAX_RESPONSE_BYTES} bytes"
+        rec["failure_kind"] = "response_too_large"
         return rec
     rec["received_at_utc"] = _utc_iso(now())
     rec["http_status"] = status
@@ -364,6 +397,10 @@ def _send_one(
     ce = resp_headers.get("content-encoding", "")
     try:
         obj = _load_json(body, ce)
+    except ResponseTooLarge as e:
+        rec["failure_kind"] = "response_too_large"
+        rec["error"] = mask(str(e), env)
+        return rec
     except Exception as e:  # noqa: BLE001
         rec["failure_kind"] = "json_parse"
         rec["error"] = mask(f"JSON 解析失敗：{type(e).__name__}: {e}", env)
@@ -449,6 +486,10 @@ def run_probe(
     except HardCapExceeded as e:
         stopped_at = len(report["requests"])
         report["stop_reason"] = f"hard_cap: {e}"
+    except Exception as e:  # noqa: BLE001  任何未預期例外：盡力保留已發請求的證據
+        stopped_at = len(report["requests"])
+        report["stop_reason"] = mask(f"unhandled_exception: {type(e).__name__}: {e}", environ)
+        report["failed_request_index"] = stopped_at + 1
     if stopped_at is None:
         report["stop_reason"] = "completed_all_authorized_requests"
     else:
@@ -498,7 +539,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"拒絕執行：輸出路徑已存在（{out}）；再次執行須重新授權。0 次請求。", file=sys.stderr)
         return 2
 
-    report = run_probe()
+    try:
+        report = run_probe()
+    except BaseException as e:  # noqa: BLE001  run_probe 外層崩潰也要留報告
+        report = {
+            "probe": AUTH_CODE, "authorization_ref": AUTH_REF, "data_source": DATA_SOURCE_NOTE,
+            "stop_reason": mask(f"unhandled_exception: {type(e).__name__}: {e}"),
+            "http_requests_attempted": None,
+            "note": "run_probe 外層例外，已發請求數未知（見 claim 與 Actions log）",
+            "skipped_not_attempted": [],
+        }
     write_report(report, out)
     print(
         f"stop_reason={mask(report['stop_reason'])} "

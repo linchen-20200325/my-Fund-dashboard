@@ -321,7 +321,7 @@ def test_workflow_static():
     assert "--force" not in code and "push -f" not in code and "--force-with-lease" not in code
     assert "github.sha" not in code and "github.ref" not in code
     pushes = [ln.strip() for ln in code.splitlines() if re.search(r"\bpush origin\b", ln)]
-    assert pushes == ['agit push origin "HEAD:refs/heads/$RESULT_BRANCH"']
+    assert pushes == ['agit push origin "HEAD:refs/heads/$RESULT_BRANCH"'] * 2  # claim 與報告各一次
     assert job["env"]["RESULT_BRANCH"] == "probe/yahoo-indices-sp-results"
     assert "probe/fx-obs-date" not in code
     assert "main" not in " ".join(pushes)
@@ -329,8 +329,16 @@ def test_workflow_static():
     assert "guard" in names
     probe_idx = next(i for i, s in enumerate(steps) if "probe_yahoo_indices_sp.py" in s.get("run", ""))
     assert names.index("guard") < probe_idx
+    claim_idx = next(i for i, s in enumerate(steps) if s.get("id") == "claim")
+    assert names.index("guard") < claim_idx < probe_idx  # claim 先推、推失敗則不跑 probe（預設 success() 條件）
+    assert "if" not in steps[probe_idx] and "if" not in steps[claim_idx]
+    guard_run = steps[names.index("guard")]["run"]
+    assert "claim.json" in guard_run and "report.json" in guard_run
+    assert 'GITHUB_RUN_ATTEMPT:-1}" != "1"' in guard_run
+    assert "agit push origin" in steps[claim_idx]["run"] and "set -euo pipefail" in steps[claim_idx]["run"]
     commit = steps[-1]
     assert "always()" in commit["if"] and "steps.guard.outcome" in commit["if"]
+    assert "steps.claim.outcome" in commit["if"]
     assert wf["name"].count("探測") >= 1 and "只讀" in wf["name"]
 
 
@@ -378,3 +386,68 @@ def test_period_window_contains_target_date():
     chk = rep["requests"][3]["window_target_check"]
     assert chk["target_date"] == "2026-06-03" and chk["bars_with_utc_date"] == [0, 1]
     assert "window_target_check" not in rep["requests"][0]
+
+
+# MF-1 遮罩不得吃掉非敏感 env ------------------------------------------------------------
+def test_mask_does_not_eat_auth_code_or_paths():
+    env = {"AUTH_CODE": "yahoo_indices_sp_20261109", "REPORT_PATH": "probe_out/yahoo_indices_sp_20261109.json",
+           "RESULT_BRANCH": "probe/yahoo-indices-sp-results", "GITHUB_TOKEN": "ghs_realtokenvalue123"}
+    rep = {"probe": "yahoo_indices_sp_20261109", "out": env["REPORT_PATH"], "err": "x ghs_realtokenvalue123 y"}
+    m = P.mask_obj(rep, env)
+    assert m["probe"] == "yahoo_indices_sp_20261109" and m["out"] == env["REPORT_PATH"]
+    assert "ghs_realtokenvalue123" not in m["err"]
+
+
+def test_written_report_keeps_probe_and_out_path_with_auth_code_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTH_CODE", "yahoo_indices_sp_20261109")
+    rep, _, _ = _run([_ok()] * 4)
+    out = tmp_path / "yahoo_indices_sp_20261109.json"
+    P.write_report(rep, out)
+    d = json.loads(out.read_text(encoding="utf-8"))
+    assert d["probe"] == "yahoo_indices_sp_20261109"
+
+
+# SF-2(d) 未預期例外仍留報告 ----------------------------------------------------------------
+def test_unhandled_exception_still_yields_report_with_count(monkeypatch):
+    def boom(*a, **k):
+        raise ValueError("kaboom Bearer leak999")
+    monkeypatch.setattr(P, "parse_chart", boom)
+    rep, op, _ = _run([_ok()] * 4)
+    assert len(op.calls) == 1 and rep["http_requests_attempted"] == 1
+    assert "leak999" not in json.dumps(rep, ensure_ascii=False)
+
+
+def test_main_writes_report_even_if_run_probe_crashes(tmp_path, monkeypatch):
+    def crash(*a, **k):
+        raise RuntimeError("crash token=abc123xyz")
+    monkeypatch.setattr(P, "run_probe", crash)
+    out = tmp_path / "r.json"
+    assert P.main(["--out", str(out)]) == 1
+    d = json.loads(out.read_text(encoding="utf-8"))
+    assert d["stop_reason"].startswith("unhandled_exception") and "abc123xyz" not in out.read_text(encoding="utf-8")
+
+
+# SF-3 大小上限 ------------------------------------------------------------------------------
+def test_oversize_body_fails_and_stops(monkeypatch):
+    monkeypatch.setattr(P, "MAX_RESPONSE_BYTES", len(GOOD_BODY) + 10)
+    rep, op, _ = _run([_ok(), (200, {}, b"x" * (len(GOOD_BODY) + 11))])
+    assert len(op.calls) == 2 and rep["stop_reason"].startswith("response_too_large")
+    assert [s["request_index"] for s in rep["skipped_not_attempted"]] == [3, 4]
+
+
+def test_opener_raising_response_too_large_is_failure():
+    rep, op, _ = _run([P.ResponseTooLarge("big")])
+    assert rep["stop_reason"].startswith("response_too_large") and len(op.calls) == 1
+
+
+def test_gzip_bomb_is_rejected(monkeypatch):
+    monkeypatch.setattr(P, "MAX_RESPONSE_BYTES", 1000)
+    bomb = gzip.compress(b"0" * 100000)
+    assert len(bomb) < 1000
+    rep, op, _ = _run([(200, {"content-encoding": "gzip"}, bomb)])
+    assert rep["stop_reason"].startswith("response_too_large") and len(op.calls) == 1
+
+
+def test_gzip_normal_body_still_parses():
+    rep, _, _ = _run([(200, {"content-encoding": "gzip"}, gzip.compress(GOOD_BODY))] * 4)
+    assert rep["stop_reason"] == "completed_all_authorized_requests"

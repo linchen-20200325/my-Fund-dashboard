@@ -41,6 +41,14 @@
   腳本內另有輸出路徑已存在即拒絕。再次執行須重新授權並更換授權代碼。
 * 離線自跑：`python scripts/probe_yahoo_indices_sp.py --dry-run` 只印出四個 URL，不發請求。
 
+### 4.1 claim 先行與「已使用授權」判定
+
+* 發任何請求之前，workflow 先把 `results/yahoo_indices_sp_20261109/claim.json`（run id、attempt、trigger／executed SHA、UTC 時間）推到結果分支；推送失敗則整個 job 失敗且不發任何請求。
+* 一次性保護檢查 `claim.json` 或 `report.json` 任一已存在即拒絕。`GITHUB_RUN_ATTEMPT` 不等於 1（re-run）一律拒絕。
+* claim 存在而無 report，視為授權已使用（請求可能已發出但報告未寫出）；須人工確認並重新授權才可再跑。
+* 腳本以例外保護盡力寫出失敗報告（含 `http_requests_attempted` 與遮罩後的 `unhandled_exception` 訊息）。
+* 單一回應讀取與 gzip 解壓縮上限為 5 MB（**專案 AI 建議值，非客戶裁示**），超過視為 `response_too_large` 並停止。
+
 ## 5. 報告欄位（純描述）
 
 頂層：授權參考、資料來源字樣（Yahoo Finance chart v8，非 TWSE／CBOE 官方）、`trigger_sha`、`executed_sha`、
@@ -64,3 +72,9 @@ run id 與 attempt、workflow 名稱、`http_requests_attempted`、`stop_reason`
 ## 7. 本批未驗證事項
 
 GitHub Actions 能否直連 Yahoo、Yahoo 實際回應形狀、dispatch API 是否回 403、3xx 在實際環境的表現，皆須由實跑確認，本批未驗。
+
+
+## 8. 已知風險
+
+* push 事件執行的是被推 commit 內的 workflow 檔本身。能推按鈕分支且有 workflows 權限者可改寫該檔，與既有 FX 探測相同；本 workflow 僅以 `ref: main` 限制腳本內容，擋不到這條路。
+* `actions/checkout` 與 `actions/setup-python` 以版本標籤固定（`@v4`、`@v5`），未釘 commit SHA，與既有 workflow 一致。

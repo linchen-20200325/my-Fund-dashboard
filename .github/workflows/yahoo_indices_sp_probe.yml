@@ -60,17 +60,54 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          if [ "${GITHUB_RUN_ATTEMPT:-1}" != "1" ]; then
+            echo "::error::GITHUB_RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}：re-run 一律不得發請求；須重新授權。0 次請求。"
+            exit 1
+          fi
           AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           echo "::add-mask::${AUTH}"
           agit() { git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" "$@"; }
           if agit ls-remote --exit-code --heads origin "$RESULT_BRANCH" >/dev/null; then
             agit fetch --depth=1 origin "$RESULT_BRANCH"
-            if git cat-file -e "FETCH_HEAD:results/${AUTH_CODE}/report.json" 2>/dev/null; then
-              echo "::error::本授權（${AUTH_CODE}）的報告已存在於 ${RESULT_BRANCH}；再次執行須重新授權。0 次請求。"
-              exit 1
-            fi
+            for f in claim.json report.json; do
+              if git cat-file -e "FETCH_HEAD:results/${AUTH_CODE}/${f}" 2>/dev/null; then
+                echo "::error::本授權（${AUTH_CODE}）的 ${f} 已存在於 ${RESULT_BRANCH}；視為授權已使用，再次執行須人工確認並重新授權。0 次請求。"
+                exit 1
+              fi
+            done
           fi
-          echo "一次性保護通過：尚無本授權的報告。"
+          echo "一次性保護通過：尚無本授權的 claim 或報告。"
+
+      - name: Claim authorization (push claim.json before any request)
+        id: claim
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::${AUTH}"
+          agit() { git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" "$@"; }
+          mkdir -p "$RUNNER_TEMP/yahoosp"
+          printf '{"auth_code":"%s","run_id":"%s","run_attempt":"%s","trigger_sha":"%s","executed_sha":"%s","claimed_at_utc":"%s"}\n' \
+            "$AUTH_CODE" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_SHA" "$PROBE_EXECUTED_SHA" \
+            "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$RUNNER_TEMP/yahoosp/claim.json"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git clean -fdxq
+          if agit ls-remote --exit-code --heads origin "$RESULT_BRANCH" >/dev/null; then
+            agit fetch --depth=1 origin "$RESULT_BRANCH"
+            git checkout -B "$RESULT_BRANCH" FETCH_HEAD
+          else
+            git checkout --orphan "$RESULT_BRANCH"
+            git rm -rfq .
+          fi
+          mkdir -p "results/${AUTH_CODE}"
+          cp "$RUNNER_TEMP/yahoosp/claim.json" "results/${AUTH_CODE}/claim.json"
+          git add "results/${AUTH_CODE}/claim.json"
+          git commit -m "探測：Yahoo 指數日線 ${AUTH_CODE} claim run${GITHUB_RUN_ID} [skip ci]"
+          agit push origin "HEAD:refs/heads/$RESULT_BRANCH"
+          git checkout --detach -q "$PROBE_EXECUTED_SHA"
+          echo "claim 已推送；之後才發請求。"
 
       - name: Run probe
         run: python scripts/probe_yahoo_indices_sp.py --out "$REPORT_PATH"
@@ -78,7 +115,7 @@ jobs:
       - name: Commit report to probe/yahoo-indices-sp-results
         # 探測失敗時報告照樣寫出（失敗原文也要留下來）→ always()；
         # 但一次性保護失敗（未發任何請求）時不推送任何東西。
-        if: always() && steps.guard.outcome == 'success'
+        if: always() && steps.guard.outcome == 'success' && steps.claim.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
