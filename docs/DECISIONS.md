@@ -2767,6 +2767,21 @@
 | 可逆性 | 可逆：客戶可隨時撤回或改裁；純文件。 |
 | provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；本筆與研究文件由專案 AI 單組寫成，**未經第二組驗證**；研究文件所用 parquet 讀取器為自製，已以列數對照，未對拍 pyarrow。 |
 
+### DEC-2026-11-10-02｜客戶核准 A1「離線唯讀快取品質檢查」施工（一支唯讀腳本＋必要測試＋文件；不授權任何快取修改、外部抓取、workflow 或契約）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-10（Asia/Taipei；承接 `DEC-2026-11-10-01` 研究文件第 9 節 G1），以實際 GitHub Merge 另驗 |
+| 決策者／原話 | **客戶**核准，經總管轉達（repo 內無逐字存檔，**要點轉述，非逐字**；客戶可推翻）。要點：採 A1，僅限一支最小唯讀檢查腳本、必要測試及文件。 |
+| ① 授權範圍（僅此） | 新增 `scripts/check_cache_quality.py`（離線、唯讀；可讀本機 `data_cache`、本機 git 歷史與本機參考 `report.json`）、`tests/test_check_cache_quality.py`、證據檔 `docs/evidence/cache_quality_check_a1_report_2026_11_10.md`，及本檔／`docs/BACKLOG.md`／`docs/HANDOFF.md` 的登記與索引。 |
+| ② 腳本內部分級（**不是正式契約**） | 報告內的 CONFIRMED（已證實異常）／SUSPECTED（疑似異常）／INSUFFICIENT_EVIDENCE（證據不足）／NO_FINDING 只是腳本內部的報告用列舉，**不是**資料 Schema、健康狀態契約或監控 Sheet 欄位；「未發現不等於正常」；不判成因；各市場假日性質只記為觀測。 |
+| ③ 尚未核准（維持原狀，不得藉本筆解鎖） | **B1**（受控重抓比對，需另列請求數與標的上限並另行授權）、**B2**（修正快取）、**B3**（改寫入端重疊窗口）、**C**（全量歷史重建）；任何快取修改或補值、外部抓取或探針、觸發 workflow、將 A1 接上排程；新增正式資料 Schema、健康狀態契約、監控 Sheet、旗標欄位；Eligibility、正式母集合、涵蓋率分母、日期轉換規則、正式收盤判準；FX Gate 不開（`FX_OBS_DATE_RULE_VERIFIED` **維持 `False`**）。 |
+| ④ 不授權事項 | 修改 `data_cache`、`metadata.json`、結果分支、既有 scripts（含 `update_macro_history.py`）、workflow、services／ui／repositories 任何正式程式、金融公式、日期規則、Sheet；`pip install`；改 `CLAUDE.md`、frozen 文件。 |
+| 與既有 DEC 關係 | **不 supersede 任何既有 DEC**。承接 `DEC-2026-11-10-01`（研究；推薦 G1 先做 A1）與 `DEC-2026-11-09-10`（Q4 不覆寫快取、不更改計算；Q2 週末排除限縮；Q3 暫行），並引用 `DEC-2026-11-09-08`。 |
+| 影響範圍 | 新增上列三檔，並於 `docs/DECISIONS.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md` 補登記／索引。無快取、workflow、既有程式或資料變更；腳本預設只印 stdout，`--out` 拒絕寫入 cache-dir 內或既有檔。 |
+| 可逆性 | 可逆：客戶可隨時撤回或改裁；新增檔可刪除，不影響任何既有路徑。 |
+| provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；本筆、腳本、測試與證據檔由專案 AI 單組寫成，**未經第二組驗證**；範例報告以自製 parquet 讀取器產生（本機無 pyarrow），未對拍 pyarrow，端到端須由 QA／CI 重現。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
@@ -2948,3 +2963,4 @@
 - 第四節 `DEC-2026-11-08-02`：客戶指示經總管派工單轉達，repo 內無逐字存檔，本組未見客戶對話本身；五項要點照寫、不增補；D8 補證方法與是否補跑本筆不寫；兩份引用的 evidence（fx_d8_gap_and_supplementary_plan／data_state_vocabulary_crosswalk_d3a）由他組同批撰寫，已於整合時到位、檔名已核對一致，獨立 QA 已完成一輪並已回修（見 PR #1175；非 QA 通過；合併前仍待 CI）；supersedes 範圍為文件組讀法；由文件組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-11-08-05`：客戶方向（報酬 A／身份 A／持倉占比 C）經總管轉達，無逐字存檔；方案內容由本組對照 `d2_draft_C` 題 1～3 與三份草稿轉述，未見客戶對話本身；③推論只讀碼、未實跑；`reason` 僅 5 種之更正為本組對 origin/main 唯讀重驗；由專案 AI 單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-11-10-01`：客戶指示經總管轉達，無逐字存檔，本組未見客戶對話本身；研究文件的 git 歷史普查限本 clone（淺層）可見的 30 筆含 `data_cache` 提交；parquet 以自製解碼器讀取，僅以列數對照；2026-06-03 假說的推論鏈依賴提交時間戳可信，GitHub Actions 執行紀錄本批未查；由專案 AI 單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-11-10-02`：客戶核准 A1 經總管轉達，無逐字存檔，本組未見客戶對話本身；腳本、測試、證據檔由專案 AI 單組寫成，未經第二組驗證；範例報告以自製 parquet 讀取器產生（本機無 pyarrow、未對拍），含 pyarrow 的真實快取結構測試本機 skip，須由 CI／QA 實跑；盤中時段判定為假設（不含半日市與國定假日）。
