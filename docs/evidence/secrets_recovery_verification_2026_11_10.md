@@ -19,7 +19,7 @@
 |---|---|
 | 總經 | 約 20 條 FRED 指標（CPI、PPI、失業率、非農、M2、Fed 資負表、Sahm、CFNAI、SLOOS 等）、美國 PMI 備援鏈、風險雷達、流動性引擎、拐點偵測、景氣位階；New UI 只接 `^VIX`、`^GSPC`、`^TWII`、DGS10／DGS2、HY OAS、10Y-2Y、FEDFUNDS（FX 閘門關閉）|
 | 籌碼／情緒／新聞 | FinMind 外資買賣超（熱錢）、NDC 景氣燈號、AAII、穩定幣市值、RSS 新聞與個股新聞 |
-| 基金 | 持股前十大／產業配置、績效 wb01／風險 wb07／同儕比較、雙演算法對帳、保單基金備援鏈（Morningstar／Yahoo／Alpha Vantage／保單商官網）、批次續跑、TDCC／FundClear 找代號（新 UI 已裁示取消）|
+| 基金 | 持股前十大／產業配置、績效 wb01／風險 wb07／同儕比較、雙演算法對帳、保單基金備援鏈（Morningstar／Yahoo／Alpha Vantage／保單商官網）、批次續跑、TDCC／FundClear 找代號（草稿稱新 UI 已裁示取消，出處引自草稿的 `DEC-2026-11-01-01`，**本批未查證，NOT VERIFIED**）|
 | 帳本與其他 | 帳本與 T7 快照、選股池 switch_advisor、績效追蹤、LINE 通知、配息行事曆、組合基準對比 |
 | AI | Gemini 單基金／組合／跨檔解盤、策略 3 組合建議、資料健康 AI（ui_v2／ui_v3 對 `ai_service`／`infra.llm` 的 import，本組 `git grep` 為 0）|
 
@@ -43,7 +43,7 @@
 | MoneyDJ www 基本資料／NAV 頁 | **Actions**（直連與 NAS 兩路徑）| 2026-10-14 基本頁 8 碼 200；2026-10-29～11-09 NAV 探針 | 非 Cloud；tcbbankfund 頁型多為 404；回 200 不證明代碼被識別 |
 | TDCC 3-2 清單 | **Actions** | 5251→5295 列 | 與 MoneyDJ／保單碼體系不通；3-4 回 0 筆 |
 | 鉅亨 NAV | **Cloud（客戶自述）** | 2026-07-22 STATE：App 端抓得到當日 NAV | 非機器證據；同日 Actions 端全掛 |
-| 其餘（FinMind、Stooq、Cboe、AAII、DefiLlama、RSS、er-api、Frankfurter、海關、SITCA、Morningstar 等）| — | 無近期成功紀錄 | 見附錄 A；Cboe Put/Call 凍結檔、Stooq `^cpc`、Yahoo `^CPC`／`^CPCE` 另有 2026-06／07 的失敗紀錄（STATE，轉載）|
+| 其餘（FinMind、Stooq、Cboe、AAII、DefiLlama、RSS、er-api、Frankfurter、海關、SITCA、Morningstar 等）| — | 無近期成功紀錄 | 見附錄 A；Cboe Put/Call 凍結檔（STATE 記載，CI／Actions 端，非 Cloud）、AAII 攔截（STATE 記載 v19.296，長期已知，非逐筆 Cloud 觀測）、Stooq `^cpc`、Yahoo `^CPC`／`^CPCE` 另有 2026-06／07 的失敗紀錄（STATE 記載，環境以原條目為準；皆轉載）|
 
 ### (d) 必須 Streamlit Cloud 實測才能確認
 1. Secrets 內 `FRED_API_KEY`、`FINMIND_TOKEN`、`PROXY_URL`、Google／Gemini 各名稱是否存在且有效（只回報「使用來源」欄，勿貼遮罩值）。
@@ -65,6 +65,8 @@
 **資料層與 AI 層分離：API 成功 ≠ 符合金融語意 ≠ 可供 AI 使用。** 上列「取得成功」只代表 HTTP 與解析成功，不代表觀測日／時區、單位／方向、vintage 或幣別口徑已核實，也不代表已核准納入畫面計算或 AI evidence。
 
 ## 0. 置頂摘要
+
+> **本節推薦以 §0A 為準**；§0.1、§0.3 為 FRED 專題的原版推薦，兩者方向一致（客戶先在 Cloud 用既有診斷入口回報），若有出入以 §0A 為準。
 
 ### 0.1 推薦的最小驗證方式（未經客戶裁示）
 
@@ -291,7 +293,7 @@ Tab5「API 金鑰狀態」表（`_key_targets`）共 5 把：`FRED_API_KEY`、`G
 
 ## 附錄 A　舊 UI 完整資料來源矩陣（2026-11-10 追加）
 
-**讀法**：欄位＝供應者｜資料｜舊 UI 入口｜實際函式（檔案＋符號）｜Secret（名稱·scope；S＝Streamlit Secrets、A＝Actions）｜Proxy｜fallback 順序｜證據（Actions 端／Cloud 端，標日期）｜ui_v2／ui_v3 是否重用｜問題分類｜標籤。「問題分類」七選一（缺 Secret／認證失敗／Cloud 網路限制／來源停供或欄位改變／快取或增量缺陷／新 UI 尚未接線／未經實測），無已知問題則寫「無已知問題」，不混用。**標籤「轉載」＝取自兩份單組草稿、本組未逐項重驗**；標 FACT 者為本組讀碼或 `git grep` 所見。「0 production caller」一律是**單組 grep、未經第二組驗證**，可能漏動態或字串名呼叫。Cloud 端證據欄凡寫「無」＝repo 內未見，不是「已確認失敗」。
+**讀法**：欄位＝供應者｜資料｜舊 UI 入口｜實際函式（檔案＋符號）｜Secret（名稱·scope；S＝Streamlit Secrets、A＝Actions）｜Proxy｜fallback 順序｜證據（Actions 端／Cloud 端，標日期）｜ui_v2／ui_v3 是否重用｜問題分類｜標籤。「問題分類」七選一（缺 Secret／認證失敗／Cloud 網路限制／來源停供或欄位改變／快取或增量缺陷／新 UI 尚未接線／未經實測），無已知問題則寫「無已知問題」，不混用。**一列可含多個獨立問題，每個問題各屬一類，不混用同一問題的成因。****標籤「轉載」＝取自兩份單組草稿、本組未逐項重驗**；標 FACT 者為本組讀碼或 `git grep` 所見。「0 production caller」一律是**單組 grep、未經第二組驗證**，可能漏動態或字串名呼叫。Cloud 端證據欄凡寫「無」＝repo 內未見，不是「已確認失敗」。
 
 ### A.1 總經與市場資料
 
@@ -303,14 +305,14 @@ Tab5「API 金鑰狀態」表（`_key_targets`）共 5 把：`FRED_API_KEY`、`G
 | FRED | 發布日（Tab5／data_registry）| ⑤ 診斷 | `repositories/macro_repository.py::fred_get_next_release_date` | 同上 | 同上 | 失敗→靜態天數閾值 | 無 | 否 | 未經實測 | 轉載 |
 | FRED NAPM／ISPMANPMI | ISM PMI（2016 停更）| 已拔除（2026-09-01）| 守衛 `tests/test_dead_fred_pmi_series_removed.py` | — | — | — | — | — | 來源停供（已移除取數）| FACT（CLAUDE.md §2.3）|
 | Yahoo chart | `^VIX`、銅、SPY／RSP、DXY、跨幣、BTC、HYG／LQD、板塊 ETF、`^MOVE`、亞洲指數等 | ① 總經頁、雷達、流動性 | `repositories/macro/yf.py::fetch_yf_close` | 無 | 經 `fetch_url`；主機級共用冷卻 | 單 ticker 失敗只缺該格 | Actions：`^VIX` 2026-11-09 探測 200；其餘 ticker 無；Cloud：無 | 僅 `^VIX`／`^GSPC`／`^TWII` | 未經實測 | 轉載 |
-| Yahoo chart | `^CPC`／`^CPCE`（Put/Call）| ① 雷達 | 同上 | 無 | 同上 | Stooq→Cboe pcratio | STATE 2026-06／07（user 回報，Cloud）：production trace「empty」 | 否 | 來源停供 | 轉載 |
+| Yahoo chart | `^CPC`／`^CPCE`（Put/Call）| ① 雷達 | 同上 | 無 | 同上 | Stooq→Cboe pcratio | STATE 記載（日期與環境以原條目為準，非本批機器觀測）：production trace「empty」 | 否 | 來源停供 | 轉載 |
 | Yahoo chart | USDTWD 與基金幣別 `<ISO>TWD=X` | ①熱錢、②③④ 換匯 | `repositories/hot_money_repository.py::fetch_usdtwd_series`、`repositories/fund/fx_and_main.py::get_latest_fx` | 無 | `fetch_url`；er-api／Frankfurter 另以 `requests` 直打 | TWD：Yahoo→er-api；非 TWD：Yahoo→FRED DEX→er-api→Frankfurter | Actions：2026-11-08 FX 探測 6 代號 ok（日期規則未驗）；Cloud：無 | v2 B 線閘門關閉＝不取數 | 新 UI 尚未接線（閘門）；未經實測 | 轉載 |
 | FinMind | 外資買賣超（熱錢卡）| ① | `repositories/hot_money_repository.py::fetch_foreign_flow_series` | `FINMIND_TOKEN`·S（選填；**總經頁只讀 `os.environ`**，見附錄 B #2）| `fetch_url` | 無；額度用盡有 dataset 專屬退避 | STATE 2026-07-11：外資卡曾顯示 106 天未更新（當時 UI 問題）；近期 Actions／Cloud：無 | **否** | 缺 Secret（讀取不一致，INFERENCE）；新 UI 尚未接線 | FACT／INFERENCE |
 | FinMind | NDC 景氣燈號 | ③ 單基金（Z 門檻）| `ui/helpers/macro/ndc.py::get_ndc_status`→`fetch_ndc_signal_history` | `FINMIND_TOKEN`·S（`get_secret`）| `fetch_url` | 失敗退預設門檻 | 無 | 否（v2 規格 pending 不取數）| 新 UI 尚未接線；未經實測 | 轉載 |
 | 多源 | 台灣 PMI 9 源賽跑、出口 YoY（海關 6053）、外資連續買賣超日數 | 無（`app.py` 可達鏈上 0 呼叫）| `repositories/macro_tw_local_repository.py::fetch_tw_pmi_local`、`fetch_tw_export_yoy` | 外資連續日數需 `FINMIND_TOKEN` | `fetch_url` | 賽跑首命中 | 無 | 否 | 未經實測 | 轉載；「0 caller」單組 grep、未經第二組驗證 |
 | Stooq | `^vix3m`／`^vxv`／`^cpc`／`^cpce` | ① 雷達 | `repositories/external_market_repository.py::fetch_stooq_csv` | 無 | `fetch_url` | VIX3M 第 3 層；Put/Call 第 2 層 | STATE 2026-06-30：`^cpc` 無法解析 | 否 | 來源停供（`^cpc`）；其餘未經實測 | 轉載 |
-| Cboe CDN | VIX3M 歷史 CSV；Put/Call CSV | ① 雷達 | `fetch_cboe_csv`、`fetch_cboe_pcratio_csv` | 無 | `fetch_url` | VIX3M 第 2 層；Put/Call 末層 | STATE：Put/Call 檔末筆停在 2019-10（凍結檔），程式以 30 天時效拒用 | 否 | 來源停供或欄位改變 | 轉載 |
-| AAII | 散戶情緒 | ①（美股流動性）| `repositories/macro/alternate.py::fetch_aaii_sentiment` | 無 | `fetch_url` | 3 段 URL | STATE 2026-07（user 回報，Cloud）：被 Cloudflare 攔截 | 否 | Cloud 網路限制／來源阻擋 | 轉載 |
+| Cboe CDN | VIX3M 歷史 CSV；Put/Call CSV | ① 雷達 | `fetch_cboe_csv`、`fetch_cboe_pcratio_csv` | 無 | `fetch_url` | VIX3M 第 2 層；Put/Call 末層 | STATE 記載（CI／Actions 端實測，非 Cloud）：Put/Call 檔末筆停在 2019-10（凍結檔），程式以 30 天時效拒用 | 否 | 來源停供或欄位改變 | 轉載 |
+| AAII | 散戶情緒 | ①（美股流動性）| `repositories/macro/alternate.py::fetch_aaii_sentiment` | 無 | `fetch_url` | 3 段 URL | STATE 記載（v19.296，長期已知攔截；日期與環境以原條目為準，非本批機器觀測） | 否 | Cloud 網路限制／來源阻擋 | 轉載 |
 | DefiLlama | 穩定幣市值 | ① 流動性 | `repositories/macro/alternate.py::fetch_defillama_stablecoin_mcap` | 無 | `fetch_url` | 無（該因子 N/A）| 無 | 否 | 未經實測 | 轉載 |
 | MacroMicro／ISM World／DBnomics／FRED 代理 | 美國 PMI 備援鏈（5 段）| ① | `repositories/macro/alternate.py::fetch_ism_pmi` | 後二段需 `FRED_API_KEY`·S | `fetch_url` | MacroMicro→ISM World→DBnomics→Phil Fed（代理）→OECD（概念替代）；全敗回空值不填 | 無；HTML 抓取易改版（INFERENCE）| 否 | 未經實測 | 轉載 |
 | open.er-api／Frankfurter | 匯率備援 | ②③④ | `get_latest_fx`（同上）| 無 | `requests` 直打＋`get_proxy_config` | 見上 | 無 | 否 | 未經實測 | 轉載 |
@@ -360,7 +362,7 @@ Tab5「API 金鑰狀態」表（`_key_targets`）共 5 把：`FRED_API_KEY`、`G
 | 3 | `infra.proxy` 只讀 `st.secrets` | **屬實**。`get_proxy_config` 只檢查 `st.secrets`，例外時快取為空設定 |
 | 4 | `update_macro_history.py` 的 proxy 路徑指向不存在模組；Actions 的 `PROXY_URL` 實際未使用 | **屬實**。`infra/` 下只有 `proxy.py`，無 `proxy_helper`；`repositories/macro_repository.py` 內無 `fetch_url`；兩條 import 皆失敗後落到**不帶 proxy** 的 `requests.get`；腳本內未讀 `PROXY_URL`。「Actions 實際直連」為 INFERENCE |
 | 5 | `fundclear_offshore` 取數函式與 `fetch_nav_history_long` 為 0 production caller | **大致屬實**。`fetch_nav_history_long` 除自身檔外無呼叫；`services/fundclear_backfill.py` 的取數函式（含 `download_and_store`、`find_fund_candidates`）無外部呼叫，只有 `analyze_backfill_conflict` 被 `nav_history_store` 呼叫。單組 grep |
-| 6 | cnyes／Morningstar 持股／Allianz 走 `requests`＋`proxies`，無 403 降級 | **部分驗證**。cnyes（`nav_metrics`、`sources`）與 Allianz（`requests.post`）確認為 `requests`＋`proxies=_proxies()`，未經 `fetch_url`；Morningstar 持股本組未逐行驗，屬轉載 |
+| 6 | cnyes／Morningstar 持股／Allianz 走 `requests`＋`proxies`，無 403 降級 | **屬實**（Morningstar 持股一項由獨立 QA 補驗）。cnyes（`nav_metrics`、`sources`）與 Allianz（`requests.post`）確認為 `requests`＋`proxies=_proxies()`，未經 `fetch_url`；Morningstar 持股段經**獨立 QA 補驗**為真：`requests.get(..., proxies=_proxies())`，僅有 `status_code != 200` 判斷，無 403 降級直連與退避 |
 | 7 | TDCC、Morningstar 搜尋、Yahoo 基金、Alpha Vantage 用裸 `urllib`，靠 import 時全域 opener | **屬實**。`_tdcc_get`、`_morningstar_search_secid`、`_morningstar_screener_secid`、`_yahoo_search_secid_by_isin`、`_src_yahoo_finance_nav`、`_av_time_series`、`_src_bank_platform_nav` 內皆為 `urlopen`；`install_global_urllib_proxy` 於 `infra/proxy.py` import 時執行，**無 proxy 設定時標記已嘗試而不再重裝**（時序風險為 INFERENCE）|
 | 8 | ui_v2 重用清單 | **部分驗證**。FRED 路徑（`market_indicator`／`market_view`）與 MoneyDJ／TDCC／FundClear（`nav_dividend`、`exp_profile`）重用屬實；未見 FinMind 籌碼、新聞、AAII、`get_latest_fx` 的取數呼叫（僅註解或遮蔽名單提及）|
 | 9 | ui_v2／ui_v3 完全沒用 AI | **屬實**（範圍：`ui_v2`、`ui_v3`、`services/v2_tables`，對 `ai_service`／`infra.llm` 的 import 為 0）|
