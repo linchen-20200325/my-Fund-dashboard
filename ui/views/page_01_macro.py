@@ -122,8 +122,9 @@
 ⚠️ **金鑰讀 `os.environ`，不讀 `infra.config`。** `app.py::_load_keys()` 已把
    `FRED_API_KEY` 從 secrets 鏡射進 `os.environ`；舊頁用的也正是
    `os.environ.get("FRED_API_KEY", "")`。讀環境變數是 stdlib，不是資料層呼叫。
-   ⚠️ **`FINMIND_TOKEN` 沒有被鏡射**（`_load_keys()` 只鏡射 FRED / GEMINI / ANTHROPIC / OPENAI），
-   故本頁只在環境變數真的有值時才帶 token，否則帶空字串走 FinMind 匿名額度
+   ⚠️ **`FINMIND_TOKEN` 已被鏡射**（2026-11-10 `DEC-2026-11-10-03` F2：`_load_keys()` 鏡射集合已加入
+   `FINMIND_TOKEN`；舊註解寫「沒有被鏡射」已不符現況），故 secrets 有值時本頁帶得到 token；
+   僅在 secrets 與環境變數都沒有值時才帶空字串走 FinMind 匿名額度
    —— **真實的降級，不是造假**，並在卡片註腳寫明。
 
 ⛔ **不復活「總經羅盤」。** `ia-wireframe.html` 的「從哪裡搬來」寫了

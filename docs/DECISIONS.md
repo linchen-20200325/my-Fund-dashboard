@@ -2782,6 +2782,21 @@
 | 可逆性 | 可逆：客戶可隨時撤回或改裁；新增檔可刪除，不影響任何既有路徑。 |
 | provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；本筆、腳本、測試與證據檔由專案 AI 單組寫成，**未經第二組驗證**；範例報告以自製 parquet 讀取器產生（本機無 pyarrow），未對拍 pyarrow，端到端須由 QA／CI 重現。 |
 
+### DEC-2026-11-10-03｜客戶裁示方案 B 限縮版（最多三件：F1／F2／F3 三項最小安全修補與 A1 pyarrow 對拍；不授權其餘）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-10（Asia/Taipei；承接 `DEC-2026-11-10-02` 與 Secrets 離線盤點證據），以實際 GitHub Merge 另驗 |
+| 決策者／原話 | **客戶**裁示，經總管轉達（repo 內無逐字存檔，**要點轉述，非逐字**；客戶可推翻）。要點：方案 B 限縮版，下一批最多三件。 |
+| ① 授權範圍（僅此） | **F1**：`scripts/update_macro_history.py` 兩處例外訊息 print 去除網址查詢字串與 `api_key=`（不改取數、重試、輸出、metadata）。**F2**：`app.py::_load_keys` 鏡射集合加入 `FINMIND_TOKEN`（單一字串，沿用既有迴圈語意）。**F3**：`ui/tab5_data_guard.py::_mask_key` 改為只顯示「已設定（長度 N）」／「（空）」，不顯示任何原值字元（只改該欄顯示字串與對應 caption，不增刪元件、不動版面）。另含 A1 報告的 pyarrow 對拍結果登記（QA 已完成，結果一致）。對應測試與文件同步。 |
+| ② 不授權（維持原狀，不得藉本筆解鎖） | Proxy 架構重做、Cloud 部署、外部資料抓取、New UI 接線、OneBrain、FX 開閘（`FX_OBS_DATE_RULE_VERIFIED` 維持 `False`）、其他修補；不得放寬資安 Gate。**Cloud 端所有來源維持「無法驗證」。** |
+| 已登記為後續（未動工、未授權） | `infra/llm.py` Gemini `?key=` 例外訊息防禦（目前僅被 `[:120]` 偶然截斷、無守衛）；Proxy 帳密遮罩 regex 對密碼含未編碼 `@` 的條件式缺陷（INFERENCE，未驗）；`fred_vintage` 等其他直接使用者盤點。 |
+| 縱深待辦（已登記，未授權） | `update_one` 的 `last_error`／`_yf_fetch_close`／`_load_existing` 未經 `_scrub_exc`（未找到實證洩露路徑）；`_scrub_exc` 不涵蓋編碼、path、`api_key: x`、JSON repr、Bearer、userinfo 等型態；`_resolve_key` 的 `val` 已無消費者。詳見 evidence §5.6。 |
+| 與既有 DEC 關係 | **不 supersede 任何既有 DEC**；承接 `DEC-2026-11-10-02`。 |
+| 影響範圍 | 三處程式最小修補（`scripts/update_macro_history.py`、`app.py`、`ui/tab5_data_guard.py`）、新增／更新對應測試，及 `docs/DECISIONS.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md`、兩份 evidence 的登記。無 workflow、`data_cache`、公式、Sheet 變更。F2 行為變更僅「FinMind 匿名額度→具名額度」（預期修復）；Cloud 上是否本來就已走具名（Streamlit 可能將 secrets 匯出為環境變數）**NOT VERIFIED**。 |
+| 可逆性 | 可逆：客戶可隨時撤回；改動為小範圍 diff，可 revert。 |
+| provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；稽核與實作皆為專案 AI 單組，稽核為單組讀碼／本地重現（未連網、未用真實 Key），**未經第二組驗證**；pyarrow 對拍由獨立 QA 完成。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
@@ -2964,3 +2979,4 @@
 - 第四節 `DEC-2026-11-08-05`：客戶方向（報酬 A／身份 A／持倉占比 C）經總管轉達，無逐字存檔；方案內容由本組對照 `d2_draft_C` 題 1～3 與三份草稿轉述，未見客戶對話本身；③推論只讀碼、未實跑；`reason` 僅 5 種之更正為本組對 origin/main 唯讀重驗；由專案 AI 單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-11-10-01`：客戶指示經總管轉達，無逐字存檔，本組未見客戶對話本身；研究文件的 git 歷史普查限本 clone（淺層）可見的 30 筆含 `data_cache` 提交；parquet 以自製解碼器讀取，僅以列數對照；2026-06-03 假說的推論鏈依賴提交時間戳可信，GitHub Actions 執行紀錄本批未查；由專案 AI 單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-11-10-02`：客戶核准 A1 經總管轉達，無逐字存檔，本組未見客戶對話本身；腳本、測試、證據檔由專案 AI 單組寫成，未經第二組驗證；範例報告以自製 parquet 讀取器產生（本機無 pyarrow、未對拍），含 pyarrow 的真實快取結構測試本機 skip，須由 CI／QA 實跑；盤中時段判定為假設（不含半日市與國定假日）。
+- 第四節 `DEC-2026-11-10-03`：客戶方案 B 限縮版經總管轉達，無逐字存檔，本組未見客戶對話本身；三項修補與稽核為專案 AI 單組，未經第二組驗證；Cloud 端行為（Streamlit secrets 是否匯出為環境變數、Actions 遮罩、App 存取控制）NOT VERIFIED。

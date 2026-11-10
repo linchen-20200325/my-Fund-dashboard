@@ -92,14 +92,10 @@ def _clear_nh_caches() -> None:
 # ════════════════════════════════════════════════════════════════
 
 def _mask_key(val: str) -> str:
-    """遮罩中段,保留前 4 + 後 4 字元 + 長度,避免診斷頁洩漏完整 key。"""
+    """只顯示「已設定(長度 N)」,不顯示任何原值字元(2026-11-10 資安最小修補)。"""
     if not val:
         return "(空)"
-    s = str(val)
-    n = len(s)
-    if n <= 8:
-        return f'{"*" * n} (len={n})'
-    return f"{s[:4]}…{s[-4:]} (len={n})"
+    return f"已設定(長度 {len(str(val))})"
 
 
 def _safe_secret(key: str):
@@ -1206,7 +1202,7 @@ def render_data_guard_tab() -> None:
     st.caption(
         "「使用來源」= 程式實際取用的位置。若為 `(無)` → st.secrets 與 os.environ 都沒有,"
         "fallback 拿到空字串,下游 API 必然 401/403/missing token。"
-        "「遮罩」顯示前 4 後 4 字 + 長度,可快速判「key 為空」vs「格式截斷」。"
+        "「實際值(遮罩)」只顯示「已設定(長度 N)」或「(空)」,不顯示任何原值字元;長度可判「key 為空」vs「格式截斷」。"
     )
 
     # ── 「去哪裡設定」——2026-08-28 客戶拍板 Q3,自 app.py 首頁搬來的那件事 ──────
