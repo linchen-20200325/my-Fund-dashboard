@@ -37,7 +37,7 @@
 | G5 | 手機首屏「主圖至少露出多少」的驗收門檻；頁首維持非 sticky 或改黏附 | `DEC-2026-11-07-02` 條件為「結論 chip＋主圖或主數字可見」，未訂可見量；現況 390px 主圖約露 157／239px | 請客戶定一個門檻，或明示承認現況；頁首維持 S1 非 sticky | 「首屏夠不夠」無客觀判準，後續驗收會各說各話 |
 | G6 | 是否要「首屏大狀態卡」「圖卡化」「Secondary 兩卡頂對齊」等版面異動 | 屬版面異動，須 UI 草稿先行（`CLAUDE.md` §-1.5.4）；首屏預算 ≤5 為 frozen 44，不得放寬 | 先出文字線框草稿再裁；不與 V1 混批 | 不施工 |
 | G7 | Streamlit Cloud、WebView、真機視覺驗收的授權與時機 | 本批無法驗；`DEC-2026-11-07-02` 的適用性／獨立 QA 仍標未驗 | 另批；先完成非作者 QA | 維持「僅離線合成證據」 |
-| G8 | 是否授權 V4（🌍 頁本體瀏覽器級守衛，純新增測試） | 頁本體目前沒有任何瀏覽器級視覺守衛 | 同意 V4 | 頁本體視覺回歸只能靠人工 |
+| G8 | 是否授權 V4（🌍 頁本體瀏覽器級守衛，純新增測試） | 頁本體目前沒有任何瀏覽器級視覺守衛（範圍：tests/ui_v3；全 repo 未窮舉） | 同意 V4 | 頁本體視覺回歸只能靠人工 |
 
 **未經授權不得開始 UI 施工**：本檔、`DEC-2026-11-10-06` 與上表任何建議，皆不構成 `ui_v3`／`ui_v2`／正式入口的改動授權。
 
@@ -49,7 +49,7 @@
 
 | 條件 | 條件內容 | 出處 | 核准狀態 | 可驗方式 |
 |---|---|---|---|---|
-| MV-01 | 五頁 IA 與順序 `mkt／ast／exp／ai／set`；只有 🌍 註冊；🤖 在 Phase 7 前可見不可進；不得空殼頁或假資料 | `PROJECT_RULES.md` 13.2 第 1 點；`docs/v2/80` 7.4；`DEC-2026-10-29-06`／`-07` | 已核准 | DOM |
+| MV-01 | 五頁 IA 與順序 `mkt／ast／exp／ai／set`；只有 🌍 註冊；🤖 在 Phase 7 前可見不可進；不得空殼頁或假資料 | `PROJECT_RULES.md` 13.2 第 1 點（五頁順序依據）；`ui_v3/shell/registry.py` 的 `IA_PAGES`；`docs/v2/80` 7.4 僅作 🤖 Phase 7 前不可進的出處，不作順序依據；`DEC-2026-10-29-06`／`-07` | 已核准 | DOM |
 | MV-02 | 區塊順序：首屏摘要（市場狀態→是否需注意→重要依據→資料新鮮度）→Primary（檢視／期間／基準日行／圖／各序列資料日／來源與限制）→Secondary（≤3，現 2）→依據卡 MKT-1~3→尚未取得／各項資料狀態 | `docs/v2/81` 3.1、3.2、5；`DEC-2026-11-03-01`、`-09` | 已核准 | DOM |
 | MV-03 | 首屏 chip＋核心數字 ≤5（常態 3 chip＋2 數字） | `docs/v2/81` 3.1 Visual Budget、10.2；`DEC-2026-11-03-09`、`-11`；44 之十九其一之一第 2 條 | 已核准 | DOM（既有守衛） |
 | MV-04 | 市場狀態、是否需注意各一枚 `⬜ 無法判定`；新鮮度一枚 `⬜ 門檻待裁示`；頁級不放延遲天數與日期 | `docs/v2/81` 3.1、Q1／Q5；`DEC-2026-11-03-01`、`-09` | 已核准 | DOM |
@@ -99,7 +99,7 @@ FACT：`docs/v2/81` 3.1 線框中的「手機底部列」已被 `DEC-2026-11-06-
 - 環境：Streamlit 1.59.2（裝於 scratchpad，非 repo 依賴）、Chromium（headless，`--no-sandbox`）、Playwright（node）、`deviceScaleFactor` 2。
 - 啟動：以一支 harness 腳本（不入 repo）把 `ui_v3.adapters.market_page.load` 換成 `tests/ui_v3/market_stubs.py` 的 `view()`／`table()`，再呼叫 `ui_v3.app_preview.main()`；`streamlit run` 帶 `--server.headless true --global.developmentMode false --server.fileWatcherType none`。**不抓外部資料。**
 - 量測：視窗 390×844、768×1024、1280×800；以 `getBoundingClientRect`／`getComputedStyle` 取值；情境 `normal` 與 `missing`（台股缺資料）。
-- 兩次執行差異：重跑時加了 `--client.toolbarMode minimal`，Streamlit 框架的 Deploy／選單鈕（約 28px，框架 chrome）因此不在量測內，「<48px 的可互動元素」從 23 變 21；其餘數字相同。Cloud 是否顯示該框架鈕＝NOT VERIFIED。
+- 兩次執行差異：重跑時加了 `--client.toolbarMode minimal`，Streamlit 框架的 Deploy／選單鈕（約 28px，框架 chrome）因此不在量測內，「<48px 的可互動元素」數：原 measure.json 實測 390／768 為 23、1280 為 24（normal 與 missing 同）；重跑僅一次、toolbarMode＝minimal 時為 21（1280 為 22），重跑值未經 QA 獨立驗證。這些元素多為框架元件（標題錨點連結、radio input、expander summary 等，含 Deploy／選單鈕），不全是頁面自繪元件；其餘數字相同。Cloud 是否顯示該框架鈕＝NOT VERIFIED。
 
 | 項目 | 390×844 | 768×1024 | 1280×800 |
 |---|---|---|---|
@@ -162,7 +162,7 @@ FACT 補充：圖表 `.uv3-chart` 的 `max-width` 為 720px、viewBox 360×240�
 
 ## 6. 響應式驗收條件（390／768／1280）
 
-自動守衛現況：導覽有瀏覽器級測試（slow lane）；首屏預算、字樣、AppTest 是 DOM 級；VF safety net 不含 `ui_v3`。**頁本體目前沒有任何瀏覽器級視覺守衛**。
+自動守衛現況：導覽有瀏覽器級測試（slow lane）；首屏預算、字樣、AppTest 是 DOM 級；VF safety net 不含 `ui_v3`。**頁本體目前沒有任何瀏覽器級視覺守衛**（範圍：tests/ui_v3；全 repo 未窮舉）。
 
 | 斷點 | 必須成立 | 可接受差異 | 失敗條件 | 驗證方式 |
 |---|---|---|---|---|
@@ -216,7 +216,7 @@ FACT 補充：圖表 `.uv3-chart` 的 `max-width` 為 720px、viewBox 360×240�
 - **MV-09 收窄**：草稿把「Primary 圖上緣在首屏」寫成核准條件。`DEC-2026-11-07-02` 的字句是「結論 chip＋主圖**或主數字**可見」；圖上緣在首屏（V7）出自 `docs/v2/81` 6 的守衛計畫。故 157／239px **不構成對 DEC 條件的違反**；11-03 的 H5 量測當時為約 158px 並被判「未發現實質衝突」，現況數字與之相近。
 - **adapter 日期推翻**：草稿稱 adapter 最後修改為 11-05（某 commit）；本批查 `ui_v3/adapters/market_page.py` 最後修改在 2026-11-03，該說法未能重現，已刪除。
 - **radio 觸控區（原 NOT VERIFIED）部分補量**：label 外框已量（<48）；實際可點區仍未量。
-- **框架 chrome 計數**：草稿的「<48px 元素 23 個」含 Deploy／選單鈕；移除後為 21。已在 §3 註明。
+- **框架 chrome 計數**：草稿的「<48px 元素 23 個」含 Deploy／選單鈕；toolbarMode＝minimal 重跑時為 21（單次重跑）。已在 §3 逐寬度註明。
 
 ---
 
