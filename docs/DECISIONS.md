@@ -2791,6 +2791,7 @@
 | ① 授權範圍（僅此） | **F1**：`scripts/update_macro_history.py` 兩處例外訊息 print 去除網址查詢字串與 `api_key=`（不改取數、重試、輸出、metadata）。**F2**：`app.py::_load_keys` 鏡射集合加入 `FINMIND_TOKEN`（單一字串，沿用既有迴圈語意）。**F3**：`ui/tab5_data_guard.py::_mask_key` 改為只顯示「已設定（長度 N）」／「（空）」，不顯示任何原值字元（只改該欄顯示字串與對應 caption，不增刪元件、不動版面）。另含 A1 報告的 pyarrow 對拍結果登記（QA 已完成，結果一致）。對應測試與文件同步。 |
 | ② 不授權（維持原狀，不得藉本筆解鎖） | Proxy 架構重做、Cloud 部署、外部資料抓取、New UI 接線、OneBrain、FX 開閘（`FX_OBS_DATE_RULE_VERIFIED` 維持 `False`）、其他修補；不得放寬資安 Gate。**Cloud 端所有來源維持「無法驗證」。** |
 | 已登記為後續（未動工、未授權） | `infra/llm.py` Gemini `?key=` 例外訊息防禦（目前僅被 `[:120]` 偶然截斷、無守衛）；Proxy 帳密遮罩 regex 對密碼含未編碼 `@` 的條件式缺陷（INFERENCE，未驗）；`fred_vintage` 等其他直接使用者盤點。 |
+| 縱深待辦（已登記，未授權） | `update_one` 的 `last_error`／`_yf_fetch_close`／`_load_existing` 未經 `_scrub_exc`（未找到實證洩露路徑）；`_scrub_exc` 不涵蓋編碼、path、`api_key: x`、JSON repr、Bearer、userinfo 等型態；`_resolve_key` 的 `val` 已無消費者。詳見 evidence §5.6。 |
 | 與既有 DEC 關係 | **不 supersede 任何既有 DEC**；承接 `DEC-2026-11-10-02`。 |
 | 影響範圍 | 三處程式最小修補（`scripts/update_macro_history.py`、`app.py`、`ui/tab5_data_guard.py`）、新增／更新對應測試，及 `docs/DECISIONS.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md`、兩份 evidence 的登記。無 workflow、`data_cache`、公式、Sheet 變更。F2 行為變更僅「FinMind 匿名額度→具名額度」（預期修復）；Cloud 上是否本來就已走具名（Streamlit 可能將 secrets 匯出為環境變數）**NOT VERIFIED**。 |
 | 可逆性 | 可逆：客戶可隨時撤回；改動為小範圍 diff，可 revert。 |

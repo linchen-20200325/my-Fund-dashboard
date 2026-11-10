@@ -268,6 +268,7 @@ Tab5「API 金鑰狀態」表（`_key_targets`）共 5 把：`FRED_API_KEY`、`G
 
 - `scripts/update_macro_history.py` 的 FRED 取數以 `requests.get(params=api_key)`，`except` 內 `print` 例外訊息；`requests` 連線類例外訊息含完整 URL（含 `api_key` 查詢參數）。
 - **2026-11-10 已修補（本 PR，`DEC-2026-11-10-03` F1；有意識更新，非漏刪，舊句保留）**：兩處 print（`_fred_get_single`、`_fetch_url_via_proxy` 直連 fallback）改經自含小函式 `_scrub_exc` 去除網址查詢字串與 `api_key=`；不改取數、重試、輸出檔、metadata。證據：`tests/test_update_macro_history_no_key_leak.py`（假 Key 執行期組成、mock `requests.get`、無真實 HTTP；斷言輸出不含假 Key 但仍含 series id 與例外型別名）。限制：僅涵蓋這兩處 print；`infra/llm.py` Gemini `?key=`（目前僅被 `[:120]` 偶然截斷）、Proxy 帳密含未編碼 `@` 的遮罩 regex 缺陷（INFERENCE，未驗）、`fred_vintage` 等其他直接使用者盤點，**已登記為後續，未動工**。
+- **2026-11-10 縱深待辦（`DEC-2026-11-10-03` 後續，已登記、未授權、未動工，不新增 BL）**：(a) `scripts/update_macro_history.py::update_one` 的 `last_error = f"{type(e).__name__}: {e}"`（會 print 並寫入 `metadata.json`、被 workflow commit 進 repo）、`_yf_fetch_close`、`_load_existing` 三處未經 `_scrub_exc`；稽核未找到實證洩露路徑（fetcher 內 requests 例外已先被攔、JSONDecodeError 不帶 URL），僅列縱深。(b) `_scrub_exc` 限制：不涵蓋 `%3F`／`api_key%3D` 編碼、Key 夾在 path、`api_key: x`／`api_key = x`／dict／JSON repr、Bearer、userinfo `user:KEY@`、Key 作為獨立 args（requests 不會產生這些型態，僅屬縱深限制）；`(api_key|token|key)=` 規則過寬會多遮（無害）。(c) `ui/tab5_data_guard.py::_resolve_key` 回傳的 `val` 已無消費者（nit，可後續清理）。
 - 重現條件：Actions 內 FRED 連線逾時／Max retries。
 - 緩解：GitHub Actions 日誌會自動遮罩已註冊的 secret 值，實際風險低（INFERENCE，平台行為未實測）。
 - Streamlit 路徑（`infra/proxy.py`、`fetch_fred`）已以 `_url_log`／`_exc_log` 砍掉查詢字串。
