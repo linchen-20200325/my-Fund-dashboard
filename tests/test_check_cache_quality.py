@@ -622,3 +622,112 @@ def test_real_cache_structure_with_pyarrow():
     assert (zero[0]["detail"] if zero else []) == sorted(set(declared) - in_cache)
     # metadata 與檔案應一致（檔案與 metadata 同一次寫入）
     assert not any(f["check"].startswith("metadata_") and f["level"] == cq.CONFIRMED for f in report["findings"])
+
+
+# ════════════════════════════════════════════════════════════════
+# 11. 紅隊 QA 修正：git ref 注入、git 子命令白名單、NO_FINDING 文案、參考檔上限、FRED 全缺值
+# ════════════════════════════════════════════════════════════════
+class _RunSpy:
+    """記錄 subprocess.run 的所有呼叫（仍轉交真實執行）。"""
+
+    def __init__(self, monkeypatch):
+        self.calls: list[tuple[list, dict]] = []
+        real = subprocess.run
+
+        def spy(argv, *a, **k):
+            self.calls.append((list(argv), k))
+            return real(argv, *a, **k)
+
+        monkeypatch.setattr(cq.subprocess, "run", spy)
+
+
+@pytest.mark.parametrize("bad_ref", ["--output={x}", "-x", "--all", "a b", "a\nb", "a\tb", "", "-"])
+def test_git_ref_injection_rejected_without_calling_git(tmp_path, monkeypatch, bad_ref):
+    cache = make_cache(tmp_path / "data_cache", spx=clean_index())
+    target = tmp_path / "X"
+    ref = bad_ref.replace("{x}", str(target))
+    spy = _RunSpy(monkeypatch)
+    popen_calls = []
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: popen_calls.append(a) or (_ for _ in ()).throw(AssertionError))
+    rc = cq.main(["--cache-dir", str(cache), f"--git-ref={ref}"], reader=json_reader)
+    assert rc == 2 and not target.exists() and spy.calls == [] and popen_calls == []
+    with pytest.raises(ValueError):  # 函式層也擋
+        cq.load_git_history(cache, "spx_history.parquet", json_reader, ref=ref)
+    assert spy.calls == [] and not target.exists()
+
+
+def test_git_all_refs_is_separate_flag_and_unverifiable_ref_degrades(git_repo, monkeypatch):
+    cache = git_repo / "data_cache"
+    assert cq.load_git_history(cache, "spx_history.parquet", json_reader, all_refs=True).status == "ok"
+    assert cq.load_git_history(cache, "spx_history.parquet", json_reader, ref="HEAD").status == "ok"
+    h = cq.load_git_history(cache, "spx_history.parquet", json_reader, ref="no-such-branch")
+    assert h.status == "unavailable" and "commit" in h.reason
+    rc = cq.main(["--cache-dir", str(cache), "--git-all-refs", "--format", "json"], reader=json_reader)
+    assert rc == 0
+
+
+def test_git_calls_are_whitelisted_readonly_and_networkless(git_repo, monkeypatch):
+    spy = _RunSpy(monkeypatch)
+    cq.run_checks(git_repo / "data_cache", reader=json_reader, use_git=True)
+    assert spy.calls, "應有 git 呼叫"
+    for argv, kw in spy.calls:
+        assert argv[1] == "--no-optional-locks", argv
+        assert argv[2] in {"rev-parse", "log", "show"}, argv
+        assert kw["env"]["GIT_NO_LAZY_FETCH"] == "1" and kw["env"]["GIT_TERMINAL_PROMPT"] == "0"
+        if argv[2] == "show" or (argv[2] == "log" and "--all" not in argv):
+            assert "--end-of-options" in argv, argv
+    # 變異檢查：任何其他子命令都必須被 _git 擋下（不會到 subprocess）
+    before = len(spy.calls)
+    for sub in ("fetch", "gc", "update-index", "checkout", "pull", "config"):
+        with pytest.raises(ValueError):
+            cq._git([sub], git_repo, "git")
+    assert len(spy.calls) == before
+
+
+def test_no_finding_mentions_insufficient_when_present(tmp_path):
+    report = run(make_cache(tmp_path / "c", spx=clean_index()))  # 無 git／無參考 → 有證據不足
+    nf = findings_of(report, "spx_history", "all")[0]
+    assert nf["level"] == cq.NO_FINDING and "另有" in nf["summary"] and "證據不足" in nf["summary"]
+    assert "未發現不等於正常" in nf["summary"]
+
+
+def test_reference_decompressed_size_limit(tmp_path, monkeypatch):
+    d = _bdays("2026-06-01", 2)
+    ref = tmp_path / "ref.json"
+    raw = json.dumps({"pad": "A" * 20000, "chart": {"result": [{"meta": {}, "timestamp": [epoch(f"{d[0]}T14:30:00Z")],
+                      "indicators": {"quote": [{"close": [1.0]}]}}]}}).encode()
+    rep = {"probe": "x", "requests": [{"requested_index": "^GSPC", "ok": True,
+                                       "raw_gzip_b64": base64.b64encode(gzip.compress(raw)).decode()}]}
+    _write(ref, rep)
+    assert ref.stat().st_size < 2000 < len(raw)  # 壓縮後很小、解開後很大（模擬壓縮炸彈）
+    assert cq.load_reference(ref).series["^GSPC"]["closes"]  # 預設上限內正常
+    monkeypatch.setattr(cq, "MAX_REFERENCE_BYTES", 2000)
+    r = cq.load_reference(ref)
+    assert "上限" in r.series["^GSPC"]["problem"] and not r.series["^GSPC"]["closes"]
+    cache = make_cache(tmp_path / "c", spx=index_payload(d, [1.0, 2.0]))
+    assert findings_of(run(cache, reference_path=ref), "spx_history", "reference_compare")[0]["level"] == cq.INSUFFICIENT
+    monkeypatch.setattr(cq, "MAX_REFERENCE_BYTES", 10)  # 參考檔本身超過上限
+    assert cq.load_reference(ref).status == "unavailable"
+
+
+def test_reference_deeply_nested_json_degrades(tmp_path):
+    deep = "[" * 200000
+    ref = tmp_path / "deep.json"
+    ref.write_text(deep, encoding="utf-8")
+    assert cq.load_reference(ref).status == "unavailable"
+    raw = deep.encode()
+    rep = {"probe": "x", "requests": [{"requested_index": "^GSPC", "ok": True,
+                                       "raw_gzip_b64": base64.b64encode(gzip.compress(raw)).decode()}]}
+    ref2 = tmp_path / "deep2.json"
+    _write(ref2, rep)
+    r = cq.load_reference(ref2)
+    assert r.status == "ok" and r.series["^GSPC"]["problem"] and not r.series["^GSPC"]["closes"]
+
+
+def test_fred_zero_rows_vs_all_missing_distinguished():
+    df = pd.DataFrame({"date": ["2026-01-01", "2026-01-02"], "series_id": ["DGS10", "DGS2"], "value": [4.0, None]})
+    findings, _, _ = cq.check_fred_dataset(df, "", None, "", ["DGS10", "DGS2", "PPIACO"])
+    by = {f.check: f for f in findings}
+    assert by["declared_series_zero_rows"].detail == ["PPIACO"]
+    assert by["declared_series_all_missing"].detail == ["DGS2"]
+    assert by["declared_series_all_missing"].level == cq.CONFIRMED

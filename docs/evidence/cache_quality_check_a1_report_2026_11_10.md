@@ -24,6 +24,8 @@
 
 重用既有定義：`DATASETS` 與 `FRED_SERIES_IDS` 以 `ast` 讀自 `scripts/update_macro_history.py`（不 import 它：它會 import `requests`）；失敗時退回最小複本，並由測試守住與原檔一致。沒有新增資料架構。
 
+**「首見提交時間」用的是提交者時間（`git log --format=%ct`，committer time），不是作者時間。**
+
 **盤中時段判定的假設（INFERENCE，非事實）**：US `America/New_York` 09:30–16:00；VIX `America/Chicago` 08:30–15:15；TWII `Asia/Taipei` 09:00–13:30；僅週一至週五，含端點，以 `zoneinfo` 處理夏令。**不含**半日市、國定假日、盤前盤後。另加一條限制：只有「列日期＝提交當地日期」的列才可能是進行中的根，因此同一提交中較早日期的列不標記（避免整批 bootstrap 被誤標）。
 
 用法與保護：
@@ -49,7 +51,7 @@ python scripts/check_cache_quality.py --reference /tmp/yahoo_ref_report.json --g
 - `data_cache` 內容＝提交 `8ca33547`（`metadata.json` `updated_at` 2026-11-08T04:07:01Z；`HEAD` 為 `11e732e0`，`data_cache` 自 `8ca33547` 起未變）。
 - **`--git-all-refs` 為必要**：本 clone 是淺層，`HEAD` 只看得到 3 筆觸及 `spx_history.parquet` 的提交（含淺層邊界），看不到 2026-06-03 的 `47fb8985`；`--all` 才看得到全部 28 筆。不加時，這幾列的首見提交會是淺層邊界提交，腳本改標「證據不足」而非猜測（已由測試覆蓋）。結果因此**依賴本機 clone 擁有的 refs**，在別的 clone 上筆數可能不同。
 - **本範例報告不是由 pyarrow 讀取產生。** 本機沒有 `pyarrow` 且不得 `pip install`；範例由放在 scratchpad（**不在 repo**）的自製 parquet 讀取器注入 `main(argv, reader=...)` 產生。該讀取器單組自製，只以列數對照（`fred_indicators` 13,829＝`metadata`；三個指數 3,879／3,881／3,762），**未與 pyarrow 對拍**。因此：腳本邏輯在本機以「假讀取器＋暫存 git repo」充分測試，但「腳本＋真 pyarrow＋真 parquet」的端到端組合**本機未驗**，須由 QA／CI 重現（第 6 節）。
-- 本機測試指令（實測可行）：`PYTHONPATH=.:/usr/local/lib/python3.13/site-packages /root/.local/bin/pytest --noconftest -q -p no:cacheprovider tests/test_check_cache_quality.py`。pytest 的 uv-tool 直譯器看不到系統 site-packages，故需以 `PYTHONPATH` 指向它才 import 得到 `pandas`；測試 47 項：46 passed、1 skipped（`importorskip("pyarrow")` 的真實快取結構測試）。
+- 本機測試指令（實測可行）：`PYTHONPATH=.:/usr/local/lib/python3.13/site-packages /root/.local/bin/pytest --noconftest -q -p no:cacheprovider tests/test_check_cache_quality.py`。pytest 的 uv-tool 直譯器看不到系統 site-packages，故需以 `PYTHONPATH` 指向它才 import 得到 `pandas`；測試 61 項：60 passed、1 skipped（`importorskip("pyarrow")` 的真實快取結構測試）。
 
 ## 3. 範例報告（完整輸出，Markdown，未刪節）
 
@@ -124,15 +126,15 @@ python scripts/check_cache_quality.py --reference /tmp/yahoo_ref_report.json --g
   - 明細：{"lag_days": 218, "threshold_days": 46.5}
 - **[fred_indicators／UNRATE] gaps**：間距超過 max(1.5×中位數, 7) = 46.5 天的缺漏區間 2 個（頻率為推定）
   - 明細：[{"days": 61, "from": "2025-09-01", "to": "2025-11-01"}, {"days": 61, "from": "2026-04-01", "to": "2026-06-01"}]
-- **[spx_history] flat_rows**：1 列 close 等於前一列（15 年間偶有自然發生，單獨不足以判異常）
+- **[spx_history] flat_rows**：1 列 close 等於前一列（相同值連續出現不必然是錯誤，單獨不足以判異常）
   - 明細：[2017-01-10]
 - **[spx_history] intraday_freeze**：1 列的首次出現提交落在該市場當日常規盤內（疑似凍結盤中值；啟發式，非證實）
   - 明細：[{"commit_local": "2026-06-03 09:35:13 EDT", "commit_utc": "2026-06-03T13:35:13Z", "date": "2026-06-03", "first_seen_commit": "47fb8985", "market_tz": "America/New_York"}]
-- **[twii_history] flat_rows**：3 列 close 等於前一列（15 年間偶有自然發生，單獨不足以判異常）
+- **[twii_history] flat_rows**：3 列 close 等於前一列（相同值連續出現不必然是錯誤，單獨不足以判異常）
   - 明細：[2014-07-23, 2016-07-08, 2026-09-20]
 - **[twii_history] weekend_rows**：1 列日期為週六或週日（日頻指數通常無週末根；啟發式，不判成因）
   - 明細：[2026-09-20]
-- **[vix_history] flat_rows**：19 列 close 等於前一列（15 年間偶有自然發生，單獨不足以判異常）
+- **[vix_history] flat_rows**：19 列 close 等於前一列（相同值連續出現不必然是錯誤，單獨不足以判異常）
   - 明細：[2011-07-08, 2012-02-22, 2012-04-16, 2012-12-24, 2013-03-15, 2013-06-28, 2013-07-30, 2014-01-15, 2017-07-25, 2018-01-05, 2018-12-19, 2020-06-10] …（共 19 筆，完整清單見 --format json）
 - **[vix_history] intraday_freeze**：1 列的首次出現提交落在該市場當日常規盤內（疑似凍結盤中值；啟發式，非證實）
   - 明細：[{"commit_local": "2026-06-03 08:35:13 CDT", "commit_utc": "2026-06-03T13:35:13Z", "date": "2026-06-03", "first_seen_commit": "47fb8985", "market_tz": "America/Chicago"}]
@@ -190,6 +192,8 @@ python scripts/check_cache_quality.py --reference /tmp/yahoo_ref_report.json --g
 
 ## 6. 限制與未涵蓋
 
+- **git 呼叫的安全邊界**：所有 git 子程序只允許 `rev-parse`／`log`／`show`，一律加 `--no-optional-locks`，環境設 `GIT_NO_LAZY_FETCH=1`、`GIT_TERMINAL_PROMPT=0`、不載入使用者／系統 git 設定；`--git-ref` 拒絕以 `-` 開頭、含空白或控制字元者（退出碼 2），並先以 `rev-parse --verify --end-of-options <ref>^{commit}` 解成 commit 才使用；`--git-all-refs` 為獨立旗標。**局部（partial／promisor）clone 的行為未實測**（已設 `GIT_NO_LAZY_FETCH=1` 避免延遲抓取，但缺的 blob 會使該提交版本讀不出而降級，未驗證實際表現）。
+- 參考檔解壓後大小上限 `MAX_REFERENCE_BYTES`＝50 MB（**專案 AI 建議值，非客戶裁示**），超限、深層巢狀 JSON 等降級為證據不足。
 - **未經 pyarrow 驗證**（見第 2 節）；`tests/test_check_cache_quality.py::test_real_cache_structure_with_pyarrow` 在本機 skip，須由 CI／QA 實跑。本機已另以注入的自製讀取器重演該測試的全部斷言，結果通過，但那不等於 pyarrow 路徑通過。
 - 盤中凍結只是「首見提交時間」的啟發式；不驗實際盤中價，不查 GitHub Actions 執行紀錄（研究文件 §3.3 已指出的可證偽點仍未被驗）。時段假設見第 1 節。
 - 「共同最大日期」等於 `fred_indicators` 內各 series 最新日期的最大值；落後門檻與缺漏門檻是 `max(1.5×中位數, 7 天)`、頻率為相鄰間距中位數推定，**不是**發布日曆；月頻序列的發布延遲不在模型內，門檻對特殊序列可能誤報或漏報。

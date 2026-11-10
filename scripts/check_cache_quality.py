@@ -35,14 +35,15 @@ import argparse
 import ast
 import base64
 import datetime as dt
-import gzip
 import hashlib
 import io
 import json
 import math
+import os
 import statistics
 import subprocess
 import sys
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
@@ -254,9 +255,41 @@ def load_metadata(cache_dir: Path) -> tuple[dict, str]:
 # ════════════════════════════════════════════════════════════════
 # git 歷史（唯讀；僅本機 git，禁網路）
 # ════════════════════════════════════════════════════════════════
+GIT_ALLOWED_SUBCOMMANDS = frozenset({"rev-parse", "log", "show"})
+
+
+def validate_git_ref(ref: str) -> Optional[str]:
+    """使用者提供的 ref 的字串層檢查；回錯誤訊息或 None。
+
+    拒絕空字串、以 ``-`` 開頭（會被 git 當成選項，例如 ``--output=<路徑>``）、含空白或控制字元者。
+    """
+    if not isinstance(ref, str) or not ref:
+        return "git ref 不可為空"
+    if ref.startswith("-"):
+        return f"拒絕 git ref：不得以 '-' 開頭（{ref!r}）"
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in ref):
+        return f"拒絕 git ref：不得含空白或控制字元（{ref!r}）"
+    return None
+
+
+def _git_env() -> dict:
+    """唯讀、不連網的 git 環境：不延遲抓取、不提示輸入、不繼承會觸發網路的 helper／設定。"""
+    env = dict(os.environ)
+    env.update({
+        "GIT_NO_LAZY_FETCH": "1", "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "true", "SSH_ASKPASS": "true",
+        "GIT_ALLOW_PROTOCOL": "none", "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull,
+    })
+    return env
+
+
 def _git(args: list[str], cwd: Path, git_exe: str) -> subprocess.CompletedProcess:
+    """唯一的 git 呼叫點：子命令白名單（rev-parse／log／show）＋ ``--no-optional-locks``。"""
+    if not args or args[0] not in GIT_ALLOWED_SUBCOMMANDS:
+        raise ValueError(f"不允許的 git 子命令：{args[:1]}")
     return subprocess.run(  # noqa: S603 — 固定 argv，無 shell
-        [git_exe, *args], cwd=str(cwd), capture_output=True, timeout=120, check=False,
+        [git_exe, "--no-optional-locks", *args], cwd=str(cwd), capture_output=True, timeout=120, check=False,
+        env=_git_env(),
     )
 
 
@@ -266,13 +299,21 @@ def load_git_history(
     reader: ParquetBytesReader,
     *,
     ref: str = "HEAD",
+    all_refs: bool = False,
     git_exe: str = "git",
 ) -> GitHistory:
     """對 ``cache_dir/filename`` 求「每個日期首次出現的提交」。
 
     只用 ``git rev-parse`` / ``git log`` / ``git show``。git 不可用、不在工作樹、無歷史、
     全部歷史版本讀不出來時回 ``status="unavailable"``（呼叫端標證據不足）。
+    ``ref`` 先經 :func:`validate_git_ref`（不合法丟 ``ValueError``，不呼叫任何 git），再以
+    ``git rev-parse --verify --end-of-options <ref>^{commit}`` 解析成 commit sha 才使用；
+    ``all_refs=True`` 為獨立旗標（``git log --all``），不經 ref 字串。
     """
+    if not all_refs:
+        err = validate_git_ref(ref)
+        if err:
+            raise ValueError(err)
     try:
         top = _git(["rev-parse", "--show-toplevel"], cache_dir, git_exe)
     except (OSError, subprocess.SubprocessError) as exc:
@@ -292,9 +333,16 @@ def load_git_history(
         if shallow_file.exists():
             shallow_shas = {ln.strip() for ln in shallow_file.read_text().splitlines() if ln.strip()}
 
-    log = _git(["log", "--format=%H%x09%ct", ref, "--", rel], toplevel, git_exe)
+    if all_refs:
+        start = ["--all", "--"]  # --all 是選項，須在 --end-of-options 之前；其後無使用者輸入
+    else:
+        ver = _git(["rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}"], toplevel, git_exe)
+        if ver.returncode != 0:
+            return GitHistory("unavailable", f"ref 無法解析為 commit（ref={ref}）", shallow_shas=frozenset(shallow_shas))
+        start = ["--end-of-options", ver.stdout.decode().strip(), "--"]
+    log = _git(["log", "--format=%H%x09%ct", *start, rel], toplevel, git_exe)
     if log.returncode != 0:
-        return GitHistory("unavailable", f"git log 失敗（ref={ref}）", shallow_shas=frozenset(shallow_shas))
+        return GitHistory("unavailable", f"git log 失敗（ref={'--all' if all_refs else ref}）", shallow_shas=frozenset(shallow_shas))
     commits: list[tuple[str, int]] = []
     for line in log.stdout.decode().splitlines():
         parts = line.split("\t")
@@ -309,7 +357,7 @@ def load_git_history(
     unreadable = 0
     readable = 0
     for sha, epoch in commits:
-        blob = _git(["show", f"{sha}:{rel}"], toplevel, git_exe)
+        blob = _git(["show", "--end-of-options", f"{sha}:{rel}"], toplevel, git_exe)
         if blob.returncode != 0:
             unreadable += 1
             continue
@@ -387,6 +435,19 @@ def check_intraday_freeze(dataset: str, dates: Iterable[dt.date], history: Optio
 # ════════════════════════════════════════════════════════════════
 # 參考檔（探測 report.json）
 # ════════════════════════════════════════════════════════════════
+# 參考檔解壓後大小上限（專案 AI 建議值，非客戶裁示；防壓縮炸彈）。
+MAX_REFERENCE_BYTES = 50 * 1024 * 1024
+
+
+def _bounded_gunzip(data: bytes, limit: int) -> bytes:
+    """gzip 解壓並限制輸出大小；超限丟 ValueError（不先全部展開）。"""
+    d = zlib.decompressobj(wbits=31)
+    out = d.decompress(data, limit + 1)
+    if len(out) > limit or d.unconsumed_tail:
+        raise ValueError(f"解壓後超過上限 {limit} bytes")
+    return out
+
+
 def load_reference(path: Path) -> ReferenceData:
     """讀入已入庫的探測 ``report.json``，解開 ``raw_gzip_b64`` 得各指數的日期→close。
 
@@ -394,9 +455,11 @@ def load_reference(path: Path) -> ReferenceData:
     不崩潰。日期採「交易所當地日期」（meta.exchangeTimezoneName），與研究文件 §3.3 一致。
     """
     try:
+        if Path(path).stat().st_size > MAX_REFERENCE_BYTES:
+            return ReferenceData("unavailable", f"參考檔大小超過上限 {MAX_REFERENCE_BYTES} bytes")
         raw_bytes = Path(path).read_bytes()
         obj = json.loads(raw_bytes.decode("utf-8"))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError, MemoryError) as exc:
         return ReferenceData("unavailable", f"參考檔無法讀取或解析 {_first_line(exc)}")
     if not isinstance(obj, dict) or not isinstance(obj.get("requests"), list):
         return ReferenceData("unavailable", "參考檔缺 requests 清單（非預期的探測 report.json 格式）")
@@ -418,7 +481,7 @@ def load_reference(path: Path) -> ReferenceData:
             entry["problem"] = entry["problem"] or "該請求未成功或缺 raw_gzip_b64"
             continue
         try:
-            raw = gzip.decompress(base64.b64decode(req["raw_gzip_b64"]))
+            raw = _bounded_gunzip(base64.b64decode(req["raw_gzip_b64"]), MAX_REFERENCE_BYTES)
             if req.get("raw_sha256") and hashlib.sha256(raw).hexdigest() != req["raw_sha256"]:
                 entry["problem"] = "解開後 sha256 與參考檔記載不符"
                 continue
@@ -429,7 +492,7 @@ def load_reference(path: Path) -> ReferenceData:
             tz = ZoneInfo(tz_name) if tz_name else dt.timezone.utc
             if len(stamps) != len(closes):
                 raise ValueError("timestamp 與 close 長度不一致")
-        except Exception as exc:  # noqa: BLE001
+        except (Exception, RecursionError, MemoryError) as exc:  # noqa: BLE001
             entry["problem"] = f"raw_gzip_b64 無法解開 {_first_line(exc)}"
             continue
         for ts, c in zip(stamps, closes):
@@ -589,7 +652,7 @@ def check_index_dataset(
     if len(flat):
         findings.append(Finding(
             SUSPECTED, dataset, "flat_rows",
-            f"{len(flat)} 列 close 等於前一列（15 年間偶有自然發生，單獨不足以判異常）",
+            f"{len(flat)} 列 close 等於前一列（相同值連續出現不必然是錯誤，單獨不足以判異常）",
             detail=[d.date().isoformat() for d in flat]))
 
     last_date = max(uniq_dates) if uniq_dates else None
@@ -681,7 +744,13 @@ def check_fred_dataset(
         stats[s] = {"rows": len(lst), "start": u[0], "end": u[-1], "unique": u, "gaps": gaps, "median": med}
 
     declared = list(declared_ids)
-    zero = sorted(s for s in declared if s not in stats)
+    present = set(sid)
+    zero = sorted(s for s in declared if s not in present)
+    all_missing = sorted(s for s in declared if s in present and s not in stats)
+    if all_missing:
+        findings.append(Finding(CONFIRMED, ds, "declared_series_all_missing",
+                                f"宣告於 FRED_SERIES_IDS 且快取有列，但全部列的日期或 value 缺失／無法解析的 series：{len(all_missing)} 項"
+                                "（與零列不同；保持缺失，未補 0）", detail=all_missing))
     if zero:
         findings.append(Finding(CONFIRMED, ds, "declared_series_zero_rows",
                                 f"宣告於 FRED_SERIES_IDS（{len(declared)} 項）但快取零列的 series：{len(zero)} 項",
@@ -753,6 +822,7 @@ def run_checks(
     as_of: Optional[str] = None,
     use_git: bool = True,
     git_ref: str = "HEAD",
+    git_all_refs: bool = False,
     git_exe: str = "git",
     gap_factor: float = 1.5,
     min_rows: int = 50,
@@ -779,7 +849,9 @@ def run_checks(
                                           min_rows=min_rows, late_start_days=late_start_days)
             evaluated[name] = bool(fa.get("rows"))
         elif name in INDEX_DATASETS:
-            hist = load_git_history(cache_dir, f"{name}.parquet", reader, ref=git_ref, git_exe=git_exe) if use_git else None
+            hist = load_git_history(
+                cache_dir, f"{name}.parquet", reader, ref=git_ref, all_refs=git_all_refs, git_exe=git_exe,
+            ) if use_git else None
             f, o, fa, dset = check_index_dataset(name, df, why, entry, meta_reason, hist, reference)
             evaluated[name] = dset is not None
             if dset is not None:
@@ -802,7 +874,9 @@ def run_checks(
     for name in sorted(datasets):
         if evaluated.get(name) and not any(
                 x.dataset == name and x.level in (CONFIRMED, SUSPECTED) for x in findings):
-            findings.append(Finding(NO_FINDING, name, "all", "本腳本已執行的檢查項目未發現問題；未發現不等於正常"))
+            n_insuf = sum(1 for x in findings if x.dataset == name and x.level == INSUFFICIENT)
+            note = f"另有 {n_insuf} 項證據不足，" if n_insuf else ""
+            findings.append(Finding(NO_FINDING, name, "all", f"本腳本已執行的檢查項目未發現問題；{note}未發現不等於正常"))
 
     findings.sort(key=Finding.sort_key)
     observations.sort(key=lambda o: (o["dataset"], str(o.get("series", "")), o["check"]))
@@ -821,7 +895,7 @@ def run_checks(
         "cache_dir": str(cache_dir),
         "constants_source": const_src,
         "parameters": {"gap_factor": gap_factor, "min_rows": min_rows, "late_start_days": late_start_days,
-                       "reference_tolerance": REFERENCE_TOLERANCE, "git_enabled": use_git, "git_ref": git_ref if use_git else None},
+                       "reference_tolerance": REFERENCE_TOLERANCE, "git_enabled": use_git, "git_ref": ("--all" if git_all_refs else git_ref) if use_git else None},
         "reference": ref_info,
         "datasets": facts,
         "summary": {"counts_by_dataset": counts, "counts_total": totals},
@@ -942,6 +1016,11 @@ def main(argv: Optional[list[str]] = None, *, reader: ParquetBytesReader = defau
     if not cache_dir.is_dir():
         print(f"cache-dir 不存在或不是目錄：{cache_dir}", file=sys.stderr)
         return 2
+    if not args.no_git and not args.git_all_refs:
+        err = validate_git_ref(args.git_ref)
+        if err:
+            print(err, file=sys.stderr)
+            return 2
     if args.out:
         err = _validate_out(Path(args.out), cache_dir)
         if err:
@@ -949,7 +1028,7 @@ def main(argv: Optional[list[str]] = None, *, reader: ParquetBytesReader = defau
             return 2
     report = run_checks(cache_dir, reader=reader, reference_path=Path(args.reference) if args.reference else None,
                         as_of=args.as_of, use_git=not args.no_git,
-                        git_ref="--all" if args.git_all_refs else args.git_ref, gap_factor=args.gap_factor)
+                        git_ref=args.git_ref, git_all_refs=args.git_all_refs, gap_factor=args.gap_factor)
     text = render_json(report) if args.format == "json" else render_markdown(report)
     if args.out:
         with open(args.out, "x", encoding="utf-8", newline="\n") as fh:
