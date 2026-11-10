@@ -68,7 +68,9 @@ Reference 欄：NOT VERIFIED（轉引 #1200）。Delta 欄：無法判定（Refe
 
 ## 5. 重量一致性
 
-FACT：本批重跑的 `measure.json` 與先前離線量測（驗收規劃文件 §3 所據的那一份，預設工具列、`deviceScaleFactor` 2）逐欄比對，六個寬度×情境組合的所有量測欄位完全相同（僅本批新增 `fullPageH`、`fullPageOverflowX` 兩欄）。尺寸為 CSS px，不受縮放 1 或 2 影響。
+本批重跑的 `measure.json` 與先前離線量測（驗收規劃文件 §3 所據的那一份，預設工具列、`deviceScaleFactor` 2）逐欄比對，六個寬度×情境組合的量測欄位相同（本批另新增 `fullPageH`、`fullPageOverflowX` 兩欄）；尺寸為 CSS px，不受縮放 1 或 2 影響。**先前量測檔未入庫，本句無法由本 PR 內容驗證（INFERENCE）。**
+
+<48px 元素數的差異來源：本批與先前量測皆用預設 Streamlit 工具列，數字為 390／768＝23、1280＝24（含框架 Deploy 鈕與選單鈕各一）。驗收規劃文件 §3 所記的 21／22 是另一次重跑加了 `--client.toolbarMode minimal` 的結果，該模式不顯示 Deploy 與選單鈕，故各少 2 個；其餘元素相同。
 
 ## 6. 未涵蓋與限制
 

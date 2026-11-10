@@ -1,4 +1,4 @@
-"""harness only (scratchpad, not in repo): 注入 tests/ui_v3/market_stubs 的人造資料後啟動 Preview App。數值是人造的。"""
+"""harness（本批在 scratchpad 執行，原樣入庫供重現，非 repo 程式；ROOT 為佔位，須改成本機 worktree 絕對路徑）：注入 tests/ui_v3/market_stubs 的人造資料後啟動 Preview App。數值是人造的。"""
 import sys
 ROOT = "<WORKTREE_ROOT>"
 sys.path.insert(0, ROOT); sys.path.insert(0, ROOT + "/tests/ui_v3")

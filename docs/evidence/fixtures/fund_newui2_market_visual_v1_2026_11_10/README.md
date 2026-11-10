@@ -20,7 +20,7 @@
 ## 附檔
 
 - `measure.json`：每個寬度×情境的 DOM 量測（`getBoundingClientRect`／`getComputedStyle`），含 `fullPageH`、`fullPageOverflowX`。
-- `harness_launch.py`、`harness_shot.js`：產生用腳本（原放 scratchpad，這裡原樣歸檔；路徑改為佔位）。
+- `harness_launch.py`、`harness_shot.js`：產生用腳本，本批在 scratchpad 執行後原樣入庫（僅 `harness_launch.py` 的 worktree 路徑改為佔位 `<WORKTREE_ROOT>`）。`harness_shot.js` 內寫死 Playwright 路徑 `/opt/node-tools/node_modules/playwright`、連線埠 8613，重現時須自行改為本機的 Playwright 路徑。
 
 ## 重現（INFERENCE：路徑依本機而異，未在別台機器驗證）
 
@@ -28,7 +28,7 @@
 2. 在 worktree 根目錄執行：
    `PYTHONPATH=<site> python3 -m streamlit run harness_launch.py --server.port 8613 --server.headless true --global.developmentMode false --server.fileWatcherType none`
    （`harness_launch.py` 內 `<WORKTREE_ROOT>` 換成 worktree 絕對路徑）
-3. `CHROME=<chromium 路徑> node harness_shot.js <輸出資料夾> 1`（需 Playwright；腳本內連線埠 8613）。
+3. 修改 `harness_shot.js` 的 Playwright 路徑後：`CHROME=<chromium 路徑> node harness_shot.js <輸出資料夾> 1`。
 
 ## harness 版本
 
