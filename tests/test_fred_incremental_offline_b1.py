@@ -102,9 +102,12 @@ def _verdict_s2(tmp_path, strategy):
 
 
 def _scn_s3(tmp_path, strategy):
+    """假設世界:觀測日 M 月 1 日於同月 20 日公布(真實月頻慣例通常是 M+1 月公布,故此為假設,
+    非對真實 FRED 的描述)。結論僅限結構性論點:嚴格以觀測日過濾時,觀測日早於全表最大日期的
+    月頻值取不到。UNRATE 的真實觀察與該過濾模型衝突,成因未解;CPI/M2 停更亦可能是 series 級取數失敗。"""
     world = {"DGS": S.daily_world(D(2026, 1, 1), D(2026, 6, 30)),
              "CPI": [S.obs(D(2026, m, 1), 100 + m, D(2026, m, 1) + dt.timedelta(days=19))
-                     for m in range(1, 7)]}          # 05-01 於 05-20 公布(假設的延遲模型)
+                     for m in range(1, 7)]}          # 05-01 於 05-20 公布:假設的延遲模型
     ids = ("DGS", "CPI")
     runs = [{"today": D(2026, 5, 15), "ids": ids}, {"today": D(2026, 5, 22), "ids": ids},
             {"today": D(2026, 5, 30), "ids": ids}]
@@ -156,10 +159,13 @@ def _verdict_s6(tmp_path, strategy):
     m = metas[-1]
     if strategy == "baseline":
         extra = set(m) - {"name", "last_updated", "row_count", "last_error"}
-        return ("FAIL", f"metadata 只有四欄、無 per-series 欄位(多餘欄位={sorted(extra)});last_error={m['last_error']}")
+        return ("PARTIAL" if extra else "FAIL",
+                f"metadata 多餘欄位={sorted(extra)}(無則無 per-series 欄位);last_error={m['last_error']}")
     if strategy == "C":
         d = S.diagnose(final, ids, runs[-1]["today"], years=1)
-        return ("FAIL", f"Y 一週內不會被旗標(旗標 Y={d['Y']['flags']}),且無法區分失敗與合法無新資料")
+        hit = set(d["Y"]["flags"]) & {"stale", "zero_rows", "internal_gap"}
+        return ("DETECT" if hit else "FAIL",
+                f"Y 失敗旗標={sorted(hit)}(空集合=一週內不會被旗標);Z 旗標={d['Z']['flags']},二者無法區分失敗與合法無新資料")
     ss = m["series_status"]
     same = ss["Y"]["status"] == ss["Z"]["status"]
     if same:
@@ -284,7 +290,8 @@ def test_s1_baseline_meta_hides_failed_series(tmp_path):
 
 
 def test_s3_global_max_and_release_delay_model(tmp_path):
-    """[機制成立-合成] 月頻觀測日 05-01(05-20 公布)早於全表最大日期 05-29 → 永不取到。
+    """[機制成立-合成;僅在嚴格觀測日過濾模型下成立,假設 05-01 於 05-20 公布,非真實月頻慣例]
+    月頻觀測日 05-01(05-20 公布)早於全表最大日期 05-29 → 永不取到。
     結構性結論:月頻起始日觀測在公布當下,觀測日必然早於日頻 series 的最大日期。"""
     final, runs, world, metas = _scn_s3(tmp_path, "baseline")
     assert metas[-1]["last_updated"] == "2026-05-29"
