@@ -44,25 +44,26 @@ class TestMaskKey:
     def test_short_key_fully_masked(self):
         from ui.tab5_data_guard import _mask_key
         r = _mask_key("abc")
-        assert "***" in r and "len=3" in r
-        # 短 key 不洩漏任何字元
+        assert "長度 3" in r
         assert "abc" not in r
 
-    def test_long_key_shows_head_tail(self):
+    def test_long_key_shows_no_original_chars(self):
+        """2026-11-10:不顯示任何原值字元(含前 4 / 後 4),僅『已設定(長度 N)』。"""
+        import secrets
         from ui.tab5_data_guard import _mask_key
-        r = _mask_key("1234567890abcdef")
-        assert r.startswith("1234")
-        assert r.endswith("(len=16)")
-        assert "cdef" in r
-        # 中段不洩漏
-        assert "567890" not in r
+        v = secrets.token_hex(16)
+        r = _mask_key(v)
+        assert r == f"已設定(長度 {len(v)})"
+        assert v[:4] not in r and v[-4:] not in r
 
-    def test_boundary_8_chars(self):
-        """剛好 8 字 → 全遮罩(不露頭尾)"""
+    def test_boundary_8_and_9_to_12_chars_leak_nothing(self):
+        import secrets
         from ui.tab5_data_guard import _mask_key
-        r = _mask_key("12345678")
-        assert "len=8" in r
-        assert "1234" not in r  # 8 字以下全遮
+        for n in (8, 9, 10, 12):
+            v = secrets.token_hex(n)[:n]
+            r = _mask_key(v)
+            assert f"長度 {n}" in r
+            assert all(v[i:i + 2] not in r for i in range(n - 1) if not v[i:i + 2].isdigit())
 
 
 class TestResolveKey:
@@ -73,7 +74,8 @@ class TestResolveKey:
             r = _resolve_key("_TEST_FUND_KEY")
             assert r["source"] == "os.environ"
             assert r["val"] == "envvalue1234"
-            assert "envv" in r["preview"]
+            assert r["preview"] == "已設定(長度 12)"
+            assert "envv" not in r["preview"]
         finally:
             del os.environ["_TEST_FUND_KEY"]
 

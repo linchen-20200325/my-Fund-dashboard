@@ -212,3 +212,12 @@ python scripts/check_cache_quality.py --reference /tmp/yahoo_ref_report.json --g
 | G4：把 A1 接上排程或 workflow | 屬新自動化與可能的新契約，本批未授權 | 不推薦現在做 |
 
 五個方案皆不解鎖 Eligibility、日期轉換規則、FX Gate、正式母集合或涵蓋率分母；`FX_OBS_DATE_RULE_VERIFIED` 維持 `False`。
+
+## 8. pyarrow 對拍結果（2026-11-10）
+
+由獨立 QA 以 pyarrow 26.0.1（pandas 3.0.5）對拍（唯讀，未動 `data_cache`）：
+
+- 列數與事實一致：spx 3879、vix 3881、twii 3762、fred 13829，皆等於 `metadata.json` 的 `row_count`。
+- 以預設讀取器（pandas／pyarrow）重跑 `check_cache_quality.py --cache-dir data_cache --git-all-refs --reference <參考檔> --format md --as-of 2026-11-10`，輸出與本報告第 3 節範例**逐行零差異**（3 CONFIRMED／14 SUSPECTED）。
+- `tests/test_check_cache_quality.py`：61 passed、0 skipped（真實快取結構測試由 skip 變 pass）。
+- 限制：pyarrow 26.0.1 超出 `requirements.txt` 的 `pyarrow>=14,<25`，14～24 未測；未在含 `conftest` 的 CI 完整環境跑；本 clone 為淺層，git 歷史證據依本機可見 refs（他 clone 筆數可能不同）；只驗報告可重現與資料事實，未重驗 findings 語意；未碰外部資料。

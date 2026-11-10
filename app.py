@@ -332,7 +332,8 @@ def _load_keys():
             os.environ["GEMINI_API_KEY"] = gem
     # v18.113 AI-3: 多 LLM provider fallback chain — 額外載 Anthropic / OpenAI keys
     # 有設就匯出到 env，infra/llm.py::call_llm 會自動讀；缺則該 provider 在 chain 中 skip
-    for _llm_key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+    # 2026-11-10: FINMIND_TOKEN 同法鏡射(page_01_macro 只讀 os.environ,補齊與全站 get_secret 的一致性)
+    for _llm_key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FINMIND_TOKEN"):
         _v = _secret(_llm_key)
         if _v:
             os.environ[_llm_key] = _v

@@ -119,7 +119,7 @@
 | `PROXY_URL`（或 `proxy` 區段） | 是（僅 `st.secrets`） | 是 | `infra/proxy.py::get_proxy_config`；多支 workflow 的 env | Streamlit：僅 `st.secrets`；Actions：環境變數 | 無設定→直連降級；Cloud IP 對部分來源可能被擋（`ui/tab5_data_guard.py` 文案） | 側欄／Tab5「Proxy 未設定」灰色說明 |
 | `GEMINI_API_KEY`（及 `GEMINI_API_KEYS`、`GEMINI_API_KEY_1..10`） | 是 | 僅 `pr-check.yml` 測試假值 | `app.py::_load_keys`；`services/ai_service.py`；`infra/llm.py` | `st.secrets` → `os.environ` | AI 摘要區塊降級，其餘照常 | Tab5 金鑰表顯示未設定（可降級，不擋路） |
 | `ANTHROPIC_API_KEY`／`OPENAI_API_KEY` | 是 | 否 | `app.py::_load_keys`；`infra/llm.py` | 同上 | 該 provider 在 fallback 鏈中略過 | — |
-| `FINMIND_TOKEN` | 是 | 否（未見 workflow 傳入） | `ui/helpers/macro/ndc.py`；`ui/tab1_macro_longterm.py`；`ui/views/page_01_macro.py`<br>~~（舊表述：三處皆以 `get_secret` 讀取）~~ | `ui/helpers/macro/ndc.py` 與 `ui/tab5_data_guard.py` 用 `get_secret`；**`ui/views/page_01_macro.py::_load_everything` 只讀 `os.environ`（不是 `get_secret`）**；**全部不被 `_load_keys` 鏡射** ——（2026-11-10 有意識更正，不是漏刪：舊表述把總經頁寫成 `get_secret`，與讀碼不符；`git grep` 本組自驗）| 空字串→FinMind 匿名額度 | Tab5 金鑰表 |
+| `FINMIND_TOKEN` | 是 | 否（未見 workflow 傳入） | `ui/helpers/macro/ndc.py`；`ui/tab1_macro_longterm.py`；`ui/views/page_01_macro.py`<br>~~（舊表述：三處皆以 `get_secret` 讀取）~~ | `ui/helpers/macro/ndc.py` 與 `ui/tab5_data_guard.py` 用 `get_secret`；**`ui/views/page_01_macro.py::_load_everything` 只讀 `os.environ`（不是 `get_secret`）**；**全部不被 `_load_keys` 鏡射**~~（舊）~~（2026-11-10 已修補，有意識更新，非漏刪：`DEC-2026-11-10-03` F2，`app.py::_load_keys` 鏡射集合已加入 `FINMIND_TOKEN`，st.secrets 有值即寫入 os.environ，`page_01_macro` 因此讀得到；行為變更＝FinMind 匿名額度→具名額度，屬預期修復；守衛 `tests/test_finmind_token_env_mirror.py`（AST）；Cloud 上是否本來就因 Streamlit 自動匯出而走具名 NOT VERIFIED） ——（2026-11-10 有意識更正，不是漏刪：舊表述把總經頁寫成 `get_secret`，與讀碼不符；`git grep` 本組自驗）| 空字串→FinMind 匿名額度 | Tab5 金鑰表 |
 | `ALPHAVANTAGE_API_KEY` | 是 | 否 | `repositories/fund/sources.py`、`fund_orchestration.py` | 同上 | 該來源略過 | — |
 | `google_service_account`（區段） | 是 | 是（secret 名為 `GOOGLE_SERVICE_ACCOUNT`） | `repositories/policy/_helpers.py`、`pool_repository.py`、`policy_supplement_repository.py`；多支 workflow | Streamlit：`st.secrets`；Actions：env | 未設定→Sheet 功能降級 | 各頁「尚未設定」灰色說明 |
 | `POLICY_SHEET_ID`、`POOL_SHEET_ID`、`NAV_SHEET_ID`、`MACRO_WEIGHTS_SHEET_ID`（`macro_weights_sheet_id`） | 是 | 是（多數） | `repositories/*`、`services/nav_history_*`、`scripts/*` | 同上 | `POOL_SHEET_ID` 無寫死預設，未設→「選股池未設定雲端來源」；`NAV_SHEET_ID` 有 baked 預設 | `ui_v2/plain.py` 已知訊息表 |
@@ -262,11 +262,12 @@
 
 ### 5.5 外洩面範圍（FACT，既有行為，本批不修改）
 
-Tab5「API 金鑰狀態」表（`_key_targets`）共 5 把：`FRED_API_KEY`、`GEMINI_API_KEY`、`FINMIND_TOKEN`、`PROXY_URL`、`GOOGLE_SHEET_ID`，**都會顯示前 4 字＋後 4 字＋長度**。其中 `PROXY_URL` 可能含帳密。客戶回報時**一律不要貼或截圖該表**，只回報「使用來源」欄。登記為後續待辦候選（未經客戶裁示，不動工）。
+Tab5「API 金鑰狀態」表（`_key_targets`）共 5 把：`FRED_API_KEY`、`GEMINI_API_KEY`、`FINMIND_TOKEN`、`PROXY_URL`、`GOOGLE_SHEET_ID`，~~**都會顯示前 4 字＋後 4 字＋長度**~~（2026-11-10 已修補，有意識更新，非漏刪：`DEC-2026-11-10-03` F3，`ui/tab5_data_guard.py::_mask_key` 改為只顯示「已設定（長度 N）」／「（空）」，不再顯示任何原值字元；`env_preview` 同欄同法。證據：`tests/test_tab5_key_diagnostic.py`（假值斷言首尾字元不出現）；限制：Cloud 端實際畫面 NOT VERIFIED；長度仍會顯示。）。其中 `PROXY_URL` 可能含帳密。客戶回報時**仍請不要貼或截圖該表**，只回報「使用來源」欄。~~登記為後續待辦候選（未經客戶裁示，不動工）。~~（已由 `DEC-2026-11-10-03` 授權並完成。）
 
 ### 5.6 非本批範圍的新風險（低，未修改）
 
 - `scripts/update_macro_history.py` 的 FRED 取數以 `requests.get(params=api_key)`，`except` 內 `print` 例外訊息；`requests` 連線類例外訊息含完整 URL（含 `api_key` 查詢參數）。
+- **2026-11-10 已修補（本 PR，`DEC-2026-11-10-03` F1；有意識更新，非漏刪，舊句保留）**：兩處 print（`_fred_get_single`、`_fetch_url_via_proxy` 直連 fallback）改經自含小函式 `_scrub_exc` 去除網址查詢字串與 `api_key=`；不改取數、重試、輸出檔、metadata。證據：`tests/test_update_macro_history_no_key_leak.py`（假 Key 執行期組成、mock `requests.get`、無真實 HTTP；斷言輸出不含假 Key 但仍含 series id 與例外型別名）。限制：僅涵蓋這兩處 print；`infra/llm.py` Gemini `?key=`（目前僅被 `[:120]` 偶然截斷）、Proxy 帳密含未編碼 `@` 的遮罩 regex 缺陷（INFERENCE，未驗）、`fred_vintage` 等其他直接使用者盤點，**已登記為後續，未動工**。
 - 重現條件：Actions 內 FRED 連線逾時／Max retries。
 - 緩解：GitHub Actions 日誌會自動遮罩已註冊的 secret 值，實際風險低（INFERENCE，平台行為未實測）。
 - Streamlit 路徑（`infra/proxy.py`、`fetch_fred`）已以 `_url_log`／`_exc_log` 砍掉查詢字串。

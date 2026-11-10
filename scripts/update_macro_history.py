@@ -44,6 +44,7 @@ import argparse
 import datetime as _dt
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -118,6 +119,19 @@ def _merge_dedupe(old: pd.DataFrame | None, new: pd.DataFrame,
     return out
 
 
+# 2026-11-10 資安最小修補:requests 的連線類例外訊息會含完整網址(含 ?api_key=...),
+# 公開 Actions 日誌不得印出。此腳本刻意不依賴 infra,故用自含小函式。
+_QUERY_RE = re.compile(r"\?[^\s'\"()<>]*")
+_APIKEY_RE = re.compile(r"(?i)(api_key|token|key)=[^&\s'\"()<>]*")
+
+
+def _scrub_exc(e: BaseException) -> str:
+    """回傳已去除網址查詢字串與 api_key= 片段的例外訊息(只供 print)。"""
+    msg = str(e)
+    msg = _QUERY_RE.sub("?<redacted>", msg)
+    return _APIKEY_RE.sub(lambda m: f"{m.group(1)}=<redacted>", msg)
+
+
 def _fetch_url_via_proxy(url: str, params: dict | None = None,
                         timeout: int = 25) -> requests.Response | None:
     """走 infra/proxy fetch_url；缺 helper 時 fallback 直連。
@@ -139,7 +153,7 @@ def _fetch_url_via_proxy(url: str, params: dict | None = None,
         return requests.get(url, params=params, timeout=timeout,
                             headers={"User-Agent": "Mozilla/5.0"})
     except Exception as e:
-        print(f"[fetch fallback] {url[:60]} ❌ {type(e).__name__}: {e}")
+        print(f"[fetch fallback] {url[:60]} ❌ {type(e).__name__}: {_scrub_exc(e)}")
         return None
 
 
@@ -173,7 +187,7 @@ def _fred_get_single(series_id: str, start: _dt.date, end: _dt.date,
         try:
             r = requests.get(FRED_URL, params=params, timeout=30, headers=headers)
         except Exception as e:
-            print(f"[FRED/{series_id}] ❌ {type(e).__name__}: {e}")
+            print(f"[FRED/{series_id}] ❌ {type(e).__name__}: {_scrub_exc(e)}")
             return pd.DataFrame()
         if r.status_code == 429:
             continue  # 重試
