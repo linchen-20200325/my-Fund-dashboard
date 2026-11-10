@@ -2811,6 +2811,20 @@
 | 可逆性 | 可逆：客戶可隨時撤回；僅文件，可 revert。 |
 | provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；證據檔由專案 AI 整合兩份單組唯讀盤點草稿並自行抽查（抽查項與被修正之處見證據檔附錄 B），**未經第二組獨立驗證**；快取內容與日期為 2026-11-10 實讀；FRED／Yahoo 真實回應、Cloud 部署行為皆 NOT VERIFIED。 |
 
+### DEC-2026-11-10-05｜客戶授權 Actions 快取增量演算法、Parquet 版本相容性及完整性的純離線驗證與最小修復方案（docs＋獨立離線測試；不授權任何正式修復）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-10（Asia/Taipei；承接 `DEC-2026-11-10-04`），以實際 GitHub Merge 另驗 |
+| 決策者／原話 | **客戶**授權，經總管轉達（repo 內無逐字存檔，**要點轉述，非逐字**；客戶可推翻）。要點：核准先做 Actions 快取增量演算法、Parquet 版本相容性及完整性的純離線驗證與最小修復方案；不得修改正式快取、workflow、UI 或執行外部抓取。 |
+| ① 授權範圍（僅此） | 三項純離線工作：B1 FRED 增量演算法（合成 fixture、快取副本與獨立離線測試；比較 per-series 起點、受控重疊窗口、逐 series 完整性判斷）、B2 Parquet 版本相容性（隔離環境唯讀）、B3 資料完整性與最小修復方案。成果：`docs/evidence/fred_incremental_parquet_integrity_offline_2026_11_10.md`、`tests/test_fred_incremental_offline_b1.py`（及候選模擬輔助檔 `tests/_fred_incremental_sim.py`）；`docs/BACKLOG.md`、`docs/HANDOFF.md` 僅更新索引。 |
+| ② 不授權（維持原狀，不得藉本筆解鎖） | 任何正式修復、回補或 bootstrap；修改 `scripts/update_macro_history.py`、任何 production fetcher、`data_cache`、`metadata.json`、workflow、UI 或 `services`；外部抓取或觸發 workflow；解除 `ui_v2`／`services` 凍結；切換 New UI 資料來源；FX Gate（`FX_OBS_DATE_RULE_VERIFIED` 維持 `False`）、Eligibility、OneBrain、正式金融公式；把快取視為已驗證。證據檔 §0 的推薦與 §6 的最小修復設計**未經客戶裁示**，不得視為已核准；A1 腳本擴充判定不在 `DEC-2026-11-10-02` 授權內，須另獲小額裁示。 |
+| 與既有 DEC 關係 | **不 supersede 任何既有 DEC**。承接 `DEC-2026-11-10-01`～`-04`，並引用 `DEC-2026-11-09-10` Q4。 |
+| 影響範圍 | 僅文件與獨立離線測試（新增證據檔、新增兩個測試檔、本筆與 BACKLOG／HANDOFF 索引句）。無 production 程式、workflow、`data_cache`、公式、Sheet 變更；不新增 BL、不改既有 BL 狀態、不動全域唯一 NEXT＝BL-0545。 |
+| 後續 | 待客戶就證據檔 §0 的 Decision Gate（G1～G6）裁示；Streamlit Cloud 端行為一律「無法驗證」。 |
+| 可逆性 | 可逆：客戶可隨時撤回；僅文件與測試，可 revert。 |
+| provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；B1／B2／B3 為三份單組離線草稿，由專案 AI 整合並抽查 12 項關鍵宣稱（結果與被收窄處見證據檔附錄 7），**未經第二組獨立驗證**；合成世界結論不等於真實 FRED 行為，FRED 真實回傳、發布延遲、vintage 修訂、Actions 日誌、Cloud 行為皆 NOT VERIFIED。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
@@ -2995,3 +3009,4 @@
 - 第四節 `DEC-2026-11-10-02`：客戶核准 A1 經總管轉達，無逐字存檔，本組未見客戶對話本身；腳本、測試、證據檔由專案 AI 單組寫成，未經第二組驗證；範例報告以自製 parquet 讀取器產生（本機無 pyarrow、未對拍），含 pyarrow 的真實快取結構測試本機 skip，須由 CI／QA 實跑；盤中時段判定為假設（不含半日市與國定假日）。
 - 第四節 `DEC-2026-11-10-03`：客戶方案 B 限縮版經總管轉達，無逐字存檔，本組未見客戶對話本身；三項修補與稽核為專案 AI 單組，未經第二組驗證；Cloud 端行為（Streamlit secrets 是否匯出為環境變數、Actions 遮罩、App 存取控制）NOT VERIFIED。
 - 第四節 `DEC-2026-11-10-04`：客戶指示經總管轉達，無逐字存檔，本組未見客戶對話本身；證據檔由專案 AI 單組整合兩份單組唯讀盤點並自行抽查，未經第二組驗證；機制測試為合成資料，不證真實成因；Cloud 端行為與 FRED／Yahoo 真實回應 NOT VERIFIED；方案推薦為總管讀法、未經客戶裁示。
+- 第四節 `DEC-2026-11-10-05`：客戶授權經總管轉達，無逐字存檔，本組未見客戶對話本身；證據檔整合三份單組離線草稿並抽查 12 項，未經第二組驗證；測試為合成世界，不證真實 FRED 行為；Actions 日誌、FRED 真實回應、Cloud 行為 NOT VERIFIED；推薦與最小修復設計為專案 AI 讀法、未經客戶裁示。
