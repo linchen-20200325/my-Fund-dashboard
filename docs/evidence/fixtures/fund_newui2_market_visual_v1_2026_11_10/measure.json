@@ -1,0 +1,2210 @@
+{
+ "w390_normal": {
+  "vw": 390,
+  "vh": 844,
+  "docScrollW": 390,
+  "hOverflow": false,
+  "appBg": "rgb(246, 248, 250)",
+  "appColor": "rgb(31, 35, 40)",
+  "sidebar": {
+   "display": "none",
+   "bg": "rgb(14, 17, 23)",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 0,
+    "h": 0
+   }
+  },
+  "stHeader": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 60
+  },
+  "topNav": {
+   "display": "flex",
+   "rect": {
+    "x": 16,
+    "y": 70.4,
+    "w": 358,
+    "h": 61
+   },
+   "bg": "rgb(255, 255, 255)"
+  },
+  "topNavCells": [
+   {
+    "x": 16,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 87.6,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 159.2,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 230.8,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 302.4,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   }
+  ],
+  "mainBlock": {
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 2426
+   },
+   "pad": {
+    "paddingLeft": "16px",
+    "paddingRight": "16px",
+    "paddingTop": "54.4px"
+   },
+   "maxW": "1100px"
+  },
+  "h1": {
+   "rect": {
+    "x": 16,
+    "y": 187.4,
+    "w": 358,
+    "h": 39
+   },
+   "font": {
+    "fontSize": "27.2px",
+    "fontWeight": "700"
+   }
+  },
+  "card": {
+   "rect": {
+    "x": 16,
+    "y": 1128.6,
+    "w": 358,
+    "h": 192.1
+   },
+   "style": {
+    "borderRadius": "8px",
+    "paddingTop": "10px",
+    "paddingLeft": "12px",
+    "marginBottom": "8px",
+    "borderTopWidth": "1px",
+    "borderTopColor": "rgba(128, 128, 128, 0.35)",
+    "backgroundColor": "rgba(0, 0, 0, 0)"
+   }
+  },
+  "cards": [
+   {
+    "k": "vix",
+    "x": 16,
+    "y": 1128.6,
+    "w": 358,
+    "h": 192.1
+   },
+   {
+    "k": "term_spread_pct",
+    "x": 16,
+    "y": 1412.7,
+    "w": 358,
+    "h": 192.1
+   },
+   {
+    "k": "MKT-1",
+    "x": 16,
+    "y": 1702.1,
+    "w": 358,
+    "h": 125.9
+   },
+   {
+    "k": "MKT-2",
+    "x": 16,
+    "y": 1836,
+    "w": 358,
+    "h": 131.7
+   },
+   {
+    "k": "MKT-3",
+    "x": 16,
+    "y": 1975.7,
+    "w": 358,
+    "h": 128.8
+   }
+  ],
+  "chip": {
+   "rect": {
+    "x": 74,
+    "y": 231.4,
+    "w": 98.3,
+    "h": 25.7
+   },
+   "style": {
+    "fontSize": "14px",
+    "borderRadius": "12px",
+    "backgroundColor": "rgba(128, 128, 128, 0.12)",
+    "borderTopColor": "rgba(128, 128, 128, 0.45)"
+   }
+  },
+  "chipCountAll": 13,
+  "row": {
+   "fontSize": "13px",
+   "lineHeight": "20.15px"
+  },
+  "metric": {
+   "fontSize": "20px"
+  },
+  "note": {
+   "fontSize": "13px"
+  },
+  "chart": {
+   "rect": {
+    "x": 16,
+    "y": 687.4,
+    "w": 358,
+    "h": 238.7
+   },
+   "scale": 0.994,
+   "tickFontPx": 10.9,
+   "endLabelFontPx": 11.9,
+   "topInViewport": true,
+   "visiblePxAboveFold": 156.625
+  },
+  "spark": {
+   "x": 29,
+   "y": 1243.8,
+   "w": 160,
+   "h": 40
+  },
+  "firstScreenTexts": [
+   "H1  @187",
+   "DIV market_state @230",
+   "DIV attention @287",
+   "DIV uv3-row @319",
+   "DIV uv3-row @347",
+   "H3  @444",
+   "DIV stRadio @495",
+   "DIV stRadio @579",
+   "DIV uv3-note @665",
+   "svg uv3-chart @687"
+  ],
+  "touchTargets": [
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Deploy",
+    "w": 57,
+    "h": 28
+   },
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Main menu",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "🌍\n\n市場",
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 356,
+    "h": 38
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 356,
+    "h": 38
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 356,
+    "h": 38
+   }
+  ],
+  "touchBelow44": 23,
+  "touchBelow48": 23,
+  "docHeight": 844,
+  "fullPageH": 2426,
+  "fullPageOverflowX": false
+ },
+ "w390_missing": {
+  "vw": 390,
+  "vh": 844,
+  "docScrollW": 390,
+  "hOverflow": false,
+  "appBg": "rgb(246, 248, 250)",
+  "appColor": "rgb(31, 35, 40)",
+  "sidebar": {
+   "display": "none",
+   "bg": "rgb(14, 17, 23)",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 0,
+    "h": 0
+   }
+  },
+  "stHeader": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 60
+  },
+  "topNav": {
+   "display": "flex",
+   "rect": {
+    "x": 16,
+    "y": 70.4,
+    "w": 358,
+    "h": 61
+   },
+   "bg": "rgb(255, 255, 255)"
+  },
+  "topNavCells": [
+   {
+    "x": 16,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 87.6,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 159.2,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 230.8,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 302.4,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   }
+  ],
+  "mainBlock": {
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 2496.7
+   },
+   "pad": {
+    "paddingLeft": "16px",
+    "paddingRight": "16px",
+    "paddingTop": "54.4px"
+   },
+   "maxW": "1100px"
+  },
+  "h1": {
+   "rect": {
+    "x": 16,
+    "y": 207.4,
+    "w": 358,
+    "h": 39
+   },
+   "font": {
+    "fontSize": "27.2px",
+    "fontWeight": "700"
+   }
+  },
+  "card": {
+   "rect": {
+    "x": 16,
+    "y": 1199.3,
+    "w": 358,
+    "h": 192.1
+   },
+   "style": {
+    "borderRadius": "8px",
+    "paddingTop": "10px",
+    "paddingLeft": "12px",
+    "marginBottom": "8px",
+    "borderTopWidth": "1px",
+    "borderTopColor": "rgba(128, 128, 128, 0.35)",
+    "backgroundColor": "rgba(0, 0, 0, 0)"
+   }
+  },
+  "cards": [
+   {
+    "k": "vix",
+    "x": 16,
+    "y": 1199.3,
+    "w": 358,
+    "h": 192.1
+   },
+   {
+    "k": "term_spread_pct",
+    "x": 16,
+    "y": 1483.4,
+    "w": 358,
+    "h": 192.1
+   },
+   {
+    "k": "MKT-1",
+    "x": 16,
+    "y": 1772.8,
+    "w": 358,
+    "h": 125.9
+   },
+   {
+    "k": "MKT-2",
+    "x": 16,
+    "y": 1906.7,
+    "w": 358,
+    "h": 131.7
+   },
+   {
+    "k": "MKT-3",
+    "x": 16,
+    "y": 2046.4,
+    "w": 358,
+    "h": 128.8
+   }
+  ],
+  "chip": {
+   "rect": {
+    "x": 74,
+    "y": 251.4,
+    "w": 98.3,
+    "h": 25.7
+   },
+   "style": {
+    "fontSize": "14px",
+    "borderRadius": "12px",
+    "backgroundColor": "rgba(128, 128, 128, 0.12)",
+    "borderTopColor": "rgba(128, 128, 128, 0.45)"
+   }
+  },
+  "chipCountAll": 15,
+  "row": {
+   "fontSize": "13px",
+   "lineHeight": "20.15px"
+  },
+  "metric": {
+   "fontSize": "20px"
+  },
+  "note": {
+   "fontSize": "13px"
+  },
+  "chart": {
+   "rect": {
+    "x": 16,
+    "y": 758,
+    "w": 358,
+    "h": 238.7
+   },
+   "scale": 0.994,
+   "tickFontPx": 10.9,
+   "endLabelFontPx": 11.9,
+   "topInViewport": true,
+   "visiblePxAboveFold": 85.953125
+  },
+  "spark": {
+   "x": 29,
+   "y": 1314.5,
+   "w": 160,
+   "h": 40
+  },
+  "firstScreenTexts": [
+   "H1  @207",
+   "DIV market_state @250",
+   "DIV attention @307",
+   "DIV uv3-row @339",
+   "DIV uv3-note @370",
+   "DIV uv3-row @394",
+   "H3  @490",
+   "DIV stRadio @541",
+   "DIV stRadio @625",
+   "DIV uv3-note @712",
+   "DIV uv3-note @736",
+   "svg uv3-chart @758"
+  ],
+  "touchTargets": [
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Deploy",
+    "w": 57,
+    "h": 28
+   },
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Main menu",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "🌍\n\n市場",
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 356,
+    "h": 38
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 356,
+    "h": 38
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 356,
+    "h": 38
+   }
+  ],
+  "touchBelow44": 23,
+  "touchBelow48": 23,
+  "docHeight": 844,
+  "fullPageH": 2497,
+  "fullPageOverflowX": false
+ },
+ "w768_normal": {
+  "vw": 768,
+  "vh": 1024,
+  "docScrollW": 768,
+  "hOverflow": false,
+  "appBg": "rgb(246, 248, 250)",
+  "appColor": "rgb(31, 35, 40)",
+  "sidebar": {
+   "display": "none",
+   "bg": "rgb(14, 17, 23)",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 0,
+    "h": 0
+   }
+  },
+  "stHeader": {
+   "x": 0,
+   "y": 0,
+   "w": 768,
+   "h": 60
+  },
+  "topNav": {
+   "display": "flex",
+   "rect": {
+    "x": 16,
+    "y": 70.4,
+    "w": 736,
+    "h": 61
+   },
+   "bg": "rgb(255, 255, 255)"
+  },
+  "topNavCells": [
+   {
+    "x": 16,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 163.2,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 310.4,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 457.6,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 604.8,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   }
+  ],
+  "mainBlock": {
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 768,
+    "h": 2174.5
+   },
+   "pad": {
+    "paddingLeft": "16px",
+    "paddingRight": "16px",
+    "paddingTop": "54.4px"
+   },
+   "maxW": "1100px"
+  },
+  "h1": {
+   "rect": {
+    "x": 16,
+    "y": 187.4,
+    "w": 736,
+    "h": 39
+   },
+   "font": {
+    "fontSize": "27.2px",
+    "fontWeight": "700"
+   }
+  },
+  "card": {
+   "rect": {
+    "x": 16,
+    "y": 1345.2,
+    "w": 360,
+    "h": 192.1
+   },
+   "style": {
+    "borderRadius": "8px",
+    "paddingTop": "10px",
+    "paddingLeft": "12px",
+    "marginBottom": "8px",
+    "borderTopWidth": "1px",
+    "borderTopColor": "rgba(128, 128, 128, 0.35)",
+    "backgroundColor": "rgba(0, 0, 0, 0)"
+   }
+  },
+  "cards": [
+   {
+    "k": "vix",
+    "x": 16,
+    "y": 1345.2,
+    "w": 360,
+    "h": 192.1
+   },
+   {
+    "k": "term_spread_pct",
+    "x": 392,
+    "y": 1429.2,
+    "w": 360,
+    "h": 192.1
+   },
+   {
+    "k": "MKT-1",
+    "x": 16,
+    "y": 1718.5,
+    "w": 234.7,
+    "h": 150.7
+   },
+   {
+    "k": "MKT-2",
+    "x": 266.7,
+    "y": 1718.5,
+    "w": 234.7,
+    "h": 131.7
+   },
+   {
+    "k": "MKT-3",
+    "x": 517.3,
+    "y": 1718.5,
+    "w": 234.7,
+    "h": 153.6
+   }
+  ],
+  "chip": {
+   "rect": {
+    "x": 74,
+    "y": 231.4,
+    "w": 98.3,
+    "h": 25.7
+   },
+   "style": {
+    "fontSize": "14px",
+    "borderRadius": "12px",
+    "backgroundColor": "rgba(128, 128, 128, 0.12)",
+    "borderTopColor": "rgba(128, 128, 128, 0.45)"
+   }
+  },
+  "chipCountAll": 13,
+  "row": {
+   "fontSize": "13px",
+   "lineHeight": "20.15px"
+  },
+  "metric": {
+   "fontSize": "20px"
+  },
+  "note": {
+   "fontSize": "13px"
+  },
+  "chart": {
+   "rect": {
+    "x": 16,
+    "y": 662.6,
+    "w": 720,
+    "h": 480
+   },
+   "scale": 2,
+   "tickFontPx": 22,
+   "endLabelFontPx": 24,
+   "topInViewport": true,
+   "visiblePxAboveFold": 361.421875
+  },
+  "spark": {
+   "x": 29,
+   "y": 1460.4,
+   "w": 160,
+   "h": 40
+  },
+  "firstScreenTexts": [
+   "H1  @187",
+   "DIV market_state @230",
+   "DIV attention @262",
+   "DIV uv3-row @294",
+   "DIV uv3-row @323",
+   "H3  @419",
+   "DIV stRadio @470",
+   "DIV stRadio @554",
+   "DIV uv3-note @641",
+   "svg uv3-chart @663"
+  ],
+  "touchTargets": [
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Deploy",
+    "w": 57,
+    "h": 28
+   },
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Main menu",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "🌍\n\n市場",
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 734,
+    "h": 38
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 734,
+    "h": 38
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 734,
+    "h": 38
+   }
+  ],
+  "touchBelow44": 23,
+  "touchBelow48": 23,
+  "docHeight": 1024,
+  "fullPageH": 2175,
+  "fullPageOverflowX": false
+ },
+ "w768_missing": {
+  "vw": 768,
+  "vh": 1024,
+  "docScrollW": 768,
+  "hOverflow": false,
+  "appBg": "rgb(246, 248, 250)",
+  "appColor": "rgb(31, 35, 40)",
+  "sidebar": {
+   "display": "none",
+   "bg": "rgb(14, 17, 23)",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 0,
+    "h": 0
+   }
+  },
+  "stHeader": {
+   "x": 0,
+   "y": 0,
+   "w": 768,
+   "h": 60
+  },
+  "topNav": {
+   "display": "flex",
+   "rect": {
+    "x": 16,
+    "y": 70.4,
+    "w": 736,
+    "h": 61
+   },
+   "bg": "rgb(255, 255, 255)"
+  },
+  "topNavCells": [
+   {
+    "x": 16,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 163.2,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 310.4,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 457.6,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 604.8,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   }
+  ],
+  "mainBlock": {
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 768,
+    "h": 2225.2
+   },
+   "pad": {
+    "paddingLeft": "16px",
+    "paddingRight": "16px",
+    "paddingTop": "54.4px"
+   },
+   "maxW": "1100px"
+  },
+  "h1": {
+   "rect": {
+    "x": 16,
+    "y": 187.4,
+    "w": 736,
+    "h": 39
+   },
+   "font": {
+    "fontSize": "27.2px",
+    "fontWeight": "700"
+   }
+  },
+  "card": {
+   "rect": {
+    "x": 16,
+    "y": 1395.8,
+    "w": 360,
+    "h": 192.1
+   },
+   "style": {
+    "borderRadius": "8px",
+    "paddingTop": "10px",
+    "paddingLeft": "12px",
+    "marginBottom": "8px",
+    "borderTopWidth": "1px",
+    "borderTopColor": "rgba(128, 128, 128, 0.35)",
+    "backgroundColor": "rgba(0, 0, 0, 0)"
+   }
+  },
+  "cards": [
+   {
+    "k": "vix",
+    "x": 16,
+    "y": 1395.8,
+    "w": 360,
+    "h": 192.1
+   },
+   {
+    "k": "term_spread_pct",
+    "x": 392,
+    "y": 1479.8,
+    "w": 360,
+    "h": 192.1
+   },
+   {
+    "k": "MKT-1",
+    "x": 16,
+    "y": 1769.2,
+    "w": 234.7,
+    "h": 150.7
+   },
+   {
+    "k": "MKT-2",
+    "x": 266.7,
+    "y": 1769.2,
+    "w": 234.7,
+    "h": 131.7
+   },
+   {
+    "k": "MKT-3",
+    "x": 517.3,
+    "y": 1769.2,
+    "w": 234.7,
+    "h": 153.6
+   }
+  ],
+  "chip": {
+   "rect": {
+    "x": 74,
+    "y": 231.4,
+    "w": 98.3,
+    "h": 25.7
+   },
+   "style": {
+    "fontSize": "14px",
+    "borderRadius": "12px",
+    "backgroundColor": "rgba(128, 128, 128, 0.12)",
+    "borderTopColor": "rgba(128, 128, 128, 0.45)"
+   }
+  },
+  "chipCountAll": 15,
+  "row": {
+   "fontSize": "13px",
+   "lineHeight": "20.15px"
+  },
+  "metric": {
+   "fontSize": "20px"
+  },
+  "note": {
+   "fontSize": "13px"
+  },
+  "chart": {
+   "rect": {
+    "x": 16,
+    "y": 713.3,
+    "w": 720,
+    "h": 480
+   },
+   "scale": 2,
+   "tickFontPx": 22,
+   "endLabelFontPx": 24,
+   "topInViewport": true,
+   "visiblePxAboveFold": 310.75
+  },
+  "spark": {
+   "x": 29,
+   "y": 1511,
+   "w": 160,
+   "h": 40
+  },
+  "firstScreenTexts": [
+   "H1  @187",
+   "DIV market_state @230",
+   "DIV attention @262",
+   "DIV uv3-row @294",
+   "DIV uv3-note @325",
+   "DIV uv3-row @349",
+   "H3  @446",
+   "DIV stRadio @497",
+   "DIV stRadio @581",
+   "DIV uv3-note @667",
+   "DIV uv3-note @691",
+   "svg uv3-chart @713"
+  ],
+  "touchTargets": [
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Deploy",
+    "w": 57,
+    "h": 28
+   },
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Main menu",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "🌍\n\n市場",
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 734,
+    "h": 38
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 734,
+    "h": 38
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 734,
+    "h": 38
+   }
+  ],
+  "touchBelow44": 23,
+  "touchBelow48": 23,
+  "docHeight": 1024,
+  "fullPageH": 2225,
+  "fullPageOverflowX": false
+ },
+ "w1280_normal": {
+  "vw": 1280,
+  "vh": 800,
+  "docScrollW": 1280,
+  "hOverflow": false,
+  "appBg": "rgb(246, 248, 250)",
+  "appColor": "rgb(31, 35, 40)",
+  "sidebar": {
+   "display": "block",
+   "bg": "rgb(14, 17, 23)",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 300,
+    "h": 800
+   }
+  },
+  "stHeader": {
+   "x": 300,
+   "y": 0,
+   "w": 980,
+   "h": 60
+  },
+  "topNav": {
+   "display": "none",
+   "rect": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "mainBlock": {
+   "rect": {
+    "x": 300,
+    "y": 0,
+    "w": 980,
+    "h": 2091.6
+   },
+   "pad": {
+    "paddingLeft": "16px",
+    "paddingRight": "16px",
+    "paddingTop": "54.4px"
+   },
+   "maxW": "1100px"
+  },
+  "h1": {
+   "rect": {
+    "x": 316,
+    "y": 126.4,
+    "w": 948,
+    "h": 39
+   },
+   "font": {
+    "fontSize": "27.2px",
+    "fontWeight": "700"
+   }
+  },
+  "card": {
+   "rect": {
+    "x": 316,
+    "y": 1284.2,
+    "w": 466,
+    "h": 192.1
+   },
+   "style": {
+    "borderRadius": "8px",
+    "paddingTop": "10px",
+    "paddingLeft": "12px",
+    "marginBottom": "8px",
+    "borderTopWidth": "1px",
+    "borderTopColor": "rgba(128, 128, 128, 0.35)",
+    "backgroundColor": "rgba(0, 0, 0, 0)"
+   }
+  },
+  "cards": [
+   {
+    "k": "vix",
+    "x": 316,
+    "y": 1284.2,
+    "w": 466,
+    "h": 192.1
+   },
+   {
+    "k": "term_spread_pct",
+    "x": 798,
+    "y": 1368.2,
+    "w": 466,
+    "h": 192.1
+   },
+   {
+    "k": "MKT-1",
+    "x": 316,
+    "y": 1657.5,
+    "w": 305.3,
+    "h": 125.9
+   },
+   {
+    "k": "MKT-2",
+    "x": 637.3,
+    "y": 1657.5,
+    "w": 305.3,
+    "h": 131.7
+   },
+   {
+    "k": "MKT-3",
+    "x": 958.7,
+    "y": 1657.5,
+    "w": 305.3,
+    "h": 128.8
+   }
+  ],
+  "chip": {
+   "rect": {
+    "x": 374,
+    "y": 170.4,
+    "w": 98.3,
+    "h": 25.7
+   },
+   "style": {
+    "fontSize": "14px",
+    "borderRadius": "12px",
+    "backgroundColor": "rgba(128, 128, 128, 0.12)",
+    "borderTopColor": "rgba(128, 128, 128, 0.45)"
+   }
+  },
+  "chipCountAll": 13,
+  "row": {
+   "fontSize": "13px",
+   "lineHeight": "20.15px"
+  },
+  "metric": {
+   "fontSize": "20px"
+  },
+  "note": {
+   "fontSize": "13px"
+  },
+  "chart": {
+   "rect": {
+    "x": 316,
+    "y": 601.6,
+    "w": 720,
+    "h": 480
+   },
+   "scale": 2,
+   "tickFontPx": 22,
+   "endLabelFontPx": 24,
+   "topInViewport": true,
+   "visiblePxAboveFold": 198.421875
+  },
+  "spark": {
+   "x": 329,
+   "y": 1399.4,
+   "w": 160,
+   "h": 40
+  },
+  "firstScreenTexts": [
+   "H1  @126",
+   "DIV market_state @169",
+   "DIV attention @201",
+   "DIV uv3-row @233",
+   "DIV uv3-row @262",
+   "H3  @358",
+   "DIV stRadio @409",
+   "DIV stRadio @493",
+   "DIV uv3-note @580",
+   "svg uv3-chart @602"
+  ],
+  "touchTargets": [
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "🌍\n\n市場與趨勢",
+    "w": 240,
+    "h": 48
+   },
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "更新資料",
+    "w": 240,
+    "h": 40
+   },
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Deploy",
+    "w": 57,
+    "h": 28
+   },
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Main menu",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 946,
+    "h": 38
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 946,
+    "h": 38
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 946,
+    "h": 38
+   }
+  ],
+  "touchBelow44": 24,
+  "touchBelow48": 24,
+  "docHeight": 800,
+  "fullPageH": 2092,
+  "fullPageOverflowX": false
+ },
+ "w1280_missing": {
+  "vw": 1280,
+  "vh": 800,
+  "docScrollW": 1280,
+  "hOverflow": false,
+  "appBg": "rgb(246, 248, 250)",
+  "appColor": "rgb(31, 35, 40)",
+  "sidebar": {
+   "display": "block",
+   "bg": "rgb(14, 17, 23)",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 300,
+    "h": 800
+   }
+  },
+  "stHeader": {
+   "x": 300,
+   "y": 0,
+   "w": 980,
+   "h": 60
+  },
+  "topNav": {
+   "display": "none",
+   "rect": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "mainBlock": {
+   "rect": {
+    "x": 300,
+    "y": 0,
+    "w": 980,
+    "h": 2142.3
+   },
+   "pad": {
+    "paddingLeft": "16px",
+    "paddingRight": "16px",
+    "paddingTop": "54.4px"
+   },
+   "maxW": "1100px"
+  },
+  "h1": {
+   "rect": {
+    "x": 316,
+    "y": 126.4,
+    "w": 948,
+    "h": 39
+   },
+   "font": {
+    "fontSize": "27.2px",
+    "fontWeight": "700"
+   }
+  },
+  "card": {
+   "rect": {
+    "x": 316,
+    "y": 1334.8,
+    "w": 466,
+    "h": 192.1
+   },
+   "style": {
+    "borderRadius": "8px",
+    "paddingTop": "10px",
+    "paddingLeft": "12px",
+    "marginBottom": "8px",
+    "borderTopWidth": "1px",
+    "borderTopColor": "rgba(128, 128, 128, 0.35)",
+    "backgroundColor": "rgba(0, 0, 0, 0)"
+   }
+  },
+  "cards": [
+   {
+    "k": "vix",
+    "x": 316,
+    "y": 1334.8,
+    "w": 466,
+    "h": 192.1
+   },
+   {
+    "k": "term_spread_pct",
+    "x": 798,
+    "y": 1418.8,
+    "w": 466,
+    "h": 192.1
+   },
+   {
+    "k": "MKT-1",
+    "x": 316,
+    "y": 1708.2,
+    "w": 305.3,
+    "h": 125.9
+   },
+   {
+    "k": "MKT-2",
+    "x": 637.3,
+    "y": 1708.2,
+    "w": 305.3,
+    "h": 131.7
+   },
+   {
+    "k": "MKT-3",
+    "x": 958.7,
+    "y": 1708.2,
+    "w": 305.3,
+    "h": 128.8
+   }
+  ],
+  "chip": {
+   "rect": {
+    "x": 374,
+    "y": 170.4,
+    "w": 98.3,
+    "h": 25.7
+   },
+   "style": {
+    "fontSize": "14px",
+    "borderRadius": "12px",
+    "backgroundColor": "rgba(128, 128, 128, 0.12)",
+    "borderTopColor": "rgba(128, 128, 128, 0.45)"
+   }
+  },
+  "chipCountAll": 15,
+  "row": {
+   "fontSize": "13px",
+   "lineHeight": "20.15px"
+  },
+  "metric": {
+   "fontSize": "20px"
+  },
+  "note": {
+   "fontSize": "13px"
+  },
+  "chart": {
+   "rect": {
+    "x": 316,
+    "y": 652.3,
+    "w": 720,
+    "h": 480
+   },
+   "scale": 2,
+   "tickFontPx": 22,
+   "endLabelFontPx": 24,
+   "topInViewport": true,
+   "visiblePxAboveFold": 147.75
+  },
+  "spark": {
+   "x": 329,
+   "y": 1450,
+   "w": 160,
+   "h": 40
+  },
+  "firstScreenTexts": [
+   "H1  @126",
+   "DIV market_state @169",
+   "DIV attention @201",
+   "DIV uv3-row @233",
+   "DIV uv3-note @264",
+   "DIV uv3-row @288",
+   "H3  @385",
+   "DIV stRadio @436",
+   "DIV stRadio @520",
+   "DIV uv3-note @606",
+   "DIV uv3-note @630",
+   "svg uv3-chart @652"
+  ],
+  "touchTargets": [
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "🌍\n\n市場與趨勢",
+    "w": 240,
+    "h": 48
+   },
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "更新資料",
+    "w": 240,
+    "h": 40
+   },
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Deploy",
+    "w": 57,
+    "h": 28
+   },
+   {
+    "tag": "BUTTON",
+    "role": "",
+    "txt": "Main menu",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 946,
+    "h": 38
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "INPUT",
+    "role": "",
+    "txt": "",
+    "w": 13,
+    "h": 13
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "A",
+    "role": "",
+    "txt": "Link to heading",
+    "w": 16,
+    "h": 16
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 946,
+    "h": 38
+   },
+   {
+    "tag": "SUMMARY",
+    "role": "",
+    "txt": "keyboard_arrow_rig",
+    "w": 946,
+    "h": 38
+   }
+  ],
+  "touchBelow44": 24,
+  "touchBelow48": 24,
+  "docHeight": 800,
+  "fullPageH": 2142,
+  "fullPageOverflowX": false
+ }
+}
