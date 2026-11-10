@@ -67,7 +67,8 @@
 | `google_service_account`（區段） | 是 | 是（secret 名為 `GOOGLE_SERVICE_ACCOUNT`） | `repositories/policy/_helpers.py`、`pool_repository.py`、`policy_supplement_repository.py`；多支 workflow | Streamlit：`st.secrets`；Actions：env | 未設定→Sheet 功能降級 | 各頁「尚未設定」灰色說明 |
 | `POLICY_SHEET_ID`、`POOL_SHEET_ID`、`NAV_SHEET_ID`、`MACRO_WEIGHTS_SHEET_ID`（`macro_weights_sheet_id`） | 是 | 是（多數） | `repositories/*`、`services/nav_history_*`、`scripts/*` | 同上 | `POOL_SHEET_ID` 無寫死預設，未設→「選股池未設定雲端來源」；`NAV_SHEET_ID` 有 baked 預設 | `ui_v2/plain.py` 已知訊息表 |
 | `WATCH_CSV_URL`、`LINE_CHANNEL_TOKEN`、`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_USER_ID` | 是（管理室） | 是 | `infra/line_push.py`、`scripts/*_notify.py`、`ui/tab_manage.py` | 同上 | 通知略過 | — |
-| `GSPREAD_SA_JSON`、`GOOGLE_APPLICATION_CREDENTIALS` | 否 | 否（僅腳本環境變數） | `scripts/fetch_nav_cache.py`、`scripts/migrate_v149_schema.py` | `os.environ` | 腳本自行處理 | — |
+| `GSPREAD_SA_JSON`、`GOOGLE_SERVICE_ACCOUNT_JSON`、`GOOGLE_APPLICATION_CREDENTIALS` | 否 | 否（僅腳本環境變數） | `scripts/fetch_nav_cache.py`（前兩者）、`scripts/migrate_v149_schema.py` | `os.environ` | 腳本自行處理 | — |
+| `[google_oauth]` 區段（`client_id`、`client_secret`、`redirect_uri`） | 是（僅 Streamlit） | 否 | `infra/personal_oauth.py::SECRETS_SECTION`；`ui/helpers/io/oauth_state.py` | `st.secrets` | 個人 Google 登入不可用 | 登入相關區塊顯示未設定 |
 | `GITHUB_TOKEN` | 否 | 是（Actions 內建） | 多支 workflow | — | — | — |
 
 註：workflow 內 `GOOGLE_SERVICE_ACCOUNT`（Actions secret 名）與 Streamlit `google_service_account`（secrets 區段名）大小寫與形態不同，是兩個 scope 各自的名稱，不是同一份設定。
@@ -111,7 +112,7 @@
 | ui_v3 市場頁缺 Key | 狀態字樣「尚未設定」 |
 | ui_v2／ui_v3 有 Key 但取數失敗 | 「⛔ 取數失敗」／「取數失敗」；無任何觀測的序列另標「◇ 資料未備」（取數失敗與缺資料分開，不併入） |
 | 舊總經頁載入例外 | 「總經指標載入失敗」＋提示「上游 FRED / PMI 來源可能暫時不可用；……請稍後再按一次送出鈕」 |
-| 舊總經頁已載入但距上次更新逾 4 小時 | 「指標數據已 N 小時未更新（上次：<時間>），點擊下方「🔄 更新總經資料」即可同步最新數據」 |
+| 舊總經頁（僅 `ui/tab1_macro.py`；`ui/views/page_01_macro.py` 沒有此 4 小時門檻）已載入但距上次更新逾 4 小時 | 「指標數據已 N 小時未更新（上次：<時間>），點擊下方「🔄 更新總經資料」即可同步最新數據」 |
 
 ### 2.4 NOT VERIFIED（本節）
 
@@ -149,7 +150,7 @@
 
 | 機制 | 讀碼事實（FACT） | 對「Key 更新後仍顯示舊失敗」的影響（INFERENCE） |
 |---|---|---|
-| `fetch_fred` 的 `_ttl_cache` | 30 分鐘、`maxsize=32`；`api_key` 是快取鍵的一部分；失敗（`fetch_url` 回 `None`）不入快取（404／407 除外） | Key 更換後是新的快取項，不會命中舊失敗項；但 FRED 回 200 且 `observations` 為空會被快取 30 分鐘；404／407 失敗也會被快取 |
+| `fetch_fred` 的 `_ttl_cache` | 30 分鐘、`maxsize=32`；`api_key` 是快取鍵的一部分；失敗（`fetch_url` 回 `None`）不入快取（404／407 除外） | Key 更換後是新的快取項，不會命中舊失敗項；但 FRED 回 200 且 `observations` 為空會被快取 30 分鐘；`fred.py` 註解所列「JSON 解析壞」也會被 `_ttl_cache` 快取；404／407 失敗也會被快取。另 INFERENCE（未實測）：無效 Key 時 FRED 回 400 類，依 `kind_for_status`（>=400 歸 server_error）會進 300 秒冷卻 |
 | 主機層退避 `infra/source_backoff.py` | 行程內 `_STATE` 字典，無檔案寫入；失敗後依類型冷卻（封鎖 900 秒、限流 1800 秒、5xx 300 秒、逾時／連不上 60 秒），冷卻期內 `fetch_url` 直接回 `None` 不發請求 | 若更新前行程已累積冷卻，更新 Secrets 本身不會清除；最長約 30 分鐘內仍可能看到失敗，直到冷卻期滿或行程重啟（Tab5 診斷路徑可刻意繞過，僅限診斷） |
 | `get_proxy_config` 快取 | 行程內，TTL 300 秒，讀失敗也快取為空設定 | `PROXY_URL` 改動最多 5 分鐘內可能未生效 |
 | Streamlit session 狀態 | 舊總經頁把載入結果／錯誤存在 `st.session_state`；需按送出鈕（或「強制重抓」）才重新載入 | 同一瀏覽器工作階段內，舊失敗訊息會留到重新按鈕或重新整理頁面 |
@@ -201,6 +202,18 @@
 | 頁面為「資料未備」（◇） | **無法判定**：缺資料與取數失敗分開，此狀態不代表已恢復也不代表失敗 |
 
 客戶回報模板（不含 Secret）：「使用來源欄顯示：<st.secrets／os.environ／(無)>；總經頁載入後 DGS10／DGS2／HY／FEDFUNDS 各自是否出現數值、資料日期、頁面顯示的文字；是否已手動 Reboot」。
+
+### 5.5 外洩面範圍（FACT，既有行為，本批不修改）
+
+Tab5「API 金鑰狀態」表（`_key_targets`）共 5 把：`FRED_API_KEY`、`GEMINI_API_KEY`、`FINMIND_TOKEN`、`PROXY_URL`、`GOOGLE_SHEET_ID`，**都會顯示前 4 字＋後 4 字＋長度**。其中 `PROXY_URL` 可能含帳密。客戶回報時**一律不要貼或截圖該表**，只回報「使用來源」欄。登記為後續待辦候選（未經客戶裁示，不動工）。
+
+### 5.6 非本批範圍的新風險（低，未修改）
+
+- `scripts/update_macro_history.py` 的 FRED 取數以 `requests.get(params=api_key)`，`except` 內 `print` 例外訊息；`requests` 連線類例外訊息含完整 URL（含 `api_key` 查詢參數）。
+- 重現條件：Actions 內 FRED 連線逾時／Max retries。
+- 緩解：GitHub Actions 日誌會自動遮罩已註冊的 secret 值，實際風險低（INFERENCE，平台行為未實測）。
+- Streamlit 路徑（`infra/proxy.py`、`fetch_fred`）已以 `_url_log`／`_exc_log` 砍掉查詢字串。
+- 建議（未經客戶裁示）：另批處理，並對 `fred_vintage.py` 等直接使用者做同法盤點。
 
 ## 6. Actions 端現有證據（離線；引用，不重算）
 
