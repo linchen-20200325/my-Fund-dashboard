@@ -1,6 +1,6 @@
 # 基金 New UI2 × 使用者台股 HTML 參考稿：視覺差異與最小驗收路線（2026-11-10）
 
-> **性質**：僅 docs-only、唯讀視覺差距盤點；**不是**新的正式 UI SSOT、不得覆蓋已裁示設計、不得據此啟動 UI、資料、OAuth、OneBrain 或金融演算施工。本檔依客戶「沿用既有基金設計＋本次台股 HTML 逐項對照，不重做五頁」的方向整理。來源為使用者在對話提供的 `index(1).html`（台股 AI 戰情室五頁 HTML 概念草稿；**未存入本 repo**），不把該稿視為基金規格或正式資料。**本 PR 與獨立 QA 皆未取得 HTML 原檔，未完成原稿逐項複驗；基金端規格與文件自洽性已獨立驗證。** 下列 §2 中股票 HTML 側的所有描述（色票、導覽、卡片、頁面內容等）皆為參考側轉述（NOT VERIFIED：HTML 未入 repo，無法由本 repo 驗證），不得當作已查證事實引用。本檔不新增 token／視覺規格；既有視覺與手機規格請見 `docs/design/vnext_visual_blueprint.md`、`docs/evidence/bl0544_mobile_top_tabs_minimal_gate_proposal_2026_11_07.md`、`docs/evidence/bl0544_s1_chromium_fixture_2026_11_07/`，以及 `tests/ui_v3/` 內 390／768／1280 的既有斷言。比對基準 main `3c463408`；文件與程式若變更須重驗。
+> **性質**：僅 docs-only、唯讀視覺差距盤點；**不是**新的正式 UI SSOT、不得覆蓋已裁示設計、不得據此啟動 UI、資料、OAuth、OneBrain 或金融演算施工。本檔依客戶「沿用既有基金設計＋本次台股 HTML 逐項對照，不重做五頁」的方向整理。來源為使用者在對話提供的 `index(1).html`（台股 AI 戰情室五頁 HTML 概念草稿；**未存入本 repo**），不把該稿視為基金規格或正式資料。**本 PR 與獨立 QA 皆未取得 HTML 原檔，未完成原稿逐項複驗；基金端宣稱經獨立 QA 抽驗約 15 項（含 §1 權威邊界與 §2 基金欄關鍵事實），非整份規格逐條重驗。** 下列 §2 中股票 HTML 側的所有描述（色票、導覽、卡片、頁面內容等）皆為參考側轉述（NOT VERIFIED：HTML 未入 repo，無法由本 repo 驗證），不得當作已查證事實引用。本檔不新增 token／視覺規格；既有視覺與手機規格請見 `docs/design/vnext_visual_blueprint.md`、`docs/evidence/bl0544_mobile_top_tabs_minimal_gate_proposal_2026_11_07.md`、`docs/evidence/bl0544_s1_chromium_fixture_2026_11_07/`，以及 `tests/ui_v3/` 內 390／768／1280 的既有斷言。比對基準 main `3c463408`；文件與程式若變更須重驗。
 
 ## 1. 權威邊界（先於視覺參考）
 
