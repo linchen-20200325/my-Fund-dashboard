@@ -2807,7 +2807,7 @@
 | ② 不授權（維持原狀，不得藉本筆解鎖） | 修改任何 production fetcher、快取（`data_cache`）、workflow、UI 或任何 `.py`；觸發外部 API 或重抓；把快取存在視為已驗證；把觀測日當公布日或取得日；變更 FX Gate（`FX_OBS_DATE_RULE_VERIFIED` 維持 `False`）、Eligibility、正式母集合、涵蓋率分母、日期轉換規則、正式金融公式、OneBrain；建立第二套資料 SSOT；切換 production 資料路徑。專案 AI 在證據檔 §0 的推薦（方案 α 最窄版）**未經客戶裁示**，不得視為已核准。 |
 | 與既有 DEC 關係 | **不 supersede 任何既有 DEC**。承接 `DEC-2026-11-10-01`～`-03`（快取品質研究、A1 檢查、資安最小修補），並引用 `DEC-2026-11-09-10`（Q1–Q5）與 `DEC-2026-10-27-41`～`-44`（🌍 頁既有通道的實作層讀法）。 |
 | 影響範圍 | 僅文件：新增證據檔、本筆、`docs/BACKLOG.md` 與 `docs/HANDOFF.md` 的索引句。無程式、workflow、`data_cache`、公式、Sheet 變更；不新增 BL、不改既有 BL 狀態、不動全域唯一 NEXT＝BL-0545。 |
-| 後續 | 待客戶就證據檔 §0 的最小 Decision Gate（G1～G5）裁示；Streamlit Cloud 端行為一律「無法驗證」，待客戶 Cloud 回報。 |
+| 後續 | 待客戶就證據檔 §0 的最小 Decision Gate（G1～G6）裁示；Streamlit Cloud 端行為一律「無法驗證」，待客戶 Cloud 回報。 |
 | 可逆性 | 可逆：客戶可隨時撤回；僅文件，可 revert。 |
 | provenance | **要點轉述（經總管轉達，非逐字，無逐字存檔）**；證據檔由專案 AI 整合兩份單組唯讀盤點草稿並自行抽查（抽查項與被修正之處見證據檔附錄 B），**未經第二組獨立驗證**；快取內容與日期為 2026-11-10 實讀；FRED／Yahoo 真實回應、Cloud 部署行為皆 NOT VERIFIED。 |
 

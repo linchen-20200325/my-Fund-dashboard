@@ -4,7 +4,7 @@
 >
 > - 本文是**研究與架構方向**的 docs-only 證據檔，**不是**准許切換 production 的授權（`DEC-2026-11-10-04`）。客戶方向是「Actions 已能穩定取得的資料，優先由 Streamlit 讀已驗證快取」；本文只盤點離這個方向還差什麼，並比較三種接線方式。
 > - **不核准**：Eligibility、正式母集合、涵蓋率分母、日期轉換規則、FX Gate（`FX_OBS_DATE_RULE_VERIFIED` 維持 `False`）、任何金融公式或門檻、OneBrain。**不建立第二套資料 SSOT**；本文提到的任何「讀取器」「欄位」「標示」都只是候選，未核准。
-> - 缺值就是缺值（missing ≠ 0）；proxy 不是真資料；**觀測日 ≠ 公布日 ≠ 取得日**；「有原料／可讀／具備正式金融語意／允許 UI 使用」五層證據**互不推論**（前一層 YES 推不出下一層）。
+> - 缺值就是缺值（missing ≠ 0）；proxy 不是真資料；**觀測日 ≠ 公布日 ≠ 取得日**；「有原料／可讀／具備正式金融語意／允許 UI 使用」四層證據**互不推論**（前一層 YES 推不出下一層）。
 > - 標籤：**FACT**＝本批讀碼、讀檔或實跑所見；**INFERENCE**＝由 FACT 推得；**NOT VERIFIED**＝未驗。快取內容的列數與日期是 2026-11-10 在基準 `c11aca98` 實讀的結果。
 > - 本批**未**修改任何 `.py`／workflow／`data_cache`／UI，**未**發出任何外部請求，**未**觸發 workflow，**未**輸出任何 Secret。測試腳本的 Key 是執行期組成的假字串。
 > - 本文由專案 AI 整合兩份單組唯讀盤點草稿並自行抽查（附錄 B）；抽查之外**沒有第二組獨立驗證**。客戶指示經總管轉達，無逐字存檔。
@@ -15,7 +15,7 @@
 
 ## 0. 推薦結論與最小 Decision Gate（推薦在前；**未經客戶裁示，總管讀法，可被推翻**）
 
-**一句話**：快取今天**還不能**當 New UI 的主來源；最小、最安全的第一步是**方案 α 的最窄版**——只對 DGS10／DGS2，且**只在即時取數失敗或缺 Key 時**回退讀快取，並明標「來源＝Actions 快取＋快取最後觀測日＋已落後 N 天」；成功路徑行為零變更。它不能直接達成「優先讀快取」的方向，但可以用最低風險驗證兩個目前 NOT VERIFIED 的前提（Streamlit Cloud 讀不讀得到檔、stale 怎麼標），再決定要不要升到 β。
+**一句話**：快取今天**還不能**當 New UI 的主來源；最小、最安全的第一步是**方案 α 的最窄版**——只對 DGS10／DGS2，且**只在即時取數失敗時**回退讀快取（**不含缺 Key**：缺 Key 仍維持現有「尚未設定」畫面，避免遮蔽客戶正在驗證的 Cloud 端 FRED Secrets 訊號），並明標「來源＝Actions 快取＋快取最後觀測日＋已落後 N 天」；成功路徑行為零變更。它不能直接達成「優先讀快取」的方向，但可以用最低風險驗證兩個目前 NOT VERIFIED 的前提（Streamlit Cloud 讀不讀得到檔、stale 怎麼標），再決定要不要升到 β。
 
 **為什麼不是 β／γ**（細節見第 5 節）：
 
@@ -27,6 +27,7 @@
 
 - **P1 生產端先修**（任一項都屬 production 資料取得行為變更）：per-series 增量起點、series 完整性檢查、metadata 補 `fetched_at`／`source`／per-series 狀態（候選細節見 5.5）。對 α 最窄版（只讀 DGS10／DGS2，日頻、落後 0 天）**不是硬前提**，但對 CPI／M2／UNRATE／DTWEXBGS／HY 是**進入任何接線之前的前提**。
 - **P2 離線守衛先固定**：用既有 `scripts/check_cache_quality.py`（A1）把「讀取前守衛」的判準固定下來（離線、零風險；是否擴充仍屬另案）。
+- **P0 缺 Key 不回退**：α 不涵蓋缺 `FRED_API_KEY`（維持「尚未設定」畫面），以免遮蔽客戶正在驗證的 Cloud 端 Secrets 訊號。
 - **P3 部署面實測**：Streamlit Cloud 實際部署分支、bot push 後是否重新拉取、New UI 的正式入口——目前 repo 內無證據（第 4 節 W8）；α 最窄版正好可以順帶驗證。
 
 ### 最小 Decision Gate 表（請客戶裁示；每題附總管建議）
@@ -38,6 +39,7 @@
 | G3 | 快取路徑的**日期與標示語意**：`obs_date`＝FRED 觀測日；「已落後 N 天」的基準日（今天的哪個時區）；不得把檔案 `updated_at` 當取得時間；是否准許新增狀態詞或原因碼 | `DEC-2026-11-09-10` ③ 明列「不新增狀態詞」「不批准日期轉換規則」；新使用者文案另受 `APPROVED_WORDING` Gate | 沿用既有四態，用現有 `ok` ＋明確的來源字串與落後天數字樣；**不新增狀態詞**；文案由客戶另行核可 |
 | G4 | 是否授權**生產端修補**（P1）：授權哪一項、是否先做 | 觸及資料取得語意；「重疊窗口自癒」會覆寫既有列，與 `DEC-2026-11-09-10` Q4（不覆寫快取）相鄰，另需明示 | 先授權**最小兩項**：(a) per-series 起點、(b) 離線完整性檢查；metadata 變更與覆寫類候選另案 |
 | G5 | （僅 β 才需要）「過期」門檻、Old UI／New UI 同指標數值一致性 | 自創新鮮度門檻是 Stop Gate 內容；`PROJECT_RULES.md` 13.3 Cross-View 一致性 | α 階段**不問**；升 β 時再送 |
+| G6 | **凍結面與 `ui_v2` maintenance-only 是否有例外適用於 α**（及 P1 的 metadata／檔案格式變更） | 本批讀 `PROJECT_RULES.md` 13.2 確認：`ui_v2`＝maintenance-only、不新增新版面、不公開到正式 Streamlit（`DEC-2026-11-02-05`／`-06`）；`BL-0537` 登記了凍結清單機械守衛（待客戶裁示、未建置），其列舉的例外類別為安全／正確性修補、`BL-0532` 缺資料字樣統一、PORT shim，**未含「新增資料備援路徑」**（FACT）。另母法凍結令 `docs/v2/CONSTITUTION.md` 的 F4＝`services/**`、F5＝資料表 Schema（含 `data_cache/` 檔案格式），`docs/v2/20_ui_spec.md` 引用之。α 的候選變更會改既有 `services/v2_tables/market_view.py` 並新增 L1 讀取器（觸 F4），若同批改 metadata 欄位則觸 F5。**凍結令是否涵蓋 `services/v2_tables/` 內的增修與新增唯讀 L1：本批未查得裁示（NOT VERIFIED），因此不能判定「不適用」** | 設計上**先避開 `ui_v2`**：把回退做成 `build_market_view` 的 opt-in 參數（預設關），只由 `ui_v3/adapters/market_page.py::load` 開啟，`ui_v2/mkt/source.py` 不改；並請客戶確認 F4／F5 是否涵蓋上述增修，若涵蓋須走母法修正提案單（`docs/v2/CONSTITUTION.md` §5），P1 的 metadata 變更同理 |
 
 **不需要客戶裁示、可直接做的**：無。本文是 docs-only；任何程式、workflow、快取、UI 變更都需上列 Gate 或另行授權。
 
@@ -97,7 +99,7 @@ FRED 各 series（FACT，同次實讀）：
 ## 2. 「全表最大日期增量起點」造成個別 series 漏抓？——唯讀機制測試
 
 **問題**：`start = 全表最大日期 + 1` 是否會讓個別 series 永久漏抓？
-**方法**：`import` 真實的 `update_one`／`fetch_fred_indicators`／`_merge_dedupe`／`_last_date`，只 monkeypatch `_fred_get_single`（記憶體假資料，模擬 `observation_start/end` 過濾）與快取目錄（暫存）。無網路、假 Key、不寫 repo。腳本全文見附錄 A，**本批重新執行 7／7 通過**。
+**方法**：`import` 真實的 `update_one`／`fetch_fred_indicators`／`_merge_dedupe`／`_last_date`，只 monkeypatch `_fred_get_single`（記憶體假資料，模擬 `observation_start/end` 過濾）與快取目錄（暫存）。無網路、假 Key、不寫 repo。腳本全文見附錄 A，**本批重新執行 7 項檢查全數通過；其中 4 項（S1 兩項、S2、S3 各以生產碼 `update_one` 驗證機制）驗生產碼機制，另 3 項（`S4.*`）為測試內模擬的對照模型，不驗生產碼**。
 
 ### 2.1 結果（FACT：合成資料下的機制；對真實 FRED 行為 NOT VERIFIED）
 
@@ -112,7 +114,7 @@ FRED 各 series（FACT，同次實讀）：
 
 與機制**一致**的觀察：CPIAUCSL／M2SL 停 2026-04-01；PPIACO／PCOPPUSDM 零列；DTWEXBGS 只有 21 列且起於 2026-06-05（快取以 15 年 bootstrap 建立，若這三個 series 在 bootstrap 當次沒有取到，之後都只能從當時的全表最大日期往後補）。
 
-**未解反例（本批用 git 歷史補強，原因仍未知）**：UNRATE 最新到 2026-10-01，比 CPI／M2 新六個月，但機制預測月頻 series 在初建後都不該再前進。本批在淺層 clone 可見的三筆 `data_cache/fred_indicators.parquet` 提交（`b816df1c`、`20bf6442`、`8ca33547`）上做集合比對（唯讀，`git show` 進記憶體）：
+**未解反例（本批用 git 歷史補強，原因仍未知）**：UNRATE 最新到 2026-10-01，比 CPI／M2 新六個月，但機制預測月頻 series 在初建後都不該再前進（UNRATE 另缺 2026-05，與 CPI／M2 的「停更」不同，同屬未解）。本批在淺層 clone 可見的三筆 `data_cache/fred_indicators.parquet` 提交（`b816df1c`、`20bf6442`、`8ca33547`）上做集合比對（唯讀，`git show` 進記憶體）：
 
 - 11-01 提交（`20bf6442`）：前次全表最大日 2026-10-22，新增 22 列，全部日期 ≥ 10-23；UNRATE 無新增。
 - 11-08 提交（`8ca33547`）：前次全表最大日 2026-10-29（所以預期 `observation_start`＝2026-10-30），新增 23 列、**刪除 0 列、重疊列數值變動 0**；除 UNRATE 外所有新增列日期皆 ≥ 10-30，**唯獨 UNRATE 新增了觀測日 2026-10-01**（早於預期起點）。
@@ -158,7 +160,7 @@ FRED 各 series（FACT，同次實讀）：
 
 ---
 
-## 4. 接線差距清單（「New UI 讀快取」要補什麼；編號 W1～W12，與第 0 節的 Gate G1～G5 不同）
+## 4. 接線差距清單（「New UI 讀快取」要補什麼；編號 W1～W12，與第 0 節的 Gate G1～G6 不同）
 
 | # | 差距 | 現況（標籤） | 影響／需要 |
 |---|---|---|---|
@@ -171,7 +173,7 @@ FRED 各 series（FACT，同次實讀）：
 | W7 | **與 vintage 路徑不相容** | HY／T10Y2Y／FEDFUNDS 在 New UI 走 `fetch_fred_vintages`；快取只有 `date`／`value`，且增量不重抓舊期間，**修正版次永不更新**（FACT／INFERENCE） | 快取**不能替代**這三鍵；最多服務 `market_view` 的日頻序列 |
 | W8 | **部署面** | `data_cache/*.parquet`＋`metadata.json` 受 git 追蹤，cron 以 bot 身分 push 到預設分支（FACT）。**Streamlit Cloud 如何取得快取：repo 內無證據（NOT VERIFIED）**——無部署設定檔可證主檔、分支、是否重新拉取。New UI 入口為獨立的 `ui_v2/app_*_live.py`／`ui_v3/app_preview.py`，`app.py` 並不 import `ui_v2`／`ui_v3`（FACT，範圍：`app.py` 與 `ui/`） | 運行中的 process 看到的是**最近一次部署時的檔案**，不是即時；實際新鮮度＝cron＋Cloud 重拉延遲，無上限證據 |
 | W8b | **寫入端與讀取端版本不一致（新發現）** | 快取檔的 parquet 中繼資料：`created_by` 為 pyarrow **26.0.1**，pandas 中繼為 **3.1.1**（四檔皆然，FACT）。但 `requirements.txt` 釘 `pyarrow>=14,<25`、`pandas>=2.3.3,<3.0`（雲端 py3.14 當機史）；寫入的 workflow 是未釘版本的 `pip install pandas pyarrow`（FACT） | 讀取端在受釘版本下能否讀這四檔：**NOT VERIFIED**（本批環境無法安裝 pandas 2.x／pyarrow 24.x）。這是任何「Streamlit 讀快取」方案的 P0 實測項 |
-| W9 | **分層（新增 L1 函式）** | parquet 讀取是 I/O：L2 不得 I/O（`CLAUDE.md` §8.2）；`market_view` 檔頭禁止新增 L1 函式；`ui_v3` adapters 自述不直接 import L1（FACT） | 需新增一支唯讀 L1 讀取器（建議置於 `repositories/macro/`）＋ L2 轉接；屬 Gate G2。可重用：`build_market_view` 已接受注入式 `fetch_fred`（簽名 `(series_id, api_key, n)`），純函式 `fred_yield_domain_from_l1` 可原樣重用（需有 `fetched_at` 欄） |
+| W9 | **分層（新增 L1 函式）** | parquet 讀取是 I/O：L2 不得 I/O（`CLAUDE.md` §8.2）；`market_view` 檔頭禁止新增 L1 函式；`ui_v3` adapters 自述不直接 import L1（FACT） | 需新增一支唯讀 L1 讀取器（建議置於 `repositories/macro/`）＋ L2 轉接；屬 Gate G2。可重用：`build_market_view` 已接受注入式 `fetch_fred`（簽名 `(series_id, api_key, n)`），純函式 `fred_yield_domain_from_l1` **不可原樣重用**：它要求 UTC 帶時區的 `fetched_at` 欄，缺則整批判「資料未備」（本批實測），而本文禁止以批次時間或現在時間補（W10）。需新增專用轉接純函式（如 `fred_yield_domain_from_cache`，名稱為候選）或修改該函式契約，二者皆屬 Gate G2／G3（見 5.1 α 變更清單） |
 | W10 | **契約欄位缺口** | `fred_yield_domain_from_l1` 要 `date`、`value`、`fetched_at`（UTC 帶時區）；快取只有前兩欄（FACT，本批實測） | 補 `fetched_at` 的值＝W5 與 Gate G3 的語意爭點；不得以現在時間補 |
 | W11 | **原因碼與文案** | 現有：缺 Key→`not_configured`、L1 錯誤→`fetch_failed`、缺 fetched_at→`資料未備`。讀快取後出現新失效模式：檔缺／壞／cron 沒跑／某 series 停更／含凍結列 | 新原因碼同步 `shared/ui_semantics/rules.py`（adapters 不得 import shared，故另存並以測試鎖）；新文案受 `APPROVED_WORDING` Gate，**本文不擬文案** |
 | W12 | **公式一致性** | `load_indicators_from_parquet` 的 YoY 用列數位移；Old UI `us_indicators` 另有自己的 YoY（FACT） | 接線**不得**順手把這些公式併進 New UI（金融公式屬 Stop Gate；`PROJECT_RULES.md` 13.1「禁止第二套平行金融計算 SSOT」） |
@@ -186,16 +188,16 @@ FRED 各 series（FACT，同次實讀）：
 
 | 項目 | **α 備援（失敗才讀快取）** | **β 快取為主、即時為輔** | **γ 全改快取** |
 |---|---|---|---|
-| 做法 | 即時 L1 成功→行為完全不變；僅當 domain 為「系統錯誤（含缺 Key）」才改讀快取，並明標「來源＝Actions 快取、快取最後觀測日、已落後 N 天」。**最窄版只含 `us10y`／`us2y`** | 先讀快取；快取缺、過期（需定義）或使用者要求重新整理時才打即時 L1 | `market_view` 不再呼叫 L1 Yahoo／FRED |
-| 具體變更檔案與符號（候選） | 新增 `repositories/macro/` 下唯讀讀取器（回 `(frame, error)`）；`services/v2_tables/market_view.py`：`build_market_view` 殖利率迴圈加回退分支（新增注入參數）；`ui_v2/mkt/source.py::load_live` 傳入；`ui_v3/adapters/market_page.py::load` 與 `domain_state`（若需新原因碼→`shared/ui_semantics/rules.py`）；測試；`docs/DECISIONS.md` | α 全部＋`build_market_view` 流程反轉、`ui_v2/mkt/source.py`、shell 的 refresh 流程（現為 `refresh_not_wired`）、Yahoo 三指數的「快取列」收盤／時區處置規則 | β 全部＋移除即時支路與其冷卻／Key 邏輯；B 線 vintage 無法由快取取代→要嘛九項不可完整達成，要嘛改 44 資料契約（`release_date` 不可空） |
+| 做法 | 即時 L1 成功→行為完全不變；僅當 domain 為「系統錯誤」**且原因不是缺 Key**（`MISSING_FRED_API_KEY` 路徑不回退、維持「尚未設定」）才改讀快取，並明標「來源＝Actions 快取、快取最後觀測日、已落後 N 天」。**最窄版只含 `us10y`／`us2y`** | 先讀快取；快取缺、過期（需定義）或使用者要求重新整理時才打即時 L1 | `market_view` 不再呼叫 L1 Yahoo／FRED |
+| 具體變更檔案與符號（候選） | 新增 `repositories/macro/` 下唯讀讀取器（回 `(frame, error)`）；`services/v2_tables/market_view.py`：`build_market_view` 殖利率迴圈加回退分支（新增注入參數）；**必要轉接**：新增專用純函式（候選 `fred_yield_domain_from_cache`，收讀取器的 `(frame, error)`、快取最後觀測日與「現在」由呼叫端傳入，不補 `fetched_at`）或改 `fred_yield_domain_from_l1` 契約；其測試（缺 `fetched_at` 時不得冒充、不補 0、落後天數計算）；Gate：G2（`market_view` 檔頭禁止新增 L1 函式）、G3（不得新增狀態詞，`DEC-2026-11-09-10` ③）、G6（凍結面）。**接線位置**：設計成 `build_market_view` 的 opt-in 參數（預設關），只由 `ui_v3/adapters/market_page.py::load` 開啟，使 `ui_v2/mkt/source.py` 不必改動（G6 建議）；若改為由 `ui_v2/mkt/source.py::load_live` 傳入則需 G6 例外；`ui_v3/adapters/market_page.py::load` 與 `domain_state`（若需新原因碼→`shared/ui_semantics/rules.py`）；測試；`docs/DECISIONS.md` | α 全部＋`build_market_view` 流程反轉、`ui_v2/mkt/source.py`、shell 的 refresh 流程（現為 `refresh_not_wired`）、Yahoo 三指數的「快取列」收盤／時區處置規則 | β 全部＋移除即時支路與其冷卻／Key 邏輯；B 線 vintage 無法由快取取代→要嘛九項不可完整達成，要嘛改 44 資料契約（`release_date` 不可空） |
 | 測試 | 缺檔／壞檔／零列／缺 series；不得補 0；不得標成即時；來源字串與最後觀測日與落後天數；L2 不 I/O 的分層守衛；**「即時成功時完全不讀快取」的突變測試**（拿掉回退，行為必須不變） | α 全部＋兩來源不一致時的優先序、凍結列顯示、快取與即時混用時 `obs_date` 連續性、批次時間作 `fetched_at` 時的落後天數語意 | β 全部＋移除即時路徑後的回歸；「cron 沒跑」情境；Old／New 一致性 |
-| 正確性／風險 | **低**。成功路徑零變更；風險＝把停更快取當可用資料（CPI／M2 型態）→以最後觀測日與落後天數揭露、不訂門檻。DGS 內部缺口（S1 型）仍不揭露（INFERENCE） | **中高**。需先裁示「過期」定義、快取與即時 `obs_date` 等價語意（W1）、凍結列處置（W2）、部署新鮮度（W8）；使用者看到的最新值可能落後即時一週以上 | **高**。凍結列、停更序列、台股週一延遲直接成為使用者所見；失敗模式變成「cron 沒跑」且使用者端無法重取；Old／New 不一致加劇；移除即時路徑的驗證成本不可逆 |
+| 正確性／風險 | **低**。成功路徑零變更；風險＝把停更快取當可用資料（CPI／M2 型態）；另若回退涵蓋缺 Key，會遮蔽 Cloud 端 FRED Secrets 失效訊號——故最窄版不含缺 Key（見 5.3）→以最後觀測日與落後天數揭露、不訂門檻。DGS 內部缺口（S1 型）仍不揭露（INFERENCE） | **中高**。需先裁示「過期」定義、快取與即時 `obs_date` 等價語意（W1）、凍結列處置（W2）、部署新鮮度（W8）；使用者看到的最新值可能落後即時一週以上 | **高**。凍結列、停更序列、台股週一延遲直接成為使用者所見；失敗模式變成「cron 沒跑」且使用者端無法重取；Old／New 不一致加劇；移除即時路徑的驗證成本不可逆 |
 | 速度 | 不變（仍每次打 L1），只提高可用性 | 明顯加速（免 Yahoo／FRED 往返、免 429 冷卻、免 Key） | 最快 |
 | Token（維護 AI 的脈絡成本） | 低 | 中高（兩套語意並存） | 最高（含契約修訂與回歸） |
 | 維護成本 | 低（一支讀取器＋一個分支） | 中高 | 最高 |
 | Old UI 是否不變 | **是** | 程式不變，但同一指標 Old（即時）與 New（快取）可能出現不同日期或數值→觸及 `PROJECT_RULES.md` 13.3 | 程式不變，落差最大 |
 | 達成客戶方向「優先讀快取」 | 最低（僅備援） | 達成 | 完全達成但九項不可完整 |
-| 所需 Decision Gate | G1（新 production 資料路徑）、G2（新增 L1 函式）、G3（日期語意／標示）；G4 視是否先修生產端 | α 全部＋G5（過期門檻、一致性）＋正式日期語意；Eligibility **不可**藉此解鎖（`DEC-2026-11-09-06` ④） | 新／替換 production data source、44 資料契約（`release_date`）、日期語意、新鮮度語意——全部觸發 |
+| 所需 Decision Gate | G1（新 production 資料路徑）、G2（新增 L1 函式與轉接純函式）、G3（日期語意／標示、不新增狀態詞）、G6（凍結面／`ui_v2` maintenance-only）；G4 視是否先修生產端 | α 全部＋G5（過期門檻、一致性）＋正式日期語意；Eligibility **不可**藉此解鎖（`DEC-2026-11-09-06` ④） | 新／替換 production data source、44 資料契約（`release_date`）、日期語意、新鮮度語意——全部觸發 |
 
 ### 5.2 推薦（**未經客戶裁示；總管讀法，可被推翻**）
 
@@ -204,7 +206,8 @@ FRED 各 series（FACT，同次實讀）：
 ### 5.3 α 最窄版的設計邊界（候選，未核准）
 
 - 只覆蓋 `us10y`／`us2y`；Yahoo 三指數、B 線三鍵、其餘 domain 不碰。
-- 顯示欄位僅：值、`obs_date`（FRED 觀測日）、「快取最後觀測日」、「已落後 N 天」、固定來源字串（不得沿用 `FRED (DGS10)` 讓人誤以為即時）。不顯示、不暗示新鮮度判定。
+- **不涵蓋缺 Key**（S3）：缺 `FRED_API_KEY` 時維持現行 `not_configured`（「尚未設定」）畫面，不改讀快取。理由：若缺 Key 也回退，Cloud 端 FRED Secrets 失效（`MISSING_FRED_API_KEY`）會被快取資料遮蔽成「看似有資料」，客戶目前正需要這個訊號來驗證 Secrets 是否生效。回退只對「有 Key 但取數失敗」這一種錯誤；兩種畫面必須可區分，並以測試鎖住（缺 Key→不讀快取）。風險：遮蔽 Secrets 失效訊號已列入 5.1「正確性／風險」。
+- 顯示欄位僅：值與其觀測日（FRED 觀測日；最新一點的觀測日即「快取最後觀測日」，不重複列兩個欄位）、「已落後 N 天」、固定來源字串（不得沿用 `FRED (DGS10)` 讓人誤以為即時）。不顯示、不暗示新鮮度判定。
 - 不新增狀態詞；用現有 `ok` 加來源字串（G3 待裁）。
 - 缺檔／壞檔／series 缺／零列各有原文，**不補 0、不回傳假資料**；缺 `fetched_at` 時的 `fetched_at` 不得以批次時間或現在時間冒充。
 
@@ -461,7 +464,7 @@ for a,b in [("b816df1c","20bf6442"),("20bf6442","8ca33547")]:
 
 | # | 抽查項 | 方法 | 結果 |
 |---|---|---|---|
-| a | 重跑機制測試 | 執行附錄 A.1 | **7／7 PASS**；monkeypatch 覆蓋唯一的 FRED 網路函式，未見任何外部請求；匯入 `streamlit` 的設定警告只是副作用輸出；工作樹無變更 |
+| a | 重跑機制測試 | 執行附錄 A.1 | 7 項全數 PASS（4 項驗生產碼機制、3 項為 `S4.*` 模型對照）；monkeypatch 覆蓋唯一的 FRED 網路函式，未見任何外部請求；匯入 `streamlit` 的設定警告只是副作用輸出；工作樹無變更 |
 | b | 運行時 0 條路徑讀 `data_cache` parquet | `git grep` `ui`、`ui_v2`、`ui_v3`、`app.py`、`services/v2_tables` 對 `parquet`／`data_cache` | **確認**：僅 `ui/sidebar.py` 一則「嚴禁清 data_cache」說明字串；全 repo 非測試、非 `scripts` 的 `read_parquet` 只在 `services/macro/validation.py`（兩處）；`load_indicators_from_parquet` 的呼叫者＝`scripts/calibrate_macro_score.py` 與同檔 `calc_macro_score_series`，後者本身在非測試程式中無呼叫者（動態呼叫未涵蓋） |
 | c | 四檔 `attrs` 空、`date` 為 Python `date`；L2 遇此型態整批不寫 | pyarrow 實讀＋記憶體呼叫現有函式 | **確認**：四檔 `attrs={}`、`date` 皆 Python `date`；`rows_from_daily_close`（VIX 末 30 列）→0 列、原因「取得時間缺」；`fred_yield_domain_from_l1`（DGS10 末 30 列、無 `fetched_at`）→`資料未備`；人工補一欄 `fetched_at` 後可通過（僅示範契約，不代表該值語意獲准） |
 | d | `market_view` 檔頭禁令原文與出處 | 讀檔頭＋檢索 DEC | **確認原文**；出處為上述 DEC 的實作層落字，**無專屬解除條件**（第 6 節） |
