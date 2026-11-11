@@ -63,3 +63,93 @@
 ## 6. 工作規則處理（刻意不動）
 
 本文件**不修改** `CLAUDE.md`、`PROJECT_RULES.md`、`PROCESS.md`、`docs/DECISIONS.md` 或現有 frozen SSOT；也不建立永久的跨專案操作規則。基金專案後續技術工作只需要本專案的正式契約與最小研究結果；**跨領域參考已轉為基金專屬能力要求**，專案 AI 無須取得任何外部專案的原始檔或程式。靜默巡航根因稽核與對話過長時的 durable-first checkpoint／結束／新對話交接，仍依原治理及先前排程處理。
+
+## 7. 增補：F-01～F-08 五欄對照（唯讀盤點；2026-11-11；main `f68ef73e`）
+
+> **性質**：客戶授權範圍內，對本檔既有 F-01～F-08 補五欄（Existing Contract／Runtime Caller／Test Evidence／Gap／Authorization Gate）。**不是第二份矩陣或 SSOT、不新增 DEC／BL／schema／enum、不是施工授權**；與第 1～6 節衝突時，仍以第 1～6 節的免責與正式契約為準。重用且不重做 `docs/v2/67／75／79／80／81／82`、BL-0527、BL-0545、`DEC-2026-11-08-02`、`docs/evidence/onebrain_evidence_coverage_gap_audit_2026_11_08.md`（下稱 AUD）、`docs/evidence/onebrain_decision_gate_route_and_risk_check_2026_11_08.md`（下稱 DG）。
+>
+> **標記**：**FACT**＝本批在 `f68ef73e` 以 `git grep`／讀檔取得；**INFERENCE**＝由事實推得；**NV**＝NOT VERIFIED。**搜尋只在 `*.py` 與所列路徑；動態 import、字串組名、別名不在範圍內**，單次 grep 0 命中不等於未實作，只代表「在此範圍內沒找到」。
+>
+> **Test Evidence 的共同限制**：本批**沒有執行任何測試**（只讀）。可引的執行紀錄只有兩類：(a) PoC 作者於 `55e48d03` 全 repo 本機 `pytest -q -m "not slow"` 的結果（`docs/evidence/fund_newui2_dual_theme_poc_evidence_2026_11_11.md` §十一：9 failed／19782 passed，見第 7.3 節 A）；(b) 各 PR head 的 CI check 結論（見各 PR 頁）。**逐檔「是否被 `-m "not slow"` 涵蓋、是否在特定 CI run 實跑」下列一律 NV**，不因檔案存在推定已跑。
+
+### 7.1 五欄對照
+
+**F-01 呈現與完整證據分離**
+- **Existing Contract**：`docs/v2/67` §5.1（硬規則）、§5.2、§8.6；`docs/v2/79` §8.1～8.3；`docs/v2/80` §16.3（UI ViewModel≠Decision Digest）；`DEC-2026-10-29-06`、`DEC-2026-11-02-07`。
+- **Runtime Caller**：FACT：🌍 市場頁資料流為 `ui_v3/app_preview.py` → `ui_v3/adapters/market_page.py`（呼叫 `services.v2_tables.market_view.build_market_view`、`market_indicator.build_market_indicator_table`）→ `ui_v3/viewmodels/market_page.py` → `ui_v3/pages/mkt.py`。Decision Digest：**not found**——搜尋範圍 `*.py` 全 repo、樣式 `decision_digest|DecisionDigest|build_digest`（不分大小寫）0 命中；`ui_v3/viewmodels/action_slot.py` 檔頭自述「本批不實作 Risk Cap、System Action State、Decision Digest、OneBrain」。
+- **Test Evidence**：`tests/ui_v3/test_ui_v3_viewmodel_contract.py`、`test_ui_v3_readonly_guard.py`、`test_ui_v3_import_guard.py`（ui_v3 層級與唯讀）；PoC 作者 §十一紀錄 `tests/ui_v3` 於 `55e48d03` 無失敗（FACT，引述）。專測「縮減 UI 顯示不影響 Digest 必要證據」的測試：**not found**（Digest 本身不存在，無從測）。
+- **Gap**：FACT：契約已定、ViewModel 側已實作；因 Digest 不存在，「呈現縮減不改變完整證據」目前**無可驗對象**（INFERENCE：屬 Digest 之前置而非獨立缺口）。
+- **Authorization Gate**：Digest schema／生產者＝未授權（`DEC-2026-11-08-02`）；僅唯讀契約對照可繼續。
+
+**F-02 讀取完整性（Required／Available／Read／Omitted）**
+- **Existing Contract**：BL-0527（`67` §5.6 七項缺口）；`67` §5.3；AUD §0 結論 1～3、§3 九域差距矩陣；`DEC-2026-11-08-02`（D2 逐域 Required／Optional／Excluded 未核准）。
+- **Runtime Caller**：FACT：唯一 Complete Evidence 生產者 `services/v2_domain/allocation_evidence.py::build_allocation_evidence`（檔內自標 `SCHEMA_VERSION = 2   # CANDIDATE`，名稱皆為內部候選、非核准詞彙）；唯一非測試 importer 為 `ui_v3/adapters/assets_source.py`（第 67 行 `import allocation_evidence`、第 439 行取用），而 `assets_source` 在 `*.py` 非測試範圍內**沒有 importer**（AUD §0 結論 1 同）。Required／Available／Read／Omitted 的確定性計算：**not found**（範圍同上）。
+- **Test Evidence**：`tests/test_v2_domain_allocation_evidence.py`、`tests/test_allocation_evidence_mutations.py`、`tests/ui_v3/test_ui_v3_assets_source_*.py`（生產者與 adapter 契約／突變）；執行狀態 NV。
+- **Gap**：FACT：只有 💼 配置面一個候選生產者且無 production 呼叫端；其他八域無。不建立 manifest 或 enum；缺口以 AUD §3 為準。
+- **Authorization Gate**：D2 逐域契約＋Digest schema＝未核准，須客戶裁示；`allocation_evidence` 的詞彙不得因本檔升格。
+
+**F-03 資料與能力狀態**
+- **Existing Contract**：`docs/v2/44` 四狀態與用字（經 `shared/ui_semantics/rules.py` 的 `source` 欄逐條指回）；`67` §5.3、§5.4；`docs/evidence/data_state_vocabulary_crosswalk_d3a_2026_11_08.md`（`DEC-2026-11-08-02` 的 D3(a) 唯讀對照表）；BL-0527 第 1 項。
+- **Runtime Caller**：FACT：`shared/ui_semantics/rules.py` 的 `ENTRIES` 現有 key：`ok`、`attention`、`missing`、`undetermined`、`not_applicable`、`fetch_failed`、`stale`、`threshold_pending`、`neutral`、`not_configured`、`user_param_unset`；`ui_v3/viewmodels/common.py` 的 `STATUS_OK／MISSING／FAILED／STALE／UNDETERMINED`；消費者 `ui_v3/pages/mkt.py`、`services/v2_domain/market_summary.py`、`allocation_evidence.py`（import `shared.ui_semantics`）。
+- **Test Evidence**：`tests/ui_v3/test_ui_v3_semantics_rules.py`、`test_ui_v3_wording_fidelity.py`、`test_ui_v3_preview_wording_guard.py`、`tests/test_v2_domain_normalization.py`；執行狀態 NV。
+- **Gap**：INFERENCE：`ENTRIES` 沒有以「Not Implemented」「Not Evaluated」命名的條目；`threshold_pending`／`not_configured`／`undetermined` 是否分別承載這兩個概念，**NV**（見 crosswalk 文件逐項對應）。本檔第 2 節的研究字串**不得**當正式 enum。
+- **Authorization Gate**：狀態語意或新字樣＝正式語意 Gate（客戶裁示）；盤點／對照可唯讀進行。
+
+**F-04 基金身分、幣別、NAV／FX 日期與資料准入**
+- **Existing Contract**：`PROJECT_RULES.md` 第 13 節；BL-0545（五維評級覆蓋率與資料准入）；`DEC-2026-11-07-03`；`DEC-2026-10-28-05`（DG-2 canonical 身分）；`DEC-2026-11-08-02` D8（FX 閘門維持關閉）；`docs/evidence/fx_d8_gap_and_supplementary_plan_2026_11_08.md`；#1166（研究）、#1168（唯讀探針）。
+- **Runtime Caller**：FACT：`services/v2_tables/market_indicator.py` 第 107 行 `FX_OBS_DATE_RULE_VERIFIED = False`；該常數的讀取者在 `*.py` 非測試範圍內為 `market_indicator.py` 自身（取數／寫列閘）、`ui_v3/adapters/assets_source.py`（第 497 行 `read_fx_rule_verified`）、`services/v2_domain/allocation_evidence.py`（由呼叫端傳入）、`ui_v2/alo/source.py`（註解）、以及 `scripts/probe_fx_obs_date.py`／`check_cache_quality.py`／`probe_yahoo_indices_sp.py`。身分解析：`repositories/pool_repository.py::resolve_secid／resolve_isin／resolve_currency`，以及 ISIN→secId 的取數側處理（`repositories/fund/sources.py` 的 `_morningstar_screener_secid`、`repositories/fund/fund_orchestration.py`；FACT 存在，涵蓋率 NV）。Canonical 身分：`services/fund_identity.py::resolve_fund_identity`／`CanonicalFundIdentity`（含 `share_class`、`currency` 屬性，`DEC-2026-10-28-05`、DG-2 Stage-1）——檔頭自述**Shadow Mode、沒有 production 呼叫端**；唯一 hook 在 `services/v2_tables/fund_keys.py`，由 `shared/fund_identity.py::DG2_SHADOW_ENABLED` 把關（FACT：檔頭自述，且 `DG2_SHADOW_ENABLED: bool = False` 已讀檔確認），其餘非測試呼叫者僅在 `scripts/`（`bl0545_coverage_probe.py`、`probe_moneydj_nav_equivalence.py`）。
+- **Test Evidence**：`tests/test_fund_identity_dg2.py`（身分解析）；`tests/test_bl0545_coverage_probe.py`（45 個 test 函式，FACT：計數；離線 fixture／injected fetcher，不證真實覆蓋率）；FX 閘門測試檔 NV。真實 Active Sheet 覆蓋率：**NOT VERIFIED**（BL-0545）。
+- **Gap**：FACT：FX 閘門仍關；INFERENCE：因此**不得推論**任何非 TWD 基金已可准入或其市值／配置數字可信。覆蓋率無實證；canonical 身分（含 share class）僅 Shadow、未接 production 路徑。
+- **Authorization Gate**：FX 開閘＝未核准、D8 補跑＝未授權（`DEC-2026-11-08-02`）；真實覆蓋率驗證需客戶提供 Active Sheet 的授權（BL-0545 邊界）。
+
+**F-05 OneBrain 範圍與反證**
+- **Existing Contract**：`67` §5（AI 只讀、單一 Brain）、§5.3 provenance 對照表、§5.6、§8.6／§8.7（Traceability）；`75` §2、§3.2、§5～§7；`44` 的 Phase 7 正式規格章節；AUD §0、§7；DG；`DEC-2026-11-08-02` D1＝方案 C（資料契約先行，Digest 後續）。
+- **Runtime Caller**：FACT：OneBrain runtime **not found**（搜尋範圍 `*.py` 非測試，樣式 `onebrain`（不分大小寫）僅命中 `ui_v3/shell/registry.py`（🤖 頁於 Phase 7 前建構即擋 `registered=True`）與 `ui_v3/viewmodels/action_slot.py` 的「不實作」註解）。現有 AI 總結為舊路徑：`ui/helpers/ai_summary.py` → `services/ai_service.py`（`gemini_generate`）→ `infra/llm.py::call_llm`（`75` §3.1 已列為可沿用骨架，而非 OneBrain）。
+- **Test Evidence**：`tests/ui_v3/test_ui_v3_page_registry_guard.py`（🤖 頁不得掛載）；`tests/test_llm.py`（檔存在；`75` §3.1 所列 provider 行為測試）；執行狀態 NV。
+- **Gap**：FACT：研究與守則已有、runtime 沒有；支持／反證與 omitted ID 的確定性 validator：not found。**本節任何描述都不是「OneBrain 已啟用」。**
+- **Authorization Gate**：Phase 7／Provider／Claude API runtime＝未授權；D2 與 Digest schema＝未核准。
+
+**F-06 AI 成本與快取**
+- **Existing Contract**：`75` §4（Provider）、§6（Analysis fingerprint／Cache）、§7（Trace／Audit）、§3.2 的 Budget／Trace／Cache 缺口；DG 相關 Gate。
+- **Runtime Caller**：FACT：`75` §6 所指「OneBrain analysis fingerprint 驅動的 AI cache 契約」**not found**。已驗證兩個**同名不同用**的既有物：`services/portfolio_tracking.py::weights_fingerprint`＝歸一化權重的 md5 前 12 碼，供快照去重（與 AI cache 無關，確認為同名誤配）；`ui/tab3_portfolio.py::_pf_health_fingerprint`＝健診結果快取查核。另有**舊路徑實際存在的 AI 磁碟快取** `repositories/ai_cache.py`（`make_key(tab_key, snapshot)`；`ui/helpers/ai_summary.py` 以 snapshot＋新聞標題＋stale 註記為 key 使用），它**不是** `75` §6 的契約（INFERENCE：兩者 key 組成、版本欄位與 trace 是否一致 NV）。付費模型呼叫：本批不做、不測。
+- **Test Evidence**：`tests/test_ai_cache.py`（舊路徑快取）；`75` §6 契約無測試（契約本身未實作）；執行狀態 NV。
+- **Gap**：FACT：Budget／Trace 契約 not found（`75` §3.2 同）；INFERENCE：舊 `ai_cache` 與 `75` §6 目標之間的差距需獨立比對，本批不做。
+- **Authorization Gate**：Provider／Cost Gate＝另行授權；不因每頁入口新增 LLM 呼叫。
+
+**F-07 手機首屏與證據分層**
+- **Existing Contract**：`docs/v2/44`（首屏預算相關章節；精確節號本批 NV）；`docs/v2/80`、`81`（🌍 線框）、`82`（💼 設計提案）；`DEC-2026-11-11-01`（G3／G6）；BL-0542 G-3～G-5（設計部分核准，資料／配息／整頁接線 Gate 未全授權）。
+- **Runtime Caller**：FACT：🌍 市場頁 `ui_v3/pages/mkt.py`（`IA_PAGES` 中唯一 `registered=True`）；💼 頁在 `ui_v3` **沒有 renderer**（`ui_v3/adapters/assets_source.py` 有 adapter、無頁面）。#1207 已合併的量測見 `docs/evidence/fund_newui2_market_g3_g6_build_evidence_2026_11_11.md`。
+- **Test Evidence**：`tests/ui_v3/test_ui_v3_degraded_first_screen_budget.py`、`test_ui_v3_market_page_browser.py`（瀏覽器量測）、`test_ui_v3_top_nav_browser.py`；#1207 head `68329b5d` 的 CI 四項 success 見 BACKLOG 檔尾 G3／G6 完成索引（引述，本批未重驗）；瀏覽器測試本身屬 slow／playwright 類，其執行位置 NV。
+- **Gap**：INFERENCE：💼 的分層規則尚未有可看的實作；不改 IA、不複製其他 UI 版型。
+- **Authorization Gate**：逐頁 wireframe／UI Gate（客戶）；12→13px 併入下一個已授權 UI 批（`DEC-2026-11-11-03`）。
+
+**F-08 Preview、測試與正式入口隔離**
+- **Existing Contract**：`DEC-2026-11-02-06`、`PROJECT_RULES.md` 13.2（preview 不是正式入口）；`DEC-2026-11-11-02`、`-03`（PoC 邊界、不授權施工）。
+- **Runtime Caller**：FACT：`ui_v3/app_preview.py` 為 Preview 入口；正式入口候選不得引用 `ui_v3`，由 `tests/ui_v3/test_ui_v3_preview_not_formal_guard.py` 掃描（根目錄 `*.py`、`ui`、`ui_v2`、`services`、`repositories`、`shared`、`infra`、`scripts`、`mcp_server`、`models` 與 `.streamlit`／`.github`／`.devcontainer`）。#1211 PoC 位於 `poc/dual_theme_isolated/`、`tests/poc_dual_theme/`，不在上述掃描範圍內（設計如此，見 `docs/evidence/decisions/2026-11-11_new_ui2_dual_theme_t1_t5_ruling.md`）。
+- **Test Evidence**：`tests/ui_v3/test_ui_v3_import_guard.py`、`test_ui_v3_preview_not_formal_guard.py`、`test_ui_v3_fixtures_are_fake_guard.py`、`tests/poc_dual_theme/test_poc_dual_theme_guard.py`；PoC 作者 §十一紀錄 `tests/ui_v3` 與 PoC 在 `55e48d03` 全數通過、PoC 的 CI 結果見 #1211 頁（引述）；各 head 實跑狀態 NV。
+- **Gap**：FACT：未發現缺口；INFERENCE：守衛的掃描範圍是靜態 AST，繞法（動態組名）不在內，守衛檔頭已自述。
+- **Authorization Gate**：無新增；新接線一律須客戶 Gate（本文件不新增任何接線）。
+
+### 7.2 後續階段候選（至多三項；皆待授權，非排程）
+
+| 候選 | 內容 | Gate |
+|---|---|---|
+| 1 | 逐域 Required／Optional／Excluded 與讀取完整性的唯讀契約對照（F-02／F-05），以 AUD §3 為底，只補差異 | D2、BL-0527；客戶授權 |
+| 2 | 非 TWD／FX 的證據補強（F-04）：依 `fx_d8_gap_and_supplementary_plan_2026_11_08.md` 的缺口與補證方法，不以相同方法立即重跑 | `DEC-2026-11-08-02` D8；客戶授權補證 |
+| 3 | 舊 `repositories/ai_cache.py` 與 `75` §6／§7 契約的差距比對（F-06）；不做付費呼叫 | Provider／Cost Gate；Phase 7 前僅唯讀 |
+
+### 7.3 誠實性檢查
+
+**A. 「9 個既有失敗」**
+- **記錄位置**：`docs/evidence/fund_newui2_dual_theme_poc_evidence_2026_11_11.md` §十一（明細）；`DEC-2026-11-11-03` 的「仍未驗證」欄（根因未驗證）；BACKLOG BL-0342（`test_hld_logic` 於 Python 3.13 失敗、3.11 基準全過）與 BL-0453（`test_rulings_2026_10_18b_logic` 本機紅、CI 綠）。
+- **明細（依 PoC 作者）**：`tests/test_alo_core_golden.py` 3、`tests/test_alo_core_golden_mutations.py` 1、`tests/ui_v2/test_hld_logic.py` 2、`tests/ui_v2/test_hld_read_failure_logic.py` 2、`tests/ui_v2/test_rulings_2026_10_18b_logic.py` 1，合計 9。**注意**：協作者口頭轉述「alo_core_golden 4」包含 `_mutations` 那 1 條；上列分開計。
+- **狀態**：於乾淨 `origin/main` `55e48d03` 同環境重跑相同 9 條（PoC 作者，FACT，引述）；**現在是否仍可重現＝NOT RUN（本批不跑全套）**；**根因＝NOT VERIFIED**——BL-0342／BL-0453 懷疑為 Python／Streamlit 版本差異，僅為 INFERENCE，BL-0342 自述「尚未完成 root-cause 判定」。不得稱已解決。
+- 以上數字來自文件引述，**本批未獨立重算**。
+
+**B. Slow／Visual 兩條 informational lane**
+- **設定（FACT，讀 `.github/workflows/pr-check.yml`）**：兩條皆 `continue-on-error: true`（非阻擋）；瀏覽器安裝步驟為 `python -m playwright install --with-deps chromium`（`--with-deps` 會走 apt）。
+- **近期紀錄（依協調者轉述的 check run 讀取結果；本批未重讀、不重跑）**：#1214 head `d8ef3bbd` 與 #1212 head `c6bd4323` 的 Slow、Visual 兩條皆在瀏覽器安裝步驟失敗，訊息為 apt「Temporary failure resolving azure.archive.ubuntu.com」，**沒有任何測試被執行**；#1207／#1211／#1213 較早的 head 這兩條曾通過。
+- **結論**：上述兩 head 的 Slow／Visual＝**NOT RUN，不是 PASS**；該失敗是 runner 網路（apt DNS），**不能**解讀為測試通過或程式問題。**未改 workflow。**
+- 阻擋性的 Fast／Schema 兩條與此分開看，各 head 的結論以 PR 頁為準。
+
+**C. 本節的驗證層級**：單組（本檔作者）產出，**未經第二組獨立複驗**；等待獨立 QA。
