@@ -13,9 +13,11 @@
 3. `.streamlit/config.toml` 是 repo 共用的 Streamlit 全站 theme，仍為舊 light palette；`ui_v3` 用頁面自有 CSS 覆寫，而舊 UI／`ui_v2` 仍使用共用設定。**直接增加或替換全站 `theme.light`／`theme.dark` 會影響尚未授權的舊介面**。
 4. `requirements.txt` 的 Streamlit 範圍為 `>=1.59.1,<1.60.0`。最新版官方文件描述的 API／行為不能直接當作 1.59.x 已驗證功能；須在與 repo 相同版本環境驗證。
 5. `mkt.py` 有 Streamlit 原生 `st.radio` 與具名 `st.container`，自繪 HTML + native 控件都需要同步套色；不能只換 `body` 背景、不能用顏色作唯一狀態訊號。
-6. G3／G6 已由 #1207 合併，三寬度和首屏現況有離線測試；雙模式尚未獲客戶授權施工。原始股票 HTML 參考側在 Claude 工作環境仍 NOT VERIFIED。
+6. G3／G6 已由 #1207 合併，三寬度和首屏現況有瀏覽器（Playwright）測試；雙模式尚未獲客戶授權施工。原始股票 HTML 參考側在 Claude 工作環境仍 NOT VERIFIED。
 
 ## 二、三種實施路徑
+
+本節的路徑 A／B／C 與 `docs/evidence/fund_newui2_dual_theme_followup_requirement_2026_11_11.md` 的方案 A／B／C（A 固定淺色、B 手動切換、C 跟隨系統加手動覆蓋）是**不同的分類**，請勿混用。
 
 | 路徑 | 做法 | 正確性／範圍風險 | 速度／Token | 研究建議 |
 |---|---|---|---|---|
@@ -23,16 +25,16 @@
 | **B `ui_v3` scoped token + 明確選擇** | 保持原 light token 不變，增加經核准的 dark token 候選，`ui_v3` 局部按選擇編譯 CSS；原生控件、邊線與 hover/focus 同驗；切換入口須待設定頁 Gate | **中**：須對原生 Streamlit 元件/重跑同步做 PoC，但可隔離舊 UI、回滾簡單 | **中／中** | **推薦技術方向（未授權施工）** |
 | C 自訂前端 JS + browser storage | 以 browser JS 或 custom component 切 theme 並保存偏好 | **中高**：JS/CSS 狀態雙來源、跨 WebView 相容性／XSS 安全／CSP／跨版本風險；增加依賴或前端契約 | 中慢／高 | 僅作 B 無法滿足「重載保持」時的後備 |
 
-**特別提醒**：Streamlit 官方最新文件支援用 `[theme.light]`／`[theme.dark]` 供使用者在 App menu 選擇，但這是**全 app 層級**，且 repo pinned 1.59.x 的配置效果尚未做 PoC；不能把「官方支援」推導為「可無痛做 `ui_v3` 限定、且設定頁內切換」。`st.context.theme.type` 為**唯讀**且可能暫時與 CSS 視覺不同，不可假設它是可寫的切換 API。
+**特別提醒**：Streamlit 官方最新文件支援用 `[theme.light]`／`[theme.dark]` 供使用者在 App menu 選擇，但這是**全 app 層級**，且 repo pinned 1.59.x 的配置效果尚未做 PoC；不能把「官方支援」推導為「可無痛做 `ui_v3` 限定、且設定頁內切換」。`st.context.theme.type` 為**唯讀**，並且是依背景色推斷；以 scoped CSS 實作的深色（路徑 B）**不會**反映在它上面（它會持續回報設定的 theme，而不只是暫時不同），因此路徑 B 不得用它來偵測目前模式，也不可假設它是可寫的切換 API（已於 Streamlit 1.59.1／1.59.2 docstring 查證）。
 
-外部參考（2026-11-11 查閱）：[Streamlit Theme overview](https://docs.streamlit.io/develop/concepts/configuration/theming)、[config.toml Theme](https://docs.streamlit.io/develop/api-reference/configuration/config.toml)、[st.context theme 1.58](https://docs.streamlit.io/1.58.0/develop/api-reference/caching-and-state/st.context)、[Session State limitations](https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state)。
+外部參考（2026-11-11 查閱）：[Streamlit Theme overview](https://docs.streamlit.io/develop/concepts/configuration/theming)、[config.toml Theme](https://docs.streamlit.io/develop/api-reference/configuration/config.toml)、[st.context theme 1.58](https://docs.streamlit.io/1.58.0/develop/api-reference/caching-and-state/st.context)、[Session State limitations](https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state)。註：`st.context theme 1.58` 連結版本與 repo 鎖定的 `>=1.59.1,<1.60.0` 不一致；API docstring 已對照已安裝的 1.59.1／1.59.2（離線）檢查，外部頁面內容仍為 NOT VERIFIED。
 
 ## 三、偏好保存契約：不要把 session 當作永久記住
 
 | 候選 | 切換後 rerun／同頁 | 瀏覽器重載／新分頁 | 跨裝置 | 額外風險 |
 |---|---|---|---|---|
 | `st.session_state` | 可（repo 既用 `session_state`） | **不可保證**：連線重建可重設 | 不可 | 最低；可做階段性 PoC，不可承諾「永久記住」 |
-| URL query parameter | 可由 URL 傳遞 | 直接使用同 URL 時可重現；其他進站方式不保證 | 分享 URL 時可傳遞 | 分享會洩漏外觀選擇但非金融資料；URL 參數與既有 routing、頁切換、導航合同需驗 |
+| URL query parameter | 可由 URL 傳遞 | 直接使用同 URL 時可重現；其他進站方式不保證 | 分享 URL 時可傳遞 | 分享會洩漏外觀選擇但非金融資料；URL 參數與既有 routing、頁切換、導航合同需驗。另：Streamlit 1.59.x 部分 widget（如 `st.radio`）有原生 `bind="query-params"` 選項，需 PoC，用於本用途 NOT VERIFIED |
 | Browser storage + bridge/custom component | 若同步正確即可 | 理論可 | 不可 | 同源/CSP、WebView、元件生命週期與 Streamlit rerun 均 NOT VERIFIED |
 | 會員設定／遠端 DB | 可以 | 可以 | 可以 | **超出本批範圍**，涉及登入、權限和新的儲存契約，必須另行裁示 |
 
@@ -67,7 +69,7 @@
 
 ## 六、待客戶裁示（**這份研究不代替裁示**）
 
-- **T1（架構）**：是否採用 B「`ui_v3` scoped 雙 token、手動切換」做後續 PoC？推薦 B；不核准全域 config 改動。
+- **T1（架構）**：是否採用 B「`ui_v3` scoped 雙 token、手動切換」做後續 PoC？推薦 B；建議不核准全域 config 改動。
 - **T2（入口時機）**：等 ⚙️ 設定頁完成再顯示切換，或提前核准僅 Preview 使用的最小入口？推薦等設定頁，不做空殼。
 - **T3（記住偏好）**：先僅 session，或本期就增加 browser-local persistence？推薦先 session PoC，永久保存另批裁示；客戶期望「記住」仍需後續達成，不得稱已完成。
 - **T4（視覺）**：上述 dark 示例色票可否作 PoC 候選？推薦只授權在隔離 PoC 測試，不作正式色票，待雙模式對照截圖後核准。
@@ -75,4 +77,4 @@
 
 **其他待客戶裁示**（分離）：#1207 的 `config.toml` 是否全域統一、12px 小字是否調 13px、`grey`／`neutral` 是否視覺分開；FRED P1 G2/G3/G4 未授權。不要把本方案推薦自動轉為以上問題的裁示。
 
-**交接**：本文件若進 main，應在合適的索引同步批次引用，避免在此 docs-only PR 改寫 DECISIONS/BACKLOG/HANDOFF 或創造新的客戶決策。若發現重複的 PR／本檔過時，先在最新 GitHub main／diff 查核後修復或關閉。
+**交接**：本 PR 以後續 commit 同步加入 BACKLOG／HANDOFF 索引指標；**未新增 DEC**，因 T1–T5 皆未決定，不得創造新的客戶決策，也未改動 DECISIONS。若發現重複的 PR／本檔過時，先在最新 GitHub main／diff 查核後修復或關閉。
