@@ -2882,7 +2882,23 @@
 | 是否可逆 | 可逆（技術 PoC、未連 production；後續具體施工須重新裁示） |
 | supersedes／superseded by | **補充** `DEC-2026-11-11-01` 的「雙模式待另行研究」；**部分 supersede** `DEC-2026-11-11-01` ② 對「深色模式」與「session 偏好保存」的不授權——**僅限隔離 PoC 範圍內**（非 production、不連正式入口），其餘（正式 UI 深色、永久／跨裝置保存、`config.toml`、`ui_v2`、正式入口等）一字不變。T5 使 G7 Cloud／WebView／真機驗收往後延（影響 `DEC-2026-11-10-07` G7 與 `DEC-2026-11-11-01` 後續欄「現已可排，需客戶 go」的措辭）：G7 僅在有正式 dark 實作且完成非作者 QA 後才安排，不再是「現已可排」。保留 `DEC-2026-11-10-07` G2 與 `DEC-2026-10-27-09` 既有淺色主內容＋深色側欄的正式方向，**不 supersede**；正式 dark 仍須另立新 DEC。 |
 | provenance | 客戶句『我同意你建議的 T1～T5 及另外三項裁示……』為客戶逐字句，經 ChatGPT 對話轉貼，專案 AI 未見原始對話、repo 內不可核對；八項對應屬要點轉述，轉達人：ChatGPT 協作助手；V1～V3 的建議原文不在 repo（INFERENCE）；單組整理，未經第二組驗證。尚待非作者獨立 QA。 |
-| 後續 | 隔離 PoC 已由 #1211 完成並合併（`poc/dual_theme_isolated/`、`tests/poc_dual_theme/`；CI 四項 success〔head `5416482d`〕；非作者獨立 QA 兩輪：第一輪 MUST-FIX〔深色展開 expander 標題文字對比 1.07:1〕已修並複驗 MERGE-READY；PoC 115 tests；9 項既有失敗在乾淨 main 上相同、非本批造成）。模式權威＝單一 session_state key，`st.context.theme` 不可用。發現：原生主選單 popover 在深色下仍為淺色（小字 4.16:1，低於 4.5）；側欄按鈕邊框 1.85／2.03，低於 3:1（繼承）；覆寫依賴 Streamlit `data-testid` 選擇器。**NOT RUN／NOT VERIFIED**：Cloud／WebView／真機／螢幕閱讀器／其他瀏覽器／持久化／Streamlit 1.59.1／真實 `ui_v3` 頁。production（`ui_v3`、`config.toml`、`ui_v2`、正式入口）未動。**仍待客戶裁示（僅為提問、非決定）**：(1) 是否核准正式深色色票（含 PoC 專用變體與紅／黃方向）；(2) session-only 以外的偏好保存（browser storage／custom component／JS／帳號）；(3) 切換入口位置與時機（T2 仍待 ⚙️ 設定頁）；(4) 是否接受原生 popover 在深色下維持淺色及 4.16:1 小字；(5) 深色是否一併讓主內容變深（現 `DEC-2026-10-27-09`：淺色主內容＋深色側欄）；(6) V2 12→13px 時機（併下一個已授權 UI 批）、V3 grey／neutral、G7 Cloud／WebView／真機。本筆授權範圍不變。 |
+| 後續 | 隔離 PoC 已由 #1211 完成並合併（`poc/dual_theme_isolated/`、`tests/poc_dual_theme/`；CI 四項 success〔head `5416482d`〕；非作者獨立 QA 兩輪：第一輪 MUST-FIX〔深色展開 expander 標題文字對比 1.07:1〕已修並複驗 MERGE-READY；PoC 115 tests；9 項既有失敗在乾淨 main 上相同、非本批造成）。模式權威＝單一 session_state key，`st.context.theme` 不可用。發現：原生主選單 popover 在深色下仍為淺色（小字 4.16:1，低於 4.5）；側欄按鈕邊框 1.85／2.03，低於 3:1（繼承）；覆寫依賴 Streamlit `data-testid` 選擇器。**NOT RUN／NOT VERIFIED**：Cloud／WebView／真機／螢幕閱讀器／其他瀏覽器／持久化／Streamlit 1.59.1／真實 `ui_v3` 頁。production（`ui_v3`、`config.toml`、`ui_v2`、正式入口）未動。**仍待客戶裁示（僅為提問、非決定）**：(1) 是否核准正式深色色票（含 PoC 專用變體與紅／黃方向）；(2) session-only 以外的偏好保存（browser storage／custom component／JS／帳號）；(3) 切換入口位置與時機（T2 仍待 ⚙️ 設定頁）；(4) 是否接受原生 popover 在深色下維持淺色及 4.16:1 小字；(5) 深色是否一併讓主內容變深（現 `DEC-2026-10-27-09`：淺色主內容＋深色側欄）；(6) V2 12→13px 時機（併下一個已授權 UI 批）、V3 grey／neutral、G7 Cloud／WebView／真機。本筆授權範圍不變。（2026-11-11 更新，有意識，非漏刪：上列六項待客戶提問已由 `DEC-2026-11-11-03` 裁示——G1～G6 均選 A，結果見該筆；仍不授權任何施工，「仍待客戶裁示」之舊狀態以該筆為準。） |
+
+---
+
+### DEC-2026-11-11-03｜New UI2 雙模式六項裁示 G1～G6（正式深色方向＝深色主內容＋深色側欄；不授權任何 UI／Runtime 施工）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-11 |
+| 決策者／原話 | 客戶 2026-11-11 六項裁示（G1～G6，均選 A）經 ChatGPT 對話轉達，repo 內無逐字存檔、不可獨立核對；內容為要點轉述，轉達人：ChatGPT 協作助手；單組整理，未經第二組驗證；客戶可推翻。**不虛構引文。** |
+| 決策內容摘要 | **G1＝A**：正式深色色票**未核准**；PoC 色票、PoC 專用變體、紅／黃深色候選仍只是研究／測試候選，不得成為正式 token。**G2＝A**：維持 session-only；不得使用 localStorage／cookie 偏好保存、JS、custom component、帳號設定或跨裝置同步；不得宣稱「永久記住」。**G3＝A**：切換入口等 ⚙️ 設定頁；設定頁須另走設計／施工 Gate；不得新增入口、空殼設定頁或第六頁。**G4＝A**：原生 popover 小字 4.16:1 **不接受為正式 PASS**，PoC 發現照留；正式驗收的一般小字須達 4.5:1；不得把未解問題記成成功，不得未經授權用脆弱 CSS／JS 硬修；側欄功能性邊框 ＜3:1 的發現仍列為風險。**G5＝A**（視覺方向）：淺色模式＝淺色主內容＋深色側欄（已核准契約）；深色模式＝深色主內容＋深色側欄。**這是視覺方向裁示、不是施工授權。** **G6＝A**：12px→13px 併入下一個適當、已授權的 UI 批；`grey`／`neutral` 視覺區分延後；G7 Cloud／WebView／真機驗收待正式 dark 實作＋非作者 QA 後，仍需另行授權。以上皆未在本批執行。 |
+| 授權範圍 | **不授權任何 UI／Runtime 施工**：不改 `ui_v3`、`.streamlit/config.toml`、`ui_v2`、正式入口、`poc/`、tests、資料、公式。僅為文件登記。 |
+| supersedes／superseded by | **G5 對 `DEC-2026-10-27-09`**：該 DEC 的「淺色主內容＋深色側欄」仍是淺色模式／現行產品的契約；**僅就「未來深色模式下的主內容方向」被取代**（深色模式主內容改為深色），並非整份取代；`DEC-2026-11-10-07` G2 的現行產品方向同此範圍。**對 `DEC-2026-11-11-02`**：其 T1～T5、V1～V3 除 G1（T4 深色色票仍非正式）、G2（T3 session-only）、G3（T2 等設定頁）、G6（V2／V3／T5）的**重申與具體化**外一字未變；G4、G5 為其未涵蓋的新增裁示。正式 dark 實作仍須另立 DEC／Gate。 |
+| 仍未驗證 | **NOT RUN／NOT VERIFIED**：Cloud／WebView／真機／螢幕閱讀器／其他瀏覽器／持久化／Streamlit 1.59.1／真實 `ui_v3` 頁。PoC 的 9 項既有測試失敗（於乾淨 main 相同）**根因仍未驗證**，不得稱已解決。#1212 最終 head 上 informational Slow／Visual lane 因 runner apt-DNS 失敗而 **NOT RUN，不是 PASS**。PoC session-only 結果不變。 |
+| 影響範圍 | 文件登記（本筆、`docs/evidence/decisions/2026-11-11_new_ui2_dual_theme_six_rulings_g1_g6.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md`）。BL-0545 仍全域唯一 NEXT；不新增 BL、不改 BL 狀態。 |
+| provenance | 客戶 2026-11-11 六項裁示（G1～G6，均選 A）經 ChatGPT 對話轉達，repo 內無逐字存檔、不可獨立核對；內容為要點轉述，轉達人：ChatGPT 協作助手；單組整理，未經第二組驗證；客戶可推翻。 |
+| 是否可逆 | 可逆（客戶可推翻；本筆不含施工）。 |
 
 ---
 
@@ -3073,3 +3089,4 @@
 - 第四節 `DEC-2026-11-10-07`：客戶裁示經總管轉達，無逐字存檔，本組未見客戶對話本身；G1～G8 對應證據檔 §0.2、為要點轉述；股票 HTML 原檔未取得、參考側 NOT VERIFIED；專案 AI 單組整理，未經第二組驗證；授權僅限 V1 證據、G3／G6 文件提案、V4 新增測試，不授權 UI 施工。
 - 第四節 `DEC-2026-11-11-01`：客戶裁示經總管於 2026-11-11 派工指示中轉達，無逐字存檔，本組未見客戶對話本身；G3／G6 內容對應 2026-11-10 token 與線框提案證據檔；專案 AI 單組整理，未經第二組驗證；施工尚未完成，本筆不記載任何 CI／QA 結果；雙模式的深色 token、保存機制、Streamlit 控件相容性皆未研究、無裁示。（2026-11-11 更新，有意識，非漏刪：施工已由 #1207 完成並合併，其 CI／QA 結果記於 #1207 與 build 證據檔，不在本筆；本更新為專案 AI 單組索引同步，自驗，低風險。）
 - 第四節 `DEC-2026-11-11-02`：客戶同意句『我同意你建議的 T1～T5 及另外三項裁示……』經 ChatGPT 對話轉貼，專案 AI 未見原始對話、repo 內不可核對；八項對應屬要點轉述（轉達人：ChatGPT 協作助手），V1～V3 的建議原文不在 repo（INFERENCE）；證據檔「隔離 PoC」一節的位置與守衛邊界是專案 AI 在 DEC 授權內的讀法、非客戶逐字；單組整理，未經第二組驗證；~~隔離 PoC NOT RUN~~，Cloud／WebView／真機 NOT VERIFIED。（2026-11-11 更新，有意識，非漏刪：隔離 PoC 已由 #1211 完成並合併（main `5e6a950d`）；`DEC-2026-11-11-02` 已由 #1210 落盤（`55e48d03`）。PoC 成功**不等於**正式雙模式授權，授權範圍一字未動。證據 `docs/evidence/fund_newui2_dual_theme_poc_evidence_2026_11_11.md`。）
+- 第四節 `DEC-2026-11-11-03`：客戶六項裁示（G1～G6）經 ChatGPT 對話轉達，repo 內無逐字存檔，本組未見客戶對話本身；內容為要點轉述（轉達人：ChatGPT 協作助手）；專案 AI 單組整理，未經第二組驗證；Cloud／WebView／真機／螢幕閱讀器／其他瀏覽器／持久化／Streamlit 1.59.1／真實 `ui_v3` 頁 NOT RUN／NOT VERIFIED；PoC 的 9 項既有失敗根因未驗證；#1212 head 上 informational Slow／Visual lane 為 NOT RUN。
