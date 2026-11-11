@@ -2902,6 +2902,24 @@
 
 ---
 
+### DEC-2026-11-11-04｜D2 Required 逐列審核（D2-G1＝B 修正版）／D2 逐域契約與 Digest schema 分離（D2-G2＝A）／D2 首批限基金身份、NAV、績效（D2-G3＝A）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-11 |
+| 決策者／原話 | 客戶 2026-11-11 三項 D2 Gate 裁示經 ChatGPT 對話轉達，**ChatGPT 轉達的客戶要點，非逐字**；repo 內無逐字存檔、專案 AI 未見客戶對話本身、不可獨立核對；客戶可推翻。**不虛構引文。** 本筆的 G 編號簡稱 D2-G1～D2-G3，與 `DEC-2026-11-09-06`、`-11-10-07`、`-11-11-03` 的同名 G 編號無關。 |
+| 決策內容摘要 | **D2-G1＝B 修正版**：僅先逐列審核 Required 候選；不得把整欄 Required 自動升格為正式契約；每列須核對既有 DEC、正式契約、New UI2 適用範圍；未明確核准、證據不足或有衝突者維持 Pending；**本次沒有核准任何具體欄位（正式核准欄位數＝0）**。**D2-G2＝A**：D2 逐域資料契約與 Digest schema 是兩個獨立 Gate；D2 逐域正式契約完成後才另行提 Digest schema Gate；不得因 D2 方向核准就啟動 Digest schema 研究／施工／OneBrain。**D2-G3＝A**：D2 首批只處理基金身份、NAV、績效；其餘六資料域延後，不啟動契約草案或施工；「延後」≠ Excluded，也不代表其既有業務能力失效。 |
+| 授權範圍（僅此） | 最小文件決策落盤（本筆、`docs/evidence/decisions/2026-11-11_d2_g1_g2_g3_rulings.md`）、在既有 D2 候選整理檔末節增補「Required 逐列待審表」（身份／NAV／績效三域；客戶審核用，**不是正式 schema**，不另建競爭矩陣或第二 SSOT）、`docs/BACKLOG.md`／`docs/HANDOFF.md` 索引句、非作者獨立 QA 與 CI。 |
+| 不授權（維持原狀，不得藉本筆解鎖） | 正式 Schema／producer／adapter；UI／Runtime 施工；金融公式、報酬窗、門檻（含 `RET_1Y_RESTORED_MIN_WINDOW_DAYS`＝350、`NAV_NOT_READY_DAYS`＝10；皆不改）；FX 開閘（`FX_OBS_DATE_RULE_VERIFIED` 維持 `False`）；Digest schema 研究／施工、OneBrain、Phase 7、Claude API；任何正式資料契約欄位升格；啟用 `DG2_SHADOW_ENABLED`；改 NAV source precedence；新增正式 ISIN／share class mapping；其餘六資料域（持倉、配息、持倉占比等）的契約草案與施工；新增 BL、改 BL 狀態、動 BL-0545（仍為全域唯一 NEXT）。 |
+| 與既有 DEC 關係 | **精確補充、不 supersede、不改寫任何歷史 DEC**：(1) 補充 `DEC-2026-11-08-02`：該筆「D2 逐域契約與 Digest schema 未核准」維持，本筆進一步裁定兩者為獨立 Gate、順序為先 D2 後 Digest。(2) 補充 `DEC-2026-11-08-04`／`-05`：其「候選逐類核可前不具效力」維持，本筆定下逐列審核方式與首批範圍（身份／NAV／績效）；`-05` 的持倉占比 C（延後）與本筆 D2-G3 同向，持倉域不在首批。(3) 補充 `DEC-2026-11-09-01`：D2-A＝B、D2-B＝收緊後 C、D2-C＝B 與淨投資金額用語**一字未動**；本筆逐列審核時遇與其衝突者，一律以 `-09-01` 為準、維持 Pending。(4) `DEC-2026-11-05-03`（NAV 10 日規則不得升格）、`DEC-2026-10-23-02`（1B 限舊站）仍有效。`DEC-2026-11-09-05` 之後各筆（至 `DEC-2026-11-11-03`）逐筆核對結果見證據檔，**未發現與本筆衝突者**（單組判讀，NOT VERIFIED 待非作者 QA）。 |
+| 現行效果 | D2 首批範圍限定為基金身份、NAV、績效；Required 候選全部**待客戶逐列核可，正式效力 Pending**；Digest schema Gate 尚未提出；其餘六域標「延後」。 |
+| evidence／source | `docs/evidence/decisions/2026-11-11_d2_g1_g2_g3_rulings.md`（裁示、後續 DEC 逐筆核對）；`docs/evidence/d2_contract_candidates_returns_identity_holdings_2026_11_08.md` 末節（Required 逐列待審表）；`docs/evidence/d2_draft_A1_fund_identity_nav_perf_2026_11_08.md`（身份／NAV／績效草案）。 |
+| 影響範圍 | 僅文件：本檔、`docs/BACKLOG.md`（檔尾索引）、`docs/HANDOFF.md`（索引句）、上列兩個 evidence 檔。無 code／tests／workflow／cron／閘門／`data_cache`／Sheet 變更。 |
+| 是否可逆 | 可逆（客戶可推翻；純文件）。 |
+| provenance | 要點轉述（ChatGPT 轉達，非逐字）；「現行效果／影響範圍」為專案 AI 整理；本筆與 evidence 由專案 AI 作者單組寫成，**未經第二組驗證；尚待非作者獨立 QA**。 |
+
+---
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
