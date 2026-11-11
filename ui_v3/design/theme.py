@@ -42,6 +42,11 @@ def card_css(selector: str, *, margin_bottom: str = "") -> str:
             f"box-shadow:{v('elevation.none')}}}")
 
 
+def card_pad_x() -> str:
+    """卡片左右內距（`card.detail.padding` 的第二個值；10px 12px → 12px）。"""
+    return m("card.detail")["padding"].split()[1]
+
+
 def tone_css() -> str:
     """chip 形狀與 tone 色（字／底／邊；neutral／grey 共用同組值）。"""
     chip = m("chip.neutral")

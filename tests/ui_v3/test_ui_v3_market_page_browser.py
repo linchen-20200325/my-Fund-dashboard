@@ -11,7 +11,9 @@ AppTest 不載入 CSS，DOM 級守衛量不到「橫向溢出」「圖是否真�
 - 390／768／1280 整頁與頁本體元素無橫向溢出（MV-08、§6）。
 - 主圖：存在、可見（非 display:none／visibility:hidden）、非零尺寸、水平在視窗內、長寬比維持 viewBox 360:240、
   在摘要之後與第一張 Secondary 卡之前、中心點沒被別的元素蓋住（MV-05、MV-09 只斷言「存在、可見、非零尺寸」）。
-- **G5 客戶暫時接受現況**：首屏主圖露出量（390px 約 157／239px）**不設門檻，只記錄**（`record_property` 與 `-s` 的 print），絕不斷言。
+- **首屏主圖露出量（G3／G6 施工批起有門檻）**：G5 原本「暫時接受現況、只記錄」；客戶規則為「首屏圖的露出量不得明顯變差，因內距而下降時優先零額外內距」，
+  故改為斷言「露出量 ≥ 改前基線 − 1px（容次像素取整）」；基線＝改前 `origin/main`（192848b）同腳本同合成資料實測：390／768／1280 ＝ 156.6／181.4／198.4px
+  （`_FOLD_BASELINE`）。390 另斷言主圖渲染寬 ≥354（改前 358；卡內左右滿版後為卡內寬 356，比例仍 360:240、最大寬 720）。數字仍照舊 print 與 `record_property`。
 - 頁首五格 S1（`DEC-2026-11-06-01`／`-07-02`）：≤768 五格全可見、等寬、不重疊、不橫滑、各格 ≥48px 高；≥769 側欄在、頁首隱藏。
 - 已核准排版：區塊順序（MV-02）、首屏 chip＋核心數字 ≤5（MV-03）、缺資料恆 `⬜`／`◇ 資料未備`、Missing 不畫零不畫空座標軸、
   取數失敗原文不外漏（MV-04、MV-07）。
@@ -216,6 +218,24 @@ def chart_violations(m):
     return bad
 
 
+# 改前（origin/main 192848b）首屏主圖露出量基線（px；Chromium、視窗高 844／844／800、合成資料）。容差 1px＝次像素取整。
+_FOLD_BASELINE = {390: 156.6, 768: 181.4, 1280: 198.4}
+_FOLD_TOLERANCE = 1.0
+_CHART_MIN_W_390 = 354   # 改前 358；卡內左右滿版後 356；窄於此代表卡片內距又吃掉圖寬
+
+
+def firstscreen_violations(m, width):
+    c = m["chart"]
+    if not c["exists"]:
+        return [("主圖不存在",)]
+    bad = []
+    if c["foldPx"] < _FOLD_BASELINE[width] - _FOLD_TOLERANCE:
+        bad.append(("首屏主圖露出量低於改前基線", round(c["foldPx"], 1), _FOLD_BASELINE[width]))
+    if width == 390 and c["w"] < _CHART_MIN_W_390:
+        bad.append(("390 主圖渲染寬低於 354（卡片內距吃掉圖寬）", round(c["w"], 1)))
+    return bad
+
+
 def nav_violations(m, width):
     if width >= 769:
         bad = []
@@ -280,6 +300,14 @@ def container_violations(m):
             bad.append(("元素不在應在的卡內", name))
     if c["radioCount"] != 3:
         bad.append(("原生單選控制項不是 3 組（檢視／期間／利率子序列）", c["radioCount"]))
+    cf, ch = m["frames"].get("chart"), m["chart"]
+    if cf and ch["exists"]:
+        # 主圖可左右滿版（伸入卡片內距），但不得蓋過卡片邊線；文字（標題）仍須保留卡片內距、不貼邊
+        if ch["x"] < cf["x"] + 1 - 0.5 or ch["r"] > cf["r"] - 1 + 0.5:
+            bad.append(("主圖蓋過卡片邊線", round(ch["x"], 1), round(ch["r"], 1), round(cf["x"], 1), round(cf["r"], 1)))
+        for b in m["bodyBoxes"]:
+            if b["t"] == "H3" and b["x"] < cf["x"] + 11:
+                bad.append(("卡內標題貼到卡片邊線（內距被吃掉）", round(b["x"], 1), round(cf["x"], 1)))
     r = m["ratesRadio"]
     if r is None or r["name"] != "利率與信用" or r["options"] != 3:
         bad.append(("利率子序列單選的無障礙名稱或選項數不符", r))
@@ -429,10 +457,11 @@ def test_primary_chart_present_visible_nonzero_and_in_place(measure, width, reco
     m = measure("normal", width)
     assert not chart_violations(m), (chart_violations(m), m["chart"])
     assert m["hit"] is not None and not m["hit"]["covered"], ("主圖中心點被別的元素蓋住", m["hit"])
-    # G5：首屏露出量只記錄、不斷言（客戶暫時接受現況；390px 實測約 157／239px）
-    info = f"w{width}: chart top y={m['chart']['y']:.0f}, foldPx={m['chart']['foldPx']:.0f}/{m['chart']['h']:.0f} (viewport h={m['vh']}) — INFO ONLY, 無門檻"
+    # 首屏露出量：斷言「不低於改前基線 − 1px」（基線與理由見檔頭 `_FOLD_BASELINE`）
+    assert not firstscreen_violations(m, width), (firstscreen_violations(m, width), m["chart"])
+    info = f"w{width}: chart top y={m['chart']['y']:.0f}, foldPx={m['chart']['foldPx']:.1f}/{m['chart']['h']:.1f}, w={m['chart']['w']:.0f} (viewport h={m['vh']}; baseline fold {_FOLD_BASELINE[width]})"
     record_property(f"chart_fold_w{width}", info)
-    print("\n[G5 info]", info)
+    print("\n[first-screen]", info)
 
 
 @pytest.mark.parametrize("width", _WIDTHS)
@@ -642,3 +671,10 @@ def test_mutation_legacy_theme_colours_are_flagged(base_and_browser):
     m = _mutated(base_and_browser, "normal", 390,
                  css='html body [data-testid="stMain"] label[data-testid="stRadioOption"][data-selected="true"] > div > div > div:first-child{background-color:#1f6feb !important}')
     assert any(v[0] == "token 未套用" and v[1] == "radioSelectedBg" for v in token_violations(m))
+
+
+def test_mutation_extra_top_spacing_pushing_chart_below_baseline_is_flagged(base_and_browser):
+    m = _mutated(base_and_browser, "normal", 390, css=".st-key-uv3-card-summary{margin-bottom:40px !important}")
+    assert any("低於改前基線" in v[0] for v in firstscreen_violations(m, 390))
+    m = _mutated(base_and_browser, "normal", 390, css="html body svg.uv3-chart{width:100% !important;margin-left:0 !important}")
+    assert any("354" in v[0] for v in firstscreen_violations(m, 390))

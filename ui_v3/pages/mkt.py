@@ -20,6 +20,7 @@ from typing import Optional
 from shared.ui_semantics import rules
 from ui_v3.design import theme
 from ui_v3.pages import chart_svg
+from ui_v3.shell import nav
 from ui_v3.shell.registry import IA_PAGES
 from ui_v3.viewmodels import preview_wording as W
 from ui_v3.viewmodels.common import STATUS_FAILED, STATUS_MISSING, STATUS_OK, STATUS_UNDETERMINED
@@ -51,10 +52,14 @@ def _css() -> str:
     """頁面 CSS：色與尺寸全取 token（`design/theme.py`）。
 
     卡內最後一個 markdown 的 `margin-bottom` 歸零：Streamlit 的 markdown 容器帶 `margin-bottom:-1rem`，卡內最後一個 markdown 會因此
-    把內容拉出下內距（實測：文字壓到下邊線）；只在卡內最後一個元素歸零，其餘元素間距不動。"""
+    把內容拉出下內距（實測：文字壓到下邊線）；只在卡內最後一個元素歸零，其餘元素間距不動。
+
+    390px 首屏（G5 守衛的後續處置）：≤768 時主圖在卡內左右滿版（圖本身的左右各伸入卡片內距 `pad_x`，文字與控制項仍保留內距、不貼邊），
+    寬度回到卡外寬（390 約 358；比例不變、最大寬 720）；`card.chart` 內標題的上內距歸零（卡片自己的 10px 內距已是上緣留白），
+    讓首屏露出量不低於改前。"""
     gutter, page, section = theme.v("gutter.mobile"), theme.v("type.page"), theme.v("type.section")
     caption, metric, body = theme.v("type.caption"), theme.v("type.metric"), theme.v("type.body")
-    text2, border = theme.v("color.text.secondary"), theme.v("color.card.border")
+    text2, border, pad_x = theme.v("color.text.secondary"), theme.v("color.card.border"), theme.card_pad_x()
     return f"""
 <style>
 .block-container,.stMainBlockContainer{{padding-top:3.4rem !important}}
@@ -74,6 +79,10 @@ h3{{font-size:{section} !important}}
 .uv3-card h4,.uv3-card-in h4{{margin:0 0 4px 0;font-size:{body}}}
 .uv3-metric{{font-size:{metric};margin:2px 0}}
 .uv3-chart{{width:100%;max-width:720px;height:auto;display:block}}
+[class*="st-key-uv3-card-chart"] h3{{padding-top:0}}
+@media (max-width:{nav.MOBILE_MAX_PX}px){{
+  .uv3-chart{{width:calc(100% + 2 * {pad_x});margin-left:-{pad_x}}}
+}}
 .uv3-spark{{width:160px;height:40px;display:block;margin:4px 0}}
 </style>
 """
