@@ -18,7 +18,7 @@
 
 | 項目 | 2026-11-07 查到的狀態 | 對應證據 |
 |---|---|---|
-| main | `7ac7c9354f27831ad936b9f19f747526f750ca39`（#1170 merge；2026-11-08 歷史快照；前一快照為 `b0e2636f`）；（2026-11-11 更新，有意識，非漏刪：2026-11-11 觀測 main `2ffc6ad1ccf80e4a3f5bacfd35861f2551416bc1`＝#1207 merge；#1206 `df005798` 與 #1207 均已合併；觀測時除本索引同步 docs PR 外無其他 Open PR；使用前仍須重查 GitHub） | 當前使用前仍須重查 GitHub |
+| main | `7ac7c9354f27831ad936b9f19f747526f750ca39`（#1170 merge；2026-11-08 歷史快照；前一快照為 `b0e2636f`）；（2026-11-11 更新，有意識，非漏刪：2026-11-11 觀測 main `2ffc6ad1ccf80e4a3f5bacfd35861f2551416bc1`＝#1207 merge；#1206 `df005798` 與 #1207 均已合併；觀測時除本索引同步 docs PR 外無其他 Open PR；使用前仍須重查 GitHub）（2026-11-11 再更新，有意識，非漏刪：#1209 合併時 main 為 `50e668012daa51575c874ecdf6329be95fbfebbe`；`DEC-2026-11-11-02` 由 PR #1210 提交，是否已進 main 以 GitHub 為準；使用前仍須重查 GitHub） | 當前使用前仍須重查 GitHub |
 | #1163 | **merged=true**；**歷史 merge SHA `025922382ef3921fc7b6858cb733084935fbf066`**（是 #1164 之前的 commit，不是當前 main HEAD） | [PR #1163](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1163)；B／S1 設計文件已進 main |
 | Open PR | ~~2026-11-08 查得 Open PR 僅 #1171（未合併，見 §3）；#1166 merge `b227ae5c`、#1168 merge `b34dd2eb`、#1167 merge `861add40` 均已完成~~（2026-11-08 更正，有意識，非漏刪）**#1171 已於 2026-11-08 merge（`5d8050df`），Open PR 為 0**（合併當時查得；使用前須重查 GitHub）；#1166 merge `b227ae5c`、#1168 merge `b34dd2eb`、#1167 merge `861add40` 均已完成 | ~~[#1171](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1171)（Open）；不把此列視為即時狀態，使用前重查~~（2026-11-08 更正，有意識，非漏刪）[#1171](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1171)（merged）；不把此列視為即時狀態，使用前重查 |
 | #1164 已合併 head CI | [run 42359253829](https://github.com/linchen-20200325/my-Fund-dashboard/actions/runs/42359253829)：Fast／Schema／Slow／Visual **success** | 最後 head `4f045c26` 的結論；**不是 merge commit 的 main CI** |
@@ -59,7 +59,7 @@
 | LATER | BL-0530 找基金 ISIN → MoneyDJ deterministic identity | research-only；無已核准 source 時不得啟用 mapping |
 | LATER | 設定登入、BL-0534 frozen amendment、BL-0535 cutover、OneBrain／Phase7 | 各走正式授權、獨立 QA、必要人工／法規 Gate |
 
-> **2026-11-11 新裁示（`DEC-2026-11-11-02`，需用 GitHub 實況再確認）**：#1209 已合併為 `50e66801`；客戶核准雙模式 T1～T5 與三項視覺處理：**僅隔離 PoC 授權**（`ui_v3` scoped token／手動切換、session-only、候選暗色僅供隔離測試）；⚙️ 正式切換入口待設定頁核准實作；G7 Cloud／WebView／真機延後；全域 `config.toml` 不改；12px→13px 併入下一個適當已授權 UI 批次；grey／neutral 區分延後。**PoC 不可被正式 Preview 或正式 App import／連結、不變更 production token、UI、資料或公式；PoC 成功不等於正式雙模式獲准。** 逐字來源與完整界線見 `docs/evidence/decisions/2026-11-11_new_ui2_dual_theme_t1_t5_ruling.md`。此文件 PR 完成獨立 QA＋CI 及合併後才視為 main 正式落盤；後續由專案 AI 安排隔離 PoC。BL-0545 仍唯一 NEXT；基金 Coverage／Digest 改善與靜默根因稽核待適當批次，不搶本次工作。
+> **2026-11-11 新裁示（`DEC-2026-11-11-02`；使用前須以 GitHub 實況再確認）**：客戶核准雙模式 T1～T5 與三項視覺處理，載體為 PR #1210（是否已進 main 以 GitHub 為準）：**僅隔離 PoC 授權**（`ui_v3` scoped token／手動切換、session-only、候選暗色僅供隔離測試）；⚙️ 正式切換入口待設定頁核准實作；G7 Cloud／WebView／真機延後至正式 dark 實作與非作者 QA 後；全域 `config.toml` 不改；12px→13px 併入下一個適當已授權 UI 批次；grey／neutral 區分延後。**PoC 不可被正式 Preview 或正式 App import／連結、不變更 production token、UI、資料或公式；PoC 成功不等於正式雙模式獲准。** PoC 位置與守衛邊界（專案 AI 讀法）、客戶句來源（經 ChatGPT 轉貼、repo 內不可核對）與完整界線見 `docs/evidence/decisions/2026-11-11_new_ui2_dual_theme_t1_t5_ruling.md`。PoC 由專案 AI 在 DEC 授權內擇適當時機安排，無 BL 編號、不需客戶再行動。BL-0545 仍唯一 NEXT；基金 Coverage／Digest 改善與靜默根因稽核待適當批次，不搶本次工作。
 
 ## 4. 新對話／compact 後交接自驗
 
