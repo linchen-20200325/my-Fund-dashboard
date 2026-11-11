@@ -70,7 +70,7 @@
 >
 > **標記**：**FACT**＝本批在 `f68ef73e` 以 `git grep`／讀檔取得；**INFERENCE**＝由事實推得；**NV**＝NOT VERIFIED。**搜尋只在 `*.py` 與所列路徑；動態 import、字串組名、別名不在範圍內**，單次 grep 0 命中不等於未實作，只代表「在此範圍內沒找到」。
 >
-> **Test Evidence 的共同限制**：本批**沒有執行任何測試**（只讀）。可引的執行紀錄只有兩類：(a) PoC 作者於 `55e48d03` 全 repo 本機 `pytest -q -m "not slow"` 的結果（`docs/evidence/fund_newui2_dual_theme_poc_evidence_2026_11_11.md` §十一：9 failed／19782 passed，見第 7.3 節 A）；(b) 各 PR head 的 CI check 結論（見各 PR 頁）。**逐檔「是否被 `-m "not slow"` 涵蓋、是否在特定 CI run 實跑」下列一律 NV**，不因檔案存在推定已跑。
+> **Test Evidence 的共同限制**：本批**沒有執行任何測試**（只讀）。可引的執行紀錄只有兩類：(a) PoC 作者的本機 `pytest -q -m "not slow"` 結果（`docs/evidence/fund_newui2_dual_theme_poc_evidence_2026_11_11.md` §十一）。**兩個範圍必須分開讀**：全 repo「9 failed／19782 passed」是在 **PoC 分支（含 PoC）**上量的，**不是**乾淨 main；乾淨 `origin/main` `55e48d03` 上只重跑了那 5 個失敗檔，結果 9 failed／557 passed（見第 7.3 節 A）；(b) 各 PR head 的 CI check 結論（見各 PR 頁）。**逐檔「是否被 `-m "not slow"` 涵蓋、是否在特定 CI run 實跑」下列一律 NV**，不因檔案存在推定已跑。
 
 ### 7.1 五欄對照
 
@@ -82,7 +82,7 @@
 - **Authorization Gate**：Digest schema／生產者＝未授權（`DEC-2026-11-08-02`）；僅唯讀契約對照可繼續。
 
 **F-02 讀取完整性（Required／Available／Read／Omitted）**
-- **Existing Contract**：BL-0527（`67` §5.6 七項缺口）；`67` §5.3；AUD §0 結論 1～3、§3 九域差距矩陣；`DEC-2026-11-08-02`（D2 逐域 Required／Optional／Excluded 未核准）。
+- **Existing Contract**：BL-0527（`67` §5.6 七項缺口）；`67` §5.3；AUD §0 結論 1～3、§3 九域差距矩陣；`DEC-2026-11-08-02`（D2 逐域 Required／Optional／Excluded 未核准）；`DEC-2026-11-08-04`（採納 Q1–Q5 方向並產出唯讀草案，**仍不是正式契約**）。
 - **Runtime Caller**：FACT：唯一 Complete Evidence 生產者 `services/v2_domain/allocation_evidence.py::build_allocation_evidence`（檔內自標 `SCHEMA_VERSION = 2   # CANDIDATE`，名稱皆為內部候選、非核准詞彙）；唯一非測試 importer 為 `ui_v3/adapters/assets_source.py`（第 67 行 `import allocation_evidence`、第 439 行取用），而 `assets_source` 在 `*.py` 非測試範圍內**沒有 importer**（AUD §0 結論 1 同）。Required／Available／Read／Omitted 的確定性計算：**not found**（範圍同上）。
 - **Test Evidence**：`tests/test_v2_domain_allocation_evidence.py`、`tests/test_allocation_evidence_mutations.py`、`tests/ui_v3/test_ui_v3_assets_source_*.py`（生產者與 adapter 契約／突變）；執行狀態 NV。
 - **Gap**：FACT：只有 💼 配置面一個候選生產者且無 production 呼叫端；其他八域無。不建立 manifest 或 enum；缺口以 AUD §3 為準。
@@ -90,14 +90,14 @@
 
 **F-03 資料與能力狀態**
 - **Existing Contract**：`docs/v2/44` 四狀態與用字（經 `shared/ui_semantics/rules.py` 的 `source` 欄逐條指回）；`67` §5.3、§5.4；`docs/evidence/data_state_vocabulary_crosswalk_d3a_2026_11_08.md`（`DEC-2026-11-08-02` 的 D3(a) 唯讀對照表）；BL-0527 第 1 項。
-- **Runtime Caller**：FACT：`shared/ui_semantics/rules.py` 的 `ENTRIES` 現有 key：`ok`、`attention`、`missing`、`undetermined`、`not_applicable`、`fetch_failed`、`stale`、`threshold_pending`、`neutral`、`not_configured`、`user_param_unset`；`ui_v3/viewmodels/common.py` 的 `STATUS_OK／MISSING／FAILED／STALE／UNDETERMINED`；消費者 `ui_v3/pages/mkt.py`、`services/v2_domain/market_summary.py`、`allocation_evidence.py`（import `shared.ui_semantics`）。
+- **Runtime Caller**：FACT：`shared/ui_semantics/rules.py` 的 `ENTRIES` 現有 key：`ok`、`attention`、`missing`、`undetermined`、`not_applicable`、`fetch_failed`、`stale`、`threshold_pending`、`neutral`、`not_configured`、`user_param_unset`；`ui_v3/viewmodels/common.py` 的 `STATUS_OK／MISSING／FAILED／STALE／UNDETERMINED`；實際 import `shared.ui_semantics` 的非測試模組（FACT，`git grep`）：`ui_v3/viewmodels/common.py`、`ui_v3/viewmodels/action_slot.py`、`ui_v3/viewmodels/preview_wording.py`、`ui_v3/pages/mkt.py`、`ui_v3/pages/chrome.py`（另 `poc/dual_theme_isolated/poc_fixtures.py` 為 PoC）。`services/v2_domain/market_summary.py` 只在 docstring 提到 `rules.py` 的 `FRESHNESS_TO_KEY`，`services/v2_domain/allocation_evidence.py` 的 import 只有 `dataclasses／datetime／math／holdings`，**兩者都沒有 import** `shared.ui_semantics`。
 - **Test Evidence**：`tests/ui_v3/test_ui_v3_semantics_rules.py`、`test_ui_v3_wording_fidelity.py`、`test_ui_v3_preview_wording_guard.py`、`tests/test_v2_domain_normalization.py`；執行狀態 NV。
 - **Gap**：INFERENCE：`ENTRIES` 沒有以「Not Implemented」「Not Evaluated」命名的條目；`threshold_pending`／`not_configured`／`undetermined` 是否分別承載這兩個概念，**NV**（見 crosswalk 文件逐項對應）。本檔第 2 節的研究字串**不得**當正式 enum。
 - **Authorization Gate**：狀態語意或新字樣＝正式語意 Gate（客戶裁示）；盤點／對照可唯讀進行。
 
 **F-04 基金身分、幣別、NAV／FX 日期與資料准入**
 - **Existing Contract**：`PROJECT_RULES.md` 第 13 節；BL-0545（五維評級覆蓋率與資料准入）；`DEC-2026-11-07-03`；`DEC-2026-10-28-05`（DG-2 canonical 身分）；`DEC-2026-11-08-02` D8（FX 閘門維持關閉）；`docs/evidence/fx_d8_gap_and_supplementary_plan_2026_11_08.md`；#1166（研究）、#1168（唯讀探針）。
-- **Runtime Caller**：FACT：`services/v2_tables/market_indicator.py` 第 107 行 `FX_OBS_DATE_RULE_VERIFIED = False`；該常數的讀取者在 `*.py` 非測試範圍內為 `market_indicator.py` 自身（取數／寫列閘）、`ui_v3/adapters/assets_source.py`（第 497 行 `read_fx_rule_verified`）、`services/v2_domain/allocation_evidence.py`（由呼叫端傳入）、`ui_v2/alo/source.py`（註解）、以及 `scripts/probe_fx_obs_date.py`／`check_cache_quality.py`／`probe_yahoo_indices_sp.py`。身分解析：`repositories/pool_repository.py::resolve_secid／resolve_isin／resolve_currency`，以及 ISIN→secId 的取數側處理（`repositories/fund/sources.py` 的 `_morningstar_screener_secid`、`repositories/fund/fund_orchestration.py`；FACT 存在，涵蓋率 NV）。Canonical 身分：`services/fund_identity.py::resolve_fund_identity`／`CanonicalFundIdentity`（含 `share_class`、`currency` 屬性，`DEC-2026-10-28-05`、DG-2 Stage-1）——檔頭自述**Shadow Mode、沒有 production 呼叫端**；唯一 hook 在 `services/v2_tables/fund_keys.py`，由 `shared/fund_identity.py::DG2_SHADOW_ENABLED` 把關（FACT：檔頭自述，且 `DG2_SHADOW_ENABLED: bool = False` 已讀檔確認），其餘非測試呼叫者僅在 `scripts/`（`bl0545_coverage_probe.py`、`probe_moneydj_nav_equivalence.py`）。
+- **Runtime Caller**：FACT：`services/v2_tables/market_indicator.py` 第 107 行 `FX_OBS_DATE_RULE_VERIFIED = False`；該常數的讀取者在 `*.py` 非測試範圍內為 `market_indicator.py` 自身（取數／寫列閘）、`ui_v3/adapters/assets_source.py`（第 497 行 `read_fx_rule_verified`）、`services/v2_domain/allocation_evidence.py`（由呼叫端傳入）、`ui_v2/alo/source.py`（註解）、以及 `scripts/probe_fx_obs_date.py`／`check_cache_quality.py`／`probe_yahoo_indices_sp.py`。身分解析：`repositories/pool_repository.py::resolve_secid／resolve_isin／resolve_currency`，以及 ISIN→secId 的取數側處理（`repositories/fund/sources.py` 的 `_morningstar_screener_secid`、`repositories/fund/fund_orchestration.py`；FACT 存在，涵蓋率 NV）。Canonical 身分：`services/fund_identity.py::resolve_fund_identity`／`CanonicalFundIdentity`（含 `share_class`、`currency` 屬性，`DEC-2026-10-28-05`、DG-2 Stage-1）——檔頭自述**Shadow Mode、沒有 production 呼叫端**；唯一 hook 為 `services/v2_tables/fund_keys.py`（第 284 行附近延遲 import）→ `services/fund_identity_shadow.py::log_shadow_for_fund_keys` → `resolve_fund_identity`（`fund_identity_shadow.py` 第 26 行 import、第 67 行呼叫）；由 `shared/fund_identity.py::DG2_SHADOW_ENABLED` 把關，該旗標為 `False`（FACT，已讀檔），故此鏈**預設不執行**。其餘非測試呼叫者僅在 `scripts/`（`bl0545_coverage_probe.py`、`probe_moneydj_nav_equivalence.py`）。
 - **Test Evidence**：`tests/test_fund_identity_dg2.py`（身分解析）；`tests/test_bl0545_coverage_probe.py`（45 個 test 函式，FACT：計數；離線 fixture／injected fetcher，不證真實覆蓋率）；FX 閘門測試檔 NV。真實 Active Sheet 覆蓋率：**NOT VERIFIED**（BL-0545）。
 - **Gap**：FACT：FX 閘門仍關；INFERENCE：因此**不得推論**任何非 TWD 基金已可准入或其市值／配置數字可信。覆蓋率無實證；canonical 身分（含 share class）僅 Shadow、未接 production 路徑。
 - **Authorization Gate**：FX 開閘＝未核准、D8 補跑＝未授權（`DEC-2026-11-08-02`）；真實覆蓋率驗證需客戶提供 Active Sheet 的授權（BL-0545 邊界）。
@@ -110,7 +110,7 @@
 - **Authorization Gate**：Phase 7／Provider／Claude API runtime＝未授權；D2 與 Digest schema＝未核准。
 
 **F-06 AI 成本與快取**
-- **Existing Contract**：`75` §4（Provider）、§6（Analysis fingerprint／Cache）、§7（Trace／Audit）、§3.2 的 Budget／Trace／Cache 缺口；DG 相關 Gate。
+- **Existing Contract**：`75` §4（Provider）、§6（Analysis fingerprint／Cache）、§7（Trace／Audit）、§8（Cost／Budget Governance，含 §8.1 成本原則、§8.2 未來 Budget Control）、§3.2 的 Budget／Trace／Cache 缺口；DG 相關 Gate。
 - **Runtime Caller**：FACT：`75` §6 所指「OneBrain analysis fingerprint 驅動的 AI cache 契約」**not found**。已驗證兩個**同名不同用**的既有物：`services/portfolio_tracking.py::weights_fingerprint`＝歸一化權重的 md5 前 12 碼，供快照去重（與 AI cache 無關，確認為同名誤配）；`ui/tab3_portfolio.py::_pf_health_fingerprint`＝健診結果快取查核。另有**舊路徑實際存在的 AI 磁碟快取** `repositories/ai_cache.py`（`make_key(tab_key, snapshot)`；`ui/helpers/ai_summary.py` 以 snapshot＋新聞標題＋stale 註記為 key 使用），它**不是** `75` §6 的契約（INFERENCE：兩者 key 組成、版本欄位與 trace 是否一致 NV）。付費模型呼叫：本批不做、不測。
 - **Test Evidence**：`tests/test_ai_cache.py`（舊路徑快取）；`75` §6 契約無測試（契約本身未實作）；執行狀態 NV。
 - **Gap**：FACT：Budget／Trace 契約 not found（`75` §3.2 同）；INFERENCE：舊 `ai_cache` 與 `75` §6 目標之間的差距需獨立比對，本批不做。
@@ -143,12 +143,13 @@
 **A. 「9 個既有失敗」**
 - **記錄位置**：`docs/evidence/fund_newui2_dual_theme_poc_evidence_2026_11_11.md` §十一（明細）；`DEC-2026-11-11-03` 的「仍未驗證」欄（根因未驗證）；BACKLOG BL-0342（`test_hld_logic` 於 Python 3.13 失敗、3.11 基準全過）與 BL-0453（`test_rulings_2026_10_18b_logic` 本機紅、CI 綠）。
 - **明細（依 PoC 作者）**：`tests/test_alo_core_golden.py` 3、`tests/test_alo_core_golden_mutations.py` 1、`tests/ui_v2/test_hld_logic.py` 2、`tests/ui_v2/test_hld_read_failure_logic.py` 2、`tests/ui_v2/test_rulings_2026_10_18b_logic.py` 1，合計 9。**注意**：協作者口頭轉述「alo_core_golden 4」包含 `_mutations` 那 1 條；上列分開計。
-- **狀態**：於乾淨 `origin/main` `55e48d03` 同環境重跑相同 9 條（PoC 作者，FACT，引述）；**現在是否仍可重現＝NOT RUN（本批不跑全套）**；**根因＝NOT VERIFIED**——BL-0342／BL-0453 懷疑為 Python／Streamlit 版本差異，僅為 INFERENCE，BL-0342 自述「尚未完成 root-cause 判定」。不得稱已解決。
+- **量測範圍（兩個，勿混）**：全 repo `-m "not slow"` 的 9 failed／19782 passed 是 **PoC 分支（含 PoC）**的結果；乾淨 `origin/main` `55e48d03` 上**只重跑了 5 個失敗檔**，得 9 failed／557 passed、失敗清單相同（PoC 作者，FACT，引述）。另一個「14 failed」來自無 `.git` 的 `git archive` 副本，是人為環境差異（多出的 6 條在有 `.git` 的真 repo 都通過），**與這 9 條無關**，不是比較基準。
+- **狀態**：**現在是否仍可重現＝NOT RUN（本批不跑全套）**；**根因＝NOT VERIFIED**——BL-0342／BL-0453 懷疑為 Python／Streamlit 版本差異，僅為 INFERENCE，BL-0342 自述「尚未完成 root-cause 判定」。不得稱已解決。
 - 以上數字來自文件引述，**本批未獨立重算**。
 
 **B. Slow／Visual 兩條 informational lane**
 - **設定（FACT，讀 `.github/workflows/pr-check.yml`）**：兩條皆 `continue-on-error: true`（非阻擋）；瀏覽器安裝步驟為 `python -m playwright install --with-deps chromium`（`--with-deps` 會走 apt）。
-- **近期紀錄（依協調者轉述的 check run 讀取結果；本批未重讀、不重跑）**：#1214 head `d8ef3bbd` 與 #1212 head `c6bd4323` 的 Slow、Visual 兩條皆在瀏覽器安裝步驟失敗，訊息為 apt「Temporary failure resolving azure.archive.ubuntu.com」，**沒有任何測試被執行**；#1207／#1211／#1213 較早的 head 這兩條曾通過。
+- **近期紀錄（依協調者轉述的 check run 讀取結果；本批未重讀、不重跑）**：#1214 head `d8ef3bbd` 與 #1212 head `c6bd4323` 的 Slow、Visual 兩條皆在瀏覽器安裝步驟失敗，訊息為 apt「Temporary failure resolving azure.archive.ubuntu.com」，**沒有任何測試被執行**；#1207／#1211／#1213 較早的 head 這兩條曾通過（同為轉述、**NOT VERIFIED**）。
 - **結論**：上述兩 head 的 Slow／Visual＝**NOT RUN，不是 PASS**；該失敗是 runner 網路（apt DNS），**不能**解讀為測試通過或程式問題。**未改 workflow。**
 - 阻擋性的 Fast／Schema 兩條與此分開看，各 head 的結論以 PR 頁為準。
 
