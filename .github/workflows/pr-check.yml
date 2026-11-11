@@ -125,7 +125,44 @@ jobs:
       # CI（CI=true，GitHub Actions 自動設定）找不到瀏覽器時測試 fail、不 skip —— 見 tests/ui_v2/_ui_v2_chromium.py。
       # 守衛：tests/ui_v2/test_ui_v2_lane_guards.py
       - name: Install Chromium for ui_v2 browser tests
-        run: python -m playwright install --with-deps chromium
+        run: |
+          # runner 偶發 apt 鏡像 DNS 失敗（Temporary failure resolving 'azure.archive.ubuntu.com'）會讓
+          # --with-deps 以 exit 100 失敗、測試根本沒跑。只對「安裝」做有界重試；指令本身不變、不降級（仍 --with-deps）。
+          # 3 次都失敗 → 明確 exit 1（不吞錯、不 || true）。
+          sudo tee /etc/apt/apt.conf.d/80-ci-retries >/dev/null <<'EOF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          EOF
+          max=3
+          for attempt in $(seq 1 "$max"); do
+            echo "::group::chromium install attempt ${attempt}/${max}"
+            if timeout 600 python -m playwright install --with-deps chromium; then
+              echo "::endgroup::"
+              echo "chromium install ok on attempt ${attempt}/${max}"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "::warning::chromium install attempt ${attempt}/${max} failed"
+            if [ "$attempt" -lt "$max" ]; then
+              sleep $((attempt * 20))
+              if ! sudo apt-get update; then echo "::warning::apt-get update failed before retry"; fi
+            fi
+          done
+          echo "::error::chromium install failed after ${max} attempts"
+          exit 1
+
+      - name: Chromium launch smoke check
+        run: |
+          python - <<'PY'
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as p:
+              b = p.chromium.launch()
+              page = b.new_page()
+              page.goto("about:blank")
+              print("chromium launch ok, version:", b.version)
+              b.close()
+          PY
 
       - name: Run AppTest (slow lane)
         env:
@@ -170,7 +207,44 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Install Chromium
-        run: python -m playwright install --with-deps chromium
+        run: |
+          # runner 偶發 apt 鏡像 DNS 失敗（Temporary failure resolving 'azure.archive.ubuntu.com'）會讓
+          # --with-deps 以 exit 100 失敗、測試根本沒跑。只對「安裝」做有界重試；指令本身不變、不降級（仍 --with-deps）。
+          # 3 次都失敗 → 明確 exit 1（不吞錯、不 || true）。
+          sudo tee /etc/apt/apt.conf.d/80-ci-retries >/dev/null <<'EOF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          EOF
+          max=3
+          for attempt in $(seq 1 "$max"); do
+            echo "::group::chromium install attempt ${attempt}/${max}"
+            if timeout 600 python -m playwright install --with-deps chromium; then
+              echo "::endgroup::"
+              echo "chromium install ok on attempt ${attempt}/${max}"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "::warning::chromium install attempt ${attempt}/${max} failed"
+            if [ "$attempt" -lt "$max" ]; then
+              sleep $((attempt * 20))
+              if ! sudo apt-get update; then echo "::warning::apt-get update failed before retry"; fi
+            fi
+          done
+          echo "::error::chromium install failed after ${max} attempts"
+          exit 1
+
+      - name: Chromium launch smoke check
+        run: |
+          python - <<'PY'
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as p:
+              b = p.chromium.launch()
+              page = b.new_page()
+              page.goto("about:blank")
+              print("chromium launch ok, version:", b.version)
+              b.close()
+          PY
 
       - name: Capture CI fixture screenshots + layout checks
         env:
