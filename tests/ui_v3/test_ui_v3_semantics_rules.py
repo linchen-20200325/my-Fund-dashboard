@@ -284,10 +284,18 @@ def test_ui_v3_action_vocabulary_is_the_rules_table_tuple():
 
 # ─────────────── 4. tone 是名字、顏色不是唯一訊息 ───────────────
 def test_tone_keys_are_names_not_hex():
+    """規則表（`rules.py`）的 tone 永遠只是名字，沒有色碼。
+
+    G3 批（客戶核准候選 B 色票）改前：本測試連 `ui_v3/design/tokens.py` 也要求無色碼（因為 token 值一律 None）。
+    現在核准色值住在 token 表（`tokens.py`；唯一真相源），所以該檔改為「語意層仍只指向名字」：`color.status.*` 一律只有
+    `refers_to`（指向 tone 鍵）、自己沒有值、不是色碼；色碼只准出現在核准的 PALETTE／TONE_VALUES（由 `test_ui_v3_design_tokens.py` 逐值鎖）。"""
     assert all(re.fullmatch(r"[a-z]+", k) for k in rules.TONES)
-    for path in (SEMANTICS_DIR / "rules.py", ROOT / "ui_v3" / "design" / "tokens.py"):
-        src = path.read_text(encoding="utf-8")
-        assert not re.search(r"#[0-9A-Fa-f]{3,8}\b|rgba?\(|hsla?\(", src), path
+    src = (SEMANTICS_DIR / "rules.py").read_text(encoding="utf-8")
+    assert not re.search(r"#[0-9A-Fa-f]{3,8}\b|rgba?\(|hsla?\(", src)
+    from ui_v3.design import tokens
+    for name, token in tokens.TOKENS.items():
+        if name.startswith("color.status."):
+            assert token.value is None and token.refers_to and token.refers_to.startswith("color.tone."), name
 
 
 def test_non_neutral_tone_always_has_symbol_and_wording():

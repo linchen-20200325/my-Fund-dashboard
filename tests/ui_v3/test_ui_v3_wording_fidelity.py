@@ -180,6 +180,7 @@ def _render_capture(model, out):
     fake = types.SimpleNamespace(
         markdown=lambda html, **k: calls.append(html), title=lambda *a, **k: None, divider=lambda: None,
         radio=lambda *a, **k: None, expander=lambda *a, **k: __import__("contextlib").nullcontext(),
+        container=lambda *a, **k: __import__("contextlib").nullcontext(),   # G6：卡片容器（`st.container(key=…)`）
         columns=lambda n: [__import__("contextlib").nullcontext() for _ in range(n if isinstance(n, int) else 1)],
         session_state={},
     )
