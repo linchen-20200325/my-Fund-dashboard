@@ -181,7 +181,11 @@ def collect_contrast(page):
     grab("idle")
     page.locator('[data-testid="stExpander"] summary').first.click()
     page.wait_for_timeout(400)
-    grab("expander 展開")
+    grab("expander 展開（hover）")
+    page.mouse.move(2, 2)
+    page.evaluate("() => document.activeElement && document.activeElement.blur()")
+    page.wait_for_timeout(500)
+    grab("expander 展開（靜止）")  # 曾漏量：未 hover、未 focus 的展開 header（QA 抓到）
     page.locator('[data-testid="stExpander"] summary').first.click()
     page.hover(f'{_RADIO}:not([data-selected="true"])')
     page.wait_for_timeout(300)

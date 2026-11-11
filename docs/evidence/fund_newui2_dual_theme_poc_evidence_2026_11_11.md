@@ -54,7 +54,7 @@
 | 項目 | 結果 |
 |---|---|
 | 新 session 預設模式 | light（三寬度皆是） |
-| computed style 與 palette 逐項吻合 | app 底、頁首底、標題字、卡片面／邊、次要文字、radio 選取圓點／未選圓環／標籤字、expander 邊／底／字、button 底／邊、disabled button／radio 字、側欄底／字、SVG 兩條線與刻度字、六枚 chip 的字／底／邊、`color-scheme`；淺→深→淺後完全回到淺色（無殘留） |
+| computed style 與 palette 逐項吻合 | app 底、頁首底、標題字、卡片面／邊、次要文字、radio 選取圓點／未選圓環／標籤字、expander 邊／底／字（另有 expander 六態對比，見第六節）、button 底／邊、disabled button／radio 字、側欄底／字、SVG 兩條線與刻度字、六枚 chip 的字／底／邊、`color-scheme`；淺→深→淺後完全回到淺色（無殘留） |
 | 頁級水平溢位 | 無（同時檢查 `documentElement`、`body`、`stMain`、`stAppViewContainer`；**`stMain` 是 Streamlit 的捲動容器，只查 document 會漏**——負控抓到後補上） |
 | 圖寬 | `0 < svg 寬 ≤ 720`（三寬度、兩模式） |
 | chip | 六枚皆有「符號＋中文字樣」（`◆ ◇ ⬜ ⛔ ◷ ●`），不靠顏色 |
@@ -64,13 +64,13 @@
 
 ## 六、對比度（FACT；作者自寫計算器，非非作者重算）
 
-- **方法**：`poc_dual_theme_contrast_lib.py`（WCAG 2.x 相對亮度、alpha 合成、大字判定）；已知值測試（黑白 21、#777 對白 4.478、alpha 合成）。配對**不寫死**：由瀏覽器 computed style 導出——每個可見文字節點的 `color`（SVG 用 `fill`）、各層祖先 `background-color` 與累計 `opacity` 逐層合成後計算。蒐集狀態：idle、expander 展開、radio hover、radio 鍵盤 focus、button hover、主選單 popover 開啟、側欄（窄螢幕點原生展開鈕）。每個寬度×模式約 70 個文字節點。
+- **方法**：`poc_dual_theme_contrast_lib.py`（WCAG 2.x 相對亮度、alpha 合成、大字判定）；已知值測試（黑白 21、#777 對白 4.478、alpha 合成）。配對**不寫死**：由瀏覽器 computed style 導出——每個可見文字節點的 `color`（SVG 用 `fill`）、各層祖先 `background-color` 與累計 `opacity` 逐層合成後計算。蒐集狀態：idle、expander 展開（hover）、**expander 展開（靜止：未 hover、未 focus）**、radio hover、radio 鍵盤 focus、button hover、主選單 popover 開啟、側欄（窄螢幕點原生展開鈕）。每個寬度×模式約 70 個文字節點。
 - **文字（門檻：一般 4.5、大字 3）**
 
 | 模式 | 最低（排除原生 popover） | 其他代表值 |
 |---|---|---|
-| light | **4.55**（disabled 字 `#6b7690` on 白） | 次要文字 6.9～7.4；紅 chip 7.67；黃 chip 7.10；主文 16.27；側欄 14.6 |
-| dark | **5.59**（disabled 字 `#8d98b0` on `#172036`） | 次要文字 7.76～8.65；紅 chip 6.71；黃 chip 8.15；主文 13.71；側欄 16.06 |
+| light | **4.55**（disabled 字 `#6b7690` on 白） | 次要文字 6.9～7.4；紅 chip 7.67；黃 chip 7.10；主文 16.27；側欄 14.6；**expander 展開靜止 header 16.27** |
+| dark | **5.59**（disabled 字 `#8d98b0` on `#172036`） | 次要文字 7.76～8.65；紅 chip 6.71；黃 chip 8.15；主文 13.71；側欄 16.06；**expander 展開靜止 header 13.71** |
 
 - **非文字／邊界（門檻 3:1，緊鄰外側底色）**
 
@@ -91,6 +91,8 @@
   3. 研究文件警告「暗底下 red／yellow 邊接近或低於 3:1」——PoC 採**研究候選 `#ff8a7a`／`#e8b84a` 作 text 與 border**（實測 7.07／8.78）並自選暗底（見下表 PoC-only），所以此警告在本 PoC 的取值下未重現；這不代表研究示例原值被核准。
   4. 兩模式的原生 `disabled`（本 PoC 用 `disabled_text` ＋ 圓點淡化 ＋ `cursor:not-allowed`）都 ≥4.5；disabled 本來就免於 WCAG 對比要求，這裡是額外保持可讀。
 - **PoC-only 變體（本 PoC 另選，**不是**研究示例、不是核准值）**：`control_border`（dark `#8a9bc4`，原生控件邊界需 ≥3:1）、`hover_bg`、`focus_ring`、`disabled_text`、`sidebar_bg`（dark `#0a101f`）、dark 的 chip 背景（neutral／grey `#222d4a`、yellow `#2d2610`、red `#3a1c1f`）、dark 的 neutral／grey 邊 `#8a9bc4`；light 的 `hover_bg`／`focus_ring`／`disabled_text` 也是 PoC-only（ui_v3 沒有對應 token）。其餘 dark 值取自研究文件 §四 示例。
+- **更正（2026-11-11 獨立 QA 發現，已修）**：初版**漏量「展開且滑鼠移開、未聚焦」的 expander header**——我的瀏覽器蒐集在展開當下滑鼠還停在 header 上（hover 底），且 hover／focus 只在收合狀態量過。實際上 Streamlit 原生對**展開中的 summary**給固定淺灰底 `rgb(242,244,247)`（不隨 palette），暗色下字 `rgb(230,237,243)` 對它只有約 **1.07:1**（390／768／1280 皆重現）；light 因字深而未被察覺。**修法**（`poc_theme_css.py`）：`details[open] > summary:not(:hover){background:transparent}`（透出 details 的 surface）＋ summary 鍵盤 focus 用 `hover_bg` 與 `focus_ring` 外框。**修後實測**：light 16.27、dark 13.71。新增 `test_expander_header_text_contrast_in_all_four_states`（關／開 × 靜止／hover／focus 共 6 個量測點 × 兩模式 × 三寬度，全部 ≥4.5）與負控 `test_mutation_without_open_summary_override_is_detected`；另在 scratchpad 副本內刪掉該覆寫行確認測試轉紅（dark 1.07，其餘五態 11.08～13.71）。上面「dark 最低 5.59」現在**涵蓋此狀態**（修後該狀態不是最低）。**教訓**：只在一個狀態下量測，等於沒量其他狀態；狀態矩陣要列出再逐格量。
+- **QA 次要註記（照錄）**：側欄按鈕的邊框取自 ui_v3 核准的 `sidebar.border #34466e`，對側欄底只有 **1.85:1（light）／2.03:1（dark）**，<3:1。該邊框是**繼承自既有核准值的裝飾性邊框**（按鈕靠文字辨識），**不在 PoC 自己的邊界表內**，PoC 未覆寫；是否需要處理屬後續視覺裁示。卡片與 chip 邊框在上表標為「報告用」（裝飾性，內容靠符號＋字樣），不是 3:1 通過的功能性項目。
 - **未涵蓋**：只量「實際渲染到的配對」；`⬜ ◷ ⛔` 等 emoji 字元本身的彩色字形不在文字對比度範圍；hover／focus 只量了上列狀態；不同 DPI／縮放／強制色彩模式 NOT RUN。
 
 ## 七、原生 widget 相容性發現
@@ -103,7 +105,7 @@
 | 頁首（stHeader、Deploy、⋮、窄螢幕的側欄展開鈕） | 可用 `stHeader` 底＋`color: inherit` 重新著色；暗色下可讀（Deploy 文字 15.28:1；窄螢幕展開鈕只有目視） |
 | 側欄（底、字、按鈕、邊） | 可行；兩模式側欄都是深色（light 沿用 ui_v3 核准的深側欄，dark 為更深的 PoC-only 值） |
 | `st.radio`（選取／未選／標籤／hover／disabled） | 圓點用既有 ui_v3 同款選擇器 `label[data-testid="stRadioOption"] > div > div > div:first-child` 覆寫可行；hover 與鍵盤 focus 用 `[data-focus-visible="true"]`／`:hover` 自訂 |
-| `st.expander`（邊、底、summary hover、字） | 可行 |
+| `st.expander`（邊、底、summary hover／鍵盤 focus、**展開靜止的 header 底**、字） | 可行，但**需要**覆寫展開中 summary 的原生固定淺灰底（見第六節更正）；關／開 × 靜止／hover／focus 六態皆已量測 |
 | `st.button`（底、邊、hover、鍵盤 focus、disabled） | 可行；Streamlit 原生 focus 的 `box-shadow`（取自 config 舊主題的半透明藍）需覆寫為 `none` 才不與自訂外框打架 |
 | 瀏覽器原生元件（捲軸、表單控件） | 設 `color-scheme`（computed 已驗證等於 palette 值）；捲軸實際外觀 **NOT VERIFIED**（headless 截圖未涵蓋） |
 
@@ -141,11 +143,11 @@ AppTest（15 條）與瀏覽器（共用同一組判定）互相印證：預設�
 
 ## 十一、全 repo 測試（FACT／見結果）
 
-**PoC 自己的測試（FACT）**：`pytest tests/poc_dual_theme -m "slow or not slow"`（含瀏覽器與對比度）→ **108 passed**（約 205 秒；分項：palettes 18、AppTest 15、guard 20、browser 35、contrast 20）。預設 fast lane（`-m "not slow"`）只跑到其中不標 slow 的 53 條（palettes＋AppTest＋guard）；瀏覽器與對比度兩檔標 `slow`，由 CI slow lane 跑（該 lane 有 chromium）。
+**PoC 自己的測試（FACT）**：`pytest tests/poc_dual_theme -m "slow or not slow"`（含瀏覽器與對比度）→ **115 passed**（約 253 秒；分項：palettes 18、AppTest 15、guard 20、browser 42、contrast 20）。預設 fast lane（`-m "not slow"`）只跑到其中不標 slow 的 53 條（palettes＋AppTest＋guard）；瀏覽器與對比度兩檔標 `slow`，由 CI slow lane 跑（該 lane 有 chromium）。
 
 **全 repo `pytest -q -m "not slow"`（FACT；作者在本機 venv 實跑，含 `tests/ui_v3` 與全部會 glob 全 repo `.py` 的掃描型測試，如 `test_name_heuristics_removed`、`test_retired_exception_ids`、`test_st_cache_failure_not_cached`、`test_ia_switch_advisor_moved_to_portfolio`、`test_constitution_file_refs`）：**
 
-- 本分支（含 PoC）：**9 failed, 19782 passed, 45 skipped, 1292 deselected, 8 xfailed**（約 16 分鐘）。
+- 本分支（含 PoC）：**9 failed, 19782 passed, 45 skipped, 1299 deselected, 8 xfailed**（約 18 分鐘；expander 修正後重跑，失敗清單與修正前逐條相同）。
 - 9 個失敗為：`tests/test_alo_core_golden.py` 3 條（`test_整份矩陣_工作樹與黃金檔逐位元組相同`、`test_逐情境相同[alo2_family-cost:near_tied_leaders_within_1e9]`、`test_額外對照_從git歷史的基準原始碼重算_等於黃金檔`）、`tests/test_alo_core_golden_mutations.py` 1 條（`test_對照組_未突變的載入器重現黃金檔`）、`tests/ui_v2/test_hld_logic.py` 2 條、`tests/ui_v2/test_hld_read_failure_logic.py` 2 條、`tests/ui_v2/test_rulings_2026_10_18b_logic.py` 1 條。
 - **對照乾淨 `origin/main`（`55e48d03`）**：在**同一環境**用 `git worktree` 取乾淨 main 重跑上述 5 個檔案 → **同樣 9 failed、557 passed**，失敗清單與本分支逐條相同（FACT）。因此這 9 條是環境因素造成、**與本 PoC 無關**（成因 NOT VERIFIED；不是本批要查的）。另用 `git archive` 取得的無 `.git` 乾淨副本跑完整 `-m "not slow"` 得 14 failed——多出的 6 條（`test_dg2_parsing_defects` 1、`test_doc_counters` 1、`test_public_repo_name_redaction` 2、`test_xview_characterization` 2）在「有 `.git` 的真 repo」都通過，屬無 git 環境的人為差異，不是比較基準。
 - 本分支**沒有任何新增失敗**；`tests/ui_v3`（含 `test_ui_v3_import_guard`、`test_ui_v3_preview_not_formal_guard`、token／導覽／市場頁相關）全數通過（FACT：失敗清單中無 `tests/ui_v3`）。
@@ -153,7 +155,7 @@ AppTest（15 條）與瀏覽器（共用同一組判定）互相印證：預設�
 
 ## 十二、範圍確認（FACT）
 
-`git diff --stat origin/main`（提交前以 `55e48d03` 為基準）：**15 個檔案、1940 行新增、0 行刪除**，全部落在 `poc/dual_theme_isolated/`（7 檔）、`tests/poc_dual_theme/`（7 檔）與本檔；沒有任何既有檔案被修改。
+`git diff --stat origin/main`（提交前以 `55e48d03` 為基準）：**15 個檔案、2029 行新增、0 行刪除**，全部落在 `poc/dual_theme_isolated/`（7 檔）、`tests/poc_dual_theme/`（7 檔）與本檔；沒有任何既有檔案被修改。
 
 `git diff --name-only origin/main -- ui_v3 .streamlit ui ui_v2 app.py services repositories shared infra scripts .github docs/DECISIONS.md docs/BACKLOG.md docs/HANDOFF.md PROJECT_RULES.md CLAUDE.md` → **空**（FACT：禁止修改的路徑皆未變）。沒有修改 `STATUS_TONES`、任何公式或資料契約。
 

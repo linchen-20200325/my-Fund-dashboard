@@ -362,3 +362,82 @@ def test_screenshots_are_saved(page_at, width, mode, tmp_path):
     path = out / f"poc_dual_theme_{mode}_{width}.png"
     page.screenshot(path=str(path))
     assert path.exists() and path.stat().st_size > 5000
+
+
+# ───────────────────────── expander 四態（關／開 × 靜止／hover／focus）× 兩模式 ─────────────────────────
+
+_SUMM = '[data-testid="stExpander"] summary'
+_SUMM_JS = """() => { const s = document.querySelector('[data-testid="stExpander"] summary'); const p = s.querySelector('p'); const chain = []; const els = [];
+  for (let e = p; e; e = e.parentElement) els.push(e); let o = 1; const cum = new Array(els.length);
+  for (let i = els.length - 1; i >= 0; i--) { o *= parseFloat(getComputedStyle(els[i]).opacity); cum[i] = o; }
+  els.forEach((e, i) => chain.push([getComputedStyle(e).backgroundColor, cum[i]]));
+  return {color: getComputedStyle(p).color, chain: chain, open: s.parentElement.hasAttribute('open')}; }"""
+
+
+def summary_header_ratio(page) -> float:
+    m = page.evaluate(_SUMM_JS)
+    bg = cl.effective_background([(c, o) for c, o in m["chain"]])
+    return cl.text_ratio(m["color"], bg)
+
+
+def _settle(page):
+    page.wait_for_timeout(500)
+
+
+def expander_state_ratios(page) -> dict:
+    out = {}
+    page.mouse.move(2, 2)
+    page.evaluate("() => document.activeElement && document.activeElement.blur()")
+    _settle(page)
+    out["關・靜止"] = summary_header_ratio(page)
+    page.hover(_SUMM)
+    _settle(page)
+    out["關・hover"] = summary_header_ratio(page)
+    page.mouse.move(2, 2)
+    page.focus('.st-key-poc-card-switch input[type=radio][tabindex="0"]')
+    page.keyboard.press("Tab")  # 依 DOM 順序逐步逼近較不穩定；改直接 focus summary
+    page.focus(_SUMM)
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Tab")
+    _settle(page)
+    assert page.evaluate("() => document.activeElement.tagName") == "SUMMARY"
+    out["關・focus"] = summary_header_ratio(page)
+    page.click(_SUMM)  # 展開（滑鼠仍在 header 上）
+    page.mouse.move(2, 2)
+    page.evaluate("() => document.activeElement && document.activeElement.blur()")
+    _settle(page)
+    assert page.evaluate(_SUMM_JS)["open"]
+    out["開・靜止（未 hover、未 focus）"] = summary_header_ratio(page)
+    page.hover(_SUMM)
+    _settle(page)
+    out["開・hover"] = summary_header_ratio(page)
+    page.mouse.move(2, 2)
+    page.focus(_SUMM)
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Tab")
+    _settle(page)
+    assert page.evaluate("() => document.activeElement.tagName") == "SUMMARY"
+    out["開・focus"] = summary_header_ratio(page)
+    return out
+
+
+@pytest.mark.parametrize("mode", L.MODES)
+@pytest.mark.parametrize("width", L.WIDTHS)
+def test_expander_header_text_contrast_in_all_four_states(page_at, width, mode):
+    """展開後把滑鼠移開、也不聚焦的 header 曾是原生淺灰底（暗色下 ≈1.07:1，QA 抓到）；關／開 × 靜止／hover／focus 六個量測點全部 ≥4.5。"""
+    page = page_at(width, mode)
+    ratios = expander_state_ratios(page)
+    assert len(ratios) == 6
+    low = {k: round(v, 2) for k, v in ratios.items() if v < 4.5}
+    assert not low, f"expander header 文字對比 <4.5：{low}（全部：{ {k: round(v, 2) for k, v in ratios.items()} }）"
+
+
+def test_mutation_without_open_summary_override_is_detected(page_at):
+    """負控：模擬缺少 `details[open] > summary:not(:hover)` 覆寫（把原生淺灰底打回去），開・靜止的量測必須 <4.5。"""
+    page = page_at(1280, "dark")
+    page.add_style_tag(content='[data-testid="stMain"] [data-testid="stExpander"] details[open] > summary:not(:hover){background:#f2f4f7 !important}')
+    page.click(_SUMM)
+    page.mouse.move(2, 2)
+    page.evaluate("() => document.activeElement && document.activeElement.blur()")
+    page.wait_for_timeout(500)
+    assert summary_header_ratio(page) < 4.5

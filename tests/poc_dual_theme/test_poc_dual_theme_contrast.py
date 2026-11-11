@@ -66,7 +66,7 @@ def test_all_rendered_text_pairs_meet_wcag_aa(results, width, mode):
     assert len(data["texts"]) >= 60, "蒐到的文字節點太少（蒐集失效）"
     assert data["sidebar_visible"], "側欄沒有被蒐到"
     states = {t["state"] for t in data["texts"]}
-    assert {"idle", "expander 展開", "radio hover", "radio 鍵盤 focus", "button hover", _POPOVER_STATE} <= states, states
+    assert {"idle", "expander 展開（hover）", "expander 展開（靜止）", "radio hover", "radio 鍵盤 focus", "button hover", _POPOVER_STATE} <= states, states
     regions = {t["region"] for t in data["texts"]}
     assert {"main", "sidebar", "header"} <= regions, regions
     low = [t for t in data["texts"] if t["state"] != _POPOVER_STATE and t["ratio"] < t["need"]]

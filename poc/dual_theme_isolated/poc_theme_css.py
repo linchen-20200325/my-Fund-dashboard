@@ -66,6 +66,10 @@ h4{{font-size:15px !important;margin:0 0 4px 0 !important;padding:0 !important}}
 /* 原生 expander */
 [data-testid="stMain"] [data-testid="stExpander"] details{{border-color:{p['card_border']};background:{p['surface']}}}
 [data-testid="stMain"] [data-testid="stExpander"] summary:hover{{background:{p['hover_bg']}}}
+/* 展開且未 hover 的 summary：Streamlit 原生給一個固定淺灰底（不隨 palette），暗色下字與底只有約 1.07:1；改為透明（透出 details 的 surface）。
+   鍵盤 focus 與 hover 同用 hover_bg。 */
+[data-testid="stMain"] [data-testid="stExpander"] details[open] > summary:not(:hover){{background:transparent}}
+[data-testid="stMain"] [data-testid="stExpander"] summary:focus-visible{{background:{p['hover_bg']};outline:2px solid {p['focus_ring']};outline-offset:-2px}}
 
 /* 原生 button（主區） */
 [data-testid="stMain"] [data-testid="stBaseButton-secondary"]{{background:{p['surface']};border:1px solid {p['control_border']}}}
