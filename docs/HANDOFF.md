@@ -59,6 +59,8 @@
 | LATER | BL-0530 找基金 ISIN → MoneyDJ deterministic identity | research-only；無已核准 source 時不得啟用 mapping |
 | LATER | 設定登入、BL-0534 frozen amendment、BL-0535 cutover、OneBrain／Phase7 | 各走正式授權、獨立 QA、必要人工／法規 Gate |
 
+> **2026-11-11 新裁示（`DEC-2026-11-11-02`，需用 GitHub 實況再確認）**：#1209 已合併為 `50e66801`；客戶核准雙模式 T1～T5 與三項視覺處理：**僅隔離 PoC 授權**（`ui_v3` scoped token／手動切換、session-only、候選暗色僅供隔離測試）；⚙️ 正式切換入口待設定頁核准實作；G7 Cloud／WebView／真機延後；全域 `config.toml` 不改；12px→13px 併入下一個適當已授權 UI 批次；grey／neutral 區分延後。**PoC 不可被正式 Preview 或正式 App import／連結、不變更 production token、UI、資料或公式；PoC 成功不等於正式雙模式獲准。** 逐字來源與完整界線見 `docs/evidence/decisions/2026-11-11_new_ui2_dual_theme_t1_t5_ruling.md`。此文件 PR 完成獨立 QA＋CI 及合併後才視為 main 正式落盤；後續由專案 AI 安排隔離 PoC。BL-0545 仍唯一 NEXT；基金 Coverage／Digest 改善與靜默根因稽核待適當批次，不搶本次工作。
+
 ## 4. 新對話／compact 後交接自驗
 
 - [ ] 我已重新讀取 main SHA、Open／Draft PR、PR merged flag、最新 head diff、四 job conclusions、review／threads。
