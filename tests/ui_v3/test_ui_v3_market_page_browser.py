@@ -11,10 +11,19 @@ AppTest 不載入 CSS，DOM 級守衛量不到「橫向溢出」「圖是否真�
 - 390／768／1280 整頁與頁本體元素無橫向溢出（MV-08、§6）。
 - 主圖：存在、可見（非 display:none／visibility:hidden）、非零尺寸、水平在視窗內、長寬比維持 viewBox 360:240、
   在摘要之後與第一張 Secondary 卡之前、中心點沒被別的元素蓋住（MV-05、MV-09 只斷言「存在、可見、非零尺寸」）。
-- **G5 客戶暫時接受現況**：首屏主圖露出量（390px 約 157／239px）**不設門檻，只記錄**（`record_property` 與 `-s` 的 print），絕不斷言。
+- **首屏主圖露出量（G3／G6 施工批起有門檻）**：G5 原本「暫時接受現況、只記錄」；客戶規則為「首屏圖的露出量不得明顯變差，因內距而下降時優先零額外內距」，
+  故改為斷言「露出量 ≥ 改前基線 − 1px（容次像素取整）」；基線＝改前 `origin/main`（192848b）同腳本同合成資料實測：390／768／1280 ＝ 156.6／181.4／198.4px
+  （`_FOLD_BASELINE`）。390 另斷言主圖渲染寬 ≥354（改前 358；卡內左右滿版後為卡內寬 356，比例仍 360:240、最大寬 720）。數字仍照舊 print 與 `record_property`。
 - 頁首五格 S1（`DEC-2026-11-06-01`／`-07-02`）：≤768 五格全可見、等寬、不重疊、不橫滑、各格 ≥48px 高；≥769 側欄在、頁首隱藏。
 - 已核准排版：區塊順序（MV-02）、首屏 chip＋核心數字 ≤5（MV-03）、缺資料恆 `⬜`／`◇ 資料未備`、Missing 不畫零不畫空座標軸、
   取數失敗原文不外漏（MV-04、MV-07）。
+
+**G3／G6 施工批新增的守衛（客戶核准 G3 候選 B 色票＋A 尺寸、G6 限定容器化；`docs/evidence/fund_newui2_market_g3_g6_build_evidence_2026_11_11.md`）**
+- 卡片容器：首屏摘要在 `card.summary`、Primary 圖與其原生單選控制項在 `card.chart`、Secondary 兩卡各有外框；利率卡的子序列單選在卡內；
+  兩卡（≥768 並排時）卡頂在同一條水平線、**不強制等高**。
+- token 實際套用（computed style）：主背景／側欄背景／卡片邊與面與圓角與內距／單選選取點的 primary／chip tone 色＝核准值；
+  頁面上沒有殘留的舊色（`.streamlit/config.toml` 的舊 theme 色 `#f6f8fa`／`#0e1117`／`#1f6feb`／`#1f2328`）。
+- 圖寬 ≤720（維持 viewBox 比例，既有比例守衛不放寬）、三寬度無橫向溢出；控制項（檢視／期間／利率子序列）真的可操作且仍在卡內。
 
 **穩定性**：不寫像素精確值。容差都有理由：長寬比 ±0.03（SVG `preserveAspectRatio` 縮放為浮點）、水平邊界 ±0.5px（次像素取整）、
 五格等寬 ±1px（沿用頁首守衛）。順序用 DOM 順序（`compareDocumentPosition`），不用 y 座標（768／1280 兩欄並排時 y 會相等）。
@@ -60,7 +69,7 @@ _MEASURE = r"""
   const rect = e => { const b = e.getBoundingClientRect(); return {x: b.x, y: b.y, r: b.right, b: b.bottom, w: b.width, h: b.height}; };
   const out = {vw, vh, docScrollW: document.documentElement.scrollWidth, mainScrollW: main.scrollWidth, mainClientW: main.clientWidth};
   // 頁本體元素水平邊界
-  out.bodyBoxes = [...main.querySelectorAll('.uv3-card, svg.uv3-chart, .uv3-row, .uv3-note, h1, h3, [data-testid="stRadio"], [data-testid="stExpander"]')]
+  out.bodyBoxes = [...main.querySelectorAll('.uv3-card, [class*="st-key-uv3-card-"], svg.uv3-chart, .uv3-row, .uv3-note, h1, h3, [data-testid="stRadio"], [data-testid="stExpander"]')]
     .filter(vis).map(e => ({t: e.tagName + (e.dataset.card ? '#' + e.dataset.card : ''), ...rect(e)}));
   // 主圖
   const svg = main.querySelector('svg.uv3-chart');
@@ -76,19 +85,19 @@ _MEASURE = r"""
   const marks = {h1: q('h1'), market_state: q('[data-field="market_state"]'), attention: q('[data-field="attention"]'),
     evidence_row: (q('.uv3-evidence') || {closest: () => null}).closest('.uv3-row'),
     freshness: (q('[data-status-key="threshold_pending"]') || {closest: () => null}).closest('.uv3-row'),
-    primary: q('h3'), chart: svg, source_limits: exp[0], vix: q('.uv3-card[data-card="vix"]'), rates: q('.uv3-card[data-card$="_pct"]'),
-    'MKT-1': q('.uv3-card[data-card="MKT-1"]'), 'MKT-2': q('.uv3-card[data-card="MKT-2"]'), 'MKT-3': q('.uv3-card[data-card="MKT-3"]'),
+    primary: q('h3'), chart: svg, source_limits: exp[0], vix: q('[data-card="vix"]'), rates: q('[data-card$="_pct"]'),
+    'MKT-1': q('[data-card="MKT-1"]'), 'MKT-2': q('[data-card="MKT-2"]'), 'MKT-3': q('[data-card="MKT-3"]'),
     missing_group: exp[1], status_group: exp[2]};
   const present = Object.entries(marks).filter(([, e]) => e);
   present.sort((a, b) => (a[1].compareDocumentPosition(b[1]) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
   out.order = present.map(([k]) => k);
-  out.secondaryCount = main.querySelectorAll('.uv3-card[data-card="vix"], .uv3-card[data-card$="_pct"]').length;
+  out.secondaryCount = main.querySelectorAll('[data-card="vix"], [data-card$="_pct"]').length;
   // 圖相對位置（圖在摘要之後、第一張 Secondary 卡之前）
-  const fresh = marks.freshness, vix = marks.vix;
+  const fresh = marks.freshness, vixFrame = q('.st-key-uv3-card-sec-vix');
   out.summaryBottom = fresh ? fresh.getBoundingClientRect().bottom : null;
-  out.vixTop = vix ? vix.getBoundingClientRect().top : null;
+  out.vixTop = vixFrame ? vixFrame.getBoundingClientRect().top : null;
   // 首屏名額：第一張 data-card 之前、可見、不在摺疊區的 chip；格內有 chip 的 evidence 只算一格
-  const firstCard = q('.uv3-card[data-card]');
+  const firstCard = q('[data-card]');
   const scope = [...document.querySelectorAll('.uv3-chip, .uv3-evidence')].filter(e => vis(e) && !e.closest('[data-testid="stExpander"]')
       && !(e.classList.contains('uv3-chip') && e.closest('.uv3-evidence'))
       && (!firstCard || (e.compareDocumentPosition(firstCard) & Node.DOCUMENT_POSITION_FOLLOWING)));
@@ -96,6 +105,48 @@ _MEASURE = r"""
   out.statusbarChips = document.querySelectorAll('.uv3-statusbar .uv3-chip').length;
   out.sidebarChips = document.querySelectorAll('[data-testid="stSidebar"] .uv3-chip').length;
   out.mainText = main.innerText;
+  // G6：卡片容器與卡內控制項的位置關係
+  const frame = k => q('.st-key-uv3-card-' + k);
+  const F = {summary: frame('summary'), chart: frame('chart'), vix: frame('sec-vix'), rates: frame('sec-rates')};
+  const css = e => { const s = getComputedStyle(e); return {bw: s.borderTopWidth, bs: s.borderTopStyle, bc: s.borderTopColor, bg: s.backgroundColor, radius: s.borderTopLeftRadius,
+                      pad: [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft].join(' '), shadow: s.boxShadow}; };
+  out.frames = Object.fromEntries(Object.entries(F).map(([k, e]) => [k, e ? {...rect(e), css: css(e)} : null]));
+  const inside = (e, f) => !!(e && f && f.contains(e));
+  const radios = [...main.querySelectorAll('[data-testid="stRadio"]')];
+  const radioIn = key => { const r = radios.find(x => x.querySelector('[data-testid="stRadioGroup"]').getAttribute('aria-label') === key); return r || null; };
+  out.containment = {
+    summaryRows: ['market_state', 'attention'].every(k => inside(q('[data-field="' + k + '"]'), F.summary)) && inside(marks.freshness, F.summary),
+    chartInChartFrame: inside(svg, F.chart), h3InChartFrame: inside(q('h3'), F.chart),
+    viewRadioInChartFrame: inside(radioIn('檢視'), F.chart), periodRadioInChartFrame: inside(radioIn('期間'), F.chart),
+    chartExpanderInChartFrame: inside(exp[0], F.chart),
+    ratesRadioInRatesFrame: inside(radioIn('利率與信用'), F.rates), ratesHeadInRatesFrame: inside(q('[data-card$="_pct"]'), F.rates),
+    vixInVixFrame: inside(q('[data-card="vix"]'), F.vix),
+    radioCount: radios.length,
+  };
+  const rr = radioIn('利率與信用');
+  out.ratesRadio = rr ? {name: rr.querySelector('[data-testid="stRadioGroup"]').getAttribute('aria-label'), options: rr.querySelectorAll('[data-testid="stRadioOption"]').length,
+                         labelVisible: !!rr.querySelector('[data-testid="stWidgetLabel"]') && vis(rr.querySelector('[data-testid="stWidgetLabel"]'))} : null;
+  // token 實際套用（computed style）
+  const sideEl = document.querySelector('[data-testid="stSidebar"]');
+  const sel = main.querySelector('label[data-testid="stRadioOption"][data-selected="true"] > div > div > div:first-child');
+  const tone = c => { const e = main.querySelector('.uv3-chip.uv3-tone-' + c); if (!e) return null; const s = getComputedStyle(e); return {color: s.color, bg: s.backgroundColor, bc: s.borderTopColor, radius: s.borderTopLeftRadius, pad: s.paddingTop + ' ' + s.paddingLeft, fs: s.fontSize}; };
+  const cs1 = (e, ...ps) => e ? Object.fromEntries(ps.map(p => [p, getComputedStyle(e)[p]])) : null;
+  out.applied = {appBg: getComputedStyle(document.querySelector('.stApp')).backgroundColor, appColor: getComputedStyle(document.querySelector('.stApp')).color,
+                 headerBg: cs1(document.querySelector('[data-testid="stHeader"]'), 'backgroundColor'),
+                 sidebarBg: sideEl ? getComputedStyle(sideEl).backgroundColor : null, sidebarColor: sideEl ? getComputedStyle(sideEl).color : null,
+                 radioSelectedBg: sel ? getComputedStyle(sel).backgroundColor : null, h1Color: getComputedStyle(q('h1')).color,
+                 h1Size: getComputedStyle(q('h1')).fontSize, noteSize: cs1(q('.uv3-note'), 'fontSize', 'color'), metric: cs1(q('.uv3-metric'), 'fontSize'),
+                 gutterLeft: getComputedStyle(document.querySelector('.block-container')).paddingLeft, tones: {grey: tone('grey')}};
+  // 舊 theme 色殘留（config.toml 的舊值）：看得到的元素的 color／background／border 色是否等於它們
+  const legacy = ['rgb(246, 248, 250)', 'rgb(14, 17, 23)', 'rgb(31, 111, 235)', 'rgb(31, 35, 40)', 'rgb(238, 241, 244)', 'rgb(22, 27, 34)', 'rgb(158, 158, 255)'];
+  out.legacyHits = [];
+  for (const e of document.querySelectorAll('body *, body')) {
+    if (!e.getClientRects().length) continue;
+    const s = getComputedStyle(e);
+    for (const [p, val] of [['color', s.color], ['bg', s.backgroundColor], ['border', parseFloat(s.borderTopWidth) > 0 ? s.borderTopColor : '']]) {
+      if (legacy.includes(val)) out.legacyHits.push(p + '=' + val + ' ' + e.tagName.toLowerCase() + '.' + String(e.className && e.className.baseVal !== undefined ? e.className.baseVal : e.className).slice(0, 40));
+    }
+  }
   out.chipTexts = [...main.querySelectorAll('.uv3-chip')].filter(e => vis(e) && !e.closest('[data-testid="stExpander"]')).map(e => e.innerText.trim());
   // 頁首五格（S1）
   const nav = document.querySelector('.st-key-uv3-top-nav'), side = document.querySelector('[data-testid="stSidebar"]');
@@ -155,12 +206,33 @@ def chart_violations(m):
     # 長寬比維持 viewBox 360:240（=0.667）；±0.03 容次像素取整
     if abs(c["h"] / c["w"] - 240 / 360) > 0.03:
         bad.append(("主圖長寬比跑掉", round(c["h"] / c["w"], 3)))
+    # G3／G6：圖最大寬 720（客戶核准維持；不得為了填滿欄寬而放大）
+    if c["w"] > 720.5:
+        bad.append(("主圖超過最大寬 720", c["w"]))
     if c["x"] < -0.5 or c["r"] > m["vw"] + 0.5:
         bad.append(("主圖超出視窗水平邊界", c["x"], c["r"]))
     if m["summaryBottom"] is not None and c["y"] < m["summaryBottom"] - 0.5:
         bad.append(("主圖在首屏摘要之上", c["y"], m["summaryBottom"]))
     if m["vixTop"] is not None and c["b"] > m["vixTop"] + 0.5:
         bad.append(("主圖壓到第一張 Secondary 卡", c["b"], m["vixTop"]))
+    return bad
+
+
+# 改前（origin/main 192848b）首屏主圖露出量基線（px；Chromium、視窗高 844／844／800、合成資料）。容差 1px＝次像素取整。
+_FOLD_BASELINE = {390: 156.6, 768: 181.4, 1280: 198.4}
+_FOLD_TOLERANCE = 1.0
+_CHART_MIN_W_390 = 354   # 改前 358；卡內左右滿版後 356；窄於此代表卡片內距又吃掉圖寬
+
+
+def firstscreen_violations(m, width):
+    c = m["chart"]
+    if not c["exists"]:
+        return [("主圖不存在",)]
+    bad = []
+    if c["foldPx"] < _FOLD_BASELINE[width] - _FOLD_TOLERANCE:
+        bad.append(("首屏主圖露出量低於改前基線", round(c["foldPx"], 1), _FOLD_BASELINE[width]))
+    if width == 390 and c["w"] < _CHART_MIN_W_390:
+        bad.append(("390 主圖渲染寬低於 354（卡片內距吃掉圖寬）", round(c["w"], 1)))
     return bad
 
 
@@ -190,6 +262,92 @@ def nav_violations(m, width):
         bad.append(("五格重疊",))
     if m["navScrollW"] > m["navClientW"]:
         bad.append(("頁首可橫向捲動", m["navScrollW"], m["navClientW"]))
+    return bad
+
+
+# ───────────────────────── G3／G6 判定函式（正向測試與變異驗證共用同一組） ─────────────────────────
+
+def _rgb(hex_color):
+    h = hex_color.lstrip("#")
+    return f"rgb({int(h[0:2], 16)}, {int(h[2:4], 16)}, {int(h[4:6], 16)})"
+
+
+def _tok(name):
+    from ui_v3.design import tokens
+    return tokens.value(name)
+
+
+def container_violations(m):
+    """卡片容器存在、尺寸／色＝token、控制項在卡內（G6）。"""
+    from ui_v3.design import tokens
+    bad = []
+    for key in ("summary", "chart", "vix", "rates"):
+        f = m["frames"].get(key)
+        if f is None:
+            bad.append(("缺卡片容器", key))
+            continue
+        shape = dict(tokens.value("card.detail"))
+        expect = {"bw": shape["border_width"], "bs": "solid", "bc": _rgb(_tok("color.card.border")), "bg": _rgb(_tok("color.surface")),
+                  "radius": _tok("radius.card"), "pad": " ".join([shape["padding"].split()[0], shape["padding"].split()[1]] * 2), "shadow": "none"}
+        for k, want in expect.items():
+            if f["css"][k] != want:
+                bad.append(("卡片外框與 token 不符", key, k, f["css"][k], want))
+    c = m["containment"]
+    for name, ok in c.items():
+        if name == "radioCount" or (name == "chartInChartFrame" and not m["chart"]["exists"]):   # 兩條都缺＝不畫圖（空狀態），沒有圖可檢
+            continue
+        if not ok:
+            bad.append(("元素不在應在的卡內", name))
+    if c["radioCount"] != 3:
+        bad.append(("原生單選控制項不是 3 組（檢視／期間／利率子序列）", c["radioCount"]))
+    cf, ch = m["frames"].get("chart"), m["chart"]
+    if cf and ch["exists"]:
+        # 主圖可左右滿版（伸入卡片內距），但不得蓋過卡片邊線；文字（標題）仍須保留卡片內距、不貼邊
+        if ch["x"] < cf["x"] + 1 - 0.5 or ch["r"] > cf["r"] - 1 + 0.5:
+            bad.append(("主圖蓋過卡片邊線", round(ch["x"], 1), round(ch["r"], 1), round(cf["x"], 1), round(cf["r"], 1)))
+        for b in m["bodyBoxes"]:
+            if b["t"] == "H3" and b["x"] < cf["x"] + 11:
+                bad.append(("卡內標題貼到卡片邊線（內距被吃掉）", round(b["x"], 1), round(cf["x"], 1)))
+    r = m["ratesRadio"]
+    if r is None or r["name"] != "利率與信用" or r["options"] != 3:
+        bad.append(("利率子序列單選的無障礙名稱或選項數不符", r))
+    return bad
+
+
+def secondary_alignment_violations(m, width):
+    """Secondary 兩卡：並排時（以實際座標判定，不以視窗寬度推斷；768 仍是兩欄）卡頂同一條水平線、且**不強制等高**；單欄（390）時依序往下排、不重疊。"""
+    vix, rates = m["frames"].get("vix"), m["frames"].get("rates")
+    if not vix or not rates:
+        return [("缺 Secondary 卡容器",)]
+    bad = []
+    side_by_side = rates["x"] >= vix["r"] - 0.5
+    if side_by_side:
+        if abs(vix["y"] - rates["y"]) > 1.0:
+            bad.append(("兩張 Secondary 卡頂沒有對齊", round(vix["y"], 1), round(rates["y"], 1)))
+        if abs(vix["h"] - rates["h"]) <= 1.0:
+            bad.append(("兩張 Secondary 卡被強制等高（不應補齊高度）", round(vix["h"], 1), round(rates["h"], 1)))
+    elif vix["b"] > rates["y"] + 0.5:
+        bad.append(("單欄時兩張 Secondary 卡重疊", vix["b"], rates["y"]))
+    return bad
+
+
+def token_violations(m):
+    """token 實際套用到 computed style；頁面上沒有殘留舊 theme 色。"""
+    a = m["applied"]
+    expect = {"appBg": _rgb(_tok("color.page.bg")), "appColor": _rgb(_tok("color.text.primary")),
+              "sidebarBg": _rgb(_tok("color.sidebar.bg")), "sidebarColor": _rgb(_tok("color.sidebar.text")),
+              "radioSelectedBg": _rgb(_tok("color.primary")), "h1Color": _rgb(_tok("color.text.primary"))}
+    bad = [("token 未套用", k, a[k], want) for k, want in expect.items() if a[k] != want]
+    if a["headerBg"]["backgroundColor"] != _rgb(_tok("color.page.bg")):
+        bad.append(("頁首背景不是 color.page.bg", a["headerBg"]))
+    if a["noteSize"]["color"] != _rgb(_tok("color.text.secondary")) or a["noteSize"]["fontSize"] != _tok("type.caption"):
+        bad.append(("備註字級／次要文字色不是 type.caption／color.text.secondary", a["noteSize"]))
+    if a["metric"]["fontSize"] != _tok("type.metric") or a["gutterLeft"] != _tok("gutter.mobile"):
+        bad.append(("主數字字級或 gutter 不符 token", a["metric"], a["gutterLeft"]))
+    grey, tone = a["tones"]["grey"], _tok("color.tone.grey")
+    if grey and (grey["color"], grey["bg"], grey["bc"]) != (_rgb(tone["text"]), _rgb(tone["background"]), _rgb(tone["border"])):
+        bad.append(("grey tone chip 色不符 token", grey))
+    bad += [("殘留舊 theme 色", h) for h in m["legacyHits"][:5]]
     return bad
 
 
@@ -299,10 +457,11 @@ def test_primary_chart_present_visible_nonzero_and_in_place(measure, width, reco
     m = measure("normal", width)
     assert not chart_violations(m), (chart_violations(m), m["chart"])
     assert m["hit"] is not None and not m["hit"]["covered"], ("主圖中心點被別的元素蓋住", m["hit"])
-    # G5：首屏露出量只記錄、不斷言（客戶暫時接受現況；390px 實測約 157／239px）
-    info = f"w{width}: chart top y={m['chart']['y']:.0f}, foldPx={m['chart']['foldPx']:.0f}/{m['chart']['h']:.0f} (viewport h={m['vh']}) — INFO ONLY, 無門檻"
+    # 首屏露出量：斷言「不低於改前基線 − 1px」（基線與理由見檔頭 `_FOLD_BASELINE`）
+    assert not firstscreen_violations(m, width), (firstscreen_violations(m, width), m["chart"])
+    info = f"w{width}: chart top y={m['chart']['y']:.0f}, foldPx={m['chart']['foldPx']:.1f}/{m['chart']['h']:.1f}, w={m['chart']['w']:.0f} (viewport h={m['vh']}; baseline fold {_FOLD_BASELINE[width]})"
     record_property(f"chart_fold_w{width}", info)
-    print("\n[G5 info]", info)
+    print("\n[first-screen]", info)
 
 
 @pytest.mark.parametrize("width", _WIDTHS)
@@ -324,6 +483,71 @@ def test_block_order_and_first_screen_budget(measure, scenario, width):
 def test_missing_data_wording_no_zero_no_leak(measure, scenario, width):
     m = measure(scenario, width)
     assert not missing_violations(m, scenario), (missing_violations(m, scenario), m["chipTexts"])
+
+
+@pytest.mark.parametrize("width", _WIDTHS)
+def test_card_containers_hold_their_controls_and_use_token_values(measure, width):
+    m = measure("normal", width)
+    assert not container_violations(m), container_violations(m)
+
+
+@pytest.mark.parametrize("width", _WIDTHS)
+def test_secondary_cards_are_top_aligned_and_not_forced_equal_height(measure, width):
+    m = measure("normal", width)
+    assert not secondary_alignment_violations(m, width), (secondary_alignment_violations(m, width), m["frames"]["vix"], m["frames"]["rates"])
+
+
+@pytest.mark.parametrize("width", _WIDTHS)
+def test_tokens_are_applied_and_no_legacy_theme_colour_remains(measure, width):
+    m = measure("normal", width)
+    assert not token_violations(m), token_violations(m)
+
+
+@pytest.mark.parametrize("scenario", _SCENARIOS)
+@pytest.mark.parametrize("width", (390, 1280))
+def test_containers_and_tokens_hold_in_degraded_scenarios(measure, scenario, width):
+    m = measure(scenario, width)
+    assert not container_violations(m), container_violations(m)
+    assert not token_violations(m), token_violations(m)
+    assert not secondary_alignment_violations(m, width)
+
+
+def _radio_option(page, group_label, option_text):
+    return page.locator(f'[data-testid="stMain"] [data-testid="stRadioGroup"][aria-label="{group_label}"] label[data-testid="stRadioOption"]',
+                        has_text=option_text).first
+
+
+@pytest.mark.parametrize("width", (390, 1280))
+def test_native_radio_controls_inside_cards_are_operable_and_keep_state(base_and_browser, width):
+    """原生單選放進卡內後仍可操作（滑鼠與鍵盤）、狀態跨重跑保留、仍在原本那張卡內。"""
+    base, browser, _ = base_and_browser
+    ctx, page = _open(browser, base, "normal", width)
+    try:
+        aria = lambda: page.locator('[data-testid="stMain"] svg.uv3-chart').first.get_attribute("aria-label")
+        assert "1Y" in aria()
+        _radio_option(page, "期間", "3M").click()
+        page.wait_for_function("() => document.querySelector('[data-testid=\"stMain\"] svg.uv3-chart').getAttribute('aria-label').includes('3M')", timeout=20000)
+        h3_before = page.locator('[data-testid="stMain"] h3').first.inner_text()
+        _radio_option(page, "檢視", "VIX").click()
+        page.wait_for_function("(t) => document.querySelector('[data-testid=\"stMain\"] h3').innerText !== t", arg=h3_before, timeout=20000)
+        assert "3M" in aria(), "切換檢視後，期間選擇應保留（狀態跨重跑）"
+        rates = page.locator('[data-testid="stMain"] .st-key-uv3-card-sec-rates')
+        _radio_option(page, "利率與信用", "信用利差").click()
+        page.wait_for_function("() => document.querySelector('[data-testid=\"stMain\"] .st-key-uv3-card-sec-rates h4').innerText.includes('信用利差')", timeout=20000)
+        assert rates.locator('[data-testid="stRadioGroup"][aria-label="利率與信用"]').count() == 1, "切換後利率單選仍在利率卡內"
+        # 鍵盤：焦點在利率單選的已選項時，方向鍵右移到下一項（原生可及性行為不因入卡而失效）
+        rates.locator('input[type="radio"]:checked').focus()
+        page.keyboard.press("ArrowRight")
+        page.wait_for_function("() => document.querySelector('[data-testid=\"stMain\"] .st-key-uv3-card-sec-rates h4').innerText.includes('政策利率')", timeout=20000)
+        # 切回「比較」後（D1：Secondary 不複製 Primary，VIX 檢視時 VIX 卡本來就不出現），整頁容器／溢出／token 仍然成立
+        _radio_option(page, "檢視", "比較").click()
+        page.wait_for_function("(t) => document.querySelector('[data-testid=\"stMain\"] h3').innerText === t", arg=h3_before, timeout=20000)
+        page.wait_for_selector('.st-key-uv3-card-sec-vix', timeout=20000)
+        m = page.evaluate(_MEASURE)
+        assert not container_violations(m) and not overflow_violations(m) and not token_violations(m), (
+            container_violations(m), overflow_violations(m), token_violations(m))
+    finally:
+        ctx.close()
 
 
 # ───────────────────────── 變異驗證（負控；只在測試內對頁面注入，不改 production） ─────────────────────────
@@ -384,7 +608,7 @@ def test_mutation_unequal_five_cells_nav_is_flagged(base_and_browser):
 
 def test_mutation_reordered_blocks_are_flagged(base_and_browser):
     js = """() => { const box = e => e.closest('[data-testid="stElementContainer"]') || e;
-      const vix = document.querySelector('.uv3-card[data-card="vix"]'), h3 = document.querySelector('[data-testid="stMain"] h3');
+      const vix = document.querySelector('.st-key-uv3-card-sec-vix'), h3 = document.querySelector('[data-testid="stMain"] h3');
       box(h3).before(box(vix)); }"""
     m = _mutated(base_and_browser, "normal", 390, js=js)
     assert any("區塊順序" in v[0] for v in order_violations(m))
@@ -413,3 +637,44 @@ def test_mutation_leaked_failure_text_and_nan_are_flagged(base_and_browser):
     m = _mutated(base_and_browser, "us_failed", 390, js=js)
     msgs = [v[0] for v in missing_violations(m, "us_failed")]
     assert "取數失敗原文外漏" in msgs and "畫面出現不可呈現的 token" in msgs
+
+
+def test_mutation_rates_radio_moved_out_of_card_is_flagged(base_and_browser):
+    js = """() => { const r = [...document.querySelectorAll('[data-testid="stMain"] [data-testid="stRadio"]')]
+        .find(x => x.querySelector('[data-testid="stRadioGroup"]').getAttribute('aria-label') === '利率與信用');
+      document.querySelector('.st-key-uv3-card-sec-rates').before(r.closest('[data-testid="stElementContainer"]')); }"""
+    m = _mutated(base_and_browser, "normal", 1280, js=js)
+    assert any(v[0] == "元素不在應在的卡內" and v[1] == "ratesRadioInRatesFrame" for v in container_violations(m))
+
+
+def test_mutation_secondary_cards_pushed_off_alignment_or_forced_equal_are_flagged(base_and_browser):
+    m = _mutated(base_and_browser, "normal", 1280, css=".st-key-uv3-card-sec-rates{margin-top:84px !important}")
+    assert any("沒有對齊" in v[0] for v in secondary_alignment_violations(m, 1280))
+    m = _mutated(base_and_browser, "normal", 1280,
+                 css=".st-key-uv3-card-sec-vix,.st-key-uv3-card-sec-rates{min-height:400px !important}")
+    assert any("強制等高" in v[0] for v in secondary_alignment_violations(m, 1280))
+
+
+def test_mutation_chart_wider_than_720_is_flagged(base_and_browser):
+    m = _mutated(base_and_browser, "normal", 1280, css="svg.uv3-chart{max-width:none !important}")
+    assert any("720" in v[0] for v in chart_violations(m))
+
+
+def test_mutation_stripped_card_frame_is_flagged(base_and_browser):
+    m = _mutated(base_and_browser, "normal", 390, css=".st-key-uv3-card-chart{border:0 !important;border-radius:0 !important}")
+    assert any(v[0] == "卡片外框與 token 不符" and v[1] == "chart" for v in container_violations(m))
+
+
+def test_mutation_legacy_theme_colours_are_flagged(base_and_browser):
+    m = _mutated(base_and_browser, "normal", 390, css=".stApp{background:#f6f8fa !important}")
+    assert any(v[0] in ("token 未套用", "殘留舊 theme 色") for v in token_violations(m))
+    m = _mutated(base_and_browser, "normal", 390,
+                 css='html body [data-testid="stMain"] label[data-testid="stRadioOption"][data-selected="true"] > div > div > div:first-child{background-color:#1f6feb !important}')
+    assert any(v[0] == "token 未套用" and v[1] == "radioSelectedBg" for v in token_violations(m))
+
+
+def test_mutation_extra_top_spacing_pushing_chart_below_baseline_is_flagged(base_and_browser):
+    m = _mutated(base_and_browser, "normal", 390, css=".st-key-uv3-card-summary{margin-bottom:40px !important}")
+    assert any("低於改前基線" in v[0] for v in firstscreen_violations(m, 390))
+    m = _mutated(base_and_browser, "normal", 390, css="html body svg.uv3-chart{width:100% !important;margin-left:0 !important}")
+    assert any("354" in v[0] for v in firstscreen_violations(m, 390))

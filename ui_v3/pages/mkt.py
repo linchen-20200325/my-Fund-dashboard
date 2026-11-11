@@ -4,8 +4,11 @@
 - `streamlit` 只在函式內 import（import `ui_v3` 時不得載入 Streamlit；守衛 `test_ui_v3_preview_not_formal_guard`）。
 - 已核准字樣一律取規則表 `shared/ui_semantics/rules.py`；尚未核准的字樣一律取 `viewmodels/preview_wording.py` 並以
   `pending_span()` 輸出（`data-pending-wording` 屬性＋虛線底線，機器與人眼都可辨識）。這裡**不發明任何字樣**。
-- 顏色不是唯一訊息：每個狀態 chip 都是「符號＋文字」；`tone` 只決定一個很淡的底色。⚠️ 色碼是 **Preview 暫用的樣式值**，
-  不是 design token（`design/tokens.py` 值未定，視覺值待客戶驗收後重建）。
+- 顏色不是唯一訊息：每個狀態 chip 都是「符號＋文字」；`tone` 只決定 chip 的字／底／邊色。色與尺寸一律取 `design/tokens.py` 的核准值
+  （G3 批：候選 B 色票＋候選 A 尺寸；經 `design/theme.py`），本檔不另寫色碼。
+- 容器（G6 批，只改容器與對齊、不改順序與內容）：首屏摘要＝`card.summary`（`st.container(key="uv3-card-summary")`）、Primary 圖＝`card.chart`
+  （`uv3-card-chart`，原生單選控制項在卡內）、Secondary 兩卡各一個具名容器（`uv3-card-sec-vix`／`uv3-card-sec-rates`，利率卡的子序列單選移進卡內，
+  兩卡頂對齊、不強制等高）；依據卡仍是 HTML 卡。原先卡與卡之間的 `st.divider()` 由卡片間距取代（見 build evidence）。
 - 沒有任何方向詞、好壞詞、方向色、目標價線、threshold／band；首屏只放事實與規則表 chip：市場狀態、是否需注意各一枚 `⬜ 無法判定`＋資料新鮮度一枚 `⬜ 門檻待裁示`（首屏採 C；基準日改為圖表附近的純文字揭露行）。
 """
 from __future__ import annotations
@@ -15,7 +18,9 @@ from html import escape
 from typing import Optional
 
 from shared.ui_semantics import rules
+from ui_v3.design import theme
 from ui_v3.pages import chart_svg
+from ui_v3.shell import nav
 from ui_v3.shell.registry import IA_PAGES
 from ui_v3.viewmodels import preview_wording as W
 from ui_v3.viewmodels.common import STATUS_FAILED, STATUS_MISSING, STATUS_OK, STATUS_UNDETERMINED
@@ -37,32 +42,54 @@ PAGE_TITLE = next(p.title for p in IA_PAGES if p.slug == "mkt")
 DEFAULT_PERIOD = "1Y"
 PERIODS = ("3M", "6M", "1Y", "3Y")
 KEY_PERIOD, KEY_VIEW, KEY_RATES = "uv3_mkt_period", "uv3_mkt_view", "uv3_mkt_rates"
+# 卡片容器的 key（Streamlit 會給外層 `st-key-<key>` class；CSS 與瀏覽器守衛以它辨識）。
+KEY_CARD_SUMMARY, KEY_CARD_CHART = "uv3-card-summary", "uv3-card-chart"
+KEY_CARD_SEC_VIX, KEY_CARD_SEC_RATES = "uv3-card-sec-vix", "uv3-card-sec-rates"
 _VIEW_LABEL_KEY = {"compare": "view_compare", "vix": "view_vix", "us10y": "view_us10y", "us2y": "view_us2y"}
 
-# Preview 暫用樣式（不是 design token）。
-CSS = """
+
+def _css() -> str:
+    """頁面 CSS：色與尺寸全取 token（`design/theme.py`）。
+
+    卡內最後一個 markdown 的 `margin-bottom` 歸零：Streamlit 的 markdown 容器帶 `margin-bottom:-1rem`，卡內最後一個 markdown 會因此
+    把內容拉出下內距（實測：文字壓到下邊線）；只在卡內最後一個元素歸零，其餘元素間距不動。
+
+    390px 首屏（G5 守衛的後續處置）：≤768 時主圖在卡內左右滿版（圖本身的左右各伸入卡片內距 `pad_x`，文字與控制項仍保留內距、不貼邊），
+    寬度回到卡外寬（390 約 358；比例不變、最大寬 720）；`card.chart` 內標題的上內距歸零（卡片自己的 10px 內距已是上緣留白），
+    讓首屏露出量不低於改前。"""
+    gutter, page, section = theme.v("gutter.mobile"), theme.v("type.page"), theme.v("type.section")
+    caption, metric, body = theme.v("type.caption"), theme.v("type.metric"), theme.v("type.body")
+    text2, border, pad_x = theme.v("color.text.secondary"), theme.v("color.card.border"), theme.card_pad_x()
+    return f"""
 <style>
-.block-container,.stMainBlockContainer{padding-top:3.4rem !important}
-.block-container{max-width:1100px;padding-left:16px;padding-right:16px;padding-top:3.4rem}
-h1{font-size:1.7rem !important;padding:.2rem 0 !important}
-h3{font-size:1.2rem !important}
-.uv3-pending{border-bottom:1px dashed rgba(128,128,128,.8)}
-.uv3-chip{display:inline-block;border-radius:12px;padding:1px 10px;font-size:14px;border:1px solid rgba(128,128,128,.45);
-  background:rgba(128,128,128,.12);margin:1px 6px 1px 0;white-space:normal}
-.uv3-tone-red{border-color:#c0392b;background:rgba(192,57,43,.12)}
-.uv3-tone-yellow{border-color:#b7791f;background:rgba(183,121,31,.14)}
-.uv3-st{white-space:normal}
-.uv3-st-red{font-weight:700}
-.uv3-row{margin:.25rem 0;line-height:1.55}
-.uv3-label{font-size:13px;opacity:.75;margin-right:6px}
-.uv3-note{font-size:13px;opacity:.85;line-height:1.5;margin:.15rem 0}
-.uv3-card{border:1px solid rgba(128,128,128,.35);border-radius:8px;padding:10px 12px;margin-bottom:8px}
-.uv3-card h4{margin:0 0 4px 0;font-size:15px}
-.uv3-metric{font-size:20px;margin:2px 0}
-.uv3-chart{width:100%;max-width:720px;height:auto;display:block}
-.uv3-spark{width:160px;height:40px;display:block;margin:4px 0}
+.block-container,.stMainBlockContainer{{padding-top:3.4rem !important}}
+.block-container{{max-width:1100px;padding-left:{gutter};padding-right:{gutter};padding-top:3.4rem}}
+h1{{font-size:{page} !important;padding:.2rem 0 !important}}
+h3{{font-size:{section} !important}}
+.uv3-pending{{border-bottom:1px dashed {border}}}
+{theme.tone_css()}
+.uv3-st{{white-space:normal}}
+.uv3-st-red{{font-weight:700}}
+.uv3-row{{margin:{theme.v("space.1")} 0;line-height:1.55}}
+.uv3-label{{font-size:{caption};color:{text2};margin-right:6px}}
+.uv3-note{{font-size:{caption};color:{text2};line-height:1.5;margin:.15rem 0}}
+{theme.card_css(".uv3-card")}
+{theme.card_css('[class*="st-key-uv3-card-"]', margin_bottom="0")}
+[class*="st-key-uv3-card-"] > [data-testid="stElementContainer"]:last-child [data-testid="stMarkdownContainer"]{{margin-bottom:0}}
+.uv3-card h4,.uv3-card-in h4{{margin:0 0 4px 0;font-size:{body}}}
+.uv3-metric{{font-size:{metric};margin:2px 0}}
+.uv3-chart{{width:100%;max-width:720px;height:auto;display:block}}
+[class*="st-key-uv3-card-chart"] h3{{padding-top:0}}
+@media (max-width:{nav.MOBILE_MAX_PX}px){{
+  .uv3-chart{{width:calc(100% + 2 * {pad_x});margin-left:-{pad_x}}}
+}}
+.uv3-spark{{width:160px;height:40px;display:block;margin:4px 0}}
 </style>
 """
+
+
+# 頁面 CSS（只在 `render()` 注入；模組層只做一次字串組裝）。
+CSS = _css()
 
 
 # ───────────────────────────── 小工具（純字串） ─────────────────────────────
@@ -284,13 +311,14 @@ def summary_html(model: MarketPageModel) -> str:
     return "".join(rows)
 
 
-def secondary_html(card: SecondaryCard, title_key: str, sub_label_key: Optional[str] = None) -> str:
+def _secondary_parts(card: SecondaryCard, title_key: str, sub_label_key: Optional[str] = None) -> tuple:
+    """Secondary 卡的 `(標題 h4, 內容)` 兩段 HTML（不含外框；外框由具名容器給）。"""
     title = W.span(title_key)
     sub = f"{W.span('separator')}{W.span(sub_label_key)}" if sub_label_key else ""
-    head = f'<div class="uv3-card" data-card="{escape(card.key)}"><h4>{title}{sub}</h4>'
+    head = f"<h4>{title}{sub}</h4>"
     label_key = sub_label_key or "series_vix"
     if card.status != STATUS_OK:
-        return head + status_html(card.status, card.reason_code, label_key) + "</div>"
+        return head, status_html(card.status, card.reason_code, label_key)
     body = f'<div class="uv3-metric">{escape(fmt_value(card.value, card.unit))}</div>'
     body += f'<div class="uv3-note">{elapsed_html(W.text(label_key), card.as_of, card.elapsed_days)}</div>'
     if card.spark:
@@ -298,7 +326,13 @@ def secondary_html(card: SecondaryCard, title_key: str, sub_label_key: Optional[
         body += f'<div class="uv3-note">{W.span("secondary_spark_caption")}</div>'
     elif card.spark_status == "insufficient":
         body += f'<div class="uv3-note">{W.span("secondary_spark_caption")}{W.span("colon")}{W.span("insufficient")}</div>'
-    return head + body + "</div>"
+    return head, body
+
+
+def secondary_html(card: SecondaryCard, title_key: str, sub_label_key: Optional[str] = None) -> str:
+    """標題＋內容一段 HTML（沒有卡內控制項的 Secondary 卡用；`data-card` 屬性是機器可辨識的卡識別，頁上每張卡只出現一次）。"""
+    head, body = _secondary_parts(card, title_key, sub_label_key)
+    return f'<div class="uv3-card-in" data-card="{escape(card.key)}">{head}{body}</div>'
 
 
 def _fact_value_text(fact: EvidenceFact) -> str:
@@ -350,37 +384,42 @@ def _render(model: MarketPageModel) -> None:
     md = lambda html: st.markdown(html, unsafe_allow_html=True)  # noqa: E731
     md(CSS)
     st.title(PAGE_TITLE)
-    md(summary_html(model))
+    with st.container(key=KEY_CARD_SUMMARY):          # card.summary：首屏狀態卡（只是容器；內容與順序同 81）
+        md(summary_html(model))
 
-    st.divider()
     card = model.primary_card
-    md(f'<h3>{W.span("title_compare") if model.view == VIEW_COMPARE else escape(card.title)}</h3>')
-    st.radio(W.text("view_label"), PRIMARY_VIEWS, key=KEY_VIEW, horizontal=True,
-             format_func=lambda v: W.text(_VIEW_LABEL_KEY[v]))
-    st.radio(W.text("period_label"), PERIODS, key=KEY_PERIOD, horizontal=True)
-    for note in disclosure_notes(model):
-        md(note)
-    chart = primary_chart_html(model)
-    if chart is not None:
-        md(chart)
-    else:
-        md(f'<div class="uv3-row">{W.span("chart_empty")}</div>')
-    for html in primary_notes_html(model.primary_notes):
-        md(html)
-    with st.expander(W.text("source_limits_title")):
-        md(source_limits_html(model))
+    with st.container(key=KEY_CARD_CHART):            # card.chart：Primary 圖卡（原生控制項在卡內，widget key 不變）
+        md(f'<h3>{W.span("title_compare") if model.view == VIEW_COMPARE else escape(card.title)}</h3>')
+        st.radio(W.text("view_label"), PRIMARY_VIEWS, key=KEY_VIEW, horizontal=True,
+                 format_func=lambda v: W.text(_VIEW_LABEL_KEY[v]))
+        st.radio(W.text("period_label"), PERIODS, key=KEY_PERIOD, horizontal=True)
+        for note in disclosure_notes(model):
+            md(note)
+        chart = primary_chart_html(model)
+        if chart is not None:
+            md(chart)
+        else:
+            md(f'<div class="uv3-row">{W.span("chart_empty")}</div>')
+        for html in primary_notes_html(model.primary_notes):
+            md(html)
+        with st.expander(W.text("source_limits_title")):
+            md(source_limits_html(model))
 
-    st.divider()
     columns = st.columns(len(model.secondary))
     for column, secondary in zip(columns, model.secondary):
         with column:
             if secondary.key == "vix":
-                md(secondary_html(secondary, "secondary_vix_title"))
+                with st.container(key=KEY_CARD_SEC_VIX):
+                    md(secondary_html(secondary, "secondary_vix_title"))
             else:
-                st.radio(W.text("secondary_rates_title"), RATES_KEYS, key=KEY_RATES, horizontal=True,
-                         format_func=lambda k: W.text(_RATES_LABEL[k]))
-                md(secondary_html(secondary, "secondary_rates_title", _RATES_LABEL[secondary.key]))
-    st.divider()
+                # 利率卡：標題 → 子序列單選（卡內，兩張 Secondary 卡因此同在一條頂線）→ 內容。
+                # 單選的可見標籤收起（與卡標題「利率與信用」重複）；無障礙名稱仍是原標籤（radiogroup 的 aria-label）。
+                head, body = _secondary_parts(secondary, "secondary_rates_title", _RATES_LABEL[secondary.key])
+                with st.container(key=KEY_CARD_SEC_RATES):
+                    md(f'<div class="uv3-card-in" data-card="{escape(secondary.key)}">{head}</div>')
+                    st.radio(W.text("secondary_rates_title"), RATES_KEYS, key=KEY_RATES, horizontal=True,
+                             format_func=lambda k: W.text(_RATES_LABEL[k]), label_visibility="collapsed")
+                    md(f'<div class="uv3-card-in">{body}</div>')
     md(f'<div class="uv3-note">{W.span("evidence_no_rule_note")}</div>')
     for column, evidence in zip(st.columns(len(model.evidence_cards)), model.evidence_cards):
         with column:

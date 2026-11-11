@@ -6,7 +6,7 @@
 
 - 五項與順序＝`registry.IA_PAGES`（已核准）；`available` ＝ `registered`（已有核准線框且已實作）。
   未掛載的項目**可見但不可進**：沒有任何 renderer、沒有空殼頁、不放假資料。
-- 版面值（斷點、觸控高度）是 Preview 暫用的樣式值，不是 design token（`design/tokens.py` 值未定）。
+- 版面值（斷點、觸控高度）是 Preview 暫用的樣式值；**色與（卡片／chip／間距／caption）尺寸**取 `design/tokens.py` 的核准值（G3 批，經 `design/theme.py`）。
 - 舊 B 線（`ui_v2/shell_nav.py`）只作 IA／操作經驗參考：這裡不 import、不複製其 presentation code；
   兩邊都取 44 第二節 2.1 的 ≤768 斷點；本版依 BL-0544／DEC-2026-11-07-02 改為手機頁首 S1 五格，不搬運底部呈現。
 """
@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+from ui_v3.design import theme
 from ui_v3.shell.registry import IA_PAGES, PageSlot
 
 MOBILE_MAX_PX = 768          # 44 第二節 2.1：≤768 手機頁首、>768 原桌機側欄（兩者不同時出現）
@@ -54,32 +55,38 @@ def nav_items(pages: Optional[Tuple[PageSlot, ...]] = None) -> Tuple[NavItem, ..
 
 
 def shell_css() -> str:
-    """Shell 的 CSS（Preview 暫用）：桌機／平板＝原左側側欄、手機＝文件流內頁首五等分導覽，兩者不同時出現。"""
+    """Shell 的 CSS：桌機／平板＝原左側側欄、手機＝文件流內頁首五等分導覽，兩者不同時出現。
+    色與尺寸一律取 `design/tokens.py`（經 `design/theme.py`；G3 批：候選 B 色票＋候選 A 尺寸），不另寫色碼；`app_css()` 負責覆寫
+    Streamlit 的 theme 色（只在 ui_v3 頁面注入；`.streamlit/config.toml` 為全 repo 共用、本批不改）。"""
     mobile, touch, bar = MOBILE_MAX_PX, TOUCH_MIN_PX, TOP_NAV_HEIGHT_PX
+    surface, border = theme.v("color.surface"), theme.v("color.card.border")
+    text2 = theme.v("color.text.secondary")
+    sb_text2, sb_border, sb_bg2, accent = (theme.v("color.sidebar.text2"), theme.v("color.sidebar.border"),
+                                           theme.v("color.sidebar.bg2"), theme.v("color.sidebar.accent"))
+    row_gap, caption = theme.v("space.1"), theme.v("type.caption")
     return f"""
 <style>
-.uv3-pending{{border-bottom:1px dashed rgba(128,128,128,.8)}}
-.uv3-chip{{display:inline-block;border-radius:12px;padding:1px 10px;font-size:13px;border:1px solid rgba(128,128,128,.45);
-  background:rgba(128,128,128,.12);white-space:normal}}
-.uv3-tone-red{{border-color:#c0392b;background:rgba(192,57,43,.12)}}
-.uv3-row{{margin:.25rem 0;line-height:1.55}}
+{theme.app_css()}
+.uv3-pending{{border-bottom:1px dashed {border}}}
+{theme.tone_css()}
+.uv3-row{{margin:{row_gap} 0;line-height:1.55}}
 /* 側欄固定（不給收合鈕；桌機／平板永遠看得到導覽） */
 [data-testid="stSidebarCollapseButton"],[data-testid="stSidebarHeader"]{{display:none !important}}
 [data-testid="stSidebarUserContent"]{{padding-top:1rem !important}}
 .uv3-brand{{font-size:17px;font-weight:700;margin:0 0 .6rem 0;line-height:1.3}}
-.uv3-nav-disabled{{display:flex;align-items:center;gap:.5rem;min-height:{touch}px;padding:0 .75rem;opacity:.55;cursor:not-allowed;
+.uv3-nav-disabled{{display:flex;align-items:center;gap:.5rem;min-height:{touch}px;padding:0 .75rem;color:{sb_text2};cursor:not-allowed;
   border-radius:.5rem;font-size:15px}}
-.uv3-nav-disabled .uv3-nav-soon{{font-size:12px;margin-left:auto;border:1px dashed rgba(128,128,128,.8);border-radius:10px;padding:0 6px}}
-.uv3-side-block{{border-top:1px solid rgba(128,128,128,.35);margin-top:.8rem;padding-top:.6rem;font-size:13px;line-height:1.55}}
-.uv3-side-block .uv3-label{{opacity:.75;margin-right:6px}}
-.uv3-cta-note{{font-size:12px;opacity:.8;margin-top:.25rem}}
+.uv3-nav-disabled .uv3-nav-soon{{font-size:12px;margin-left:auto;border:1px dashed {sb_text2};border-radius:10px;padding:0 6px}}
+.uv3-side-block{{border-top:1px solid {sb_border};margin-top:.8rem;padding-top:.6rem;font-size:{caption};line-height:1.55}}
+.uv3-side-block .uv3-label{{color:{sb_text2};margin-right:6px}}
+.uv3-cta-note{{font-size:12px;color:{sb_text2};margin-top:.25rem}}
 /* 目前頁：除了顏色，還有粗體＋左側色條（不只靠顏色） */
-[class*="st-key-uv3-nav-now-side"] a[data-testid="stPageLink-NavLink"]{{font-weight:700;border-left:4px solid currentColor}}
+[class*="st-key-uv3-nav-now-side"] a[data-testid="stPageLink-NavLink"]{{font-weight:700;border-left:4px solid {accent};background:{sb_bg2}}}
 [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]{{min-height:{touch}px}}
 /* Top／Status Bar：極薄一行（Shell 的一部分，不是頁級狀態 chip） */
-.uv3-statusbar{{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:12px;line-height:1.5;opacity:.9;margin:0 0 .25rem 0}}
+.uv3-statusbar{{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:12px;line-height:1.5;color:{text2};margin:0 0 .25rem 0}}
 .uv3-statusbar .uv3-tag{{font-weight:700;letter-spacing:.06em;border:1px solid currentColor;border-radius:4px;padding:0 5px;cursor:help}}
-.uv3-footer{{font-size:12px;opacity:.7;margin-top:1.2rem}}
+.uv3-footer{{font-size:12px;color:{text2};margin-top:1.2rem}}
 /* 頁首導覽：桌機／平板完全不顯示；手機佔用文件流（不吸頂、不貼定位），位於 Streamlit 自帶 stHeader 之下、不覆蓋它 */
 .st-key-{TOP_KEY}{{display:none !important}}
 @media (max-width:{mobile}px){{
@@ -87,7 +94,7 @@ def shell_css() -> str:
   .st-key-{TOP_KEY}{{display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;gap:0 !important;
     width:100%;max-width:100%;min-height:{bar}px;
     box-sizing:border-box;overflow-x:hidden;margin:0;padding:0;
-    background:var(--background-color,#ffffff);color:inherit;border-bottom:1px solid rgba(128,128,128,.45)}}
+    background:{surface};color:inherit;border-bottom:1px solid {border}}}
   .st-key-{TOP_KEY} [class*="st-key-uv3-nav-"],.st-key-{TOP_KEY} [data-testid="stElementContainer"]{{gap:0 !important;margin:0 !important;min-width:0 !important}}
   .st-key-{TOP_KEY} > div{{display:flex !important;flex:1 1 0 !important;min-width:0 !important;width:100% !important}}
   /* 未掛載項是 st.markdown（stMarkdown 預設 shrink-to-fit，實測 30～40px 寬、低於觸控下限且五格不等寬）→ 逐層撐滿格寬 */
@@ -103,7 +110,7 @@ def shell_css() -> str:
   .st-key-{TOP_KEY} [class*="st-key-uv3-nav-now-top"] a[data-testid="stPageLink-NavLink"]{{font-weight:700;border-bottom:3px solid currentColor;
     text-decoration:underline;text-underline-offset:3px}}
   .st-key-{TOP_KEY} a[data-testid="stPageLink-NavLink"]:focus-visible{{outline:2px solid currentColor;outline-offset:-3px}}
-  .st-key-{TOP_KEY} .uv3-tn-disabled{{opacity:.55;cursor:not-allowed;font-size:12px}}
+  .st-key-{TOP_KEY} .uv3-tn-disabled{{color:{text2};cursor:not-allowed;font-size:12px}}
   .st-key-{TOP_KEY} .uv3-tn-icon{{font-size:20px;line-height:1}}
   .st-key-{TOP_KEY} .uv3-tn-soon{{font-size:10px}}
 }}
