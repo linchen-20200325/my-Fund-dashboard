@@ -1,5 +1,14 @@
 # NAS Squid Proxy 中繼站 — AI 移植說明書
 
+> **狀態說明（防誤用）**
+>
+> - 本文件是通用、可攜的 NAS 中繼移植說明（歷史參考），**不是本 repo 的現行實作指令**。
+> - 本 repo 的現行實作為 `infra/proxy.py`（`fetch_url` 等；Proxy 設定由 `get_proxy_config()` 讀取）。
+> - 不得依本文自行建立 `proxy_helper.py`：本 repo 的 git 追蹤檔案中無此檔（可用 `git ls-tree -r origin/main --name-only` 驗證）。
+> - 不得自行新增或修改 secrets、NAS 設定、workflow 或資料來源；新增或變更須依 `CLAUDE.md` §-1 與 `PROJECT_RULES.md` 第 4 節 Stop／Decision Gate 請客戶裁示。
+> - 下方「不需要詢問使用者任何問題，直接完成」等句，僅適用於原先通用移植情境，在本 repo 不適用。
+> - 以下原文未經改動，保留作歷史參考。
+
 > **給 AI 的指示**：本文件是「一次性移植任務說明書」。照著以下步驟執行，不需要詢問使用者任何問題，直接完成所有檔案建立與設定。
 
 ---
