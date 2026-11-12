@@ -16,7 +16,7 @@
 2. **四件關鍵事項未裁或未接線**：(a) DG2 canonical identity 仍 shadow（`DG2_SHADOW_ENABLED=False`，production 0 consumer）；(b) FX 閘門 `FX_OBS_DATE_RULE_VERIFIED=False`；(c) Actions 快取（`data_cache/`）尚未接進 New UI，且快取本身有已證實異常；(d) D2 正式契約「核准欄位數＝0」。
 3. **Old UI 路徑仍有缺值被補 0／持有**（`composite_score`、`decision_matrix`）；New UI 路徑（`ui_v2`、`ui_v3`、`services/v2_tables`、`services/v2_domain`）對這兩者 0 引用。已登記為 BL-0546（待客戶裁示，本 PR 新增一列，登記不構成動工授權）。
 4. **正式 production 入口仍是 Old UI**（`app.py`）；`app.py` 不 import `ui_v2`／`ui_v3`。New UI2（`ui_v3`）只有 🌍 一頁已註冊並實作於獨立 Preview。Streamlit Cloud 入口設定 repo 內查不到＝**NOT VERIFIED**。
-5. **「可直接施工且已核准、不需新資料接線」的 UI 工作很少**（§3 只找到 2 項＋1 項草稿產出物）。真正擋進度的是客戶裁示（§5）。
+5. **低風險候選 UI／文件工作很少**（§3 只找到 2 項＋1 項草稿產出物；皆未授權開工，其中 U2(b)(c) 是否在 NG-2「只修安全／正確性」範圍**無明文**，見 §3.1）。真正擋進度的是客戶裁示（§5）。
 6. 本檔**沒有**提出需要新 provider／Schema／來源／公式的「可直接做」項目。
 
 ---
@@ -27,7 +27,7 @@
 
 | 來源／群組 | 實作位置 | 狀態 | 證據與缺口 |
 |---|---|---|---|
-| 基金 NAV 多來源瀑布（編排結構） | `repositories/fund/fund_orchestration.py::_fetch_fund_single`；A 鏈 `services/moneydj_fetcher.py::auto_fetch_moneydj`；`repositories/fund/nav_metrics.py::fetch_nav` | 已有且可驗證 | 讀碼：安聯官網→FundClear→鉅亨→TCB MoneyDJ→www.moneydj→SITCA→近 30 日→晨星→Yahoo／AlphaVantage／銀行平台／Franklin／JPM→台灣人壽等分支；測試檔 `tests/test_v2_tables_nav_chain_handover.py`、`tests/test_v2_tables_nav_dividend.py` 存在（**未執行**）；客戶 2026-10-13「B 線沿用既有多來源淨值鏈」。17 個 `_src_*` NAV adapter 的 live 可達性見下一列 |
+| 基金 NAV 多來源瀑布（編排結構） | `repositories/fund/fund_orchestration.py::_fetch_fund_single`；A 鏈 `services/moneydj_fetcher.py::auto_fetch_moneydj`；`repositories/fund/nav_metrics.py::fetch_nav` | 已有且可驗證 | 讀碼：安聯官網→FundClear→鉅亨→TCB MoneyDJ→www.moneydj→SITCA→近 30 日→晨星→Yahoo／AlphaVantage／銀行平台／Franklin／JPM→台灣人壽等分支；測試檔 `tests/test_v2_tables_nav_chain_handover.py`、`tests/test_v2_tables_nav_dividend.py` 存在（**未執行**）；客戶 2026-10-13「B 線沿用既有多來源淨值鏈」。`repositories/fund/sources.py` 內 `_src_*` 函式共 25 個（含 meta／div）；其中名稱含 nav 或 url 者 15 個、加 `_src_cache_files` 為 16 個（單組 `grep -cE "^def _src_"` 計數，口徑不同結果不同）；各 adapter 的 live 可達性見下一列 |
 | 各 NAV adapter 的 live 可達性 | `repositories/fund/sources.py::_src_*` | 無法驗證 | 需 live＋NAS Proxy／美國 IP；本稽核不連網。GitHub Actions 為美國 IP，台灣來源可能被擋 |
 | TDCC OpenAPI | `repositories/fund/sources.py::_src_tdcc_meta`、`tdcc_search_fund_with_error`；`declared_profile.py::fetch_tdcc_listing` | 部分缺漏 | NAV 瀑布裡 TDCC **只有 meta 段**（`_src_tdcc_meta`），沒有 `_src_tdcc_nav`；只能給最新單點，不能給序列。**更正（抽驗後）**：`sources.py` 與 `scripts/fetch_nav_cache.py` 的 docstring 都寫 TDCC OpenAPI 是**境外**基金 API、境內基金（如安聯台灣）走 SITCA；故 `CLAUDE.md` §2.1「TDCC（境內）主」連「境內」標籤都可能標錯。**是否更正憲法需客戶／總管確認；本 PR 不改憲法，僅登記**（見 §5 G12） |
 | 市場指標：FRED（含 vintage 首次公布日） | `repositories/macro/fred.py::fetch_fred`、`fred_vintage.py`；L2 `services/v2_tables/market_indicator.py`、`market_view.py` | 已有且可驗證 | 七鍵中四鍵 `phase1="write"`，一鍵受 FX 閘門，兩個 NDC 鍵 `pending`；測試 `tests/test_v2_tables_market_indicator_fred.py`、`test_v2_tables_market_view.py`。FRED 金鑰缺→誠實「⛔ 尚未設定」；Cloud 端 Secrets 是否已設＝無法驗證 |
@@ -209,9 +209,9 @@ New UI 路徑分離乾淨：`ui_v2` import 守衛禁止 import 舊樹；`ui_v3/v
 
 ---
 
-## 3. 任務 3｜可直接改善的 UI 工作、資料缺口、方案比較
+## 3. 任務 3｜低風險候選 UI／文件工作、資料缺口、方案比較
 
-### 3.1 可直接改善的 UI 工作（僅 2 項＋1 項草稿產出物；皆**不在本階段授權內**）
+### 3.1 低風險候選 UI／文件工作（僅 2 項＋1 項草稿產出物；皆**不在本階段授權內**，也**不是已核准施工項**）
 
 判斷準則：有明文已核准的 DEC／文件條文；不新增資料來源／欄位／公式／門檻；不改版面結構；有現成守衛或能寫成測試。
 
@@ -295,7 +295,7 @@ New UI 路徑分離乾淨：`ui_v2` import 守衛禁止 import 舊樹；`ui_v3/v
 | 5 | `services/macro/_helpers.py` 的 tw_pmi／tw_export 是 `_TAB1_TTL_CACHE_NAMES` 字串名，非 re-export | ✔ 讀該檔 `_TAB1_TTL_CACHE_NAMES` 區塊 |
 | 6 | `_build_alo2` 缺 FX 分母：寫成已登記落差，不寫「缺陷／相反」 | ✔ 該函式分母 `sum(... if v["value"] is not None)` 存在；落差登記於 BL-0542 G-1 |
 | 7 | `ui_v2` Preview 為 4 頁（alo／hld 併入 ast） | ✔ `ui_v2/app_preview.py::PAGES` 四列 |
-| 8 | HANDOFF §0／§18 並列 79／80／81／82：寫成「用語不一致，需確認」 | ✔ `PROJECT_RULES.md` 0.5 對 82 的措辭；HANDOFF §0 第 4 點原文（註：本檔所見 HANDOFF 無 §18，並列句在 §0 第 4 點） |
+| 8 | HANDOFF §0 第 4 點並列 79／80／81／82：寫成「用語不一致，需確認」 | ✔ `PROJECT_RULES.md` 0.5 對 82 的措辭；HANDOFF §0 第 4 點原文 |
 
 另：`DataStatus` 在 repo 0 命中，實際為四～五套並行詞彙（✔ 全 repo 字面搜尋 0 命中）；Streamlit Cloud 入口 repo 內查不到＝NOT VERIFIED。
 
