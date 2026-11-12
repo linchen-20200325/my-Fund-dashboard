@@ -2,6 +2,7 @@
 
 > **基準 `origin/main` 85a158bb；單組作者草稿；獨立 QA 已完成一輪並已回修（非 QA 通過；本輪最後小修由專案 AI 自驗 delta）；候選非核准；不構成正式 Schema／契約／裁示。**
 > **2026-11-09 更新（`DEC-2026-11-09-01`；客戶要點轉述，非逐字）**：客戶已回覆本檔「下一批最值得核准事項」三題——題一＝**B**、題二＝**收緊後的 C**（不直接列 Required）、題三＝**B**；另「淨投資金額」一律不稱成本。各題結果見該節「2026-11-09 客戶回覆」標註。**這只核准文件方向，不核准正式 Schema／producer／實作**；舊句保留。
+> **2026-11-11 更新（`DEC-2026-11-11-04`；ChatGPT 轉達的客戶要點，非逐字）**：D2-G1＝B 修正版——先逐列審核 Required 候選、不得整欄升格、**本次未核准任何具體欄位**；D2 首批限基金身份、NAV、績效。逐列待審表見本檔**末節**「Required 逐列待審表」；Digest schema 為獨立 Gate（D2-G2）。舊句保留。
 > 本檔彙整三份作者草稿（E1 報酬、E2 身份、E3 持倉；原文不改寫，只調整標題層級並加註記），並附「對 #1177 草案的更正」與「下一批最值得核准事項」。
 > 客戶 2026-11-08 方向（經總管轉達的**要點轉述，非逐字，客戶可推翻**）：報酬算法選 A、基金身份選 A、持倉占比選 C；**只授權整理正式資料契約候選與裁示登記，不授權新公式、程式施工、FX 開閘或啟動 OneBrain**。登記見 `docs/DECISIONS.md` `DEC-2026-11-08-05`。
 > 標記沿用三草稿：FACT／【F】＝可由所引檔案重現；INFERENCE／【I】＝作者推得；NOT VERIFIED／【NV】＝未查證。三部分各自有分類欄（Required／Optional／Excluded／Pending），皆為**作者候選**，客戶逐類核可前不具效力。
@@ -523,3 +524,66 @@
 - 本檔整合時只做文件層動作：讀 origin/main 原文與三份草稿、對 `services/fund_total_return.py` 做上述唯讀重驗；**未執行任何應用程式測試、未取任何資料、未改任何程式**。
 - 三部內文來自三組單組作者草稿，未經第二組複驗；各表的列數、分類與「小計」為作者人工統計，整合時以 Python 逐表重數欄數一致（見 PR／提交說明）。
 - 三題的方案表與推薦為整合作者判斷；客戶方向的原話只有要點轉述，repo 內無逐字存檔。
+
+---
+
+## Required 逐列待審表（2026-11-11；`DEC-2026-11-11-04` D2-G1＝B 修正版；客戶審核用，**不是正式 schema**）
+
+> **性質（先讀）**：本節只把上文三部及 `d2_draft_A1_fund_identity_nav_perf_2026_11_08.md` 中**已存在的 Required 候選**逐列攤開，供客戶**逐列**核可。**本次沒有核准任何具體欄位；正式核准欄位數＝0。** 每列「本次狀態」一律＝**待客戶逐列核可，正式效力 Pending**；「建議處理」是專案 AI 作者的建議，**不是客戶已核准**。不新增欄位、狀態詞、公式、門檻；欄位名稱沿用現名。不新建競爭矩陣，本表是本檔的一節，不是第二份 SSOT。
+> **範圍（`DEC-2026-11-11-04` D2-G3＝A）**：只含基金身份、NAV、績效三域；其餘六資料域（持倉、配息、持倉占比等）**延後，不是 Excluded**，其既有業務能力不受影響，本節不列其契約。
+> **來源與限制**：客戶三項裁示為 **ChatGPT 轉達的客戶要點，非逐字**（`docs/evidence/decisions/2026-11-11_d2_g1_g2_g3_rulings.md`）；本表由專案 AI 作者單組整理，**未經第二組驗證**。
+> **「Required」的出處分兩種，請勿混讀**：(a) **身份、績效兩域**的 Required 來自上文第一部／第二部各自的「候選分類」欄（作者候選）；(b) **NAV 域在本檔沒有獨立的 Required 候選**——NAV 的候選只在 A1 草案 B 區，分類用語是「**必備**」（A1 自述「不是正式 Required／Optional／Excluded 契約」）。本表把 A1 的「必備」六列（B1～B4、A9、A10；其中 A9／A10 在上文 K13／K14 亦標「歸 NAV 契約，Pending」）列為 NAV 域的 Required 候選待審，**不另創欄位補滿**。
+> **與已裁示的衝突處理**：上文原列（#3 `ccy`、#8 `as_of`、A1 B2／A9 等）仍標 Required／必備，但 `DEC-2026-11-09-01` D2-B（收緊後 C）已規定 `as_of`、幣別**不直接列 Required**，須四項同源證據同時成立才可當 1Y 含息的證據。**原列與來源保留不刪**，本表標 Pending，以正式 DEC 為準。
+> **New UI2 適用欄的讀法**：「未核准」＝尚無客戶對「此欄納入 New UI2 資料契約」的明確核准；「僅 Preview」＝`ui_v2`／`ui_v3` 預覽路徑有實作，不等於正式入口或 Cloud 已驗。
+
+### 身份域（3 列；原列 K1～K3，見第二部 §1）
+
+| 待審 ID | 原始候選 | 欄位名稱 | 現有來源 | 現有 DEC／契約 | New UI2 適用 | 既有實作 | 衝突與缺口 | 本次狀態 | 建議處理（非裁示） | 後續 Gate |
+|---|---|---|---|---|---|---|---|---|---|---|
+| R-ID-1 | 第二部 K1；A1 A1 | `fund_code` | Sheet「基金代號」欄；`nav`／`dividend`／`fund_profile` 列鍵（`services/v2_tables/contract.py::NAV_FIELDS` 等） | `DEC-2026-10-29-01` 第 1 項、`-03` 第 1 項（Sheet 欄＝MoneyDJ 基本代碼命名空間，已核准）；`DEC-2026-11-08-04` Q2；`DEC-2026-11-09-01` D2-A＝B（違反欄位契約須標示、保留原值、不改寫；契約文字層） | 命名空間已核准；「列入 Required」**未核准**；僅 Preview | 欄位存在；D2-A＝B 要求的格式檢查**尚未實作**（`shared/fund_identity.py::DG2_SHADOW_ENABLED = False`） | 契約文字與實作有落差，須明標；`sheet_code_contract_violation` 在 production 路徑打不出 | 待客戶逐列核可，正式效力 Pending | 證據最強，可列為優先逐列核可候選；核可時須連帶標明「格式檢查尚未實作」 | 實作接線另需授權；不啟用 DG2 Shadow |
+| R-ID-2 | 第二部 K2 | `full_key`（`resolve_full_keys` 輸出） | `services/v2_tables/fund_keys.py::resolve_full_keys`（`PURE_CODE_PATTERN`；`portal` 恆空） | BL-0527 第 5 項；`DEC-2026-11-09-01` D2-C＝B（別名表不升格、只收 `mapping_source` 追溯） | **未核准**；僅 Preview（`ui_v2` 的 `hld`／`alo`／`exp` source 模組呼叫；`ui_v3` 未見直接呼叫，僅字面 grep） | 已實作（Preview 取數鍵） | **`full_key` 可否帶通路後綴未裁**（S7）：程式接受主碼＋`-`＋後綴，而既有裁示要求 Sheet 欄遇後綴標違反；canonical identity（`base_fund_code`／`canonical_key`）仍 Shadow、未轉正；不改 NAV source precedence；不新增正式 ISIN／Share Class mapping | 同上 | 建議**先拆分問題**：S7 未裁前維持 Pending，不宜單獨核可 | 需客戶先裁 S7；canonical 轉正須 Stage-2 驗證 V1～V13（第二部 §5） |
+| R-ID-3 | 第二部 K3 | `ok`（`results[].ok`） | 同 R-ID-2 | 無專屬 DEC | **未核准**；僅 Preview | 已實作 | 依附 R-ID-2；無此旗標則無法區分「沒取到」與「沒有這檔」（作者推論） | 同上 | 建議隨 R-ID-2 一併處理，不單獨核可 | 同 R-ID-2 |
+
+### NAV 域（6 列；原列 A1 B1～B4、A9、A10，見 `d2_draft_A1` §1；本檔無獨立 NAV Required 候選）
+
+| 待審 ID | 原始候選 | 欄位名稱 | 現有來源 | 現有 DEC／契約 | New UI2 適用 | 既有實作 | 衝突與缺口 | 本次狀態 | 建議處理（非裁示） | 後續 Gate |
+|---|---|---|---|---|---|---|---|---|---|---|
+| R-NAV-1 | A1 B1 | `nav_orig_ccy` | `services/v2_tables/nav_dividend.py::build_nav_table`（A 鏈取數；非有限／非正值不寫） | `DEC-2026-11-08-04` Q5（非台幣可整理原幣）；`44` 4.2 | **未核准**；僅 Preview（`ui_v2` `hld`／`alo` 使用；`ui_v3` 市值基準 blocked，引 A1 B9） | 已實作（Preview） | 原幣、無 TWD 欄；FX 閘門關閉（`FX_OBS_DATE_RULE_VERIFIED = False`）；NAV source precedence 不改 | 待客戶逐列核可，正式效力 Pending | 可列為優先候選（原幣欄，不涉 FX） | 無新增 Gate；不得推及 TWD 換算 |
+| R-NAV-2 | A1 B2；與 R-PERF-6 同源 | `nav_date` | 同上 | `DEC-2026-11-09-01` D2-B；A1 B2 引 `67` §8.6「as_of 為 Required 例」（既有文件，非核准清單） | **未核准**；僅 Preview | 已實作（Preview）；舊 UI 純量 `nav_date` 與序列末日不同源、無 reconcile（G-NAV-6） | **與 D2-B 衝突**：`as_of` 不直接列 Required；PIT 取哪一欄未定；NAV 新鮮度（`NAV_NOT_READY_DAYS = 10`，`DEC-2026-11-05-03` 不得升格）未裁 | 同上 | 建議**維持 Pending**（以 `DEC-2026-11-09-01` 為準）；不新增 10 日門檻 | D2-B 四項同源證據；`DEC-2026-11-05-03` 待決 (a)～(e) |
+| R-NAV-3 | A1 B3；與 D2-B 的 `fetched_at` 同源 | `fetched_at` | 同上（UTC；缺／無時區／晚於當下 300 秒整批不寫） | `44` 4.2；`DEC-2026-11-09-01` D2-B（不以讀取時間冒充觀測時間） | **未核准**；僅 Preview | 已實作（Preview） | 納入 Digest 未核准；Freshness／Stale 的 `stale_after` 值未裁（`67` §8.5）；觀測時間與取得時間須分開 | 同上 | 建議**維持 Pending** | Freshness 門檻另案，需客戶裁示 |
+| R-NAV-4 | A1 B4 | `source_tier`（表）／`provenance[fund_code].source`（旁路） | `nav_dividend.py`；表內只有 `source_tier`，無 provider 欄 | `44` 4.2 `source_tier` 值域；provider 名進契約規則**未核准** | **未核准**；僅 Preview | 部分（旁路 provenance） | 「必備」與「Optional：補充 provenance」邊界待決；不改 NAV source precedence | 同上 | 建議**先拆分問題**：`source_tier`（有值域）與 provider 名（無規則）分開審 | provider 名入契約需客戶裁示 |
+| R-NAV-5 | A1 A9；第二部 K13；與 R-PERF-3 同源 | `ccy` | `nav.ccy`：持倉列手填或 meta 頁自報；`fetch_nav` 不自報幣別（`nav_dividend.py` 檔頭） | `DEC-2026-10-28-05`（currency 與 share class 分開、不預設 USD）；`DEC-2026-11-09-01` D2-B | **未核准**；僅 Preview | 已實作（Preview）；缺或衝突→該檔淨值整批不寫 | **與 D2-B 衝突**：幣別不直接列 Required；幣別比對僅字串比對 | 同上 | 建議**維持 Pending** | D2-B 四項同源證據 |
+| R-NAV-6 | A1 A10；第二部 K14 | `ccy_source` | `provenance[fund_code]`（旁路，不在表欄內） | 同 R-NAV-5 | **未核准**；僅 Preview | 部分（旁路） | 與 R-NAV-5 成對；是否進契約欄未定 | 同上 | 建議隨 R-NAV-5 處理 | 同 R-NAV-5 |
+
+### 績效域（8 列；原列第一部 §1 的 #1、#2、#3、#4、#6、#8、#10、#11）
+
+| 待審 ID | 原始候選 | 欄位名稱 | 現有來源 | 現有 DEC／契約 | New UI2 適用 | 既有實作 | 衝突與缺口 | 本次狀態 | 建議處理（非裁示） | 後續 Gate |
+|---|---|---|---|---|---|---|---|---|---|---|
+| R-PERF-1 | 第一部 #1 | `fund_code` | 同 R-ID-1 | 同 R-ID-1 | 同 R-ID-1 | 同 R-ID-1 | **與 R-ID-1 重複**，不獨立計 | 同上 | 隨 R-ID-1 | 同 R-ID-1 |
+| R-PERF-2 | #2 | `value_pct`（1Y 含息報酬） | `services/fund_total_return.py::resolve_1y_total_return` ← `calc_metrics` | `DEC-2026-10-23-02` 1B（配息還原淨值法為唯一正式算法；官方值只對帳；資料不足顯示「資料未備／無法判定」）——**落地範圍限舊站，不改 `ui_v2/`**；BL-0427 (1)(3)(4)(5) 待裁 | **舊站已裁；New UI2 未核准**（不得自動擴及；`DEC-2026-11-08-05` ④、`-11-09-01` D2-B） | 僅舊站（`services/fund_service.py` 等消費；`ui_v2`／`ui_v3` 未見呼叫，僅字面 grep）；1M／3M／6M 無核准算法（BL-0524），不在本表 | BL-0427 公式／窗口未決；多套「1Y」並存；無 TWD 報酬（FX 閘門）；不改 350 天門檻或公式 | 同上 | 建議**先拆分問題**：「1Y 含息可否延伸至 New UI2」（BL-0427＋1B 範圍）先裁，欄位核可在其後 | 客戶裁示 1B 延伸與 BL-0427 |
+| R-PERF-3 | #3 | `ccy`（報酬計價幣別） | 輸出**不含** `ccy`；取自 `nav.ccy` | `DEC-2026-11-09-01` D2-B | **未核准** | 輸出無此欄 | **與 D2-B 衝突**；與 R-NAV-5 同源，**重複** | 同上 | 建議**維持 Pending**；不自行補幣別 | 同 R-NAV-5 |
+| R-PERF-4 | #4 | `source`（計算口徑標識） | `fund_total_return.py`：`SRC_SELF_RESTORED`／`SRC_NONE` | 1B：純 NAV／外推不得掛「含息」名 | 舊站已裁；New UI2 **未核准** | 僅舊站 | 無衝突；依附 R-PERF-2 | 同上 | 隨 R-PERF-2 | 同 R-PERF-2 |
+| R-PERF-5 | #6 | `window_days`（`ret_1y_window_days`） | `calc_metrics`；`RET_1Y_RESTORED_MIN_WINDOW_DAYS`（`shared/signal_thresholds.py`，350） | 350 天為既有 SSOT 常數，**核准依據 NOT VERIFIED**；BL-0427 (3)(4) | **未核准** | 僅舊站 | 稀疏序列擋不住、日曆日頻恆 unavailable（BL-0427）；**不以 `window_days` 猜窗口起日**（D2-B）；窗口起訖日輸出沒有（第一部 #7 Pending） | 同上 | 建議**維持 Pending**；不改 350 | BL-0427 窗口定義 |
+| R-PERF-6 | #8；與 R-NAV-2 同源 | `as_of`（資料末端日期） | `resolve_1y_total_return` 輸出**沒有**；NAV 列有 `nav_date` | `DEC-2026-11-09-01` D2-B；`67` §8.6 Required 例 | **未核准** | 輸出無此欄 | **與 D2-B 衝突**；與 R-NAV-2 **重複**；不自行補資料末端日期 | 同上 | 建議**維持 Pending** | 同 R-NAV-2 |
+| R-PERF-7 | #10 | `status`（`ok`／`unavailable`） | `resolve_1y_total_return` | `DEC-2026-11-08-04` Q4 管缺資料字樣，**不直接核准兩值**；D3(a)／(b) 狀態字彙待裁 | **未核准** | 僅舊站 | 不新增「過期／衝突」正式詞；是否採此二值當契約狀態字彙未裁 | 同上 | 建議**先拆分問題**：狀態字彙歸 D3，不在欄位核可內決定 | D3(a)／(b) |
+| R-PERF-8 | #11 | `reason`（5 種：`no_series`、`no_restored_value`、`window_short`、`window_unknown`、`dividend_data_missing`） | `_unavailable()` | 1B：資料不足→資料未備／無法判定；`UNAVAILABLE_REASON_TEXT` 為呈現層 | **未核准** | 僅舊站 | 值域為既有碼，核准性 NOT VERIFIED；`dividend_data_missing_unaligned` 是文字鍵、非 `reason` 值（見上「對 #1177 草案的更正」） | 同上 | 隨 R-PERF-7 | 同 R-PERF-7 |
+
+### 列數統計與核可狀態
+
+| 域 | 待審列數 | 其中與他域重複 | 正式核准欄位數 |
+|---|---|---|---|
+| 身份 | 3（R-ID-1～3） | — | 0 |
+| NAV | 6（R-NAV-1～6） | — | 0 |
+| 績效 | 8（R-PERF-1～8） | 3（R-PERF-1＝R-ID-1；R-PERF-3＝R-NAV-5；R-PERF-6＝R-NAV-2） | 0 |
+| 合計 | 17 列（去除重複後 14 個不同欄位） | — | **0（正式核准欄位數＝0）** |
+
+### Legacy Reuse Gate 查核（`PROJECT_RULES.md` 13.6；只查與上列欄位直接相關的既有能力；不整份複製、不改舊 UI、不移植舊金融公式）
+
+| 域 | 既有能力與位置 | 驗證證據（唯讀查到） | 備註 |
+|---|---|---|---|
+| 身份 | `services/v2_tables/fund_keys.py::resolve_full_keys`；`services/fund_identity.py`、`services/fund_identity_shadow.py`、`shared/fund_identity.py`（Shadow） | `tests/test_v2_tables_fund_keys.py`、`tests/test_fund_identity_dg2.py` 存在；`DG2_SHADOW_ENABLED = False`；hook 僅在 `fund_keys.py` 由旗標把關 | 本批未執行測試於本表；canonical identity 未轉正 |
+| NAV | `services/v2_tables/nav_dividend.py::build_nav_table`；`services/v2_tables/contract.py::NAV_FIELDS`；`ui_v2/thresholds.py::NAV_NOT_READY_DAYS`（Preview）；`services/v2_domain/nav_metrics.py` | `tests/test_v2_tables_nav_dividend.py`、`tests/test_nav_dividend_golden_c3a.py` 存在 | 10 日規則不得升格（`DEC-2026-11-05-03`） |
+| 績效 | `services/fund_total_return.py::resolve_1y_total_return`；`services/reconcile.py`；`shared/signal_thresholds.py::RET_1Y_RESTORED_MIN_WINDOW_DAYS` | `tests/test_compute_1y_total_return.py`、`tests/test_reconcile.py` 存在；`ui_v2`／`ui_v3` 未見 `resolve_1y_total_return` 呼叫 | 舊站算法適用範圍不自動擴及 New UI2；`services/health/`（配息 Coverage）屬金融公式，**與本表欄位無關，勿誤用** |
+| 跨域 | `services/v2_domain/allocation_evidence.py`（檔頭自述 INTERNAL CANDIDATE） | 被 `ui_v3/adapters/assets_source.py` 引用（Preview composition root）；未見正式入口 `app.py` 接線（僅字面 grep） | 屬持倉域（D2-G3 延後），本表**不採用** |
+
+> **本節未驗證項（NOT VERIFIED）**：(1) 上列「存在」的測試**本批未實跑**；(2) 「`ui_v2`／`ui_v3` 未見呼叫」為字面 grep，非動態呼叫鏈驗證；(3) A1 草案「必備」與第二部／第一部「Required」是否等價，是專案 AI 的歸併讀法，**可被客戶推翻**；(4) Cloud／真機／實資料一律無法驗證。
