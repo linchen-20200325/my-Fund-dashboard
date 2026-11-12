@@ -2925,14 +2925,17 @@
 | 欄位 | 內容 |
 |---|---|
 | 日期 | 2026-11-12 |
-| 決策內容摘要 | 客戶同意協作總管建議：基金儀表板採「資料／資料契約優先，New UI2 安全 UI 並行」。先完成已授權的 B1 文件整理，再做五頁 UI × 資料來源／契約／證據狀態的唯讀對應稽核；資料層優先核對基金身分、NAV、績效、日期、幣別、缺值及既有資料庫／資料接線，沿用既有資料架構，不建立第二套平行 SSOT、memory 或資料層。已核准的安全 UI 設計可與資料查核並行，但尚未核准的正式 UI／Runtime 施工、正式資料接線及金融判斷顯示不得因「雙軌」自動開閘；每頁必要資料契約與 Decision Gate 過關後才能依另行核准範圍接線。客戶另指示 GitHub Actions 執行紀錄清理與最後死碼／歷史清理階段一併延後，現階段以 UI＋資料庫為優先，不刪任何 Actions Run。此處的「資料庫整理」不授權 Schema、provider、資料來源、金融公式、正式門檻、Cloud／Sheet 寫入或 production migration。 |
-| CI／專案 AI 延續規則 | 接手必須先 GitHub-first 核對 main、PR head/base、diff、四 lane 實跑步驟及非作者 QA；若有實際 CI **安裝／工具環境**故障，得先提出隔離的最小環境修復派工／PR，在**另有該修復授權**時才施工；必須保留全部原有 required checks、測試數量、browser／visual 驗收及 merge Gate。不得用 skip、continue-on-error 或放寬測試掩蓋真失敗；同 head CI success 與非作者 QA 俱備後才依既有 Auto-Ship Gate 合併。本筆是後續交接規則，不宣稱本基金 repo 目前存在 pip exit 127、Playwright 故障，也不授權新的 CI 修復施工。專案 AI 的完成回報須核實 GitHub、保存可追溯結果並更新 HANDOFF；已合併工作不重做。 |
+| 決策者／原話 | 客戶；2026-11-12 要點經 ChatGPT 協作助手轉達（非逐字），並由客戶於專案 AI 對話再行確認方向（亦無逐字存檔）；repo 內無逐字存檔、不可獨立核對；客戶可推翻。不虛構引文。 |
+| 決策內容摘要 | 客戶同意 ChatGPT 協作助手的建議（建議內容無逐字存檔，客戶實際同意範圍不可由專案 AI 獨立核對）：基金儀表板採「資料／資料契約優先，New UI2 安全 UI 並行」。B1 文件整理已完成（見「已完成基準」）；接著做五頁 UI × 資料來源／契約／證據狀態的唯讀對應稽核；資料層優先核對基金身分、NAV、績效、日期、幣別、缺值及既有資料庫／資料接線，沿用既有資料架構，不建立第二套平行 SSOT、memory 或資料層。已核准的安全 UI 設計可與資料查核並行，但尚未核准的正式 UI／Runtime 施工、正式資料接線及金融判斷顯示不得因「雙軌」自動開閘；每頁必要資料契約與 Decision Gate 過關後才能依另行核准範圍接線。客戶另指示 GitHub Actions 執行紀錄清理與最後死碼／歷史清理階段一併延後，現階段以 UI＋資料庫為優先，不刪任何 Actions Run。此處的「資料庫整理」是 ChatGPT 協作助手對客戶「先處理UI+資料庫」指示的解讀（可被客戶推翻），不授權 Schema、provider、資料來源、金融公式、正式門檻、Cloud／Sheet 寫入或 production migration。 |
+| CI／專案 AI 延續規則 | 【ChatGPT 協作助手的保守讀法，非客戶裁示、可被客戶推翻；不改 `PROJECT_RULES.md` 第 4 節】接手必須先 GitHub-first 核對 main、PR head/base、diff、四 lane 實跑步驟及非作者 QA；若有實際 CI **安裝／工具環境**故障，得先提出隔離的最小環境修復派工／PR，施工依 `PROJECT_RULES.md` 第 4 節（CI 修復屬可自行處理範圍；超出既有授權者另行取得客戶批准）；必須保留全部原有 required checks、測試數量、browser／visual 驗收及 merge Gate。不得用 skip、continue-on-error 或放寬測試掩蓋真失敗；同 head CI success 與非作者 QA 俱備後才依既有 Auto-Ship Gate 合併。本筆是後續交接規則，不宣稱本基金 repo 目前存在 pip exit 127、Playwright 故障，也不授權新的 CI 修復施工。專案 AI 的完成回報須核實 GitHub、保存可追溯結果並更新 HANDOFF；已合併工作不重做。 |
 | 已完成基準 | B1-1 #1221（merge `7893eabf`）、B1-2／B1-3 #1222（merge `195de856`）、B1 狀態同步 #1223（merge `439590dc`）；以上均已合併，不能重新開工。 |
-| 影響範圍 | 只調整工作優先序與授權判讀／交接；不修改正式金融契約、DataStatus、New UI2 frozen 44、子法 1＋57、FX Gate、D2 Required 審核、Risk Cap 或 OneBrain／Phase 7。BL-0545 繼續為既有唯一全域 NEXT，合法輸入未提供；本次 UI × 資料盤點為另外明示的有限唯讀研究，不取代它。 |
+| 影響範圍 | 只調整工作優先序與授權判讀／交接；不修改正式金融契約、資料狀態語意（正式 UI／資料契約文件所定義者）、New UI2 frozen 44、子法 1＋57、FX Gate、D2 Required 審核、Risk Cap 或 OneBrain／Phase 7。BL-0545 繼續為既有唯一全域 NEXT，合法輸入未提供；本次 UI × 資料盤點為另外明示的有限唯讀研究，不取代它。 |
 | 是否可逆 | 可由客戶後續裁示改變優先序；原有金融／資料／治理 Gate 不受影響。 |
 | supersedes／superseded by | 不 supersede 既有正式產品決策；本筆只記錄 2026-11-12 新優先序與不授權邊界。 |
-| evidence／source | 2026-11-12 客戶於 ChatGPT 表示「聽你的建議」採資料契約優先、UI 安全並行；其後明確指示「這有空處理，最後死碼清理的時候再來處理，先處理UI+資料庫」；本筆經 ChatGPT 協作助手轉達，repo 內無逐字對話檔。GitHub 完成事實以各 PR、CI、QA 記錄為準。 |
-| provenance | **要點轉述**（客戶裁示經 ChatGPT 協作助手轉達；含 CI 條件化執行界線為協作總管的保守解釋，不能冒充客戶批准的基金 CI 施工）。本筆文件由 ChatGPT 直接起草，尚待非作者獨立 QA；未核實的全稱句不得作為合併依據。 |
+| evidence／source | ChatGPT 轉達的客戶用語要點（非逐字、未經核對）：表示聽從建議採「資料契約優先、UI 安全並行」；另指示 GitHub Actions 清理延後至最後死碼清理階段、先處理 UI＋資料庫；本筆經 ChatGPT 協作助手轉達，repo 內無逐字對話檔。2026-11-12 客戶另於專案 AI 對話中直接裁示同一方向（優先 UI＋既有資料庫／資料契約、Actions 紀錄清理延至最後、不授權 B2／B3、BL-0545 暫不提供輸入、BL-0541 (f) 保留待核、不另立重複 B1 授權 DEC）；該對話亦無逐字存檔。GitHub 完成事實以各 PR、CI、QA 記錄為準。 |
+| provenance | **要點轉述**（客戶裁示經 ChatGPT 協作助手轉達；含 CI 條件化執行界線為 ChatGPT 協作助手的保守解釋（總管層級裁量，可被客戶推翻），不能冒充客戶批准的基金 CI 施工）。本筆文件由 ChatGPT 直接起草，尚待非作者獨立 QA；未核實的全稱句不得作為合併依據。 |
+
+---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
