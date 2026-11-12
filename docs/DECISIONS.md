@@ -2937,6 +2937,22 @@
 
 ---
 
+### DEC-2026-11-12-02｜第三階段：D2 核准準備、🔍 線框草稿、治理差異與 Gate 整理；α 不全面啟動（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-12 |
+| 決策者／原話 | 客戶；2026-11-12 第三階段正式裁示，於專案 AI 對話中直接下達；repo 內無逐字存檔、不可獨立核對；本筆為專案 AI 整理之要點，非逐字；客戶可推翻。不虛構引文。 |
+| 決策內容摘要 | (1) 採 γ 優先、搭配限縮版 β：先整理金融資料契約 Decision Gate（D2 核准準備），再提出 🔍 找基金 New UI2 文字線框草稿供審。(2) α 不全面啟動；BL-0532 僅做正式模式可見殘餘影響掃描；`TEXT_EMPTY` 暫維持原樣；不得一次改寫舊 UI 110 行字樣及大量測試。(3) 79／80 保持「正式 input contract」既有地位，不自動升格 frozen；82 必須清楚標成「部分核准草案」，不得與已核准規格混同；81 依其正式有效範圍引用。(4) 保留 BL-0546；未核准修改舊 UI 的 `composite_score`／`decision_matrix`。(5) BL-0545 繼續 BLOCKED，不要求客戶提供輸入。(6) B2／B3、`CLAUDE.md` 大幅整理、Digest、OneBrain、Phase 7、FX 開閘與 Actions 清理繼續暫停。 |
+| 授權範圍 | 本批授權：唯讀研究與 docs 落盤（D2 核准準備、🔍 線框草稿、治理文件差異與 G1～G13 整理）。**不授權**正式 UI 或資料庫施工、不核准任何 D2 欄位、不解除 FX／D2／身份／金融公式／cutover Gate。 |
+| 影響範圍 | 僅文件：本檔、`docs/BACKLOG.md`（索引與 BL-0532 說明欄追加註記）、`docs/HANDOFF.md`、三份新 evidence 檔。無 code／tests／workflow／cron／閘門／`data_cache`／Sheet 變更。 |
+| 是否可逆 | 可逆（客戶可推翻；純文件）。 |
+| supersedes／superseded by | 不 supersede 既有正式決策；僅補強 `DEC-2026-11-12-01` 的優先序。 |
+| evidence／source | `docs/evidence/d2_contract_approval_prep_2026_11_12.md`（D2 核准準備）；`docs/evidence/exp_new_ui2_wireframe_draft_2026_11_12.md`（🔍 找基金線框草稿）；`docs/evidence/gates_and_governance_diff_2026_11_12.md`（治理文件差異、G1～G13 與 BL-0532 殘餘掃描）。 |
+| provenance | **要點轉述**（客戶於專案 AI 對話直接裁示，由專案 AI 整理，非逐字，QA 無法獨立核對）；三份 evidence 為單組作者草稿，**尚待非作者獨立 QA**；不得作為合併依據的全稱句未經第二組驗證。 |
+
+---
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
