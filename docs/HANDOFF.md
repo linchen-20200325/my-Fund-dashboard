@@ -5,7 +5,7 @@
 > 舊版錯誤將 #1163 當 Draft 且否認 S1 Code 已動工。舊版原文逐字留存在 `docs/evidence/history/2026-11-07_handoff_before_cold_start_resync.md`（NOT CURRENT）；不可用舊版文件、對話記憶、PR body 或排程回報推翻即時 GitHub 證據。本檔 2026-11-12 瘦身前全文（含逐則更新鏈與被劃線舊句）逐字留存在 `docs/evidence/history/2026-11-12_handoff_before_slimming.md`（NOT CURRENT）。
 >
 > **⏯ Resume Checkpoint（`PROJECT_RULES.md` §6.1 第 6 點／§6.1.2 第 2 點；2026-11-12 觀測，使用前必須重查 GitHub）**
-> - **main（觀測基準，本檔設計即比 main 舊一格：合併本批 docs-only PR 後 main 會前進）**：`b991df70623242afd1876b217088e9eccd5a6ebb`（#1224 merge；2026-11-12 `git fetch origin main` 與 GitHub 實查）。**Open PR**：0（開本批前實查；本批 UI×資料層唯讀稽核證據 docs-only PR 開出後即為 Open，編號、CI、QA 以 GitHub 為準，作者不自稱獨立 QA）。main push CI（`b991df70`）本批未查，結論 NOT VERIFIED。
+> - **main（觀測基準，本檔設計即比 main 舊一格：合併本批 docs-only PR 後 main 會前進）**：`d82a711d3bb7f4939952bdebae1441e99a8704f5`（#1225 merge；2026-11-12 `git fetch origin main` 實查；#1224、#1225 已合併；前一觀測基準 `b991df70623242afd1876b217088e9eccd5a6ebb`＝#1224 merge）。**Open PR**：以開本批 PR 前的 GitHub 實查為準（本批第三階段 docs-only PR 開出後即為 Open，編號、CI、QA 以 GitHub 為準，作者不自稱獨立 QA）。main push CI（`d82a711d`）本批未查，結論 NOT VERIFIED。
 > - **已完成**：見 §1 與 `docs/BACKLOG.md` 檔尾索引；近期新增 B1-1（#1221，merge `7893eabf`）、B1-2／B1-3（#1222，merge `195de856`），範圍見 §3「GATE」列。**未完成**：BL-0545 等合法輸入（§2）；其餘待決項見 §3。
 > - **Decision Gate**：§3 各列所列 Gate 未裁示者待客戶裁示（BL-0545 待外部輸入；D8 客戶已裁維持關閉；BL-0530 research-only），登記不構成動工授權。另依客戶本批授權單（未另立 DEC，repo 內無逐字存檔）：BL-0538 不延伸授權修改 `CLAUDE.md`；本批只核准 B1；B2、B3、`CLAUDE.md` 封存或瘦身、Digest、OneBrain、Phase 7、FX Gate 均未授權、不得擅自開始（見 §3「GATE」列）。**Stop Gate**：BL-0545 為外部輸入驅動（使用者暫不提供輸入）；遇上位明文衝突即停止、不擅改；本檔未登記其他進行中的 Stop Gate（以即時 GitHub 與 BACKLOG 為準）。
 > - **下一個唯一工作點**：§2（BL-0545）。**下一批建議 Model／Effort**：取得合法輸入後的 Phase 1 唯讀探針執行＝Sonnet 5.5／Medium；純 HANDOFF／BACKLOG／DECISIONS 機械同步＝Haiku 5.5／Low（`PROJECT_RULES.md` §5.1 表；總管讀法，可被客戶推翻）。
@@ -15,14 +15,14 @@
 1. **只查基金 repo** `linchen-20200325/my-Fund-dashboard`：`main` 完整 SHA、最近 commits、已 merged PR（讀 `merged`、`merge_commit_sha`）；不要拿今天的 main SHA 不同判斷歷史 PR 沒合併。
 2. **所有 Open／Draft PR**：逐一查 head/base SHA、diff/files、reviews、unresolved threads、mergeability 和 branches，確認是否已有人施工；PR 分支不等於 main，不能重開重複 PR。
 3. **CI 依最新 head**：Fast、Schema、Slow、Visual 逐項查 `conclusion`。新 head 不能繼承舊 head 的 success，`mergeable=true` 不代表 CI／QA 合格；main CI 不可拿 PR CI 冒充。
-4. **讀權威文件**：`CLAUDE.md` → `PROJECT_RULES.md` → 本檔 → `docs/BACKLOG.md` → `docs/DECISIONS.md` → 該批正式 SSOT／規格（frozen 44、子法 1＋57、79／80／81／82）。歷史快照不得當現行規格，HANDOFF 不能獨立宣稱完成。
+4. **讀權威文件**：`CLAUDE.md` → `PROJECT_RULES.md` → 本檔 → `docs/BACKLOG.md` → `docs/DECISIONS.md` → 該批對應的正式 SSOT／規格／輸入契約（**地位各不相同、不得混讀**：凍結 SSOT＝44；子法 1＋57；New UI2 正式 input contract〔不等同 frozen〕＝79、80，其中 80 的 architecture／Reuse Matrix／migration boundary 依 `DEC-2026-11-02-05` 已凍結；🌍 已核准線框＝81〔範圍以其檔頭與 `DEC-2026-11-03-01` 為準，非 production 渲染授權〕；82＝部分核准草案、非現行規格〔僅 `DEC-2026-11-04-01`／`-02`、`DEC-2026-11-09-02`～`-04` 所列 UI 設計／顯示方向已核准〕）。歷史快照不得當現行規格，HANDOFF 不能獨立宣稱完成。
 5. **判斷與交接**：標明 NOW／NEXT、owner、可動工 Gate、實際 CI／QA／視覺證據和未驗項；遇到文件與 GitHub 不一致，以即時 GitHub 為準，文件另由安全治理批修正，不重做已合併功能。不具備工具／證據就寫 NOT VERIFIED，禁止猜測。
 
 ## 1. 最近一次 GitHub 實查快照（歷史觀測，必須重新查）
 
 | 項目 | 2026-11-07 查到的狀態 | 對應證據 |
 |---|---|---|
-| main | `b991df70623242afd1876b217088e9eccd5a6ebb`（#1224 merge；2026-11-12 觀測；前一觀測基準 `195de8562baee28b99e2afa100f503eda25f0724`＝#1222 merge；#1221〔`7893eabf`，B1-1〕、#1222〔`195de856`，B1-2／B1-3〕已合併；`29ba4fd5`＝#1219 merge；#1209～#1219 均已合併。近期：#1216〔`6cb212aa`，CI Slow／Visual 的 Chromium 安裝加有界重試與啟動 smoke check〕、#1217〔`75e8dbca`，D2 G1／G2／G3 裁示落盤〕、#1218〔`78d55726`，PROJECT_RULES 兩處 HANDOFF 節號指標修正〕、#1219〔`29ba4fd5`，BL-0220 補註 `update_macro_history` 在 Actions 實際直連〕）；更早的逐次快照（`7ac7c935`〔#1170〕、`2ffc6ad1`〔#1207〕、`50e66801`〔#1209〕、`5e6a950d`〔#1211〕、`966a2722`〔#1212〕）見 history 快照；使用前仍須重查 GitHub | 當前使用前仍須重查 GitHub |
+| main | `d82a711d3bb7f4939952bdebae1441e99a8704f5`（#1225 merge；2026-11-12 觀測；前一觀測基準 `b991df70623242afd1876b217088e9eccd5a6ebb`＝#1224 merge；更早 `195de8562baee28b99e2afa100f503eda25f0724`＝#1222 merge；#1221〔`7893eabf`，B1-1〕、#1222〔`195de856`，B1-2／B1-3〕已合併；`29ba4fd5`＝#1219 merge；#1209～#1219 均已合併。近期：#1216〔`6cb212aa`，CI Slow／Visual 的 Chromium 安裝加有界重試與啟動 smoke check〕、#1217〔`75e8dbca`，D2 G1／G2／G3 裁示落盤〕、#1218〔`78d55726`，PROJECT_RULES 兩處 HANDOFF 節號指標修正〕、#1219〔`29ba4fd5`，BL-0220 補註 `update_macro_history` 在 Actions 實際直連〕）；更早的逐次快照（`7ac7c935`〔#1170〕、`2ffc6ad1`〔#1207〕、`50e66801`〔#1209〕、`5e6a950d`〔#1211〕、`966a2722`〔#1212〕）見 history 快照；使用前仍須重查 GitHub | 當前使用前仍須重查 GitHub |
 | #1163 | **merged=true**；**歷史 merge SHA `025922382ef3921fc7b6858cb733084935fbf066`**（是 #1164 之前的 commit，不是當前 main HEAD） | [PR #1163](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1163)；B／S1 設計文件已進 main |
 | Open PR | 2026-11-12 開本批前 GitHub REST 實查 Open PR 為 0（#1217、#1218、#1219 均已 merged）；#1171 已於 2026-11-08 merge（`5d8050df`）；#1166 merge `b227ae5c`、#1168 merge `b34dd2eb`、#1167 merge `861add40` 均已完成 | [#1171](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1171)（merged）；不把此列視為即時狀態，使用前重查 |
 | #1164 已合併 head CI | [run 42359253829](https://github.com/linchen-20200325/my-Fund-dashboard/actions/runs/42359253829)：Fast／Schema／Slow／Visual **success** | 最後 head `4f045c26` 的結論；**不是 merge commit 的 main CI** |
@@ -32,7 +32,7 @@
 | main CI | #1168 merge 的 main push CI 逐 job 結論本次 NOT VERIFIED；PR head 四項 success 不能替代 main CI | 必須依最新 SHA 重新查 |
 | 清理線 #1152／#1153／#1154 | 三 PR 均已合併；#1165 交接修復也已合併（`7a3ab87c`） | 不重做、也不把已 merged 的 PR 當 Open |
 
-## 2. 唯一 NEXT：BL-0545 真實覆蓋率合法輸入 Gate
+## 2. 唯一 NEXT：BL-0545 真實覆蓋率合法輸入 Gate（BLOCKED：等使用者合法輸入；`DEC-2026-11-12-02` 維持暫停，不要求提供輸入）
 
 唯一下一接手點：使用者稍後選擇方式 A（自己的合法 Google 登入 session）或方式 B（自願提供匿名基金代碼清單），再以已合併的 Phase 1 唯讀探針取得真實三層分母；目前使用者明確指示暫不提供輸入，故維持 NOT VERIFIED，不執行 live、不得請求憑證或虛構結果。
 
@@ -66,7 +66,8 @@
 - **正式決策錨點：** `docs/DECISIONS.md` `DEC-2026-11-12-01`（要點轉述，待獨立 QA）。客戶已選「資料／資料契約優先、New UI2 安全部分並行」；先作五頁 UI × 資料來源／契約／證據狀態唯讀對應稽核，再依已核准範圍分批開發。雙軌方向**不等於**授權未核准 UI／Runtime 施工或資料接線；D2、BL-0545、FX、金融語意／公式、frozen SSOT 等既有 Gate 不變。
 - **推遲清理：** Actions 執行紀錄清理（客戶對話提及，repo 內無對應盤點文件）尚未核准；停止此清理線，待最後死碼／歷史清理階段再處理，禁止現在刪除 Run。CLAUDE.md 大幅封存、B2／B3 不因此授權。
 - **CI／QA 接手：**（ChatGPT 協作助手保守讀法，非客戶裁示、可被客戶推翻；CI 修復的自主範圍仍依 `PROJECT_RULES.md` 第 4 節，超出既有授權者另行取得客戶批准）遇環境安裝錯誤先獨立診斷，若需要修復，須為有界最小的環境修復；CI 修復施工授權來源僅依 `PROJECT_RULES.md` 第 4 節，本段不新增授權；不可放寬 checks／測試／QA／Auto-Ship Gate；非作者 QA 與同 head CI 才能支撐 merge。B1 #1221～#1223 已合併，禁止重做。
-- **UI×資料層唯讀稽核證據（2026-11-12；`DEC-2026-11-12-01` 優先序下的有限唯讀稽核，本批客戶授權單未另立 DEC）：** `docs/evidence/ui_data_contract_audit_2026_11_12.md`（基準 main `b991df70`；單組盤點＋一次獨立抽驗，仍有未驗項；**非客戶裁示、非授權施工、未經獨立 QA**）。結論摘要：New UI 路徑 Missing≠0 成立，Old UI `composite_score`／`decision_matrix` 缺值補 0／持有已登記 BL-0546（待客戶裁示）；DG2、FX 閘門、Actions 快取接線、D2 正式契約（核准欄位＝0）仍待客戶；低風險候選 UI／文件工作僅 BL-0532 殘餘與文件／註解一致性小批（均未授權開工；其中文件／註解小批是否在 NG-2 範圍無明文）。BL-0545 仍是唯一全域 NEXT，本稽核不是 NEXT；下一個 Decision Gate 清單見證據檔 §5。
+- **UI×資料層唯讀稽核證據（2026-11-12；`DEC-2026-11-12-01` 優先序下的有限唯讀稽核，本批客戶授權單未另立 DEC）：** `docs/evidence/ui_data_contract_audit_2026_11_12.md`（基準 main `b991df70`；單組盤點＋一次獨立抽驗，仍有未驗項；**非客戶裁示、非授權施工、未經獨立 QA**）。結論摘要：New UI 路徑 Missing≠0 成立，Old UI `composite_score`／`decision_matrix` 缺值補 0／持有已登記 BL-0546（待客戶裁示）；DG2、FX 閘門、Actions 快取接線、D2 正式契約（核准欄位＝0）仍待客戶；低風險候選 UI／文件工作僅 BL-0532 殘餘與文件／註解一致性小批（均未授權開工；其中文件／註解小批是否在 NG-2 範圍無明文）。BL-0545 仍是唯一全域 NEXT，本稽核不是 NEXT；下一個 Decision Gate 清單見證據檔 §5；G1～G13 現行狀態分類與 BL-0532 正式模式殘餘掃描見 `docs/evidence/gates_and_governance_diff_2026_11_12.md`（單組作者，尚待非作者 QA，非客戶裁示）。
+- **第三階段（2026-11-12；`DEC-2026-11-12-02`，要點轉述）：** 已落盤三份唯讀草稿證據，皆為單組作者草稿、非核准、非客戶裁示，待非作者 QA／客戶審：`docs/evidence/d2_contract_approval_prep_2026_11_12.md`（D2 核准準備）、`docs/evidence/exp_new_ui2_wireframe_draft_2026_11_12.md`（🔍 找基金線框草稿，Q1～Q9）、`docs/evidence/gates_and_governance_diff_2026_11_12.md`（治理文件差異、G1～G13 分類、BL-0532 正式模式殘餘掃描）。BLOCKED：BL-0545 缺使用者合法輸入，客戶本批維持暫停、不要求提供輸入。等待客戶裁示的事項（**不是新的全域 NEXT**，BL-0545 仍是唯一全域 NEXT）僅限：客戶對 D2 核准準備的裁示順序、🔍 線框 Q1～Q9、G1～G13 中 (C) 類 Gate 的裁示；尚待客戶裁示的 Gate 指向 `docs/evidence/gates_and_governance_diff_2026_11_12.md`。不授權正式 UI 或資料庫施工、不核准任何 D2 欄位、不解除 FX／D2／身份／金融公式／cutover Gate；`TEXT_EMPTY` 維持原樣、BL-0546 保留、B2／B3、`CLAUDE.md` 大幅整理、Digest、OneBrain、Phase 7、Actions 清理繼續暫停。
 - **本文不是新全域 NEXT：** BL-0545 仍是既有唯一全域 NEXT；本段只保存本次客戶對 P0 工作優先序和有限唯讀稽核的指示。資料庫／UI 正式施工須沿正式授權；不可由本段推導已核准新 Schema、provider、來源、金融計算或新 UI 頁接線。
 
 ## 4. 新對話／compact 後交接自驗
