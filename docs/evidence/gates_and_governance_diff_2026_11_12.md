@@ -2,7 +2,7 @@
 
 > **研究證據（唯讀整理）；非客戶裁示、非授權施工；單組作者，尚待非作者 QA。** 基準：main `d82a711d3bb7f4939952bdebae1441e99a8704f5`（#1225 merge；本機與 origin/main 同步）；整理日 2026-11-12（Asia/Taipei）。
 > 授權來源：客戶 2026-11-12 本批授權單（任務 3 與同批裁示 (2)～(6)；**成稿時未另立 DEC；整合入庫時已由 `DEC-2026-11-12-02` 補登要點，repo 內仍無逐字存檔**，本檔所引「客戶本批裁示 (n)」均為總管轉述，不得當逐字稿）。`DEC-2026-11-12-01` 僅作優先序與「不授權」邊界引用。
-> 本檔**不修改**任何程式、測試、workflow、`CLAUDE.md`、`PROJECT_RULES.md`、`docs/DECISIONS.md`、`docs/v2/**`；對 `HANDOFF`／`BACKLOG` 的修改建議另存（`old→new` 精確文字），**不在本檔內執行**。文中「推薦」一律是**總管讀法，可被客戶推翻**。
+> 本檔**不修改**任何程式、測試、workflow、`CLAUDE.md`、`PROJECT_RULES.md`、`docs/DECISIONS.md`、`docs/v2/**`；對 `HANDOFF`／`BACKLOG` 的修改（E1～E5）不在本檔內，已由整合者於本 PR 套用，精確 old→new 見本 PR diff。文中「推薦」一律是**總管讀法，可被客戶推翻**。
 > 路徑一律寫「檔案::符號」，不寫行號。未寫 secret、NAS 位址、Sheet ID 值。缺值／無法判定一律寫 ⬜（UNAVAILABLE），不得讀成 0 或正常。
 > 「單組 grep」＝全稱句限度：所有「0 命中／只有 N 處」皆為本組字面搜尋，**不含別名、動態組字**，**未經第二組驗證**。測試是否綠**只能由 CI 驗**（本機沒有 pytest 可用於本 repo 的依賴齊全環境；本組未跑任何 pytest）。
 
@@ -15,7 +15,7 @@
 | 1 | **用語不一致只有一處需要改**：`docs/HANDOFF.md` §0 第 4 點把 82 與 79／80／81 並列為「正式 SSOT／規格」。`PROJECT_RULES.md` 對 79／80／81／82 的措辭與各檔頭、相關 DEC **彼此一致**，不需改（也不在本批授權內）。建議的最小修改為 E1（單行替換，守衛相容性已模擬；整合者已於本 PR 套用，old→new 見本 PR diff）。 | 已查證（單組） |
 | 2 | **BL-0532 在正式模式的可見殘餘＝1 組（共 3 個渲染點）＋1 項無法判定**：確認殘餘＝`ui_v2/mkt/market_section.py::_STATUS_TEXT` 的「資料未備」一列（市場趨勢區段不經 `symbols.apply`）；無法判定＝`ui_v2/mkt/chart.py::TEXT_EMPTY`（依 L2 契約推論正常資料不可達，未跑 AppTest）。其餘 `ui_v2` 命中（111 行）經渲染期改寫、僅示範模式、僅註解／docstring 或屬匯出檔。`ui_v3` 0 命中。 | 靜態追蹤＋純函式實算；**畫面層 NOT RUN** |
 | 3 | **`TEXT_EMPTY` 暫維持原樣、不一次改寫 110 行**：本檔只登記，未改任何 `.py`。若客戶日後要動，最小批僅限第 2 節 (i) 類（1 組、改 1 個常數＋4 行測試斷言級別），不含 `TEXT_EMPTY`。 | 依客戶本批裁示 (2) |
-| 4 | **G1～G13 分類**：(A) 已有明確裁示＝G2、G12；(C) 必須停止等待客戶＝其餘 11 個（其中 G6、G10、G11 另含有限的 (B) 唯讀研究）；(D) 可供下一批實施的候選＝**只有 2 項，且都不屬於 FX／D2／身份／金融公式／cutover**（D-1 HANDOFF 措辭修正；D-2 BL-0532 (i) 類最小批，仍須客戶開實作批）。 | 單組分類，可被客戶推翻 |
+| 4 | **G1～G13 分類**：(A) 已有明確裁示＝G2、G12（統計不變：(A) 2 個；其中 G12 的 (A) 僅指「不得改 `CLAUDE.md`」〔BL-0538〕，是否登記為憲法勘誤＝總管讀法，待客戶）；(C) 必須停止等待客戶＝其餘 11 個（其中 G6、G10、G11 另含有限的 (B) 唯讀研究）；(D) 可供下一批實施的候選＝**只有 2 項，且都不屬於 FX／D2／身份／金融公式／cutover**（D-1 HANDOFF 措辭修正；D-2 BL-0532 (i) 類最小批，仍須客戶開實作批）。 | 單組分類，可被客戶推翻 |
 | 5 | **BL-0546 登記保留**（BACKLOG 該列存在、內容與證據檔 §1.8／§5 G13 相符，不動）。**BL-0545 仍是唯一全域 NEXT**；`BACKLOG` 該列狀態欄寫 `open`、`HANDOFF` 寫「暫不提供輸入」，兩處都**沒有「BLOCKED」一詞**（單組 grep）；客戶說 BLOCKED，故建議在文件補註（選配 E2／E4）。 | 已查證 |
 
 ---
@@ -47,7 +47,7 @@
 ### 1.3 建議修改與守衛相容性
 
 - **E1（必要，單行替換）**：`docs/HANDOFF.md` §0 第 4 點。新句把 44／子法 1＋57／79、80／81／82 分成四種地位。**行數不變**（81 行）。
-- **E2（選配）**：§2 標題補「BLOCKED」註記。**E3（選配）**：§3A 證據檔段落補本檔索引。**E4／E5（選配，BACKLOG）**：BL-0545 加入快速索引 blocked 行；BL-0532 列尾加殘餘掃描指標。**成稿時另存為建議檔；整合者已於本 PR 套用 E1～E5，精確 old→new 見本 PR diff。**
+- **E2（選配）**：§2 標題補「BLOCKED」註記。**E3（選配）**：§3A 證據檔段落補本檔索引。**E4／E5（選配，BACKLOG）**：BL-0545 加入快速索引 blocked 行；BL-0532 列尾加殘餘掃描指標。**整合者已於本 PR 套用 E1～E5，精確 old→new 見本 PR diff。**
 - **守衛相容性（本組以純 Python 複刻 `tests/test_canonical_rule_consistency.py` 的判定，非跑 pytest）**：套用 E1＋E2＋E3 後的 HANDOFF 模擬結果：行數 81（上限 120）；未劃線「唯一下一接手點」恰 1 處且非並列編號；無 `PENDING`／`擬：`／`待客戶定字`；無 `~~`；無舊頁名行；§0 仍為 5 點。**真正的 pytest 結果 NOT RUN（待 CI）。**
 - **不提議**：改 `PROJECT_RULES.md`、`CLAUDE.md`、`docs/v2/79`～`82`、`docs/DECISIONS.md`。
 
@@ -145,7 +145,7 @@ Gate 定義：`docs/evidence/ui_data_contract_audit_2026_11_12.md` §5（逐字�
 | **G9** 🤖 Phase 7 前置 | Digest schema、Risk Cap、BL-0528 何時處理 | **C** | BACKLOG BL-0527（open）、BL-0495／0496（待客戶裁示）、BL-0528（待客戶裁示）；`DEC-2026-11-11-04` D2-G2＝A（D2 與 Digest 分離） | 無 | A 維持 Phase 7 前不啟用，BL-0528 另案（推薦）／B 先定 Digest schema／C 先接 Claude API | OneBrain／Digest 施工、Risk Cap 數值、改 A 線 prompt、Phase 7 |
 | **G10** ⚙️ wireframe（BL-0536-G4）、Rule ID 格式、BL-0534 | Registry 殼、通知偏好版面；`pay_date` amendment | **C**（(B)：BL-0534 amendment 文字起草） | `PROJECT_RULES.md` 0.4（⚙️ 尚無 wireframe）；BACKLOG BL-0534（open，amendment 文字未起草、起草後送客戶核准）、BL-0531 UI-10；`DEC-2026-11-02-07`（44 `pay_date` 另開正式 amendment） | 起草 BL-0534 amendment **文字**（不改 frozen 44）是否在現行授權內＝**NOT VERIFIED**，宜先請總管確認；⚙️ 線框草稿須客戶指示 | A Registry 殼先只列名稱與出處、`pay_date` 先起草文字（證據檔推薦）／B 先出 ⚙️ 線框／C 直接 amend 44 | 直接改 frozen 44、新增 Rule Registry 程式、改 OAuth scope／callback |
 | **G11** FX 閘門 D8；Actions→Cache 讀取路線 | FX 閘門何時可開；快取何時能當主來源 | **C**（(A)：FX 維持關閉；(B)：僅離線唯讀） | `DEC-2026-11-08-02`（D8 維持關閉、不以相同方法立即重跑）、`-08-01`（遠端分支全保留）、`DEC-2026-11-10-04`（研究與架構方向，**不准許切換 production**）、`-10-05`（純離線驗證）；`FX_OBS_DATE_RULE_VERIFIED` 仍為 `False`（證據檔 §1.1，單組讀碼） | FX：**無**（含不得重跑探測、不得觸發 workflow）。快取：僅限 `DEC-2026-11-10-05` 範圍的純離線唯讀分析；不得連網、不得改 workflow | A FX 維持關閉；快取最窄版 α 僅為研究推薦、未裁（證據檔推薦）／B 開 FX 補跑／C 快取當主來源 | FX 開閘、改 `FX_OBS_DATE_RULE_VERIFIED`、重跑探測、改 `data_cache`／workflow、清 Actions Run、刪遠端分支 |
-| **G12** `CLAUDE.md` §2.1 TDCC「境內」標籤、§3.1 pandera 自相矛盾 | 是否登記為憲法勘誤待另案 | **A**（不得改；僅登記） | BACKLOG BL-0538 列＋HANDOFF §3 GATE (a)：「BL-0538 不延伸授權修改 `CLAUDE.md`」；BACKLOG 檔尾 2026-11-12 索引列已登記此兩項為文件勘誤待確認；本組複核：`repositories/fund/sources.py` 的 TDCC 說明寫「TDCC OpenAPI 境外基金 metadata」，`CLAUDE.md` 寫「TDCC(境內)主」；`requirements.txt` 有 `pandera>=0.20,<1.0`，`CLAUDE.md` §3.1 首句仍寫「無 pandera」（該處已自帶 2026-09-01 反遮蔽註記） | 無。已登記，不另開 BL | A 僅登記、不改（已裁，推薦）／B 另案修憲法／C 順手修 | 修改 `CLAUDE.md` 任何字；以「勘誤」名義夾帶 |
+| **G12** `CLAUDE.md` §2.1 TDCC「境內」標籤、§3.1 pandera 自相矛盾 | 是否登記為憲法勘誤待另案 | **(A)＝不得改（BL-0538）；是否登記為憲法勘誤＝總管讀法，待客戶** | BACKLOG BL-0538 列＋HANDOFF §3 GATE (a)：「BL-0538 不延伸授權修改 `CLAUDE.md`」；BACKLOG 檔尾 2026-11-12 索引列已登記此兩項為文件勘誤待確認；本組複核：`repositories/fund/sources.py` 的 TDCC 說明寫「TDCC OpenAPI 境外基金 metadata」，`CLAUDE.md` 寫「TDCC(境內)主」；`requirements.txt` 有 `pandera>=0.20,<1.0`，`CLAUDE.md` §3.1 首句仍寫「無 pandera」（該處已自帶 2026-09-01 反遮蔽註記） | 無。已登記，不另開 BL | A 僅登記、不改（「不得改」已裁於 BL-0538；是否登記為勘誤＝總管讀法，待客戶）／B 另案修憲法／C 順手修 | 修改 `CLAUDE.md` 任何字；以「勘誤」名義夾帶 |
 | **G13** BL-0546 | Old UI `composite_score`／`decision_matrix` 缺值語意（補 0／持有）是否沿用 legacy | **C** | BACKLOG BL-0546 列（存在，待客戶裁示，登記不構成動工授權）；與 BL-0428／BL-0440／BL-0445 相鄰；客戶本批裁示 (4)（保留登記、未核准修改舊 UI） | 無；**保留 BL-0546 登記不動** | A 不動 Old UI，與 BL-0428／0440 一併裁（推薦）／B 要求 Old UI 改 ⬜／C 沿用 | 改 Old UI 的 `composite_score`／`decision_matrix`；New UI 沿用此語意；新增公式／門檻 |
 
 ### 3.2 與證據檔不一致或需補充之處
@@ -191,7 +191,7 @@ Gate 定義：`docs/evidence/ui_data_contract_audit_2026_11_12.md` §5（逐字�
 
 ## 4. 限度與未驗清單
 
-1. **未跑任何 pytest／AppTest／Streamlit／截圖**；所有測試是否綠＝NOT VERIFIED（CI 才能驗）。本機 `python3` 無 streamlit、無 pytest；本組僅以 `python3 -I`＋`PYTHONDONTWRITEBYTECODE=1` import 純 Python 模組做小段實算（`ui_v2/symbols`、`ui_v2/plain`、`ui_v2/mkt/{market_section,overview,chart}`、`ui_v2/{alo,hld,exp,mkt,set}/{logic,live,fixtures}` 等），並以 stub 取代 `pytest` 只為了 import 測試檔的 fixtures 組裝函式；**未寫入 repo、`git status` 乾淨**。
+1. **未跑任何 pytest／AppTest／Streamlit／截圖**；所有測試是否綠＝NOT VERIFIED（CI 才能驗）。本機 `python3` 無 streamlit；`python3 -m pytest` 無 pytest，以 uv tool 的絕對路徑可用（見 `CLAUDE.md` §-2.A 更正）；本組僅以 `python3 -I`＋`PYTHONDONTWRITEBYTECODE=1` import 純 Python 模組做小段實算（`ui_v2/symbols`、`ui_v2/plain`、`ui_v2/mkt/{market_section,overview,chart}`、`ui_v2/{alo,hld,exp,mkt,set}/{logic,live,fixtures}` 等），並以 stub 取代 `pytest` 只為了 import 測試檔的 fixtures 組裝函式；**未寫入 repo、`git status` 乾淨**。
 2. 全稱句皆單組字面搜尋（見檔頭）；「`ui_v2` 殘餘＝R1 一組」依賴 88＋17 個 fixtures 模型的覆蓋度。
 3. 79／80／81／82 的地位判讀、(A)～(D) 分類、推薦欄，皆為**單組作者讀法，可被客戶推翻**；`DEC-2026-11-02-03`／`-05`／`-07` 等多為「要點轉述」，本組見不到客戶對話本身。
 4. 81 檔頭「獨立稽核本批尚未完成」是否後續補完＝**NOT VERIFIED**。
@@ -214,4 +214,4 @@ git grep -n "⬜ 資料未備" -- tests/ui_v2/test_mkt_market_section_logic.py t
 git grep -n "TEXT_EMPTY" -- tests
 ```
 
-分類（AST，把 111 行分為註解／docstring／程式字串）與模型殘餘掃描（借用 `tests/ui_v2/test_plain_logic.py::_live_models` 與 `ui_v2/set/fixtures`）的做法見 2.1 第 2、4 步；腳本為一次性、未入庫，整合者如需附錄可向本組索取。
+分類（AST，把 111 行分為註解／docstring／程式字串）與模型殘餘掃描（借用 `tests/ui_v2/test_plain_logic.py::_live_models` 與 `ui_v2/set/fixtures`）的做法見 2.1 第 2、4 步；腳本未入庫（一次性）。
