@@ -61,6 +61,13 @@
 
 > 本表各列取代了瘦身前 §2／§3 內逐則「下一步」更新鏈與被劃線舊句；舊句已 `superseded:` 各該 DEC，原文逐字見 `docs/evidence/history/2026-11-12_handoff_before_slimming.md`。
 
+## 3A. 2026-11-12 優先序裁示（使用前仍須重新核對 GitHub）
+
+- **正式決策錨點：** `docs/DECISIONS.md` `DEC-2026-11-12-01`（要點轉述，待獨立 QA）。客戶已選「資料／資料契約優先、New UI2 安全部分並行」；先作五頁 UI × 資料來源／契約／證據狀態唯讀對應稽核，再依已核准範圍分批開發。雙軌方向**不等於**授權未核准 UI／Runtime 施工或資料接線；D2、BL-0545、FX、金融語意／公式、frozen SSOT 等既有 Gate 不變。
+- **推遲清理：** Actions 執行紀錄清理（客戶對話提及，repo 內無對應盤點文件）尚未核准；停止此清理線，待最後死碼／歷史清理階段再處理，禁止現在刪除 Run。CLAUDE.md 大幅封存、B2／B3 不因此授權。
+- **CI／QA 接手：**（ChatGPT 協作助手保守讀法，非客戶裁示、可被客戶推翻；CI 修復的自主範圍仍依 `PROJECT_RULES.md` 第 4 節，超出既有授權者另行取得客戶批准）遇環境安裝錯誤先獨立診斷，若需要修復，須為有界最小的環境修復；CI 修復施工授權來源僅依 `PROJECT_RULES.md` 第 4 節，本段不新增授權；不可放寬 checks／測試／QA／Auto-Ship Gate；非作者 QA 與同 head CI 才能支撐 merge。B1 #1221～#1223 已合併，禁止重做。
+- **本文不是新全域 NEXT：** BL-0545 仍是既有唯一全域 NEXT；本段只保存本次客戶對 P0 工作優先序和有限唯讀稽核的指示。資料庫／UI 正式施工須沿正式授權；不可由本段推導已核准新 Schema、provider、來源、金融計算或新 UI 頁接線。
+
 ## 4. 新對話／compact 後交接自驗
 
 - [ ] 我已重新讀取 main SHA、Open／Draft PR、PR merged flag、最新 head diff、四 job conclusions、review／threads。
