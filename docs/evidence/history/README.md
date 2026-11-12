@@ -22,6 +22,7 @@
 | `2026-11-05_cleanup_handoff_superseded.md` | 清理線重複 checkpoint 收斂前的 HANDOFF 全文；含舊 G-2 接手與各次未查證聲明，逐字保存 | H14 | `docs/HANDOFF.md`（基準 `6e021744`） |
 | `2026-11-06_handoff_before_top_tabs_health_ruling.md` | main `861628cc` 時 `docs/HANDOFF.md` 的完整逐字全文（前置 6 行 NOT CURRENT 說明），為 2026-11-06 頂層分頁與健康度覆蓋裁示前的版本；非區塊檔、無 `MOVED-BEGIN` 標記，**NOT CURRENT**；候選現行內容見乾淨替代 Draft PR #1162 的 `docs/HANDOFF.md`（尚未合併 main） 與 `DEC-2026-11-06-01`／`DEC-2026-11-06-02` | （無，非區塊檔） | `docs/HANDOFF.md`（基準 `861628cc`） |
 | `2026-11-12_handoff_before_slimming.md` | main `29ba4fd5` 時 `docs/HANDOFF.md` 的完整逐字全文（前置 NOT CURRENT 說明，含逐則更新鏈與被劃線舊句；該檔自 `75e8dbca` 起位元組不變），為 HANDOFF 瘦身前的版本；非區塊檔、無 `MOVED-BEGIN` 標記，**NOT CURRENT** | （無，非區塊檔） | `docs/HANDOFF.md`（基準 `29ba4fd5`；blob `f5da46cb`、sha256 `a6732114…`、40429 bytes） |
+| `2026-11-12_backlog_quick_index_and_inventory.md` | main `856640fa` 時 `docs/BACKLOG.md` 的三段逐字封存：〈快速索引〉首行「2026-11-07 最新接手索引（歷史快照）」、〈快速索引〉2026-10-19 起至 2026-11-05 的逐批登記敘事（79 行）、§3 末段初版計數與六次現況重算快照；段落識別碼 QI-0（L84）、QI-1（L89–L167）、INV-1（L51–L74）（各段 bytes／sha256 見檔頭表）；用 `SEGMENT-BEGIN`／`SEGMENT-END` 註解行分隔、非區塊檔、無 `MOVED-BEGIN` 標記，**NOT CURRENT**；現行狀態以 `docs/BACKLOG.md` 各 BL 列與 `docs/HANDOFF.md` 為準 | （無，非區塊檔） | `docs/BACKLOG.md`（基準 `856640fa`；blob `7efa3252`、sha256 `222fb071…`、639957 bytes） |
 
 **防遺失機制**：每個區塊在 `MOVED-BEGIN` 標記記 `sha256` 與位元組數；`tests/test_canonical_rule_consistency.py` 重算每個區塊的 sha256 比對標記，並在可取得該區塊自己的基準 commit（`source` 的 `@` 後；`82ba783f` 或 `d6173220`）時與該 commit 的原文逐位元組（H1）或逐行（其餘區塊）比對。搬進來的文字**不准改**；要補註寫在區塊外。
 
