@@ -75,7 +75,7 @@
 - 範圍：不改程式；在有 playwright／Chromium 環境跑 `tests/ui_v3` 兩支 browser 測試，把 PASS／FAIL／NOT RUN 補進 evidence，再 docs-only 最小同步。
 - 但書：本沙箱無 playwright，Chromium 安裝可否過代理 NOT VERIFIED；本機 CPython 3.13 與 CI 3.11 不同，僅能當輔助證據；CI Slow lane 已含這兩支測試；#1233 PR head `1a35359c` 與 #1234 PR head `5b7ab4ed` 的 Slow 皆為 1283 passed／16 skipped（來源：GitHub Actions job log，總管讀 step log；QA 無法獨立驗證），但那不是 Streamlit Cloud／真機／WebView 的 PASS。
 - 該項是否屬 BL-0544 列授權字面（該列強調真實 Cloud 證據）為總管讀法，**建議先向客戶確認**。
-- 2026-11-13 補：🔍 線框骨架已落盤於 `docs/evidence/exp_wireframe_skeleton_new_ui2_2026_11_13.md`（非核准、不授權施工）；BL-0544 候選已做 CI 日誌引用摘要（evidence 目錄 README 末節；三個 PR head Slow 皆 1283 passed／16 skipped），本機補測仍 NOT RUN，狀態不變。
+- 2026-11-13 補：🔍 線框骨架已落盤於 `docs/evidence/exp_wireframe_skeleton_new_ui2_2026_11_13.md`（非核准、不授權施工）；BL-0544 候選已做 CI 日誌引用摘要（evidence 目錄 README 末節；三個 PR head Slow 皆 1283 passed／16 skipped；來源：GitHub Actions job log，總管轉述，作者未驗證），本機補測仍 NOT RUN，狀態不變。
 - 其餘候選（BL-0532 殘餘、BL-0548 ②～⑦、BL-0542 G-1～G-5、BL-0547、~~D2 R-ID-1／R-NAV-1~~（2026-11-13 契約文字已核，`DEC-2026-11-13-06`；其餘 D2 列仍待）、🔍 線框 Q1～Q9（Q1／Q7／Q8／Q9 方向已裁，其餘仍待）、找基金／設定／AI 頁）全部需客戶裁示，不列為可施工；每批最多三項，不為湊數。
 
 > 本表各列取代了瘦身前 §2／§3 內逐則「下一步」更新鏈與被劃線舊句；舊句已 `superseded:` 各該 DEC，原文逐字見 `docs/evidence/history/2026-11-12_handoff_before_slimming.md`。

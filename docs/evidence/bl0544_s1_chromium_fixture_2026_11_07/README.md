@@ -53,7 +53,7 @@ Python 3.13、Streamlit 1.59.2（requirements `>=1.59.1,<1.60.0`）、playwright
 ## 2026-11-13 CI 與本機補測摘要
 
 ### CI 事實（來源：GitHub Actions job log；由總管讀 step log 轉述，本文作者未能自行驗證）
-- Slow lane 在三個 PR head 皆為 `1283 passed, 16 skipped, 19930 deselected`：`2a95ae21`（run 43431573322）、`5b7ab4ed`（run 43422084231）、`7fb9321e`（run 43444106501）。
+- Slow lane 在四個 PR head 皆為 `1283 passed, 16 skipped, 19930 deselected`：`1a35359c`（#1233，run 43415198998）、`5b7ab4ed`（#1234，run 43422084231）、`2a95ae21`（#1235，run 43431573322）、`7fb9321e`（#1236，run 43444106501）。
 - `tests/ui_v3/test_ui_v3_top_nav_browser.py` 與 `tests/ui_v3/test_ui_v3_market_page_browser.py` 於上述 Slow lane 中逐案 PASSED（寬度 374／375／390／768／769／1280 與 190% 字體 CSS 模擬等案例，依總管轉述）。
 - Slow lane 標了 `continue-on-error`，PR 狀態不反映其紅綠；本節數字取自 step log 末行，不是 `mergeable_state`。
 
