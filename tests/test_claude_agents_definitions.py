@@ -5,8 +5,9 @@ disallowedTools 完整五項、本文標題（恰為七個 H2，不得有 H1／H
 禁字與檔尾格式。
 
 **結構守衛不涵蓋**（如實寫明）：標題文字以外的本文內容品質、Forbidden 條目是否齊全、
-description 措辭、YAML 縮排／多行值（本檔只接受單行 `key: value`，其他形式直接視為解析失敗）。
-**不守衛**：agent 的實際執行期權限（那要用 `claude -p` 實測，屬 PR-2 範圍）、
+description 措辭、YAML 縮排／多行值（本檔只接受單行 `key: value`，其他形式直接視為解析失敗）、
+標題偵測邊角（未收尾的程式碼圍欄、Setext 形式 H2、縮排標題、HTML 標題）不由本守衛涵蓋。
+**不守衛**：agent 的實際執行期權限（那要用 `claude -p` 實測，結果見 evidence §2.3 的單組自測）、
 也不證明資安隔離（工具白名單不等於資安隔離；敏感路徑 deny 規則屬待客戶裁示的 BL-0549）。
 
 純標準庫、不依賴 yaml／streamlit，手動解析 frontmatter；每個守衛附一個「變異驗證」：
