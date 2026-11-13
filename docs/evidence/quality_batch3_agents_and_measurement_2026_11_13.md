@@ -9,7 +9,7 @@
 ## 0. 一頁結論（先讀）
 
 1. PR-1 建立三個**唯讀** Agent 定義（`.claude/agents/fund-nav-data.md`、`fund-governance-auditor.md`、`fund-independent-qa.md`），frontmatter 僅 `name`／`description`／`tools: Read, Grep, Glob`／`disallowedTools: Write, Edit, NotebookEdit, Bash, Agent`；本文固定七個二級標題；結構由 `tests/test_claude_agents_definitions.py` 守衛。
-2. **工具白名單不等於資安隔離。** 敏感路徑 `Read(...)` deny 規則與唯讀 GitHub MCP 工具兩件事都屬待客戶裁示（BL-0549），本批不施工、不建立 `.claude/settings*`。
+2. **工具白名單不等於資安隔離。** 敏感路徑 `Read(...)` deny 規則與唯讀 GitHub MCP 工具兩件事都屬待客戶裁示（BL-0549），~~本批不施工、不建立 `.claude/settings*`。~~ → 已被 DEC-2026-11-13-05 第 (6) 點與 PR #1234 取代（尚未 merge）。
 3. 三個 Agent 的獨立性僅限「不同 context、無寫入能力、不接受自己的修改」；與主 session 共享同一個派工來源，**不等於**組織上完全獨立（Batch 1 §1.4(d)-6 的 NOT VERIFIED 依然成立）。
 4. **權限正負向測試已做（§2.3，單組自測、每項 1～3 次）**：在父權限 P1（預設）與 P2（acceptEdits）、CLI 2.1.323、假檔條件下，三個 Agent 實際沒有 Write／Edit／Bash／Agent 能力，專案層 Read deny 規則對其 Read 生效並過濾了所測 Grep 組合；寫入與執行能力的限制來自工具白名單，Read 的過濾來自專案層 deny 規則，兩者都**不構成完整資安隔離**。`bypassPermissions` 父 session：**NOT RUN**。
 5. **Token／返工 A/B 量測已執行（§3）**：有效資料 19 次（v2 九＋v2x 十；另 v1 六次無效保留）。**本批沒有證據顯示導入三個 Agent 能降低成本**：B 組 8 次自然語句**零委派**（`description` 未觸發路由），輸入 token 名目中位數 −27.7%、費用 −4.2%，但**不可歸因給 Agent**（A、B 機制近乎相同，control 題差距無規律）；強制路由的 B2 費用為同題 A／B 的逐題約 1.7～11.7 倍（彙總約 4.1～6.3 倍）；正確性未見明顯退步，也不能說更好。每條件 N=1，不得宣稱統計顯著，**不得宣稱節省比例**。
