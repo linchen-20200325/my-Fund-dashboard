@@ -3027,7 +3027,7 @@
 | 是否可逆 | 可逆（客戶可推翻；本筆僅文件修改，settings 施工另案且須附可回滾方案）。 |
 | supersedes／superseded by | **supersedes（僅此一點）**：`DEC-2026-11-13-04`「授權範圍」欄中對「`.claude/settings*` 權限規則、敏感路徑 deny 規則」的「不授權」狀態，且僅限第 (6) 點所列條件下的 `.claude/settings.json` `permissions.deny`；`DEC-2026-11-13-04` 其餘各點不動，其本文不改，僅在本欄說明。 |
 | evidence／source | `docs/evidence/quality_batch3_agents_and_measurement_2026_11_13.md`；`docs/BACKLOG.md` BL-0549；GitHub Issue #1228。 |
-| provenance | **要點轉述**（客戶於專案 AI 對話直接裁示，經總管轉達，非逐字，repo 內無逐字存檔，QA 無法獨立核對）；第 (4) 點的 `permission_mode`＝`auto` 為總管唯讀查詢結果（FACT，僅限本 session）；本筆為單組作者產出，**尚待非作者獨立 QA**；`.claude/settings.json` 尚未施工、尚未驗證、尚未 merge。 |
+| provenance | **要點轉述**（客戶於專案 AI 對話直接裁示，經總管轉達，非逐字，repo 內無逐字存檔，QA 無法獨立核對）；第 (4) 點的 `permission_mode`＝`auto` 為總管唯讀查詢結果（FACT，僅限本 session）；本筆為單組作者產出，**尚待非作者獨立 QA**；`.claude/settings.json` 尚未施工、尚未驗證、尚未 merge。第 (6) 點施工已由 PR #1234 合併（`df099db7`）；效力邊界見 evidence。 |
 
 ---
 
