@@ -71,7 +71,7 @@ gh api repos/<owner>/<repo>/actions/runs/<run_id>/jobs --jq '.jobs[]|{name,concl
 
 | workflow（檔） | 排程／觸發 | 寫入目標 | 最近結論（schedule 觸發） | **這證明什麼** | **不證明什麼** |
 |---|---|---|---|---|---|
-| 每日 NAV 自動補齊（`weekly_nav_backfill.yml`） | cron `0 12 * * *`（UTC）；另有 `workflow_dispatch`（`dry_run` 預設 true） | 雲端 `nav_history`（Google Sheet，以 GitHub secrets 存取；本檔不印 ID）；步驟含 `POOL_SHEET_ID` 非空檢查、失敗時 LINE 推播 | #89（11-12T19:38Z）、#88（11-11T19:20Z）、#87（11-10T19:25Z）、#86（11-09T22:00Z）、#85（11-08T17:43Z）、#84（11-07T17:32Z）皆 `success`；每次約 4～7 分鐘 | 排程有跑；`POOL_SHEET_ID` 檢查通過；腳本結束碼 0 | 實際 append 列數（週末／假日 no-op 為正常）；淨值正確；幣別守衛是否攔截；覆蓋率；來源是否已核准。**觀察**：實際 `created_at` 較 cron 12:00Z 晚約 5.5～10 小時，原因 NOT VERIFIED，不得據此推斷「當日淨值已確定」 |
+| 每日 NAV 自動補齊（`weekly_nav_backfill.yml`） | cron `0 12 * * *`（UTC）；另有 `workflow_dispatch`（`dry_run` 預設 true）；排程觸發為實抓實寫（workflow 註解明寫），僅手動 dispatch 的 dry_run 預設 true | 雲端 `nav_history`（Google Sheet，以 GitHub secrets 存取；本檔不印 ID）；步驟含 `POOL_SHEET_ID` 非空檢查、失敗時 LINE 推播 | #89（11-12T19:38Z）、#88（11-11T19:20Z）、#87（11-10T19:25Z）、#86（11-09T22:00Z）、#85（11-08T17:43Z）、#84（11-07T17:32Z）皆 `success`；每次約 4～7 分鐘 | 排程有跑；`POOL_SHEET_ID` 檢查通過；腳本結束碼 0 | 實際 append 列數（週末／假日 no-op 為正常）；淨值正確；幣別守衛是否攔截；覆蓋率；來源是否已核准。**觀察**：實際 `created_at` 較 cron 12:00Z 晚約 5.5～10 小時，原因 NOT VERIFIED，不得據此推斷「當日淨值已確定」 |
 | 匯出 fund.db（`export_db.yml`） | cron `0 21 * * *`（UTC） | 把 `data_cache` parquet 匯成 fund.db，force-push 到 `data` 分支（單 commit） | #116（11-13T01:42Z）、#115、#114、#113、#112 皆 `success` | 匯出步驟執行成功 | 輸入是**已 commit 的 `data_cache`**（每週才更新一次），故每日 success **不代表 fund.db 內容每日更新**；下游是否消費 NOT VERIFIED |
 | 全球總經歷史快取（`update_macro_history.yml`） | cron `0 0 * * 0`（週日 UTC）；`workflow_dispatch`（含 bootstrap） | 增量寫回 `data_cache/`（bot commit）；需 `FRED_API_KEY`（secret，本檔不碰） | #28（11-08T04:06Z）、#27（11-01）、#26（10-25）、#25（10-18）、#24（10-11）皆 `success`；最新 commit `8ca33547` | 每週有跑並有 commit | **success ≠ 各 series 都有增量**：A1 報告顯示 `CPIAUCSL`、`M2SL` 最新停在 2026-04-01（SUSPECTED，落後共同最大日期 218 天）、`PPIACO`／`PCOPPUSDM` 宣告卻零列（CONFIRMED）；`DEC-2026-11-10-01` ② 對成因的是專案 AI 推論（INFERENCE）；BL-0220：該 workflow 的 `PROXY_URL` 對 `infra.proxy` 無效（僅登記） |
 | 補選股池 currency（`fill_pool_currency.yml`） | 僅 `workflow_dispatch`（一次性維護，預設 dry_run） | 選股池 Sheet 的 currency 欄 | **本檔未查 run**（NOT VERIFIED） | — | 非週期性健康指標，不應納入「最近一次成功」判讀 |
@@ -206,13 +206,14 @@ Batch 1 §2.1 的原句同樣適用於此：**頁級彙總中任何一格的「�
 
 第 1 項的實作在 PR #1230（Draft；僅測試層，黃金檔與 production 程式未動），本檔不重述其內容，只登記位置：
 
-- 守衛 helper：`tests/_py_baseline_guard.py`（基準 CPython 3.11；`decide` 純函式三分支：3.11 照跑嚴格比對、非 3.11 且不在 CI 則帶原因 skip、非 3.11 且 `GITHUB_ACTIONS=true` 則 fail 的 tripwire）；自測 `tests/test_py_baseline_guard.py`（含基準常數與黃金檔檔頭交叉驗證、9 條函式確實掛上守衛的 AST 檢查）。
-- 被裝飾的 9 條測試函式（`@baseline_python_only`；比對本體一字未動）：
+- 守衛 helper：`tests/_py_baseline_guard.py`（基準 CPython 3.11；`decide` 純函式三分支：3.11 照跑嚴格比對、非 3.11 且不在 CI 則帶原因 skip、非 3.11 且 `GITHUB_ACTIONS=true` 則 fail 的 tripwire）；自測 `tests/test_py_baseline_guard.py`（含基準常數與黃金檔檔頭交叉驗證、10 條函式確實掛上守衛的 AST 檢查）。
+- 被裝飾的 10 條測試函式（`@baseline_python_only`；比對本體一字未動）：
   - `tests/test_alo_core_golden.py`：`test_整份矩陣_工作樹與黃金檔逐位元組相同`、`test_逐情境相同`（參數化）、`test_額外對照_從git歷史的基準原始碼重算_等於黃金檔`
-  - `tests/test_alo_core_golden_mutations.py`：`test_對照組_未突變的載入器重現黃金檔`
+  - `tests/test_alo_core_golden_mutations.py`：`test_對照組_未突變的載入器重現黃金檔`、`test_突變被黃金檔抓到`（參數化；非 3.11 時未突變基準本身就與黃金檔不同，`assert differ` 會空泛為真而成為假綠燈，故同樣只在基準版本執行）
   - `tests/ui_v2/test_hld_logic.py`：`test_第2件反向控制_十二情境乘九塊一百零八格逐格未變`、`test_第2件_三個新情境的整頁模型逐格釘住`
   - `tests/ui_v2/test_hld_read_failure_logic.py`：`test_T2c正_十七個情境_示範與正式模式共389個模型_與改動前相同`、`test_空白套用d反_設定讀得到_清空再套用照舊說未設定_本條修正不改這些頁面`
   - `tests/ui_v2/test_rulings_2026_10_18b_logic.py`：`test_示範模式_持倉體檢與標的探索全情境模型_md5與動手前相同`
 - 新增跨層測試：`tests/test_alo_core_golden_user_visible_invariance.py`（任何 CPython 版本都執行：使用者可見內容與黃金檔相同，只容許內部浮點欄尾差，不放寬嚴格比對）、`tests/test_new_ui_no_imputation_static_guard.py`（New UI 資料路徑的 AST 靜態守衛：不得出現顯式補值 API，對應 Batch 1 Δ3-11／G-1）。
-- 數字口徑說明：§2.1 引用 Batch 1 的「8 條」是 3.12 起實測紅燈的測試數；本節的「9 條函式」是被掛上守衛的函式數。兩者口徑不同（被掛守衛者含參數化函式與依賴版本歷史的對照測試），本檔不宣稱兩者應相等，也未逐條重驗哪幾條在非 3.11 實際紅燈。
+- 數字口徑說明：§2.1 引用 Batch 1 的「8 條」是 3.12 起實測紅燈的測試數；本節的「10 條函式」是被掛上守衛的函式數。兩者口徑不同（被掛守衛者含參數化函式與依賴版本歷史的對照測試），本檔不宣稱兩者應相等，也未逐條重驗哪幾條在非 3.11 實際紅燈。
+- 取捨：`test_逐情境相同` 以整函式掛守衛，本機非 3.11 時因此整函式 skip，連不受浮點尾差影響的情境也失去嚴格訊號；此處接受該代價，使用者可見層的訊號由在任何版本都執行的 `tests/test_alo_core_golden_user_visible_invariance.py` 提供。
 - 本機 Python 3.13 與 CI Python 3.11 的差異仍在：3.11 完整 pytest 只有 CI 能驗；本機的 skip 不等於通過。PR #1230 的補強尚待非作者 QA 與合併後才生效。

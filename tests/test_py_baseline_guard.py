@@ -2,7 +2,7 @@
 """`tests/_py_baseline_guard.py`（CPython 版本守衛）的自測。純 Python；在 3.11（CI）與 3.12+（本機）行為相同。
 
 涵蓋：(1) `decide` 三分支；(2) 裝飾器在 run／skip／fail 三種情況的實際行為（以假造的版本／環境變數）；
-(3) 基準常數與黃金檔檔頭交叉驗證；(4) 9 條受影響測試「真的掛上了守衛」（AST，防日後被悄悄拿掉）。
+(3) 基準常數與黃金檔檔頭交叉驗證；(4) 10 條受影響測試「真的掛上了守衛」（AST，防日後被悄悄拿掉）。
 """
 
 from __future__ import annotations
@@ -26,7 +26,10 @@ GUARDED = {
         "test_逐情境相同",
         "test_額外對照_從git歷史的基準原始碼重算_等於黃金檔",
     ],
-    "tests/test_alo_core_golden_mutations.py": ["test_對照組_未突變的載入器重現黃金檔"],
+    "tests/test_alo_core_golden_mutations.py": [
+        "test_對照組_未突變的載入器重現黃金檔",
+        "test_突變被黃金檔抓到",   # 非基準版本時 `assert differ` 會因基準本身就不同而空泛為真（假綠燈）
+    ],
     "tests/ui_v2/test_hld_logic.py": [
         "test_第2件反向控制_十二情境乘九塊一百零八格逐格未變",
         "test_第2件_三個新情境的整頁模型逐格釘住",

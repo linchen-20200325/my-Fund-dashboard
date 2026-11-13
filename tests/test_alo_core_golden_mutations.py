@@ -224,6 +224,7 @@ def test_對照組_未突變的載入器重現黃金檔():
 
 
 @pytest.mark.parametrize("mutation", [m for m in MUTATIONS if m[0] not in SURVIVORS_DOCUMENTED], ids=lambda m: m[0])
+@baseline_python_only   # 非基準版本時未突變基準本身就與黃金檔不同 ⇒ `assert differ` 空泛為真（假綠燈），故同樣只在基準版本執行
 def test_突變被黃金檔抓到(mutation):
     try:
         differ = _groups_that_differ(load_namespace(mutation))
