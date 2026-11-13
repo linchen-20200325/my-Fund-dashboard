@@ -61,6 +61,11 @@
 | LATER | BL-0530 找基金 ISIN → MoneyDJ deterministic identity | research-only；無已核准 source 時不得啟用 mapping |
 | LATER | 設定登入、BL-0534 frozen amendment、BL-0535 cutover、OneBrain／Phase7 | 各走正式授權、獨立 QA、必要人工／法規 Gate |
 
+**外部事件追蹤（2026-11-13，來源：PR #1235 協作總管留言與總管讀 GitHub API；使用前重查）**
+- 客戶回報 `mynews` 的 CI #990（13:1x UTC）因 GitHub Billing／Actions budget 致 runner 未啟動；本 repo 未證實有跨 repo 效力，**不得**把 CI_BLOCKED_BILLING 套到基金。
+- 基金實查：main `df099db7` push run 43429146809 與 #1235 head `45e4f07c` PR run 43429529944 皆 in_progress，Schema success、Fast in_progress，steps 顯示 runner 實際執行；目前標籤 **CI_NOT_VERIFIED**（非 BLOCKED_BILLING、非 SUCCESS）。
+- 狀態詞：CI_SUCCESS（有跑且成功）／CI_FAILED（有跑且測試失敗）／CI_BLOCKED_BILLING（Billing 拒絕啟動，需某 exact head 證據）／CI_NOT_VERIFIED（證據不足）。不得用舊 SHA 綠燈抵充新 head、不得放寬 CI 或改 runner／帳務預算；BL-0545 仍唯一全域 NEXT。
+
 **下一階段：New UI2 五頁＋資料契約雙軌（候選，非授權）**
 - 唯一下一個全域 NEXT 仍為 BL-0545（BLOCKED，不要求客戶提供真實資料）。
 - 唯讀盤點（單組，**尚待客戶確認**）：依禁區（不碰金融公式、D2、FX、DG2、正式資料來源、未核准 UI layout、BL-0545 輸入）篩選後，疑似屬已核准範圍者僅 1 項（總管讀法，待客戶確認）：**BL-0544 S1 手機頁首瀏覽器層唯讀驗收**（依據 BACKLOG BL-0544 列〔post-merge evidence gap 唯讀驗收，不得重開 #1164〕、`DEC-2026-11-07-01`／`-02`）。
