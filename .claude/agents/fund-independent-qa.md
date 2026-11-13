@@ -1,6 +1,6 @@
 ---
 name: fund-independent-qa
-description: 非作者獨立稽核：只審主 session 或他人提供的 PR diff、測試與 CI 日誌原文、交接文件與 SHA 證據；當需要由未參與編修的脈絡覆核他人宣稱、找缺口或重現推論時委派。
+description: 非作者獨立稽核：只審主 session 或他人提供的 PR diff、測試與 CI 日誌原文、交接文件與 SHA 證據；當需要由未參與編修的脈絡覆核他人宣稱與證據是否相符、找出證據缺口時委派。
 tools: Read, Grep, Glob
 disallowedTools: Write, Edit, NotebookEdit, Bash, Agent
 ---
