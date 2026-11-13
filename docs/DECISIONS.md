@@ -3015,6 +3015,20 @@
 | evidence／source | GitHub Issue #1228（Batch 3 段）；`docs/evidence/quality_batch3_agents_and_measurement_2026_11_13.md`；`docs/evidence/quality_batch1_delta_2026_11_13.md` §1.4（角色草案）。 |
 | provenance | **要點轉述**（客戶於專案 AI 對話直接授權，經總管轉達，非逐字，QA 無法獨立核對）；Batch 3 成果須由 PR-2 的實測證據支撐，未量測前不得宣稱效益；evidence 檔為單組作者草稿，**尚待非作者獨立 QA**。 |
 
+### DEC-2026-11-13-05｜BL-0549 六項客戶裁示（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-13 |
+| 決策者／原話 | 客戶；2026-11-13 於專案 AI 對話中就 BL-0549 登記的六個待裁示項直接裁示，經總管轉達；repo 內無逐字存檔、不可獨立核對；本筆為專案 AI 整理之要點，非逐字；客戶可推翻。不使用引號、不虛構引文。 |
+| 決策內容摘要 | 六點如下（括號內為對應 BL-0549 待裁示項）。(1)（對應 (vi)）零記憶接手驗收 FAIL：採 A，保留第一次 FAIL 結果，不重跑、不修改凍結評分標準。(2)（對應 (iv)）Agent 自動路由：採 A，維持明確指定；不修改三個 Agent 的 `description`，也不修改 `CLAUDE.md`。(3)（對應 (v)）`omitClaudeMd`：採 A，暫不採用（Agent 檔與守衛不變）。(4)（對應 (iii)）`bypassPermissions`：不授權實際測試、不切換權限模式；只允許唯讀確認目前模式，查不到標 NOT VERIFIED。總管唯讀確認結果（FACT，2026-11-13，來源：session 中介資料 `get_session` 唯讀查詢）：本 session `permission_mode`＝`auto`（非 `bypassPermissions`）；該結果只描述本 session，不代表新對話或三個 Agent 在其他父模式下的行為，後者仍 NOT VERIFIED／NOT RUN。(5)（對應 (i)）唯讀 GitHub MCP：維持現狀，不新增 MCP、不擴大 Agent 權限（三個 Agent 仍只有 Read／Grep／Glob）。(6)（對應 (ii)）敏感路徑 deny：有條件授權最小安全補強——只允許在 `.claude/settings.json`（目前不存在，屬新增）加入必要的 `permissions.deny` 路徑規則。條件：先查當前 Claude Code 官方規格與專案實際設定；涵蓋 `.env`、Streamlit secrets 與已確認的敏感憑證路徑；用無真實秘密的隔離假檔做允許／拒絕測試，不讀取任何真實憑證；驗證正常文件、必要測試與 Agent 功能未受破壞；不確定的權限模式、路徑匹配或執行結果標 NOT VERIFIED；不宣稱完整資安隔離；失敗即停止設定變更並提供可回滾方案；採最小獨立 PR，依既有非作者 QA、同 head CI、一般 merge commit、main 後驗。 |
+| 授權範圍 | 本筆授權：僅第 (6) 點所列條件下的 `.claude/settings.json` `permissions.deny` 最小補強（由後續獨立 PR 施工），其餘 (1)～(5) 為採 A／維持現狀的裁示，不產生新施工。**不授權**：新增 MCP／API／憑證；擴大 Agent 權限；修改 Agent `description`／`CLAUDE.md`／守衛；重跑 A/B 或零記憶驗收；第四個 Agent；第二批角色；`bypassPermissions` 測試；`.claude/settings.json` 的其他項目（`allow`／hooks／`env`）；改 production／金融公式／D2／FX／DG2／正式資料來源／未核准 UI layout；解除 BL-0545。**Batch 3 結論維持**：Agent 定義已完成但有限度；A/B 無證據證明節省；零記憶驗收 FAIL；六項品質補強不得宣稱全部 PASS；Issue #1228 不得藉本筆宣稱全部通過。 |
+| 影響範圍 | 文件層：本檔、`docs/BACKLOG.md`（BL-0549 狀態欄與待裁示項尾註；檔尾索引一行）、`docs/HANDOFF.md`（Resume Checkpoint 與 §1 main 列的最小同步）。`.claude/settings.json` 本身由後續獨立 PR 處理，**本 PR 不含**。無 production code／workflow／cron／閘門／`data_cache`／Sheet 變更。 |
+| 是否可逆 | 可逆（客戶可推翻；本筆僅文件修改，settings 施工另案且須附可回滾方案）。 |
+| supersedes／superseded by | **supersedes（僅此一點）**：`DEC-2026-11-13-04`「授權範圍」欄中對「`.claude/settings*` 權限規則、敏感路徑 deny 規則」的「不授權」狀態，且僅限第 (6) 點所列條件下的 `.claude/settings.json` `permissions.deny`；`DEC-2026-11-13-04` 其餘各點不動，其本文不改，僅在本欄說明。 |
+| evidence／source | `docs/evidence/quality_batch3_agents_and_measurement_2026_11_13.md`；`docs/BACKLOG.md` BL-0549；GitHub Issue #1228。 |
+| provenance | **要點轉述**（客戶於專案 AI 對話直接裁示，經總管轉達，非逐字，repo 內無逐字存檔，QA 無法獨立核對）；第 (4) 點的 `permission_mode`＝`auto` 為總管唯讀查詢結果（FACT，僅限本 session）；本筆為單組作者產出，**尚待非作者獨立 QA**；`.claude/settings.json` 尚未施工、尚未驗證、尚未 merge。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
