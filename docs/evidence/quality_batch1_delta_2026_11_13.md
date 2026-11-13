@@ -523,7 +523,7 @@ builtins.sum = _naive_sum
 | source／provider | 目標／容許帶／基準／類別名稱來自設定試算表 `user_setting`；USD 匯率來自設定試算表已存的 `market_indicator` 列；非美元匯率由 `alo/source.py` 經 `market_indicator.build_fx_indicator_table`（Yahoo `<ISO>TWD=X`）；`market_indicator.source_tier`＝「市場指標」 | `alo` 明寫塊上無 `source_tier`／`fetched_at`，不掛來源徽章 | 丟棄（ALO-GAP-來源徽章） |
 | canonical identity | 類別＝`holding.bucket`（空值／不在 `alo_bucket_names` → 「未分類」）；同鍵（`policy_id`,`fund_code`）多列加總，`bucket` 或 `ccy` 不同 → raise | 保留 | 保留 |
 | NAV | 市值基準：`latest_nav_row` × `units_shares`；淨值日距今 `>10` → 該檔視為缺（`REASON_NAV_STALE`），過期或 `cache_fallback`／`stale`／`is_estimated is not False` 的檔在 `assemble_nav` 就被拿掉 | 保留 | 保留 |
-| ccy／FX 方向 | 鍵 `fx_twd_per_<小寫ISO>`＝**新臺幣／該幣（TWD per 1 單位外幣）**，Yahoo `USDTWD=X` 同向；`value_twd = nav × units × rate`；`nav.ccy=="TWD"` 不乘；對齊規則＝`obs_date` 不晚於 `nav_date` 的最近一筆；閘門 `FX_OBS_DATE_RULE_VERIFIED=False` ⇒ 非美元鍵 `pending`、不取數，該類別「⬜ 資料未備：缺換算匯率 <鍵>」。**消費端不讀 `value_unit`，也無匯率新鮮度上限**（Δ3-03）。Old UI 的 `get_latest_fx`／`get_fx_rate_by_date` 在 `ui_v2`／`ui_v3`／`services/v2_*` 0 命中，兩條 FX 路徑不相交 | 保留（缺 FX → 該類別缺值） | 保留；方向於寫入端固定、於消費端**未驗**（E5） |
+| ccy／FX 方向 | 鍵 `fx_twd_per_<小寫ISO>`＝**新臺幣／該幣（TWD per 1 單位外幣）**，Yahoo `USDTWD=X` 同向；`value_twd = nav × units × rate`；`nav.ccy=="TWD"` 不乘；對齊規則＝`obs_date` 不晚於 `nav_date` 的最近一筆；閘門 `FX_OBS_DATE_RULE_VERIFIED=False` ⇒ 非美元鍵 `pending`、不取數，該類別「⬜ 資料未備：缺換算匯率 <鍵>」。**消費端不讀 `value_unit`，也無匯率新鮮度上限**（Δ3-03）。Old UI 的 `get_latest_fx`／`get_fx_rate_by_date` 在 `ui_v2`／`ui_v3`／`services/v2_*` 無呼叫（僅一行註解命中，見 §3.6 G-2），兩條 FX 路徑不相交 | 保留（缺 FX → 該類別缺值） | 保留；方向於寫入端固定、於消費端**未驗**（E5） |
 | as-of date | 以 `nav_date` 為 FX 對齊鍵；`allocation_evidence` 根層**無 `as_of`**（#1225 §1.5） | `alo` 無配置層級 as-of | 無（配置層級） |
 | fetched_at | 配置結果無 `fetched_at`；FX 列有 `fetched_at` 但消費端不讀 | 丟棄 | 丟棄 |
 | freshness | NAV 10 日門檻（見 3.1-A）；FX **無** | — | NAV 保留／FX 無 |
@@ -628,7 +628,7 @@ builtins.sum = _naive_sum
 | 取數失敗 | `errors[code]` 原文（遮蔽後）；畫面 ⛔ | 否 |
 | 資料過舊 | `NAV_NOT_READY_DAYS`：`hld` 該檔淨值列不交給 `logic`（走 `nav_missing`）；`alo` 不交進 dataset；皆「⬜ 資料未備」，**不用舊淨值算任何數** | 否 |
 | 未評估 | `ui_v3/adapters/assets_source.py`：市值基準 `blocked`；`allocation_evidence` 的 `not_evaluated`／`nav_state=not_assembled`；`shared/ui_semantics/rules.py` 有 `undetermined`／`not_configured`／`user_param_unset`，但 `ui_v2` 的 `hld`／`alo`／`exp` **不 import 它**（用自己的 `page_health`／`symbols`／`status_class`，此為 BL-0540 G-2／G-3 範圍） | 否 |
-| 目標類別無持倉 | `_build_alo2` 預設 `{"value": 0.0}`（真 0）；證據支線區分 `real_zero_by_rule` 與 `unproven_zero` | **有風險**：覆蓋不完整時 ALO-2 仍印 `0.0%`（Δ3-05） |
+| 目標類別無持倉 | `_build_alo2` 預設 `{"value": 0.0}`（真 0）；證據支線區分 `real_zero_by_rule` 與 `unproven_zero` | **有風險**：覆蓋不完整時 ALO-2 仍印 `0.0%`（Δ3-05）；加註：model 層 ALO-0／ALO-6 另行揭露略過列，見 §3.6 盲點 3，嚴重度由後續 QA 判 |
 
 **搜尋結果**：`services/v2_tables`、`services/v2_domain`、`ui_v2/{hld,alo,exp}`、`ui_v3`、`shared/ui_semantics`、`shared/active_sheet.py`、`repositories/fund` 對 `fillna|ffill|bfill|interpolate|fill_value|reindex(` **0 命中**；`or 0`／`.get(…,0)` 命中皆為計數器累加（見 G-1）。
 
@@ -663,7 +663,7 @@ builtins.sum = _naive_sum
 | 同日同值併一列、不同值全不寫；數值不四捨五入 | `::test_nav_同一日期同值只寫一列_不同值該日全不寫`、`::test_數值_淨值保留原精度不四捨五入` | 過 | 有效 |
 | 幣別缺／衝突／不合 ISO → 整檔不寫、不預設 USD | `::test_nav_幣別缺_整批不寫_不猜不預設USD`、`::test_nav_來源自報與持倉不同_不猜_整批不寫`、`::test_nav_持倉幣別不合ISO4217_不改大小寫_整批不寫` | 過 | 有效（但只證明「不矛盾」，不證明「真是該幣別」） |
 | A 鏈幣別不當標籤；非原生來源未宣告 → 整檔不寫 | `test_v2_tables_nav_chain_handover.py::test_非原生來源沒宣告幣別_整檔不寫`、`::test_B1例二_FundClear序列宣告USD_持倉填TWD_整檔不寫`、`::test_B1例三_累積表點宣告USD_持倉填TWD_整檔不寫_閘門開啟` | 過 | 有效 |
-| `fetched_at` 不以當下時間補；預存檔取 `cache_updated_at`；缺則整批不寫 | `test_v2_tables_nav_dividend.py::test_nav_fetched_at取不到或沒有時區_整批不寫_不以當下時間補`、`::test_nav_預存舊序列_fetched_at改取cache_updated_at_stale照記`、`::test_nav_預存舊序列沒有cache_updated_at_整批不寫`；chain：`::test_N1_序列沒帶fetched_at_用快取內原本那次的chain_started_at_不是當下`、`::test_N3_預存檔那一支_fetched_at_from標cache_updated_at` | 過 | 有效 |
+| `fetched_at` 不以當下時間補；預存檔取 `cache_updated_at`；缺則整批不寫 | `test_v2_tables_nav_dividend.py::test_nav_fetched_at取不到或沒有時區_整批不寫_不以當下時間補`、`::test_nav_預存舊序列_fetched_at改取cache_updated_at_stale照記`、`::test_nav_預存舊序列沒有cache_updated_at_整批不寫`；`test_v2_tables_nav_chain_handover.py`：`::test_N1_序列沒帶fetched_at_用快取內原本那次的chain_started_at_不是當下`、`::test_N3_預存檔那一支_fetched_at_from標cache_updated_at` | 過 | 有效 |
 | 累積表閘門關閉：累積點不寫、不讀表 | `test_v2_tables_nav_chain_handover.py::test_閘門預設關閉`、`::test_閘門關閉_累積點一律不寫_重疊日是即時值照寫`、`::test_B4_閘門關閉_只有第二頁型有即時資料加累積點_寫出25列_latest_live_不讀表` | 過 | 有效 |
 | 名稱／代碼搜尋得來的晨星 secId 拒收；池表／寫死表照收 | `::test_B2_晨星secId由名稱搜尋得來_B線整檔不寫_A鏈照舊採用`、`::test_M11_code_search_也拒收`、`::test_B2_晨星secId來自池表或寫死表_照收_並標出currencyId出處`（參數僅 `pool`／`hardcoded_map`） | 過 | **`pool_isin_search` 尚無有效測試**：缺「收或拒」的斷言（只描述，不寫碼） |
 | A 鏈 `full_key` 必須等於代碼對照的 `full_key` | `::test_A鏈回的full_key與fund_keys不同_照實標缺_原因讀得懂`、`::test_nav_同一檔給了不同full_key_不取數不寫` | 過 | 有效 |
@@ -714,7 +714,7 @@ builtins.sum = _naive_sum
 - **E6** `resolve_full_keys`：`ACTI71`→ok；`acdd01-eqtal005`→ok、`ACDD01-EQTAL005`；`…?a=ACDD01-EQTAL005` 網址→ok、同 `full_key`；`TLZF9 X`→`ok=False`；`""`→`ok=False`；頂層 `provenance.mapping_source="builtin"`（三端皆不讀）。
 - **E7** ALO-2 `nofx`（結果見 §3.3-B）。**E8** `scenario_with("full")` 移除「現金」類全部持倉＋在 dataset 加一筆略過列（`skipped_holdings`，`page_health.OMITTED_DATASET_KEY`） → 現金列仍 `0.0%`／`外`，`_missing_cells` 無，`tail_lines` 空；僅多一個 `_omitted_rows` 鍵。
 - **G-1** `git grep -n -E "fillna|\.ffill|\.bfill|interpolate|fill_value|reindex\(" -- services/v2_tables services/v2_domain ui_v2/hld ui_v2/alo ui_v2/exp ui_v3 shared/ui_semantics shared/active_sheet.py repositories/fund`（排除 fixtures）→ 無輸出。
-- **G-2** `git grep -n "get_latest_fx\|get_fx_rate_by_date" -- ui_v2 ui_v3 services/v2_tables services/v2_domain` → 無輸出。
+- **G-2** `git grep -n "get_latest_fx\|get_fx_rate_by_date" -- ui_v2 ui_v3 services/v2_tables services/v2_domain` → 僅 `services/v2_tables/market_indicator.py` 一行註解命中（約 :214，提到 `repositories/fund/fx_and_main.py::get_latest_fx` 的組法），無呼叫。
 - **G-3** `git grep -n -E "perf_source|official_1y|SRC_SELF|resolve_1y_total_return" -- ui_v2 ui_v3 services/v2_tables services/v2_domain shared/ui_semantics` → 無輸出；`git grep -n "source_tier" -- ui_v2 ui_v3`（非 fixtures）僅值域／徽章／欄標。
 - **G-4** `git grep -n -E "mapping_source|ccy_source|currency_id_origin|secid_origin" -- ui_v2 ui_v3` → `ccy_source` 僅 `exp` 輸入側（`declared_ccy_source`）；`mapping_source`、`currency_id_origin` 0 命中；`secid_origin` 0 命中（只在 L2 `nav_dividend.py` 與 L1 `sources.py`）。
 - **G-5** `git grep -n "assets_source\|AssetsLoadResult" -- ui_v3 ui_v2 app.py`（排除自身）→ 無消費端。
@@ -723,7 +723,7 @@ builtins.sum = _naive_sum
 
 1. **未連 live、未碰憑證與真實 Sheet**：各 NAV adapter 的 live 可達性、真實 Active Sheet 的欄位／覆蓋率（BL-0545）、Streamlit Cloud 實際 Python 版本與 Secrets＝NV。
 2. **測試在 Python 3.13 跑，CI 為 3.11**：R1～R5 綠＝「在 3.13 綠」，不是 CI 綠；唯一與版本相關的失敗已定位（§3.3-F）。第三個黃金失敗（對照組）以同一載入器推定同因，未在 3.11 下以 pytest 實跑。
-3. **ALO-2 畫面渲染層未實跑**：Δ3-04／Δ3-05 的數字取自 `logic.build_page_model` 輸出；`ui_v2/alo/page.py` 實際渲染（含 `_omitted_rows` 是否由 ALO-0 另行揭露）未跑 AppTest，**NV**。
+3. **ALO-2 畫面渲染層未實跑**：Δ3-04／Δ3-05 的數字取自 `logic.build_page_model` 輸出；`ui_v2/alo/page.py` 實際渲染（含 `_omitted_rows` 是否由 ALO-0 另行揭露）未跑 AppTest，**NV**。model 層實測：ALO-0 的 `detail_lines` 與 ALO-6 的 `footer_lines` 另行揭露略過列（「⬜ 資料未備：… 未列入：缺持倉補充」）；ALO-2 該列值仍為 0.0%；page 渲染層 NOT VERIFIED。
 4. **`ok=False` 被濾掉的基金畫面如何揭露**（#1227 G3）仍 NV；本批未追到呈現層。
 5. **Old UI 的 `source` 多義用法**只做字面 grep，未逐檔讀。
 6. **Δ3-02 的判斷力**：本組只證明「B 線接受、來源不進側車、無測試」，**不證明**它違反 `DEC-2026-11-01-02`；選股池 `isin` 的手填程度與實際命中率 NV。
