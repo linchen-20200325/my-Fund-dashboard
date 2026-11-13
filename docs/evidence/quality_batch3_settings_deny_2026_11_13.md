@@ -64,7 +64,7 @@
 
 ## ④ 測試矩陣與原始證據路徑
 
-環境：Claude Code CLI 2.1.323、預設權限模式、`claude -p --output-format json`；scratch：`/tmp/claude-0/-home-user-my-Fund-dashboard/cc79b467-1eb5-5c99-858a-b62d9cd40863/scratchpad/denytest`（非 git）與 `.../denytest_git`（git init＋`.gitignore`）。原始 JSON：`.../scratchpad/denyraw/*.json`（不入庫）。完整彙整：`.../scratchpad/RESULTS.md`。
+環境：Claude Code CLI 2.1.323、預設權限模式、`claude -p --output-format json`；scratch：作者自建隔離目錄 `denytest/`（非 git）與 `denytest_git/`（git init＋`.gitignore`）。原始 JSON：scratch 內 `denyraw/*.json`（不入庫）。完整彙整：scratch 內 `RESULTS.md`（不入庫）。
 
 測試輔助（非繞過）：每次加 `--add-dir <scratch>`（否則模型會抄錯長絕對路徑而出現與 deny 無關的「未授權」假象）；Grep／Glob 在 `-p` 預設工具集不存在，以 `--tools` 啟用；Bash 僅用 `--allowedTools "Bash(cat:*)" "Bash(head:*)" "Bash(grep:*)" "Bash(python3:*)"`（對假檔的最小白名單）。
 
@@ -117,6 +117,8 @@
 
 ## ⑦ 可回滾方案
 
+**失敗即停**：任一測試顯示 deny 規則破壞正常功能，立即停止變更並依本節回滾。
+
 1. revert 加入 `.claude/settings.json` 的單一 merge commit；或
 2. 直接刪除 `.claude/settings.json`。
 實測：刪除後被擋檔立即恢復可讀（`denyraw/f_rollback.json`、`t9_rollback.json`）。設定檔變更即時重載，不需重啟（官方文件所述，本組以重新啟動 `claude -p` 驗證）。
@@ -148,3 +150,5 @@
 - 數字核對：本檔矩陣的 9 拒絕／7 允許、Grep／Glob／Bash 結果、probe agent 5 拒／3 允許，已對照 `RESULTS.md` 與 `denyraw/f_*.json` 一致；`RESULTS.md` 的 Grep「4 runs」指含隔離輪次的合計，最終檔確認矩陣為 1 輪。
 - 本檔不含任何金鑰；假值僅以 `FAKE_…` 描述，未貼內容。
 - 不得宣稱六項品質補強全部 PASS；Issue #1228 不得藉本檔宣稱全部通過。
+- 三個專案 Agent 未逐一驗 deny：`fund-nav-data` 因自身提示拒讀而 deny 未被行使（兩次早期矩陣加 `t6_A_subagent_real2` 皆如此）；`fund-governance-auditor`、`fund-independent-qa` 未測；deny 僅以 probe agent（`--agents` 自訂，tools＝Read／Grep／Glob）驗證，不等於三個專案 Agent 皆已驗證。
+- 數字核對（以 denyraw 原始檔為準）：(1) 控制組（無 settings）`t1_control_abs` 為 **13** 檔全可讀（不含 `.env.example`、`sub/.env.local`、`sub/secrets.toml`）；有 deny 的測試為 **16** 檔（9 拒絕＋7 允許），故「13」與「16」分屬不同矩陣，`RESULTS.md` 第 1 列文字寫「all 16」為筆誤，實際輸出 13。(2) probe agent：`t6_A_subagent_probe` 為 7 次 Read（拒 4、允 3）；最終檔 `f_probe` 為 8 次 Read（拒 5、允 3），故 `RESULTS.md` 的「×4」與本檔 §4 的「×5」各對應不同 run，兩者皆與原始檔相符。
