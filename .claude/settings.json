@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(./.streamlit/secrets.toml)",
+      "Read(**/.streamlit/secrets.toml)",
+      "Read(**/secrets.toml)",
+      "Read(~/.streamlit/secrets.toml)"
+    ]
+  }
+}
