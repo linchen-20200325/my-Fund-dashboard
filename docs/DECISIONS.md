@@ -3001,6 +3001,22 @@
 
 ---
 
+### DEC-2026-11-13-04｜Batch 3 正式授權：三個專業 Agent、Token／返工 A/B 量測、零記憶接手驗收（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-13 |
+| 決策者／原話 | 客戶；2026-11-13 於專案 AI 對話中對 Issue #1228 Batch 3 下達正式授權，經總管轉達；repo 內無逐字存檔、不可獨立核對；本筆為專案 AI 整理之要點，非逐字；客戶可推翻。不使用引號、不虛構引文。 |
+| 決策內容摘要 | (1) Batch 3 僅三項：建立三個專業 Agent；Token／返工 A/B 量測（先 N=3，再 N=6 配對）；零記憶 session 接手驗收。(2) 三個 Agent 預設唯讀 Read／Grep／Glob，不得有 Write／Edit／Bash／MCP 寫入能力，不得自行修改規格、解除 Gate 或驗收自己的修改；須先查官方格式與實際權限繼承，並用無敏感內容的測試檔做正負向測試，禁止讀取真實密鑰；單次測試通過不得宣稱完整資安隔離。(3) A/B 量測固定相同 main SHA、任務、主模型、Effort、初始資料，各自獨立冷啟動；記錄 token、費用（有可靠來源才計）、正確率、漏項、返工、路由符合度、交接開銷；正確性與安全性不得退步；效益目標為中位數降低至少 10%，樣本小不得宣稱統計顯著；量測不可得標 NOT VERIFIED，不得編造節省比例；若無有效數據，不得宣稱六項品質補強全部完成。(4) 零記憶接手驗收含正負例（權限、角色衝突、資料缺值）；失敗據實保留，不得改寫標準。(5) 必要文件同步：BL-0342、BL-0453 的 PR #1230 措辭，以及 HANDOFF 須反映 #1230 已合併與 main CI success。(6) 硬限制：每批 ≤3 項；不改憲法／修正案 #8／凍結 44；不改 production、金融公式、Golden、正式資料來源；不新增外部 API／MCP／憑證；不解除 BL-0545／D2／FX／DG2。(7) 流程：非作者 QA、同 head CI、一般 merge commit、main 後驗。 |
+| 授權範圍 | 本批授權：`.claude/agents/` 三個 Agent 定義檔、`tests/` 內的結構守衛、docs 最小同步與 evidence。**不授權**：第二批角色（Portfolio Analyst／Fund Discovery／UI-UX）；`.claude/settings*` 權限規則；敏感路徑 deny 規則；新增 MCP／API／憑證。Issue #1228 是派工入口，**不是授權狀態 SSOT**，授權以本筆為準。 |
+| 影響範圍 | 文件與測試層：本檔、`docs/BACKLOG.md`（新增 BL-0549；BL-0342、BL-0453 出處欄措辭；檔尾索引）、`docs/HANDOFF.md`（最小增量）、`docs/evidence/quality_batch2_production_health_acceptance_2026_11_13.md`（兩處過期措辭）、新 evidence 檔 `docs/evidence/quality_batch3_agents_and_measurement_2026_11_13.md`、`.claude/agents/` 三檔、`tests/test_claude_agents_definitions.py`。無 production code／workflow／cron／閘門／`data_cache`／Sheet 變更。 |
+| 是否可逆 | 可逆（客戶可推翻；新增檔案與文件修改均可還原）。 |
+| supersedes／superseded by | **supersedes（僅此一點）**：`DEC-2026-11-13-03` 決策內容摘要 (5)(7) 中「Batch 3 與 `.claude/agents/` 仍未授權」之狀態；`DEC-2026-11-13-03` 其餘各點不變。與 `DEC-2026-11-13-02` 並行，不改其範圍。 |
+| evidence／source | GitHub Issue #1228（Batch 3 段）；`docs/evidence/quality_batch3_agents_and_measurement_2026_11_13.md`；`docs/evidence/quality_batch1_delta_2026_11_13.md` §1.4（角色草案）。 |
+| provenance | **要點轉述**（客戶於專案 AI 對話直接授權，經總管轉達，非逐字，QA 無法獨立核對）；Batch 3 成果須由 PR-2 的實測證據支撐，未量測前不得宣稱效益；evidence 檔為單組作者草稿，**尚待非作者獨立 QA**。 |
+
+---
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。

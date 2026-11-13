@@ -204,7 +204,7 @@ Batch 1 §2.1 的原句同樣適用於此：**頁級彙總中任何一格的「�
 
 ## 7. 第 1 項（CPython 版本守衛＋跨層測試）交叉指標
 
-第 1 項的實作在 PR #1230（Draft；僅測試層，黃金檔與 production 程式未動），本檔不重述其內容，只登記位置：
+第 1 項的實作在 PR #1230（僅測試層，黃金檔與 production 程式未動；**2026-11-13 更新：已合併**，main `c8847f00ef13abe52deb6240bf152757693023dc`，一般 merge commit），本檔不重述其內容，只登記位置：
 
 - 守衛 helper：`tests/_py_baseline_guard.py`（基準 CPython 3.11；`decide` 純函式三分支：3.11 照跑嚴格比對、非 3.11 且不在 CI 則帶原因 skip、非 3.11 且 `GITHUB_ACTIONS=true` 則 fail 的 tripwire）；自測 `tests/test_py_baseline_guard.py`（含基準常數與黃金檔檔頭交叉驗證、10 條函式確實掛上守衛的 AST 檢查）。
 - 被裝飾的 10 條測試函式（`@baseline_python_only`；比對本體一字未動）：
@@ -216,4 +216,4 @@ Batch 1 §2.1 的原句同樣適用於此：**頁級彙總中任何一格的「�
 - 新增跨層測試：`tests/test_alo_core_golden_user_visible_invariance.py`（任何 CPython 版本都執行：使用者可見內容與黃金檔相同，只容許內部浮點欄尾差，不放寬嚴格比對）、`tests/test_new_ui_no_imputation_static_guard.py`（New UI 資料路徑的 AST 靜態守衛：不得出現顯式補值 API，對應 Batch 1 Δ3-11／G-1）。
 - 數字口徑說明：§2.1 引用 Batch 1 的「8 條」是 3.12 起實測紅燈的測試數；本節的「10 條函式」是被掛上守衛的函式數。兩者口徑不同（被掛守衛者含參數化函式與依賴版本歷史的對照測試），本檔不宣稱兩者應相等，也未逐條重驗哪幾條在非 3.11 實際紅燈。
 - 取捨：`test_逐情境相同` 以整函式掛守衛，本機非 3.11 時因此整函式 skip，連不受浮點尾差影響的情境也失去嚴格訊號；此處接受該代價，使用者可見層的訊號由在任何版本都執行的 `tests/test_alo_core_golden_user_visible_invariance.py` 提供。
-- 本機 Python 3.13 與 CI Python 3.11 的差異仍在：3.11 完整 pytest 只有 CI 能驗；本機的 skip 不等於通過。PR #1230 的補強尚待非作者 QA 與合併後才生效。
+- 本機 Python 3.13 與 CI Python 3.11 的差異仍在：3.11 完整 pytest 只有 CI 能驗；本機的 skip 不等於通過。PR #1230 的補強已於 2026-11-13 合併（合併前非作者 QA 兩組結論 MERGE-READY、四條 lane CI success；main push CI run 43374994855 success）。限度：Fast lane 不印 pytest 計數，「10 條函式在 CI 逐條執行」仍屬間接推論，未取得逐條日誌。
