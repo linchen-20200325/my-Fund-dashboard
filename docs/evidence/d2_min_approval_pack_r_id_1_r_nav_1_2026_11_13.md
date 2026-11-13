@@ -29,7 +29,7 @@
 | `DEC-2026-11-11-04` D2-G2＝A／D2-G3＝A | D2 逐域契約與 Digest schema 是兩個獨立 Gate；首批只處理基金身份、NAV、績效，其餘六域延後（≠ Excluded） | 同上 |
 | `DEC-2026-11-12-01` | 「影響範圍」明寫不修改 D2 Required 審核、FX Gate、金融契約 | `docs/DECISIONS.md` 該 DEC |
 | `DEC-2026-11-12-02` | 「**不授權**……不核准任何 D2 欄位、不解除 FX／D2／身份／金融公式／cutover Gate」；(5) BL-0545 繼續 BLOCKED | `docs/DECISIONS.md` 該 DEC |
-| 掃描 | `docs/DECISIONS.md` 最後一筆 DEC 為 `DEC-2026-11-12-02`（其後即「五、歷史索引」）；「核准欄位數／正式核准欄位」字樣只出現在 `DEC-2026-11-11-04`（單組 grep，附錄 A-1） | — |
+| 掃描 | `docs/DECISIONS.md` 最後一筆 DEC 為 `DEC-2026-11-12-02`（其後即「五、歷史索引」；基準 `6dcb51f8`，不含本批新增的 DEC-2026-11-13-01）；「核准欄位數／正式核准欄位」字樣只出現在 `DEC-2026-11-11-04`（基準同上；單組 grep，附錄 A-1） | — |
 
 ### 1.2 兩列在 D2 Required 逐列待審表的原文
 
@@ -369,7 +369,7 @@
 | `R-PERF-6` 1Y 的 `as_of` | **Pending** | **Pending** | 同上 |
 | `R-ID-1`、`R-NAV-1`、`R-NAV-4` | **不受影響** | **不受影響** | 非日期／幣別欄 |
 
-**結論**：讀法差異只改變 **4 列**（`R-NAV-2／3／5／6`）的走向；**前人準備包 §4 把 `R-PERF-3／6` 也列入 Q0 涵蓋列，需修正**——該兩列在兩種讀法下結果相同（見 §6 補正表）。另，`R-ID-1` 一旦核准，只提供 D2-B 條件①的**契約錨點**，並不證明條件①。
+**結論**：讀法差異只改變 **4 列**（`R-NAV-2／3／5／6`）的走向；**前人準備包 §4 把 `R-PERF-3／6` 也列入 Q0 涵蓋列，需修正**——該兩列在兩種讀法下結果相同（見 §6 補正表）。另，`R-ID-1` 一旦核准，只提供 D2-B 條件①的**契約錨點**，並不證明條件①。（候選檔把 R-PERF-3／6 計為 R-NAV-5／2 的重複列；本包將其視為「1Y 輸出側欄位」，該欄在 1Y 輸出不存在，故不隨 Q0。此為總管讀法，可被客戶推翻。）
 
 ### 4.4 1Y 證據適用範圍研究
 
@@ -488,7 +488,7 @@
 
 | 方案 | 做法 | 優點 | 缺點 | 風險 | 涉及新資料契約 |
 |---|---|---|---|---|---|
-| **A** | D2-B **僅**約束 1Y 含息證據欄位與其借用 NAV 日期／幣別的條件 | 貼字面標題；與第四階段「D2-B 不擴大至 NAV 全域」一致；`R-NAV-2／3／5／6` 可逐列獨立審 | 候選檔現行讀法需改寫；NAV 欄位要靠其他 Gate（D3(b)、`DEC-2026-11-05-03`）把關 | 若客戶實意為 B，會把本應 Pending 的欄位提早審 | 否 |
+| **A** | D2-B **僅**約束 1Y 含息證據欄位與其借用 NAV 日期／幣別的條件 | 貼字面標題；（若客戶該句指 (i)）與第四階段「D2-B 不擴大至 NAV 全域」一致；`R-NAV-2／3／5／6` 可逐列獨立審 | 候選檔現行讀法需改寫；NAV 欄位要靠其他 Gate（D3(b)、`DEC-2026-11-05-03`）把關 | 若客戶實意為 B，會把本應 Pending 的欄位提早審 | 否 |
 | **B** | D2-B 也約束 NAV 域 `nav_date`／`fetched_at`／`ccy`／`ccy_source` | 最保守（fail closed）；與候選檔現行標註一致 | 需四項同源證據，而 1Y 與 NAV 目前無共用路徑（§4.4.4）→ 這 4 列實務上長期 Pending | NAV 域進度長期停滯 | 否 |
 | **C** | 暫不裁；`R-NAV-2／3／5／6` 逐列各自判，預設 Pending | 不必先答 Q0 | 每列都要重提一次理由 | 流程拖長 | 否 |
 | **推薦** | **A**（總管讀法，可被客戶推翻）；請客戶以一句話確認第四階段敘述所指為 (i) | | | | |
@@ -542,8 +542,8 @@
 
 | # | 指令 | 輸出 |
 |---|---|---|
-| A-1 | `grep -n "核准欄位數\|正式核准欄位" docs/DECISIONS.md` | 僅 `DEC-2026-11-11-04` 一筆（決策內容摘要欄）；`grep -n "^### DEC-2026-11-1[0-9]" docs/DECISIONS.md` 最後一筆為 `DEC-2026-11-12-02` |
-| A-2 | `git grep -n "^FX_OBS_DATE_RULE_VERIFIED\|FX_OBS_DATE_RULE_VERIFIED *=" -- '*.py'`（排除 tests） | `services/v2_tables/market_indicator.py:107: FX_OBS_DATE_RULE_VERIFIED = False` |
+| A-1 | `grep -n "核准欄位數\|正式核准欄位" docs/DECISIONS.md` | 僅 `DEC-2026-11-11-04` 一筆（決策內容摘要欄）；`grep -n "^### DEC-2026-11-1[0-9]" docs/DECISIONS.md` 最後一筆為 `DEC-2026-11-12-02`（基準 `6dcb51f8`，不含本批新增的 DEC-2026-11-13-01） |
+| A-2 | `git grep -n "^FX_OBS_DATE_RULE_VERIFIED\|FX_OBS_DATE_RULE_VERIFIED *=" -- '*.py'`（排除 tests） | `services/v2_tables/market_indicator.py:107: FX_OBS_DATE_RULE_VERIFIED = False`；另有 `scripts/probe_yahoo_indices_sp.py` 內一處字串字面值（非賦值），不影響結論 |
 | A-3 | `git grep -n "resolve_full_keys" -- app.py ui ui_v3 \| wc -l` | `0` |
 | A-3b | `git grep -ln "resolve_full_keys" -- '*.py'`（非測試） | `scripts/bl0545_coverage_probe.py`、`services/fund_identity.py`、`services/fund_identity_shadow.py`、`services/v2_tables/{exp_profile,fund_keys,settings_store}.py`、`shared/fund_identity.py`、`ui_v2/{alo,exp,hld}/source.py` |
 | A-4 | `git grep -n "build_nav_table\|nav_dividend" -- ui_v3 \| wc -l` | `0` |

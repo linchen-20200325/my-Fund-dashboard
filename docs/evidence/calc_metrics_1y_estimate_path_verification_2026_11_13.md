@@ -12,7 +12,7 @@
 
 1. **估算值與真實值可區分嗎？** 不可區分。`ret_1y_window_days` 是單一整數，量測值、估算值、`or 365` 預設值**同型、同鍵、無旗標**；解析器 `resolve_1y_total_return` 對三者給出**同一個** `status="ok"`／同一個標籤。估算分支甚至**連 stderr 都不印**（比 N1 說的更靜默）。
 2. **日期窗口可能造成誤判嗎？** 有，但**主要風險不是 N1**。N1 的估算路徑在「日頻或更粗的日期索引」上**不可達**（實跑證實，見 §2）；真正可達、可重現的是**窗口無上界**：稀疏／長跨度序列會得到 `window_days`＝1757、1796 天仍判 `ok` 的「1Y 含息」（實跑 B1／B2）。
-3. **違反 Missing≠0／估算必須標示嗎？** N1 的估算與 `or 365`：**若觸發，違反 CLAUDE.md §1 精神（估值未標示）；Missing≠0 字面不違反（沒有填 0）**；判為「灰色偏違反」，且**可達性目前無證據**。長窗無上界：**違反 1B「近一年」語意的標示**（屬已登記待裁的 BL-0427 (4)）。另發現三處 UI 直讀 `metrics.ret_1y_total` 繞過 350 天閘門（§1 補充 F-C）。
+3. **違反 Missing≠0／估算必須標示嗎？** N1 的估算與 `or 365`：**若觸發，違反 CLAUDE.md §1 精神（估值未標示）；Missing≠0 字面不違反（沒有填 0）**；判為「灰色偏違反」，且**可達性目前無證據**。長窗無上界：**違反 1B「近一年」語意的標示**（屬已登記待裁的 BL-0427 (4)）。另發現三處 UI 直讀 `metrics.ret_1y_total` 繞過 350 天閘門（§1 補充 F-C；其中 `ui/tab5_data_guard.py` 診斷格僅 `perf["1Y"]` 缺值時的 fallback）。
 4. **影響 New UI2 接線嗎？** 目前**無影響**（New UI 對 `calc_metrics`／`ret_1y_total`／`resolve_1y_total_return` 0 消費）。**未來接線前**必須先處理：窗口定義（行數窗 vs 日曆月窗）、上界、窗口證據欄；N1 本身優先級低於長窗無上界。
 
 **對 N1 的總評：PARTIAL**——程式碼描述全部屬實，但「機率可能很低」應改寫為「在目前已知的日期粒度 NAV 來源下，觸發條件（同日內多筆唯一時間戳）**不可達**；唯一可達路徑需要盤中／次日內時間戳索引」。
@@ -51,7 +51,7 @@
 | 跨度<7 天用 `max(int(len(s)*1.4),14)` 估跨度 | **CONFIRMED（程式碼）／PARTIAL（可達性）** | L832–833。日頻以上索引：≥20 個**不重複日期**至少跨 19 天（實跑 D：20 個營業日跨 27 天）→ `_days_span<7` 不成立。僅盤中／次日內時間戳可觸發 |
 | 列數 250～251 時估算值恰好過 350 | **CONFIRMED（算術與實跑）／PARTIAL（可達性）** | §2.2、§2.3 C1：250→350、251→351、`resolver.status=ok`。但同樣只在 span<7 天時成立；**日頻 250 列的實際走法是量測 347 天 → `window_short`**（A2 bday250） |
 | 只有 stderr print、無旗標 | **PARTIAL** | P2 有 stderr print；P3／P5 連 print 都沒有。「無旗標」成立 |
-| 現有測試未見鎖定 | **CONFIRMED（單組 grep）** | `grep -rnE "1\.4\|or 365\|_days_span\|days_span" tests/*.py`（G1）無任何相關命中；26 個測試檔引用 `ret_1y_window_days`，無一斷言 365 預設或 ×1.4 估算，亦無上界斷言（G3 為空）。全稱句，**單組未驗** |
+| 現有測試未見鎖定 | **CONFIRMED（單組 grep）** | `grep -rnE "1\.4\|or 365\|_days_span\|days_span" tests/*.py`（G1）無任何相關命中；26 個測試檔引用 `ret_1y_window_days`，無一斷言 365 預設或 ×1.4 估算，亦無長窗上界斷言（G3 於 2026-11-13 整合時重跑，僅命中三處 `< 350` 短窗斷言，見附錄 C）。全稱句，**單組未驗** |
 | 機率可能很低 | **PARTIAL（改寫）** | 不給機率數字。情境論述見 §2.5：已知 NAV 取數路徑皆日期粒度，觸發需盤中／次日內時間戳索引 |
 
 ### 2.2 邊界算術（純 Python 模擬 A）
@@ -149,7 +149,7 @@
 **F-C（本組新增發現，讀碼＋實跑佐證）**：以下三處**直讀 `metrics.ret_1y_total`、未經 `resolve_1y_total_return` 閘門**：
 - `ui/tab3_portfolio.py`（約 L2448）：組合 AI 快照，字串 `1Y 報酬 {ret_1y}%`——**窗口 <350（如 345 天，A2 實跑 `ret_1y_total=-16.07` 仍有值）仍以「1Y 報酬」送進 AI prompt**；
 - `ui/tab3_portfolio.py`（約 L779）：原始資料傾印欄 `1Y含息%(還原淨值)`；
-- `ui/tab5_data_guard.py`（約 L1397）：診斷格 `1Y含息報酬（還原淨值）[本地·cache]`。
+- `ui/tab5_data_guard.py`（約 L1397）：診斷格 `1Y含息報酬（還原淨值）[本地·cache]`（僅 `perf["1Y"]` 缺值時的 fallback）。
 原因：`calc_metrics` 對 30～349 天窗口**仍算並輸出** `ret_1y_total`（短窗累積），閘門只存在於解析器。這與 `fund_total_return.py` 檔頭「同一檔基金在不同分頁會因為走到不同層而出現不同數字」的 SSOT 目標相悖。是否已在 BACKLOG 登記：`docs/BACKLOG.md` 僅 1 行含 `ret_1y_total` 字樣（BL-0428 列），**本組未逐字判讀其是否涵蓋這三處＝NOT VERIFIED**。
 
 > **整合時事實更正（2026-11-13，落盤者以 `git grep -n "ret_1y_total" docs/BACKLOG.md` 實查）**：該行為 **BL-0523 列**（非 BL-0428 列）。BL-0523 登記「tab2 快照與 tab3 表欄讀原始 `ret_1y_total`，繞過 SSOT 門檻」，**未涵蓋**本節的 tab3 AI prompt 與 `ui/tab5_data_guard.py` 診斷格，故另登記 BL-0547（與 BL-0523 部分重疊）。上段原文保留不改。
@@ -309,7 +309,8 @@ for name, idx in (("tz-aware", pd.date_range("2025-01-01", periods=260, freq="B"
 
 ```
 G1  grep -rnE "1\.4|or 365|_days_span|days_span" tests/*.py   -> 無任何與估算相關命中（僅無關的 1.41／1.496 等數值）
-G3  grep -rnE "ret_1y_window_days[...]\s*(<=|<)\s*[0-9]{3}" tests/*.py -> 無輸出（無上界斷言）
+G3  grep -rnE "ret_1y_window_days[^=]{0,12}(<=|<)\s*[0-9]{3}" tests/*.py   （2026-11-13 整合時重跑；原稿 pattern 以 [...] 省略、原稿標「無輸出」，經重跑更正如下）
+    -> tests/test_fund_metrics.py:152、tests/test_risk_metrics_p0_fixes.py:497、tests/test_xview_characterization.py:595，三處皆為 `< 350` 短窗斷言；無長窗上界斷言
 G4  grep -rl "ret_1y_window_days" tests/*.py | wc -l -> 26
 G5  grep -n "RESTORED_MAX|window_days >|wd_i >" services/fund_total_return.py services/health/dividend.py -> 無輸出
 G6  sparse 砍除清單（fund_service.py L1374-L1392）：sortino、calmar、sharpe(self_calc)、std_1y/2y/3y/5y；不含 ret_1y_total

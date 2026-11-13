@@ -4,7 +4,7 @@
 >
 > 舊版錯誤將 #1163 當 Draft 且否認 S1 Code 已動工。舊版原文逐字留存在 `docs/evidence/history/2026-11-07_handoff_before_cold_start_resync.md`（NOT CURRENT）；不可用舊版文件、對話記憶、PR body 或排程回報推翻即時 GitHub 證據。本檔 2026-11-12 瘦身前全文（含逐則更新鏈與被劃線舊句）逐字留存在 `docs/evidence/history/2026-11-12_handoff_before_slimming.md`（NOT CURRENT）。
 >
-> **⏯ Resume Checkpoint（`PROJECT_RULES.md` §6.1 第 6 點／§6.1.2 第 2 點；2026-11-12 觀測，使用前必須重查 GitHub）**
+> **⏯ Resume Checkpoint（`PROJECT_RULES.md` §6.1 第 6 點／§6.1.2 第 2 點；2026-11-13 觀測，使用前必須重查 GitHub）**
 > - **main（觀測基準，本檔設計即比 main 舊一格：合併本批 docs-only PR 後 main 會前進）**：`6dcb51f8dee3af7536211b3deda4676c3439ed56`（#1226 merge；2026-11-13 `git fetch origin main` 實查；#1224、#1225、#1226 已合併；前一觀測基準 `d82a711d3bb7f4939952bdebae1441e99a8704f5`＝#1225 merge，更早 `b991df70623242afd1876b217088e9eccd5a6ebb`＝#1224 merge）。**Open PR**：開本批 PR 前 GitHub 實查為 0；本批第四階段 docs-only PR 開出後即為 Open，編號、CI、QA 以 GitHub 為準，作者不自稱獨立 QA。main push CI（`6dcb51f8`）本批未查，結論 NOT VERIFIED。
 > - **已完成**：見 §1 與 `docs/BACKLOG.md` 檔尾索引；近期新增 B1-1（#1221，merge `7893eabf`）、B1-2／B1-3（#1222，merge `195de856`），範圍見 §3「GATE」列。**未完成**：BL-0545 等合法輸入（§2）；其餘待決項見 §3。
 > - **Decision Gate**：§3 各列所列 Gate 未裁示者待客戶裁示（BL-0545 待外部輸入；D8 客戶已裁維持關閉；BL-0530 research-only），登記不構成動工授權。另依客戶本批授權單（未另立 DEC，repo 內無逐字存檔）：BL-0538 不延伸授權修改 `CLAUDE.md`；本批只核准 B1；B2、B3、`CLAUDE.md` 封存或瘦身、Digest、OneBrain、Phase 7、FX Gate 均未授權、不得擅自開始（見 §3「GATE」列）。**Stop Gate**：BL-0545 為外部輸入驅動（使用者暫不提供輸入）；遇上位明文衝突即停止、不擅改；本檔未登記其他進行中的 Stop Gate（以即時 GitHub 與 BACKLOG 為準）。
@@ -24,7 +24,7 @@
 |---|---|---|
 | main | `6dcb51f8dee3af7536211b3deda4676c3439ed56`（#1226 merge；2026-11-13 觀測；前一觀測基準 `d82a711d3bb7f4939952bdebae1441e99a8704f5`＝#1225 merge；更早 `b991df70623242afd1876b217088e9eccd5a6ebb`＝#1224 merge；更早 `195de8562baee28b99e2afa100f503eda25f0724`＝#1222 merge；#1221〔`7893eabf`，B1-1〕、#1222〔`195de856`，B1-2／B1-3〕已合併；`29ba4fd5`＝#1219 merge；#1209～#1219 均已合併。近期：#1216〔`6cb212aa`，CI Slow／Visual 的 Chromium 安裝加有界重試與啟動 smoke check〕、#1217〔`75e8dbca`，D2 G1／G2／G3 裁示落盤〕、#1218〔`78d55726`，PROJECT_RULES 兩處 HANDOFF 節號指標修正〕、#1219〔`29ba4fd5`，BL-0220 補註 `update_macro_history` 在 Actions 實際直連〕）；更早的逐次快照（`7ac7c935`〔#1170〕、`2ffc6ad1`〔#1207〕、`50e66801`〔#1209〕、`5e6a950d`〔#1211〕、`966a2722`〔#1212〕）見 history 快照；使用前仍須重查 GitHub | 當前使用前仍須重查 GitHub |
 | #1163 | **merged=true**；**歷史 merge SHA `025922382ef3921fc7b6858cb733084935fbf066`**（是 #1164 之前的 commit，不是當前 main HEAD） | [PR #1163](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1163)；B／S1 設計文件已進 main |
-| Open PR | 2026-11-12 開本批前 GitHub REST 實查 Open PR 為 0（#1217、#1218、#1219 均已 merged）；#1171 已於 2026-11-08 merge（`5d8050df`）；#1166 merge `b227ae5c`、#1168 merge `b34dd2eb`、#1167 merge `861add40` 均已完成 | [#1171](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1171)（merged）；不把此列視為即時狀態，使用前重查 |
+| Open PR | 2026-11-13 開本批前 GitHub REST 實查 Open PR 為 0（#1217、#1218、#1219 均已 merged）；#1171 已於 2026-11-08 merge（`5d8050df`）；#1166 merge `b227ae5c`、#1168 merge `b34dd2eb`、#1167 merge `861add40` 均已完成 | [#1171](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1171)（merged）；不把此列視為即時狀態，使用前重查 |
 | #1164 已合併 head CI | [run 42359253829](https://github.com/linchen-20200325/my-Fund-dashboard/actions/runs/42359253829)：Fast／Schema／Slow／Visual **success** | 最後 head `4f045c26` 的結論；**不是 merge commit 的 main CI** |
 | Code | ≤768px 五格同列頁首／無橫滑／≥48px；769px+ 原側欄；僅 🌍 可進、🤖 不開放；無效 sticky 已修 | #1164 **已 merged 到 main**，但 Preview-only ≠ Cloud 正式上線 |
 | 視覺證據 | #1164 已合入 Chromium 合成 fixture 的 374／375／390／768／769／1280 及 190% 模擬 JSON／PNG | `docs/evidence/bl0544_s1_chromium_fixture_2026_11_07/`；**不代表**正式 Cloud／真機／WebView |
