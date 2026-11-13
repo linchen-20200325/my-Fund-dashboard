@@ -19,6 +19,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from ui_v2.hld import fixtures, logic, theme  # noqa: E402
+from _py_baseline_guard import baseline_python_only  # noqa: E402  # BL-0342／BL-0453：基準 CPython 3.11，非基準 skip／CI fail
 # BL-0250 批次 3-B：產生處新增的標記鍵（`ui_v2/page_health.py::MARK_KEYS`）與 `_missing_cells` 同一類，摘要時略過；
 # 期望值一個都沒改（拿掉標記之後逐格仍與改動前相同）。
 from ui_v2.page_health import MARK_KEYS as _BATCH3B_MARKS  # noqa: E402
@@ -2011,6 +2012,7 @@ def _cell_digest(block) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
 
 
+@baseline_python_only
 def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
     """⛔ **反向控制，整張網。**
 
@@ -2321,6 +2323,7 @@ def test_第3件_46沒有留下指向已被改掉的規則的標籤():
     assert "明知違反第 1 節第一句" in raw, "整句被刪掉了 —— 本檔體例是劃掉保留"
 
 
+@baseline_python_only
 def test_第2件_三個新情境的整頁模型逐格釘住():
     """⭐ **補上那張反向控制網的結構性盲點（2026-09-24 稽核指出）。**
 

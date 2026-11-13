@@ -27,6 +27,7 @@ import types
 import pytest
 
 import _alo_core_golden as G
+from _py_baseline_guard import baseline_python_only   # BL-0342／BL-0453：黃金檔基準是 CPython 3.11，非基準版本 skip／CI fail
 
 _ROOT = pathlib.Path(__file__).resolve().parents[1]
 _GOLDEN = _ROOT / "tests" / "fixtures" / "alo_core_golden_before.json"
@@ -217,6 +218,7 @@ def _groups_that_differ(ns) -> list:
     return sorted(g for g in gold_dec if gold_dec[g] != now_dec.get(g))
 
 
+@baseline_python_only
 def test_對照組_未突變的載入器重現黃金檔():
     assert _groups_that_differ(load_namespace()) == []
 
