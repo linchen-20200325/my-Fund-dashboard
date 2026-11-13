@@ -34,6 +34,7 @@ from ui_v2.exp import logic as exp_logic  # noqa: E402
 from ui_v2.hld import fixtures as hld_fixtures  # noqa: E402
 from ui_v2.hld import live as hld_live  # noqa: E402
 from ui_v2.hld import logic as hld_logic  # noqa: E402
+from _py_baseline_guard import baseline_python_only  # noqa: E402  # BL-0342／BL-0453：基準 CPython 3.11，非基準 skip／CI fail
 
 _OLD_DAY = HF._LAST + timedelta(days=11)          # 11 天：超過門檻
 _RETREAT_LINE = "⛔ 取數失敗：AAAA：改用 2026-09-18 的預存淨值"
@@ -247,6 +248,7 @@ def _restore_old_page_title(node, new: str, old: str) -> int:
     return count
 
 
+@baseline_python_only
 def test_示範模式_持倉體檢與標的探索全情境模型_md5與動手前相同():
     """示範模式不經過 `live.py`。基準值於 `7114da08`（本批動手前）以同一支序列化量得。"""
     default = lambda o: sorted(o, key=repr) if isinstance(o, (set, frozenset)) else repr(o)  # noqa: E731

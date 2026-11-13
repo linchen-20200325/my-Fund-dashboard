@@ -26,6 +26,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from ui_v2.hld import fixtures, live, logic  # noqa: E402
+from _py_baseline_guard import baseline_python_only  # noqa: E402  # BL-0342／BL-0453：基準 CPython 3.11，非基準 skip／CI fail
 # BL-0250 批次 3-B：產生處新增的標記鍵（`ui_v2/page_health.py::MARK_KEYS`）與 `_missing_cells` 同一類，摘要時略過；
 # 期望值一個都沒改（拿掉標記之後逐格仍與改動前相同）。
 from ui_v2.page_health import MARK_KEYS as _BATCH3B_MARKS  # noqa: E402
@@ -486,6 +487,7 @@ _BASELINE = {
 
 # ~~test_T2c正_十七個情境_示範與正式模式共423個模型_與改動前相同~~ → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：
 # 正式模式每情境由三個模型改為一個（見 `_live_models`），總數 423 → 389（示範模式 372 個一個不少）。
+@baseline_python_only
 def test_T2c正_十七個情境_示範與正式模式共389個模型_與改動前相同():
     assert set(_BASELINE) == set(fixtures.ALL_SCENARIO_NAMES)
     count = 0
@@ -817,6 +819,7 @@ _NO_SETTINGS_FAILURE_BASELINE = {
 }
 
 
+@baseline_python_only
 def test_空白套用d反_設定讀得到_清空再套用照舊說未設定_本條修正不改這些頁面():
     makes = {"真的沒設定": _unset, "設定照讀": _full, "真的沒有持倉": _empty, "只有持倉讀取失敗": _s2}
     applies = {"空白套用": _BLANK_APPLY, "只填區間": _WINDOW_ONLY_APPLY, "只填門檻": _RULES_ONLY_APPLY}

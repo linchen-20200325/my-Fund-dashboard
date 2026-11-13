@@ -2985,6 +2985,22 @@
 
 ---
 
+### DEC-2026-11-13-03｜品質補強 Batch 2 限縮版授權（三項）；更正 `DEC-2026-11-13-02`「六項只明列五項、第六項待指明」之誤讀（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-13 |
+| 決策者／原話 | 客戶；2026-11-13 於專案 AI 對話中，對 Issue #1228 Batch 2 下達限縮版裁示與「六項」誤讀更正，經總管轉達；repo 內無逐字存檔、不可獨立核對；本筆為專案 AI 整理之要點，非逐字；客戶可推翻。不虛構引文。客戶就誤讀更正的要點（總管轉達，非逐字；刻意不加引號，以免被當成客戶原話）：六項品質補強已明確列在 Issue #1228；Batch 1 驗收標準中的五個高風險案例不是六項工作的完整清單，不需客戶再指定第六案例；請在後續文件中以最小增量更正此誤讀。 |
+| 決策內容摘要 | (1) **限縮範圍**：Batch 2 只做三項——跨層 Golden／E2E 缺口（只補真實缺口，無平行計算引擎）、最小 PR Impact Check（沿用既有 PR checks，不改 required checks）、Production 健康度驗收（分開 CI／AppTest、NAV 更新、涵蓋率／freshness、Sheet 可用性與 New UI2 五頁正式資料；沒有 live 合法證據標 NOT VERIFIED；探針成功不等於正式來源核准）。(2) **BL-0548 七點不全部阻擋 Batch 2（僅 ① 的版本守衛部分可補強；②～⑦ 維持待客戶裁示、僅唯讀登記）；CPython 版本守衛可補，但**不得動 Golden 黃金檔、不得放寬任何嚴格比對、不得修改金融公式；Golden 紅燈（CPython ≥3.12 `sum()` 補償加總差異，見 BL-0548 ①、BL-0342、BL-0453）仍禁止重錄。(3) **ISIN、FX 新鮮度、ALO-2 缺 FX 分母、1Y 口徑**：僅唯讀登記與驗收設計，不啟用 ISIN 對照、不訂 FX 新鮮度門檻、不改 ALO-2 分母、不改 `calc_metrics` 1Y 估算口徑。(4) **未核准 UI**：僅唯讀；不授權 UI layout 變更。(5) **Agent 不提前建檔**：三個專業 Agent（`fund-nav-data`／`fund-governance-auditor`／`fund-independent-qa`）仍屬 Batch 3，Batch 2 期間不建立 `.claude/agents/` 任何定義。(6) **更正（針對 `DEC-2026-11-13-02` 第 (5) 點）**：該點稱「『六項』在 Issue 內只明列五項，第六項未枚舉，待客戶指明」為**誤讀**。客戶已確認（轉述）：六項品質補強已明確列在 Issue #1228；Batch 1 驗收標準中的五個高風險案例（NAV 換幣守衛、缺 FX 資產配置分母、`calc_metrics` 1Y estimated window、ISIN 未啟用、Missing／Partial／UNAVAILABLE／未評估分流）**不是六項工作的完整清單**，**不需客戶再指定第六案例**；因此沒有待客戶指明的第六案例。(7) 每批最多三項；Batch 3 須待 Batch 2 合併驗證、重查 GitHub 且無未解 Gate 後才開始。各批沿用 `PROJECT_RULES.md` §7／§8／§10：非作者 QA、最新 head CI、普通 merge commit、main 驗證、GitHub 永久交接。(8) BL-0545 維持唯一全域 NEXT（BLOCKED，真實輸入暫停），品質批次不取代它。 |
+| 授權範圍 | 本批授權：Batch 2 三項的**限縮版**（以 (1)～(4) 為界）之唯讀驗收設計、文件落盤，及客戶 (2) 所允許的 CPython 版本守衛類測試層調整（不動 Golden、不放寬比對、不改公式）、跨層測試（僅 `tests/`、無平行計算引擎、不動 Golden 與 production；含使用者可見文字不變守衛與 New UI 靜態補值守衛）、最小 PR Impact Check 的 PR 模板與其守衛測試；加本檔、`docs/BACKLOG.md`、`docs/HANDOFF.md` 的登記與索引。**不授權**：Batch 3 動工；建立 `.claude/agents/` 任何定義；正式 UI、資料庫、Schema、provider、金融公式、cutover 施工；憲法／修正案 #8／凍結 44 修改；Google Sheet Reader／Writer／Secrets；NAV／FX／資料語意變更；重錄或修改 Golden；任何 live 探測、憑證要求或探針觸發；解除 D2／FX／DG2／AI Digest／Phase 7／cutover Gate。Issue #1228 是派工入口，**不是授權狀態 SSOT**，授權以本筆為準。 |
+| 影響範圍 | 僅文件與客戶 (2) 所允許範圍內的測試層調整：本檔、`docs/BACKLOG.md`（BL-0548 欄尾一句改寫；BL-0342、BL-0453 出處欄尾各追加一句狀態註記；檔尾索引一行）、`docs/HANDOFF.md`（§3A 同一 bullet 兩處就地改寫）、新 evidence 檔、`.github/pull_request_template.md` 與 `tests/test_pr_template_impact_check.py`（新增）；`DEC-2026-11-13-02` 本文不改（其第 (5) 點由本筆 supersedes 更正）；`docs/evidence/quality_batch1_delta_2026_11_13.md` 僅檔尾追加更正指標。CPython 版本守衛與跨層測試見 PR #1230（僅 `tests/`）。無 workflow／cron／閘門／`data_cache`／Sheet 變更。 |
+| 是否可逆 | 可逆（客戶可推翻；文件與測試層調整均可還原）。 |
+| supersedes／superseded by | **supersedes（僅此一點）**：`DEC-2026-11-13-02`「決策內容摘要」第 (5) 點關於「第六項待客戶指明」的說法（誤讀）；`DEC-2026-11-13-02` 其餘各點（含分三批、每批≤3項、不授權清單）不變。與 `DEC-2026-11-12-01`／`-02`、`DEC-2026-11-13-01` 並行，不改其範圍。 |
+| evidence／source | GitHub Issue #1228（Batch 2 / Batch 3 段）；PR #1230（CPython 版本守衛與跨層測試）；`docs/evidence/quality_batch2_production_health_acceptance_2026_11_13.md`（Production 健康度分層驗收表，單組草稿；含 PR Impact Check 設計說明）；`docs/evidence/quality_batch1_delta_2026_11_13.md`（被更正敘述所在，其五項覆核結論不受影響）。 |
+| provenance | **要點轉述**（客戶於專案 AI 對話直接裁示，經總管轉達，非逐字，QA 無法獨立核對）；evidence 檔為單組作者草稿，**尚待非作者獨立 QA**；未經第二組驗證的全稱句不得作為合併或核准依據。 |
+
+---
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。

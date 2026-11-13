@@ -27,6 +27,7 @@ import types
 import pytest
 
 import _alo_core_golden as G
+from _py_baseline_guard import baseline_python_only   # BL-0342／BL-0453：黃金檔基準是 CPython 3.11，非基準版本 skip／CI fail
 
 _ROOT = pathlib.Path(__file__).resolve().parents[1]
 _GOLDEN = _ROOT / "tests" / "fixtures" / "alo_core_golden_before.json"
@@ -217,11 +218,13 @@ def _groups_that_differ(ns) -> list:
     return sorted(g for g in gold_dec if gold_dec[g] != now_dec.get(g))
 
 
+@baseline_python_only
 def test_對照組_未突變的載入器重現黃金檔():
     assert _groups_that_differ(load_namespace()) == []
 
 
 @pytest.mark.parametrize("mutation", [m for m in MUTATIONS if m[0] not in SURVIVORS_DOCUMENTED], ids=lambda m: m[0])
+@baseline_python_only   # 非基準版本時未突變基準本身就與黃金檔不同 ⇒ `assert differ` 空泛為真（假綠燈），故同樣只在基準版本執行
 def test_突變被黃金檔抓到(mutation):
     try:
         differ = _groups_that_differ(load_namespace(mutation))

@@ -24,6 +24,7 @@ import types
 import pytest
 
 import _alo_core_golden as G
+from _py_baseline_guard import baseline_python_only   # BL-0342／BL-0453：黃金檔基準是 CPython 3.11，非基準版本 skip／CI fail
 
 _ROOT = pathlib.Path(__file__).resolve().parents[1]
 _GOLDEN = _ROOT / "tests" / "fixtures" / "alo_core_golden_before.json"
@@ -83,6 +84,7 @@ def test_黃金檔位元組可由其內容重新序列化出來_沒有被手改(
 # ═══════════════════════ 主驗收：工作樹 == 黃金檔（不 skip） ═══════════════════════
 
 
+@baseline_python_only
 def test_整份矩陣_工作樹與黃金檔逐位元組相同():
     now = G.dumps(G.encode_matrix(_live_decoded()))
     doc = _doc()
@@ -95,6 +97,7 @@ def test_整份矩陣_工作樹與黃金檔逐位元組相同():
     ("category_values", [c[0] for c in G._cat_cases()]),
     ("alo2_family", list(G._alo2_cases())),
 ) for k in labels])
+@baseline_python_only
 def test_逐情境相同(group, label):
     """整份比對失敗時，逐情境指出是哪一個變了。"""
     got = _live_decoded()[group][label]
@@ -203,6 +206,7 @@ def _git_show(rel):
     return out.stdout.decode("utf-8") if out.returncode == 0 else None
 
 
+@baseline_python_only
 def test_額外對照_從git歷史的基準原始碼重算_等於黃金檔():
     logic_src = _git_show("ui_v2/alo/logic.py")
     hold_src = _git_show("services/v2_domain/holdings.py")
