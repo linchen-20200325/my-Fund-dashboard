@@ -540,7 +540,7 @@
 
 | 待審 ID | 原始候選 | 欄位名稱 | 現有來源 | 現有 DEC／契約 | New UI2 適用 | 既有實作 | 衝突與缺口 | 本次狀態 | 建議處理（非裁示） | 後續 Gate |
 |---|---|---|---|---|---|---|---|---|---|---|
-| R-ID-1 | 第二部 K1；A1 A1 | `fund_code` | Sheet「基金代號」欄；`nav`／`dividend`／`fund_profile` 列鍵（`services/v2_tables/contract.py::NAV_FIELDS` 等） | `DEC-2026-10-29-01` 第 1 項、`-03` 第 1 項（Sheet 欄＝MoneyDJ 基本代碼命名空間，已核准）；`DEC-2026-11-08-04` Q2；`DEC-2026-11-09-01` D2-A＝B（違反欄位契約須標示、保留原值、不改寫；契約文字層） | 命名空間已核准；「列入 Required」**未核准**；僅 Preview | 欄位存在；D2-A＝B 要求的格式檢查**尚未實作**（`shared/fund_identity.py::DG2_SHADOW_ENABLED = False`） | 契約文字與實作有落差，須明標；`sheet_code_contract_violation` 在 production 路徑打不出 | 待客戶逐列核可，正式效力 Pending | 證據最強，可列為優先逐列核可候選；核可時須連帶標明「格式檢查尚未實作」 | 實作接線另需授權；不啟用 DG2 Shadow |
+| R-ID-1 | 第二部 K1；A1 A1 | `fund_code` | Sheet「基金代號」欄；`nav`／`dividend`／`fund_profile` 列鍵（`services/v2_tables/contract.py::NAV_FIELDS` 等） | `DEC-2026-10-29-01` 第 1 項、`-03` 第 1 項（Sheet 欄＝MoneyDJ 基本代碼命名空間，已核准）；`DEC-2026-11-08-04` Q2；`DEC-2026-11-09-01` D2-A＝B（違反欄位契約須標示、保留原值、不改寫；契約文字層） | 命名空間已核准；「列入 Required」**未核准**；僅 Preview。契約文字已核（`DEC-2026-11-13-06`）；Required 升格／New UI2 適用仍未核 | 欄位存在；D2-A＝B 要求的格式檢查**尚未實作**（`shared/fund_identity.py::DG2_SHADOW_ENABLED = False`） | 契約文字與實作有落差，須明標；`sheet_code_contract_violation` 在 production 路徑打不出 | ~~待客戶逐列核可，正式效力 Pending~~ → **已核准契約文字 `T-ID1`（核准日 2026-11-13，`DEC-2026-11-13-06` 裁示 (2)；要點轉述，尚待非作者獨立 QA）**；僅限 Sheet「基金代號」欄、MoneyDJ 基本代碼命名空間；不含 EXP 選股池代碼（另案，裁示 (4)）、不含 ISIN／`full_key`／後綴／DG2；**D2-A＝B 標示尚未實作的落差仍在**；僅核准契約文字，不授權改 resolver／producer／Schema／資料接線 | 證據最強，可列為優先逐列核可候選；核可時須連帶標明「格式檢查尚未實作」 | 實作接線另需授權；不啟用 DG2 Shadow |
 | R-ID-2 | 第二部 K2 | `full_key`（`resolve_full_keys` 輸出） | `services/v2_tables/fund_keys.py::resolve_full_keys`（`PURE_CODE_PATTERN`；`portal` 恆空） | BL-0527 第 5 項；`DEC-2026-11-09-01` D2-C＝B（別名表不升格、只收 `mapping_source` 追溯） | **未核准**；僅 Preview（`ui_v2` 的 `hld`／`alo`／`exp` source 模組呼叫；`ui_v3` 未見直接呼叫，僅字面 grep） | 已實作（Preview 取數鍵） | **`full_key` 可否帶通路後綴未裁**（S7）：程式接受主碼＋`-`＋後綴，而既有裁示要求 Sheet 欄遇後綴標違反；canonical identity（`base_fund_code`／`canonical_key`）仍 Shadow、未轉正；不改 NAV source precedence；不新增正式 ISIN／Share Class mapping | 同上 | 建議**先拆分問題**：S7 未裁前維持 Pending，不宜單獨核可 | 需客戶先裁 S7；canonical 轉正須 Stage-2 驗證 V1～V13（第二部 §5） |
 | R-ID-3 | 第二部 K3 | `ok`（`results[].ok`） | 同 R-ID-2 | 無專屬 DEC | **未核准**；僅 Preview | 已實作 | 依附 R-ID-2；無此旗標則無法區分「沒取到」與「沒有這檔」（作者推論） | 同上 | 建議隨 R-ID-2 一併處理，不單獨核可 | 同 R-ID-2 |
 
@@ -548,7 +548,7 @@
 
 | 待審 ID | 原始候選 | 欄位名稱 | 現有來源 | 現有 DEC／契約 | New UI2 適用 | 既有實作 | 衝突與缺口 | 本次狀態 | 建議處理（非裁示） | 後續 Gate |
 |---|---|---|---|---|---|---|---|---|---|---|
-| R-NAV-1 | A1 B1 | `nav_orig_ccy` | `services/v2_tables/nav_dividend.py::build_nav_table`（A 鏈取數；非有限／非正值不寫） | `DEC-2026-11-08-04` Q5（非台幣可整理原幣）；`44` 4.2 | **未核准**；僅 Preview（`ui_v2` `hld`／`alo` 使用；`ui_v3` 市值基準 blocked，引 A1 B9） | 已實作（Preview） | 原幣、無 TWD 欄；FX 閘門關閉（`FX_OBS_DATE_RULE_VERIFIED = False`）；NAV source precedence 不改 | 待客戶逐列核可，正式效力 Pending | 可列為優先候選（原幣欄，不涉 FX） | 無新增 Gate；不得推及 TWD 換算 |
+| R-NAV-1 | A1 B1 | `nav_orig_ccy` | `services/v2_tables/nav_dividend.py::build_nav_table`（A 鏈取數；非有限／非正值不寫） | `DEC-2026-11-08-04` Q5（非台幣可整理原幣）；`44` 4.2 | **未核准**；僅 Preview（`ui_v2` `hld`／`alo` 使用；`ui_v3` 市值基準 blocked，引 A1 B9）。契約文字已核（`DEC-2026-11-13-06`）；Required 升格／New UI2 適用仍未核 | 已實作（Preview） | 原幣、無 TWD 欄；FX 閘門關閉（`FX_OBS_DATE_RULE_VERIFIED = False`）；NAV source precedence 不改 | ~~待客戶逐列核可，正式效力 Pending~~ → **已核准契約文字 `T-NAV1`（核准日 2026-11-13，`DEC-2026-11-13-06` 裁示 (3)；要點轉述，尚待非作者獨立 QA）**；須結合同列 `ccy`／`nav_date` 解讀，二者自身核准仍 Pending；無 TWD 欄、FX 不開、不認定 share class／NAV series 等價、不改來源優先序；R-NAV-5 不因此核准 | 可列為優先候選（原幣欄，不涉 FX） | 無新增 Gate；不得推及 TWD 換算 |
 | R-NAV-2 | A1 B2；與 R-PERF-6 同源 | `nav_date` | 同上 | `DEC-2026-11-09-01` D2-B；A1 B2 引 `67` §8.6「as_of 為 Required 例」（既有文件，非核准清單） | **未核准**；僅 Preview | 已實作（Preview）；舊 UI 純量 `nav_date` 與序列末日不同源、無 reconcile（G-NAV-6） | **與 D2-B 衝突**：`as_of` 不直接列 Required；PIT 取哪一欄未定；NAV 新鮮度（`NAV_NOT_READY_DAYS = 10`，`DEC-2026-11-05-03` 不得升格）未裁 | 同上 | 建議**維持 Pending**（以 `DEC-2026-11-09-01` 為準）；不新增 10 日門檻 | D2-B 四項同源證據；`DEC-2026-11-05-03` 待決 (a)～(e) |
 | R-NAV-3 | A1 B3；與 D2-B 的 `fetched_at` 同源 | `fetched_at` | 同上（UTC；缺／無時區／晚於當下 300 秒整批不寫） | `44` 4.2；`DEC-2026-11-09-01` D2-B（不以讀取時間冒充觀測時間） | **未核准**；僅 Preview | 已實作（Preview） | 納入 Digest 未核准；Freshness／Stale 的 `stale_after` 值未裁（`67` §8.5）；觀測時間與取得時間須分開 | 同上 | 建議**維持 Pending** | Freshness 門檻另案，需客戶裁示 |
 | R-NAV-4 | A1 B4 | `source_tier`（表）／`provenance[fund_code].source`（旁路） | `nav_dividend.py`；表內只有 `source_tier`，無 provider 欄 | `44` 4.2 `source_tier` 值域；provider 名進契約規則**未核准** | **未核准**；僅 Preview | 部分（旁路 provenance） | 「必備」與「Optional：補充 provenance」邊界待決；不改 NAV source precedence | 同上 | 建議**先拆分問題**：`source_tier`（有值域）與 provider 名（無規則）分開審 | provider 名入契約需客戶裁示 |
@@ -572,10 +572,12 @@
 
 | 域 | 待審列數 | 其中與他域重複 | 正式核准欄位數 |
 |---|---|---|---|
-| 身份 | 3（R-ID-1～3） | — | 0 |
-| NAV | 6（R-NAV-1～6） | — | 0 |
+| 身份 | 3（R-ID-1～3） | — | ~~0~~ → 1（R-ID-1；`DEC-2026-11-13-06`） |
+| NAV | 6（R-NAV-1～6） | — | ~~0~~ → 1（R-NAV-1；`DEC-2026-11-13-06`） |
 | 績效 | 8（R-PERF-1～8） | 3（R-PERF-1＝R-ID-1；R-PERF-3＝R-NAV-5；R-PERF-6＝R-NAV-2） | 0 |
-| 合計 | 17 列（去除重複後 14 個不同欄位） | — | **0（正式核准欄位數＝0）** |
+| 合計 | 17 列（去除重複後 14 個不同欄位） | — | ~~**0（正式核准欄位數＝0）**~~ → **2（R-ID-1、R-NAV-1；2026-11-13，`DEC-2026-11-13-06`）**；其餘 15 列仍 Pending（R-PERF-1 為 R-ID-1 重複列，依裁示 (5) 維持 Pending） |
+
+> **2026-11-13 更新（追加，不改上方歷史句）**：客戶經 `DEC-2026-11-13-06` 核准 R-ID-1（`T-ID1`）與 R-NAV-1（`T-NAV1`）兩段契約文字，正式核准欄位數由 0 變 2；其餘各列（含 R-NAV-2／3／5／6，雖經 Q0 採 A 允許各自逐列審核，但**仍 Pending**、遵守各自既有 Gate）未核准。本次更動範圍僅：R-ID-1、R-NAV-1 兩列的「本次狀態」欄，以及兩列「New UI2 適用」欄各補一句（契約文字已核；Required 升格／New UI2 適用仍未核）；列數統計表身份／NAV／合計三格；本註。其餘各列各欄一字未動；先前『本次沒有核准任何具體欄位；正式核准欄位數＝0』為 2026-11-11 當時狀態。契約文字僅限文件層，不授權改 resolver／producer／Schema／資料接線；單組作者更新，尚待非作者獨立 QA。
 
 ### Legacy Reuse Gate 查核（`PROJECT_RULES.md` 13.6；只查與上列欄位直接相關的既有能力；不整份複製、不改舊 UI、不移植舊金融公式）
 

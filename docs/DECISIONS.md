@@ -3029,6 +3029,58 @@
 | evidence／source | `docs/evidence/quality_batch3_agents_and_measurement_2026_11_13.md`；`docs/BACKLOG.md` BL-0549；GitHub Issue #1228。 |
 | provenance | **要點轉述**（客戶於專案 AI 對話直接裁示，經總管轉達，非逐字，repo 內無逐字存檔，QA 無法獨立核對）；第 (4) 點的 `permission_mode`＝`auto` 為總管唯讀查詢結果（FACT，僅限本 session）；本筆為單組作者產出，**尚待非作者獨立 QA**；~~`.claude/settings.json` 尚未施工、尚未驗證、尚未 merge。~~ → 已被 #1234 合併（`df099db7`）取代。第 (6) 點施工已由 PR #1234 合併（`df099db7`）；效力邊界見 evidence。 |
 
+### DEC-2026-11-13-06｜客戶八項裁示：D2 範圍（Q0）、R-ID-1／R-NAV-1 契約核准（限縮文字）、選股池代碼命名空間另案、🔍 Q1／Q7／Q8／Q9 線框方向、契約測試草案採文字版（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-13 |
+| 決策者／原話 | 客戶；2026-11-13 於專案 AI 對話中就 `DEC-2026-11-13-01` 所備之 D2 最小核准包與 🔍 找基金決策包下達八項裁示，經總管轉達；repo 內無逐字存檔、不可獨立核對；本筆為專案 AI 整理之要點，非逐字；客戶可推翻。不使用引號、不虛構引文。 |
+| 決策內容摘要 | (1) **Q0 採 A**：D2-B 僅約束「1Y 含息證據欄位」，以及 1Y 借用 NAV 日期／幣別時的「四項同源條件」；**不擴張為 NAV 全域契約**。R-NAV-2／3／5／6 可各自逐列審核，但**仍 Pending**、遵守各自既有 Gate；「允許逐列審核」不等於自動核准。(2) **R-ID-1 採 A**：核准契約文字 `T-ID1`（見下方〈附一〉，逐字抄自 `docs/evidence/d2_min_approval_pack_r_id_1_r_nav_1_2026_11_13.md` §2.6，未改寫）。僅適用 Google Sheet 持倉「基金代號」欄；命名空間為 MoneyDJ 基本基金代碼；不擴張為所有 `fund_code`；不含 EXP 選股池代碼；不核准 ISIN、`full_key`、後綴或 DG2；原始資料不可被靜默截斷、剝除、改寫或補值；**明確保留 D2-A＝B「違反契約須標示」尚未實作的落差**。**僅核准契約文字**，不授權修改 resolver、producer、Schema 或資料接線。(3) **R-NAV-1 採 A**：核准契約文字 `T-NAV1`（見下方〈附二〉，逐字抄自同包 §3.6，未改寫）：`nav_orig_ccy` 為有限且大於零的單位淨值；必須結合同列 `ccy` 與 `nav_date` 解讀；`ccy`、`nav_date` 自身的 D2 Required 核准仍 Pending；不宣稱幣別已獨立驗證；不建立 TWD 欄、不開 FX Gate；不認定 share class／配息型別／避險型態／NAV series 等價；不改 NAV 來源優先序或 1Y 算法；R-NAV-5 不因本裁示核准。(4) **選股池（EXP）代碼命名空間：另案待裁**，屬獨立資料身份 Gate；不併入 R-ID-1，不以 MoneyDJ Sheet 命名空間規則外推；本批只保存問題與證據。(5) **R-PERF-1 維持 Pending**：它是 join key 的關聯，不代表 1Y 輸出已有核准的 `fund_code` 欄位（1Y 輸出無此鍵，見核准準備檔）；不因 R-ID-1 核准而自動升格。(6) **Q1 採 A 修正版**（New UI2 線框語意方向）：New UI2 不顯示「查無基金」「不存在」等無充分證據的存在性結論；依資料證據分 `◇ 資料未備`（確實屬資料未提供或未建立來源）／`⛔ 取數失敗`（上游取得失敗）／`⬜ 無法判定`（無法確認身份或存在性）；**不得把所有空結果一律轉為 `◇`**。frozen 44 `EXP-6` 的「查無此 fund_code」字面，與其觸發／判準，**尚未處置**：依協作總管複核（PR #1235 留言，**非客戶裁示**）與 G-E5（`docs/evidence/decisions/2026-11-01_batch_e_gate_rulings.md`），**現在不啟動 amendment、不改 frozen 44，`EXP-6` 保留〔待定／來源契約未確認〕**；未來若實作證據證明真衝突，先提最小 amendment 裁示包並經獨立 QA，未核准前不施工該格。(7) **🔍 Q7／Q8／Q9 全採 A**：Q7＝上區 session-only 比較元件稱「比較」、下區 `EXP-3` 保留「對照」，兩者選取互不連動；Q8＝第一階段唯讀，不畫「加入觀察清單」與尚未啟用的「候選清單」控制項、不新增寫入；Q9＝只整理上下區分隔、順序與 `EXP-0`～`EXP-7` 對應骨架，不重設計下區篩選。**僅核准線框方向**，不授權 UI 程式或正式 layout。(8) **契約測試草案採 B**：只整理文字版測試案例與驗收預期（優先引用既有測試）；**不新增 `tests/`、不改 Golden、不製造預期失敗的 CI 測試**。 |
+| 授權範圍 | 本筆授權（僅文件層）：(a) 把 `T-ID1`、`T-NAV1` 兩段契約文字登記為 D2 已核准契約文字；(b) 把 Q0／Q1／Q7／Q8／Q9 的方向登記於 DECISIONS／BACKLOG／HANDOFF 與 D2 候選檔；(c) 文字版契約測試草案摘要（見〈附四〉）。**不授權**：Schema、runtime、resolver／producer、資料來源、UI 程式、FX（含開閘與 TWD 欄）、DG2（含 `DG2_SHADOW_ENABLED`）、ISIN、`full_key`／後綴、cutover；改動 frozen 44／Old UI／`PROJECT_RULES.md`／`CLAUDE.md`；新增 Agent／MCP／API／付費項目；解鎖 BL-0545（仍為唯一全域 NEXT，BLOCKED）；新增 `tests/`、改 Golden；實作 D2-A＝B 的標示；核准任何 R-ID-2／3、R-NAV-2～6、R-PERF-2～8、其他 D2 欄位。 |
+| D2 核准欄位狀態 | **核准欄位數：0 → 2（僅 R-ID-1、R-NAV-1 兩列）**。其餘仍 Pending（17 列待審表中其餘 15 列）：R-ID-2、R-ID-3、R-NAV-2、R-NAV-3、R-NAV-4、R-NAV-5、R-NAV-6、R-PERF-1～R-PERF-8；其中 R-PERF-1（與 R-ID-1 重複列，見裁示 (5)：不因 R-ID-1 核准而自動升格）、R-PERF-3（與 R-NAV-5 重複）、R-PERF-6（與 R-NAV-2 重複）為重複列，不獨立計。**Q2～Q6、C9／C10／C17、W 欄文案**仍須依 `docs/evidence/exp_wireframe_decision_pack_2026_11_13.md` 處理，**不視為核准**。 |
+| 影響範圍 | 僅文件：本檔、`docs/BACKLOG.md`（BL-0524、BL-0542、BL-0547 尾端各一句指標；檔尾索引一行）、`docs/HANDOFF.md`（Resume Checkpoint main 基準、§1 快照與 §3 外部事件追蹤的最小同步；第四階段 bullet 句尾）、`docs/evidence/d2_contract_candidates_returns_identity_holdings_2026_11_08.md`（Required 逐列待審表 R-ID-1、R-NAV-1 兩列「本次狀態」與「列數統計」表尾註）。無 code／tests／workflow／cron／閘門／`data_cache`／Sheet 變更。 |
+| 是否可逆 | 可逆（客戶可推翻；純文件）。 |
+| supersedes／superseded by | **精確補充、不改寫既有 DEC 本文，僅就下列各點的「狀態」於本欄註明被更新**：(i) `DEC-2026-11-11-04` D2-G1 摘要所稱「正式核准欄位數＝0」為**當時**（2026-11-11）狀態，其本文不改；自本筆起該計數為 2（R-ID-1、R-NAV-1），D2-G1＝B 修正版的「逐列審核、整欄不自動升格」原則**不變**。(ii) `DEC-2026-11-13-01` 摘要 (1) 所稱「射程題 Q0 仍待客戶一句話確認」與授權範圍欄「正式核准欄位數仍為 0」，被本筆 (1)(2)(3) 更新其**狀態**；該筆其餘各點不變。(iii) 本筆不改 `DEC-2026-11-09-01` 的 D2-A／D2-B／D2-C 一字；Q0 採 A 是對 D2-B「射程」的客戶澄清，不是改寫。(iv) 本筆 (6) 不 supersede `DEC-2026-11-01-02`（G-E3／G-E5），僅在其框架內取線框語意方向。 |
+| evidence／source | `docs/evidence/d2_min_approval_pack_r_id_1_r_nav_1_2026_11_13.md`（§2.6 `T-ID1`、§3.6 `T-NAV1`、§4 D2-B 射程研究、§2.8／§3.8 文字版契約測試草案）；`docs/evidence/exp_wireframe_decision_pack_2026_11_13.md`（Q1／Q7／Q8／Q9）；`docs/evidence/d2_contract_candidates_returns_identity_holdings_2026_11_08.md`（Required 逐列待審表）；`docs/evidence/decisions/2026-11-01_batch_e_gate_rulings.md`（G-E3／G-E5）。 |
+| provenance | **要點轉述**（客戶經總管轉達，非逐字；repo 內無逐字存檔，QA 無法獨立核對）；`T-ID1`／`T-NAV1` 為逐字抄入核準包原文（擬議文字經客戶採 A 後生效，抄寫是否與原文一字不差可由讀者比對 §2.6／§3.6）；本筆為**作者單組草稿，尚待非作者獨立 QA**（資料身份／金融語意等級，依 `PROJECT_RULES.md` 須至少 1 組真正獨立稽核）；未經第二組驗證的全稱句不得作為合併或核准依據。本筆**未**宣稱任何 CI／QA 已通過，**未**宣稱六項品質補強全部 PASS。 |
+
+**〈附一〉`T-ID1` 逐字契約文字（抄自核準包 §2.6，未改寫；以下為「核准的契約文字」，不是「已實作行為」）**
+
+> **T-ID1｜身份域 `fund_code`**
+> 1. 型別：字串，不可空。語意：Google Sheet 持倉「基金代號」欄所填的 MoneyDJ 基本基金代碼（命名空間固定 MoneyDJ，**只限該欄**，`DEC-2026-10-29-01` 第 1 項）；為 `nav` 表主鍵之一（`fund_code`＋`nav_date`）。
+> 2. 取用規則：原值保留（僅去前後空白）；不轉大小寫、不截斷、不剝後綴、不改寫、不補值。大小寫正規化**不在本契約內**。
+> 3. 無日期語意；不是 ISIN、不是通路後綴碼、不是持倉鍵（持倉鍵為 `policy_id`＋`fund_code`，另域）。
+> 4. 缺值：Sheet 欄空或非字串→該持倉不產生 `nav`／績效列，呈現層為「⬜ 資料未取得／無法判定」；不得補預設代碼。
+> 5. **已知落差（D2-A＝B）**：Sheet 欄遇網址、帶後綴代碼或格式異常時，契約要求「標示違反欄位契約、保留原始輸入、不靜默截斷／剝除／改寫」；**目前尚未實作**——現行解析鏈對此類輸入可能判 `ok=True` 並產出 `full_key`，且不產生任何違反標記（`DG2_SHADOW_ENABLED = False`）。
+> 6. 本核准**不**構成對任何 1Y 輸出欄位的核准（1Y 輸出無 `fund_code` 鍵，它是呼叫端的 join key）。
+
+**〈附二〉`T-NAV1` 逐字契約文字（抄自核準包 §3.6，未改寫）**
+
+> **T-NAV1｜NAV 域 `nav_orig_ccy`**
+> 1. 型別：浮點，有限且大於 0，不可空。語意：該基金於同列 `nav_date` 當日的**單位淨值**，採來源序列所報數值（`float()` 後原樣，不換算、不四捨五入、不調整、不年化）；**計價幣別以同列 `ccy` 為準**。
+> 2. **表內無 TWD 欄**；不提供新臺幣換算；FX 閘門維持關閉。
+> 3. 取不到值不寫列，不以 0、前一筆或估算值補；週末、假日、停止交易日沒有列屬正常；同日有無效值或同日不同值→該日全不寫；同日同值併一列。
+> 4. 本欄**不代表**：share class、配息／累積型、避險型態、NAV series 的等價（同一基金代碼不隱含這些屬性相同）；亦不代表來源優先序或跨來源一致性已核准。
+> 5. `ccy`（含其驗證方式與出處）、`nav_date`、`fetched_at` 的契約**另案**，本核准不含；`nav_orig_ccy` 的「原幣」解讀受同列 `ccy` 約束。
+
+**〈附三〉兩段契約文字的邊界（沿用核準包「不含」表，一字不增減其意）**：`T-ID1` 不含 `full_key`／`ok`（R-ID-2／3）、S7 後綴規則、`canonical_key`／`base_fund_code`／ISIN／share class／currency 身份屬性、`exp` 路徑的選股池代碼命名空間（見裁示 (4)，另案）、`dividend`／`fund_profile` 的 `fund_code`、啟用 `DG2_SHADOW_ENABLED`、改 resolver／consumer／Sheet schema、實作 D2-A＝B 標示。`T-NAV1` 不含 `ccy`／`ccy_source`（R-NAV-5／6）、`nav_date`（R-NAV-2）、`fetched_at`（R-NAV-3）、`source_tier`／供應者（R-NAV-4）、`is_estimated`、任何 TWD 換算與 FX、NAV 來源優先序／`get_latest_nav`／累積序列閘門（`NAV_HISTORY_PROVENANCE_VERIFIED` 維持 `False`）、NAV 10 日規則／新鮮度門檻／PIT 取欄（`DEC-2026-11-05-03`）、1Y 含息報酬 `value_pct`（BL-0427／BL-0524 未裁）。
+
+**〈附四〉文字版契約測試草案摘要（裁示 (8) 採 B；未寫入 `tests/`、不改 Golden、不新增紅燈；明細與現況對照見核準包 §2.8／§3.8）**
+
+| 草案 | 意圖 | 現況（引用既有測試；本批未實跑） |
+|---|---|---|
+| T-ID1-a | `NAV_FIELDS` 第一欄＝`fund_code`／字串／不可空 | 已有：`test_契約_nav與44逐欄相同_source_tier值域相同` |
+| T-ID1-b | `nav` 列 `fund_code` ＝呼叫端原值（去前後空白），不轉大小寫、不替換為 `full_key` | 未見專門測試（核準包 A-7，單組） |
+| T-ID1-c | `fund_code` 空字串／非字串→`build_nav_table` 拋 `ValueError` | 未見直接測試（核準包 A-7） |
+| T-ID1-d | **特徵化記錄落差**：Sheet 欄帶後綴→`ok=True`、產出 `full_key`、無違反標記（記錄已知落差，**不是期望行為**） | 行為已被 `test_mapping_miss_passes_through` 釘住；落差說明尚無對應測試 |
+| T-ID1-e | D2-A＝B 驗收（遇後綴／網址／異常→標示違反、保留原值） | production 無此行為；**不得先寫成紅燈進 CI**，待 D2-A＝B 實作另獲授權後才有意義 |
+| T-NAV1-a | nav 表欄位集合不含任何 TWD 欄（7 欄固定） | 已有：鏡像測試 `len(fields) == 7` 與 `NAV_FIELDS == fields` |
+| T-NAV1-b | 非有限／非正／布林／溢位→不寫；不 ffill | 已有（核準包 §3.4 清單） |
+| T-NAV1-c | 數值不被四捨五入 | 已有：`test_數值_淨值保留原精度不四捨五入` |
+| T-NAV1-d | 同日不同值全不寫；同日同值一列 | 已有：`test_nav_同一日期同值只寫一列_不同值該日全不寫` |
+| T-NAV1-e | 幣別缺或衝突→整檔不寫，不補 USD | 已有：`test_nav_幣別缺_整批不寫_不猜不預設USD`、`test_nav_同一檔多列持倉幣別互相不同_整批不寫` |
+| T-NAV1-f | 契約第 4 點「不代表 share class／NAV series 等價」為文字聲明，無可測行為，不寫測試，只在契約註記 | — |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
