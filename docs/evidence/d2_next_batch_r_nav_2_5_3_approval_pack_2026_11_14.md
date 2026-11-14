@@ -1,6 +1,6 @@
 # D2 下一批三列核可包：R-NAV-2 `nav_date`／R-NAV-5 `ccy`／R-NAV-3 `fetched_at`（2026-11-14）
 
-> **基準**：main `ede93f6fe9330deecd429c824422fcd975d7625b`（#1246 merge；其 push CI 作者撰寫時尚未完成，**以 GitHub 為準**）。docs-only。
+> **基準**：main `ede93f6fe9330deecd429c824422fcd975d7625b`（#1246 merge；其 push CI 作者撰寫時尚未完成，**以 GitHub 為準**）。docs-only。**盤點讀碼的實際樹為 `3e25cc81`（#1246 head）**；與 `ede93f6f` 的差異僅 #1246 的 4 個 docs 檔（作者推論，未逐檔 diff 核對）。
 > **性質**：**只準備核可證據，不核可、不升格為正式 Schema、不接線**。契約文字皆**草稿，不具效力**；任何一列都須客戶逐列明示核可（`DEC-2026-11-13-06` 同款：契約文字核准 ≠ 接線授權）。不改 Schema、FX、DG2、公式、資料來源、`ui_v2`、`ui_v3`；BL-0545 BLOCKED。本批沿用範本包 `docs/evidence/d2_min_approval_pack_r_id_1_r_nav_1_2026_11_13.md` 的結構（該包自述基準 `6dcb51f8`，與現在基準的差異本稿未比對）。
 > **事實來源**：2026-11-14 一份唯讀盤點（subagent，單組，**只讀函式名、未跑任何測試、未查 CI**）。作者另抽查四個承重點：`services/v2_tables/contract.py::NAV_FIELDS` 存在；`nav_dividend.py` 的 `CHAIN_DECLARED_CCY_ATTR`（「不當標籤，只拿來比對」）、`MIN_VALID_DATE = date(1900, 1, 1)`、`FETCHED_AT_MAX_FUTURE_SEC = 300`、`NAV_HISTORY_PROVENANCE_VERIFIED = False`。**其餘為單組讀碼，全稱句未經第二組驗證。**
 > **品質狀態**：單組作者草稿，**尚待非作者獨立 QA**（data semantics 等級，依 `DEC-2026-10-16-05`）。〔事〕＝讀碼可核；〔推〕＝推論；〔Gate〕＝需客戶裁示。檔案引用為「檔案::符號」，不寫行號。
@@ -37,17 +37,17 @@
 | 缺值語意 | 該筆不寫；原因只進 `skipped` **自由文字，沒有封閉原因碼**。週末假日無列，不 ffill、不補 0（44 §4.2）。同日同值併一列；同日不同值或同日有無效值，該日全不寫 |
 | 日期語意 | 44 §4.2：「這筆淨值對應的日期」。程式不轉時區，**不判斷各 provider 的 `nav_date` 是估值日、交易日還是公布日**（NOT VERIFIED） |
 | Consumer | L2：`services/v2_domain/holdings.py::latest_nav_row`（取 `max(nav_date)`）、`basis_value_with_reason`（以 `nav_date` 對齊 FX：`obs_date <= nav_date` 最近一列）、`allocation_evidence.py`（`NavFact`）。`ui_v2`：`hld/live.py`（N＝台灣今天減最後一筆；`> NAV_NOT_READY_DAYS`＝10 → 資料未備）、`hld/logic.py`、`hld/page.py`、`alo/live.py`、`alo/logic.py`、`exp/live.py::nav_is_old`、`exp/logic.py`。ui_v3：無 |
-| 風險 | (1)「資料日」與「取得時間」不可混用（`alo/live.py` 註解明寫用列本身 `nav_date`，不用 `fetched_at`）；(2) 舊站純量 `nav_date` 與序列末日不同源、無 reconcile（G-NAV-6，引 `docs/v2/69`，本稿沒重驗）；(3) 契約若順帶寫 10 日規則會違反 `DEC-2026-11-05-03`（不得升格為全頁正式規則，其待決 (a)～(e) 未裁）；(4) PIT 取哪個日期欄未定；(5) `alo` 的 `assemble_nav` 會剔除 `cache_fallback`／`stale`／`is_estimated is not False` 的列，故 alo 看到的 `nav_date` 集合比表本身小 |
+| 風險 | (1)「資料日」與「取得時間」不可混用（`alo/live.py` 註解明寫用列本身 `nav_date`，不用 `fetched_at`）；(2) 舊站純量 `nav_date` 與序列末日不同源、無 reconcile（G-NAV-6，引 `docs/v2/69`，本稿沒重驗）；(3) 契約若順帶寫 10 日規則會違反 `DEC-2026-11-05-03`（不得升格為全頁正式規則，其待決 (a)～(e) 未裁）；(4) PIT 取哪個日期欄未定；(5) `ui_v2/alo` 會以**整檔為單位**剔除未就緒的基金（`alo/live.py` 的 `not_fresh` 為 fund_code 集合），並另有最新淨值日距今超過 `max_age_days` 的剔除，故 alo 看到的 `nav_date` 集合比表本身小（本稿採 QA 的讀法，單組讀碼） |
 | 已知落差 | 候選檔寫「與 D2-B 衝突」；`DEC-2026-11-13-06` Q0＝A（D2-B 僅約束 1Y 含息證據與四項同源條件，不擴張為 NAV 全域契約）後，不再構成阻擋，但此列仍 Pending |
 | 測試證據（只讀函式名，未跑） | `test_nav_索引帶時區_不猜日期`、`test_必修1_非日期索引一律不寫_理由寫明`、`test_必修1_三種合格日期都收`、`test_3_nav_date未來或1900以前不寫_台灣當日照收`、`test_nav_同一日期同值只寫一列_不同值該日全不寫`（`tests/test_v2_tables_nav_dividend.py`） |
 
 **契約文字草稿 T-NAV2（不具效力）**：
 1. 型別：日期，YYYY-MM-DD 字串，不可空。語意：該列 `nav_orig_ccy` 所對應的日期，取自來源序列索引，原樣，不平移、不換時區、不補列。
-2. 只收：無時區 Timestamp、`date`、恰為 YYYY-MM-DD 的字串；帶時區、`datetime`、NaT、非日期型別不寫。早於 1900-01-01 或晚於寫入當下台灣日期者不寫。
+2. 只收：無時區 Timestamp、`date`、恰為 YYYY-MM-DD 的字串；帶時區、`datetime`、NaT、非日期型別不寫。另有合理日期範圍過濾——**以下僅描述寫入端現行實作事實，不是正式門檻**：下限現為程式常數 `MIN_VALID_DATE`（1900-01-01），上限現為寫入當下的台灣日期。「今天」是否定義為台灣日期、未來日期 NAV 的正式語意，屬 `DEC-2026-11-05-03` (a)(c)，**未裁，不在本核准內**。
 3. 與 `fund_code` 為主鍵；同日同值併一列；同日不同值或同日有無效值，該日全不寫。
 4. 週末、假日、停止交易日沒有列；不 ffill、不補 0。
-5. 缺值：該筆不寫，呈現層「資料未備／無法判定」；原因目前只在旁路自由文字，**無封閉碼**。
-6. **不含**：新鮮度與 10 日規則、PIT 取欄、FX 對齊規則、各 provider 日期語意（估值日／交易日／公布日）。1Y 的 `as_of`（R-PERF-6）不因此核准。
+5. 缺值：該筆不寫；原因目前只在旁路自由文字，**無封閉碼**。呈現文案與狀態字彙**不在本核准內**（程式註解明寫「文案未定」；狀態字彙歸 D3）。
+6. **不含**：新鮮度與 10 日規則、「今天」的定義與未來日期 NAV 的正式語意（`DEC-2026-11-05-03` (a)(c)）、PIT 取欄、FX 對齊規則、各 provider 日期語意（估值日／交易日／公布日）。1Y 的 `as_of`（R-PERF-6）不因此核准。
 
 ### 3.2 R-NAV-5 `ccy`
 
@@ -64,7 +64,7 @@
 **契約文字草稿 T-NAV5（不具效力）**：
 1. 型別：字串，不可空，三個 ASCII 大寫英文字母（**形狀檢查，非 ISO 4217 清單成員檢查**）。語意：與同列 `nav_orig_ccy` 配對的計價幣別標籤。
 2. 標籤出處依入口，不混用：持倉入口＝Sheet 持倉列「幣別」欄手填；🔍 入口＝基本資料頁自報。A 鏈序列自報的幣別不當標籤，只用於比對。
-3. 缺或不合形狀 → 整檔 NAV 不寫（`ccy_missing`）；標籤之間或與序列宣告意思不同（去空白、大寫化後比）→ 整檔不寫（`ccy_conflict`）；非原生報價來源未宣告 → 整檔不寫。不預設 USD、不改大小寫、不猜、不換算。
+3. 缺或不合形狀 → 整檔 NAV 不寫（`ccy_missing`；多個值意思相同〔去空白、大寫化後相同，例 `usd` 與 `USD` 並存〕時取合格的那一個，僅有不合形狀值而無合格值時才不寫）；標籤之間或與序列宣告意思不同（去空白、大寫化後比）→ 整檔不寫（`ccy_conflict`）；非原生報價來源未宣告 → 整檔不寫。不預設 USD、不改大小寫、不猜、不換算。
 4. **不證明**：手填標籤並未獨立證明數值確實以該幣別計價，只排除已宣告的衝突。
 5. **不含**：TWD 換算、匯率方向、FX 閘門、share class／配息型／避險型態、`ccy_source`（R-NAV-6）、`dividend` 與 `fund_profile` 的 `ccy`。R-PERF-3 不因此核准。
 
@@ -81,8 +81,8 @@
 
 **契約文字草稿 T-NAV3（不具效力）**：
 1. 型別：時間，UTC，`+00:00` 形式，不可空。語意：該列所屬那一段序列的取得時間；**不是資料日、不是畫面 render 時間**。
-2. 取值依分支：序列自帶；否則 A 鏈本輪起始時間；預存檔取 `cache_updated_at`；累積表點取 `recorded_at`。列內不標分支，分支只在旁路 provenance。
-3. 缺、無時區、格式不符 → 該段不寫；晚於當下超過 300 秒 → 不寫。不以當下時間補。
+2. 取值依分支：序列自帶；否則 A 鏈本輪起始時間；預存檔取 `cache_updated_at`；累積表點取 `recorded_at`。列內不標分支，分支只在旁路 provenance。**累積表分支目前受 `NAV_HISTORY_PROVENANCE_VERIFIED=False` 關閘、不產生列，其出處語意不在本核准內。**
+3. 缺、無時區、格式不符 → 該段不寫；晚於當下超過一個容差者不寫（容差現為程式常數 `FETCHED_AT_MAX_FUTURE_SEC`＝300 秒，**僅為實作事實，是否為正式門檻不在本核准內**）。不以當下時間補。
 4. **不含**：新鮮度、`stale_after`、300 秒是否為正式門檻、10 日規則。
 
 ---
