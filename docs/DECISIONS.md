@@ -3123,6 +3123,20 @@
 | evidence／source | `docs/evidence/exp_amendment_c_draft_and_s0_preapplication_2026_11_14.md`；`docs/evidence/exp_wireframe_approval_draft_and_slice_request_2026_11_14.md` §2.1、§3.2。 |
 | provenance | **要點轉述**；來源性質見「決策者／原話」欄（是否客戶本人〔待核〕）；本筆為**作者單組草稿，尚待非作者獨立 QA**（涉 frozen 規格邊界）；未宣稱任何 CI／QA 已通過。 |
 
+### DEC-2026-11-14-04｜整頁線框裁示：🔍 找基金核准稿 U／D／L 為線框基準；frozen 44 Amendment 採 C／P1～P4／寫法甲（方向與範圍）；S0 為第一個內部切片——僅核准線框層規則、amendment 方向與 S0 純函式範圍（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-14 |
+| 決策者／原話 | 使用者帳號送達之訊息，文字以客戶裁示口吻書寫（標題「🔍 找基金整頁線框裁示與 S0 第一切片」）；本組無法確認發送者身份；repo 內無逐字存檔、QA 無法獨立核對；本筆為專案 AI 整理之要點，**非逐字**（不使用引號引文）；客戶可推翻。 |
+| 決策內容摘要 | **一、線框**：(1) 以 `docs/evidence/exp_wireframe_approval_draft_and_slice_request_2026_11_14.md` 的 U／D／L 驗收條件作為 New UI2 🔍 找基金的線框基準；已明確決定項正式採用，仍標 Pending、候選或作者推論的項目**不因整頁核准自動升格**為資料契約或實作授權。(2) **L10**：缺值與無法判定的排序值排在末端，不轉 0，不視為最小或最大，不代表基金優劣（由〔候選〕升為已決）。(3) **EXP-0**：N＝明確符合，M＝無法判定；N＝0、M>0 時保留「沒有符合的基金」並接「另有 M 檔無法判定」，不得隱藏 M（核准稿 L1 該點由〔推〕升為已決）。(4) 條件未設定時顯示「尚未設定條件」，不展示 N／M；未填數值的條件不生效（L1、L5b 該點升為已決；L5b「不產生 M」亦隨之成立）。(5) **EXP-7** 最後一列符合數＝N、無法判定數＝M；驗收須覆蓋多條條件與缺值情境（L3 該點升為已決）。(6) **6b 其餘欄位**：暫不預留未核准的資料值欄位；待 D2 契約批准後於線框最小增補（核准稿 U8 該點由 Pending 改為已決）。(7) 上述只核准線框層規則，不代表 D2、來源、公式或正式資料接線已獲核准。**二、frozen 44 Amendment**：採方案 C，**範圍含 P1～P4**，寫法採「甲」（保留舊原文，以最小正式註記標明 New UI2 🔍 的適用規則與決策依據）；先獨立核對 P1～P4 原文與相互引用、補齊 P4 專屬註記草稿、原規則對其他頁面與歷史 UI 的效力保留、依 44 既有 amendment Gate 驗證、不得擴大修改範圍；**本次批准的是方向與範圍，逐字註記須完成獨立 QA 後才能正式修改**；`EXP-0` 計數舊句與 `EXP-1`／`EXP-4` 存檔舊句**不併入**本次 amendment，先由 DEC 與現行指標解釋，不得宣稱已同步。**三、S0**：同意為第一個內部開發切片，範圍嚴格限定——`ui_v3` 純函式處理 EXP-0 N／M 計數一致性與正式文案；只用呼叫端輸入、不接資料來源；不掛頁、不改 registry、不增加假控制項；不修改 `ui_v2`、Old UI、Schema、frozen 44 或正式資料接線；不新增公式、來源、FX、DG2；測試涵蓋缺值、負數、不一致、無條件、N＝0／M>0；文案採新版核准稿「有 N 檔符合」、不沿用 `ui_v2` 的「有 N 檔」且不因此修改舊 UI；S0 是非使用者可見的內部基礎切片，**不得宣稱 🔍 找基金頁面功能已完成**；程式變更須獨立核對輸入輸出契約與 GitHub Gate 後，使用獨立 PR、非作者 QA 與 exact-head CI；不符合既有開工 Gate 即停止並回報。**四、後續**：S2 維持路徑 A，另行審核 `ui_v3` 重用既有 L2 的資料接線範圍，**S0 通過不自動核准 S2**；BL-0545 維持 BLOCKED；Q5 Formula Gate、R-NAV-2／5、EXP-6、選股池命名空間均不解鎖。 |
+| 授權範圍 | 本筆授權：(a) 線框層：核准稿 U／D／L 作為基準（已決項）；(b) 文件：準備 P1～P4 逐字 amendment 草稿與獨立 QA；(c) **程式（唯一）**：S0 純函式新增 `ui_v3/viewmodels/exp_counts.py` 與 `tests/ui_v3/test_ui_v3_exp_counts.py`（以獨立 PR）。**不授權**：修改 frozen 44（逐字註記須先完成獨立 QA 並依原 Gate）；任何頁面／registry／`ui_v2`／Old UI 改動；`ui_v3` 資料接線（S2）；D2 其餘列、Schema、資料來源、FX、DG2、公式、ISIN；EXP-6 處置；解鎖 BL-0545；新增 Agent／MCP／付費項目。 |
+| 影響範圍 | 文件：本檔、`docs/BACKLOG.md`（檔尾索引一行）、`docs/HANDOFF.md`、新 evidence `docs/evidence/exp_amendment_p1_p4_verbatim_draft_2026_11_14.md`。程式（另一 PR）：僅新增上列兩個檔案。 |
+| 是否可逆 | 可逆（客戶可推翻；文件與新增純函式檔皆可 revert）。 |
+| supersedes／superseded by | **補充 `DEC-2026-11-14-02`、`-03`，不取代**：`-02` 的 Pending／候選項中，本筆升格者僅限上列 (2)～(6)；其餘維持。`-03` 的 amendment 範圍「是否含 P4、寫法」、S0「有條件同意」於本筆得到回覆。不 supersede `DEC-2026-11-13-06`。 |
+| evidence／source | `docs/evidence/exp_wireframe_approval_draft_and_slice_request_2026_11_14.md`；`docs/evidence/exp_amendment_c_draft_and_s0_preapplication_2026_11_14.md`；`docs/evidence/exp_amendment_p1_p4_verbatim_draft_2026_11_14.md`。 |
+| provenance | **要點轉述**；發送者身份見「決策者／原話」欄；本筆為**作者單組草稿，尚待非作者獨立 QA**（涉 frozen 規格與 data semantics）；未宣稱任何 CI／QA 已通過。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
