@@ -3139,6 +3139,98 @@
 
 ---
 
+### DEC-2026-11-14-05｜客戶有條件合併授權：#1247 一次性授權（條件逐項；已使用）——僅限 #1247，不含任何 Pending 語意生效（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-14 |
+| 決策者／原話 | 使用者帳號送達之訊息，文字以客戶裁示口吻書寫（訊息標題為「#1247 合併、Stage 1 S-VM 與 D2 三列正式裁示」，此為轉述的標題而非引文）；本組無法確認發送者身份；repo 內無逐字存檔、QA 無法獨立核對；本筆為專案 AI 整理之要點，**非逐字**（不使用引號引文）；客戶可推翻。 |
+| 決策內容摘要 | 同意 #1247 在以下條件全部成立後，以一般 merge commit 合併：(1) 最新 exact-head Fast、Schema、Slow、Visual 四項全 success；(2) 非作者 QA 已覆蓋最新修改，M1～M8 無未解必修；(3) PR 僅含既定四個 docs 檔，不修改 frozen 44、production、tests、workflow；(4) PR 說明、最新 head 與實際 QA／CI 狀態一致；(5) main 的未完成 CI 必須核實，不可宣稱已通過，若出現真實失敗先依治理判斷影響；(6) 未決的 UI／D2 Gate 仍為申請或草稿，不因合併自動取得效力。條件不足則維持 Draft，不得放寬測試或冒充獨立 QA；合併後驗證新 main 與 push CI。 |
+| 授權範圍 | 一次性，僅 #1247。**不授權**其他 PR 的合併決定（不另行擴張）、不使任何 Pending 語意生效。 |
+| 執行結果（事實，非裁示） | #1247 於 head `916a60c8` 通過上列條件後以一般 merge commit 合併為 main `453dd375`；exact-head 四項 CI success（Slow 日誌尾 `1283 passed, 16 skipped`）；合併前 main 前一次 push CI（run `43580772104`）四項 success；非作者 QA（subagent，非 GitHub review）M1～M8 全 PASS。此授權已使用完畢。 |
+| 影響範圍 | 僅文件登記。 |
+| 是否可逆 | 登記可逆；合併可 revert。 |
+| supersedes／superseded by | 不 supersede 任何既有 DEC；`DEC-2026-11-14-04` 中對 S2 的敘述不變。 |
+| evidence／source | PR #1247；`docs/evidence/assets_stage1_wireframe_gap_and_s_vm_request_2026_11_14.md`；`docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md`。 |
+| provenance | 要點轉述；單組作者草稿，尚待非作者獨立 QA（本筆為純登記，無新語意）。 |
+
+---
+
+### DEC-2026-11-14-06｜💼 我的資產 Stage 1：Q1 採 A（精修後線框為後續最小切片的設計基準）、Q2 採 A（授權 S-VM 純函式切片，僅 5 個新增檔）——不含 renderer、registry、資料接線（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-14 |
+| 決策者／原話 | 同 `DEC-2026-11-14-05`（同一則訊息的第二項）；來源是否客戶本人〔待核〕；要點轉述，非逐字。 |
+| 決策內容摘要 | **Q1＝A**：核准精修後 Stage 1 線框作為後續最小切片的設計基準；範圍僅限 A00／A10／A20、A50／A60、已核准的缺值呈現與展開方向。G-A～G-G 缺口繼續保留，優先以原有 82 文件及 evidence 完成最小補充；缺口未決部分不得自行創造金融規則、資料欄位、正式字樣或入口判定。本核准不等於完整視覺驗收通過，也不等於 Stage 3 或 production 授權。**Q2＝A**：授權 S-VM 純函式切片，僅新增 `ui_v3/viewmodels/assets_page.py`、`ui_v3/adapters/assets_page.py`、`tests/ui_v3/assets_page_support.py`、`tests/ui_v3/test_ui_v3_assets_page_viewmodel.py`、`tests/ui_v3/test_ui_v3_assets_page_adapter.py`；限 fake／fixture 輸入；不含 I/O、Streamlit、L2 import 的最小資料轉換與 ViewModel 契約。驗收須含：A20 固定四格、缺值不填 0；原始資料缺漏與正式計算口徑未核准不得混淆；不產生未核准金額、百分比、配置比例或金融判斷；暫行的入口資料對映只能在 fixture 中測試、不得升格為 production 規則；市值基準 blocked 時維持降級、不偽造結果；未核准字樣與欄位維持 Pending；保留可追溯的獨立 QA、契約測試與 exact-head CI。禁止修改 registry、app_preview、pages、既有守衛、資料來源、services、金融公式、FX Gate。S-VM 完成後不得自行接續頁面 renderer 或正式資料接線，下一個可見 UI 切片須另行申請。 |
+| 授權範圍 | 本筆授權：(a) 線框基準（限上述範圍）；(b) 程式（唯一）：上列 5 個新增檔，以獨立 PR 提交。**不授權**：頁面 renderer、`pages/ast.py`、registry、`app_preview`、既有守衛／測試修改、資料接線、Streamlit、L2 import、D2 其餘列、Schema、FX、DG2、公式、Stage 3、390／1280 真實像素驗收、BL-0545 解鎖。 |
+| 執行結果（事實，非裁示） | S-VM 以獨立 PR #1248 提交（內容 5 個新增檔；實作與 QA 狀態以該 PR 與 `docs/HANDOFF.md` 為準）。實作中執行組另行自訂之判斷，現列於 `ui_v3/viewmodels/assets_page.py::PROVISIONAL_ITEMS`（22 項，以 PR #1248 為準），均為「暫行／不得升格」，**不因本筆升格為規格**。 |
+| 待客戶裁示（不因本筆自動裁定） | (1) 首屏預算是否計入 A10 入口與原因句（G-B；不計入＝5，計入＝6～8；SPEC／限制若也計入再 +2）；(2)「來源完整但無持倉列」歸類別 (a)、(b) 或其他（目前暫歸 (a)）；(3) 市值基準 blocked 時 A50 不可見與 82 §11.3 的處置（G-F）；(4)「可用持倉列」門檻與入口判定（UI-2 暫行）；(5) A60 欄位／字樣；(6) 設定讀取失敗的呈現；(7) G-D：(a)(b) 後綴形式與 (b)「計算口徑未核准」的放置位置（及字母標記是否算新增狀態詞）；其餘（A20 逐格判準、T6 逐檔金額、T7 A30／A40 去留等）見該 evidence 的 Remaining open；詳見 `docs/evidence/assets_stage1_gap_supplement_2026_11_14.md`。 |
+| 影響範圍 | 文件登記；程式僅新增 5 檔（另 PR）。 |
+| 是否可逆 | 可逆（客戶可推翻；新增檔可 revert）。 |
+| supersedes／superseded by | **補充、不取代**：`DEC-2026-11-09-03／-04` 的「客戶審核精修後 Stage 1 線框」停點，其 Q1 由本筆回覆；不改寫其本文。不 supersede `DEC-2026-11-04-01／-02`。 |
+| evidence／source | `docs/evidence/assets_stage1_wireframe_gap_and_s_vm_request_2026_11_14.md`；`docs/evidence/assets_stage1_gap_supplement_2026_11_14.md`；`docs/v2/82_new_ui2_assets_ui_data_evidence_proposal.md` §11.9。 |
+| provenance | 要點轉述；單組作者草稿，尚待非作者獨立 QA。 |
+
+---
+
+### DEC-2026-11-14-07｜D2 三列裁示：R-NAV-2 採 C（核准 T-NAV2＋附註）、R-NAV-5 採 A 附嚴格限制（核准 T-NAV5）、R-NAV-3 採 B（暫緩，維持 Pending）——僅核准契約文字（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-14 |
+| 決策者／原話 | 同 `DEC-2026-11-14-05`（同一則訊息的第三項）；來源是否客戶本人〔待核〕；要點轉述，非逐字。 |
+| 決策內容摘要 | **R-NAV-2＝C**：核准 `T-NAV2` 契約文字，並明確附註：各 provider 的實際日期語意尚未驗證；程式目前的日期合理範圍僅為實作事實，不升格為正式金融門檻；不核准 NAV 10 日規則、「今天」的正式定義、未來日期語意、PIT、FX 對齊或 1Y `as_of`。**R-NAV-5＝A（附嚴格限制）**：核准 `T-NAV5` 契約文字，並保留：目前只檢查三個 ASCII 大寫英文字母，不等於已通過 ISO 4217 清單驗證；持倉手填幣別標籤不等於實際計價幣別已獲獨立證明；序列自報幣別僅作衝突比對，不可誤寫成正式標籤優先來源；不核准 `ccy_source` 獨立契約、FX 方向、TWD 換算、跨幣別聚合或正式資料准入；若後續驗證發現標籤錯誤，必須 fail-closed，不得利用本次文字核准繞過既有金融安全 Gate。**R-NAV-3＝B**：暫緩，維持 Pending，等待 D3(b) 的日期、新鮮度及來源時間語意收斂。以上僅限契約文字，不授權 Schema、producer、adapter、資料接線、正式計算或 UI 上線；不得連帶核准其他 D2 欄位。要求建立正式 DEC 與索引，保留草稿原文及此次決定之差異，不覆寫歷史裁示。 |
+| 授權範圍 | 本筆授權（僅文件層）：把 `T-NAV2`、`T-NAV5` 兩段契約文字（含客戶附註）登記為 D2 已核准契約文字。**不授權**：Schema、runtime、resolver／producer、adapter、資料來源、UI、FX（含開閘與 TWD 換算）、跨幣別聚合、R-NAV-3／4／6、R-ID-2／3、R-PERF-1～8（含與 R-NAV-2／5 重複的 R-PERF-6／3，不連帶核准）、`dividend`／`fund_profile` 同名欄。 |
+| D2 核准欄位狀態 | **核准欄位數：2 → 4（R-ID-1、R-NAV-1、R-NAV-2、R-NAV-5）**。其餘仍 Pending（17 列待審表中其餘 13 列）：R-ID-2、R-ID-3、R-NAV-3（本筆採 B 暫緩）、R-NAV-4、R-NAV-6、R-PERF-1～R-PERF-8。核准的僅是「契約文字」，不是「已實作行為」，也不是接線授權（沿用 `DEC-2026-11-13-06` 同款限縮）。 |
+| 與草稿的差異（保留草稿原文於 evidence，不覆寫） | 草稿原文保留於 `docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md` §3.1／§3.2／§3.3（標「不具效力」）。**R-NAV-2**：草稿 `T-NAV2` 與核准文字相同；客戶選 C 的附註（前述三項）為本筆新增的限定，**草稿第 2、6 點已含其中大部分，附註再明示「各 provider 日期語意未驗證」**。**R-NAV-5**：核准文字＝草稿 `T-NAV5`；本筆新增的限制中，「序列自報幣別僅作衝突比對」與草稿第 2 點一致，「若後續驗證發現標籤錯誤須 fail-closed」「不核准跨幣別聚合與正式資料准入」為草稿未明寫、由客戶新增。**R-NAV-3**：草稿 `T-NAV3` **未核准**，維持草稿。 |
+| 影響範圍 | 文件：本檔、`docs/BACKLOG.md`、`docs/HANDOFF.md`、`docs/evidence/d2_contract_candidates_returns_identity_holdings_2026_11_08.md` 的逐列待審表與列數統計（R-NAV-2、R-NAV-5 兩列狀態；NAV 域核准 1→3、合計 2→4，與 `DEC-2026-11-13-06` 同做法，最小註記、不改原文）。R-PERF-1／3／6 為與已核准列重複之列，不獨立計。**本筆不解鎖** `DEC-2026-11-14-02` 的 Q5 Formula Gate 與 Q6 的 6b 數值接線。**不**改程式、測試、Schema。 |
+| 是否可逆 | 可逆（客戶可推翻；純文件）。 |
+| supersedes／superseded by | **補充 `DEC-2026-11-13-06`、不改寫其本文**：該筆所稱「核准欄位數 2」為當時狀態；自本筆起為 4。其 Q0＝A 原則不變。不 supersede `DEC-2026-11-05-03`（10 日規則等待決項仍未裁）。 |
+| evidence／source | `docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md`；`docs/evidence/d2_min_approval_pack_r_id_1_r_nav_1_2026_11_13.md`；`docs/evidence/d2_contract_candidates_returns_identity_holdings_2026_11_08.md`。 |
+| provenance | 要點轉述；`T-NAV2`／`T-NAV5` 條文逐字抄自上列 evidence §3.1／§3.2（於 head `916a60c8` 的文字，經非作者 QA 增量複驗；DEC 內的標題行為本筆體例新加），是否一字不差可由讀者比對；本筆為作者單組草稿，尚待非作者獨立 QA（資料語意等級，依 `DEC-2026-10-16-05`）。 |
+
+**〈附一〉`T-NAV2` 核准契約文字（逐字抄自 evidence §3.1；以下為「核准的契約文字」，不是「已實作行為」）**
+
+> **T-NAV2｜NAV 域 `nav_date`**
+> 1. 型別：日期，YYYY-MM-DD 字串，不可空。語意：該列 `nav_orig_ccy` 所對應的日期，取自來源序列索引，原樣，不平移、不換時區、不補列。
+> 2. 只收：無時區 Timestamp、`date`、恰為 YYYY-MM-DD 的字串；帶時區、`datetime`、NaT、非日期型別不寫。另有合理日期範圍過濾——**以下僅描述寫入端現行實作事實，不是正式門檻**：下限現為程式常數 `MIN_VALID_DATE`（1900-01-01），上限現為寫入當下的台灣日期。「今天」是否定義為台灣日期、未來日期 NAV 的正式語意，屬 `DEC-2026-11-05-03` (a)(c)，**未裁，不在本核准內**。
+> 3. 與 `fund_code` 為主鍵；同日同值併一列；同日不同值或同日有無效值，該日全不寫。
+> 4. 週末、假日、停止交易日沒有列；不 ffill、不補 0。
+> 5. 缺值：該筆不寫；原因目前只在旁路自由文字，**無封閉碼**。呈現文案與狀態字彙**不在本核准內**（程式註解明寫「文案未定」；狀態字彙歸 D3）。
+> 6. **不含**：新鮮度與 10 日規則、「今天」的定義與未來日期 NAV 的正式語意（`DEC-2026-11-05-03` (a)(c)）、PIT 取欄、FX 對齊規則、各 provider 日期語意（估值日／交易日／公布日）。1Y 的 `as_of`（R-PERF-6）不因此核准。
+>
+> **客戶裁示附註（登記；與草稿重疊與新增之處見上方『與草稿的差異』欄）——客戶選 C 的明確附註**：(i) 各 provider 的實際日期語意尚未驗證；(ii) 程式目前的日期合理範圍僅為實作事實，不升格為正式金融門檻；(iii) 不核准 NAV 10 日規則、「今天」的正式定義、未來日期語意、PIT、FX 對齊或 1Y `as_of`。
+
+**〈附二〉`T-NAV5` 核准契約文字（逐字抄自 evidence §3.2）**
+
+> **T-NAV5｜NAV 域 `ccy`**
+> 1. 型別：字串，不可空，三個 ASCII 大寫英文字母（**形狀檢查，非 ISO 4217 清單成員檢查**）。語意：與同列 `nav_orig_ccy` 配對的計價幣別標籤。
+> 2. 標籤出處依入口，不混用：持倉入口＝Sheet 持倉列「幣別」欄手填；🔍 入口＝基本資料頁自報。A 鏈序列自報的幣別不當標籤，只用於比對。
+> 3. 缺或不合形狀 → 整檔 NAV 不寫（`ccy_missing`；多個值意思相同〔去空白、大寫化後相同，例 `usd` 與 `USD` 並存〕時取合格的那一個，僅有不合形狀值而無合格值時才不寫）；標籤之間或與序列宣告意思不同（去空白、大寫化後比）→ 整檔不寫（`ccy_conflict`）；非原生報價來源未宣告 → 整檔不寫。不預設 USD、不改大小寫、不猜、不換算。
+> 4. **不證明**：手填標籤並未獨立證明數值確實以該幣別計價，只排除已宣告的衝突。
+> 5. **不含**：TWD 換算、匯率方向、FX 閘門、share class／配息型／避險型態、`ccy_source`（R-NAV-6）、`dividend` 與 `fund_profile` 的 `ccy`。R-PERF-3 不因此核准。
+>
+> **客戶裁示限制（登記；與草稿重疊與新增之處見上方『與草稿的差異』欄）——客戶選 A 的嚴格限制**：(i) 目前只檢查三個 ASCII 大寫英文字母，不等於已通過 ISO 4217 清單驗證；(ii) 持倉手填幣別標籤不等於實際計價幣別已獲獨立證明；(iii) 序列自報幣別僅作衝突比對，不可誤寫成正式標籤優先來源；(iv) 不核准 `ccy_source` 獨立契約、FX 方向、TWD 換算、跨幣別聚合或正式資料准入；(v) 若後續驗證發現標籤錯誤，必須 fail-closed，不得利用本次文字核准繞過既有金融安全 Gate。
+
+---
+
+### DEC-2026-11-14-08｜補登 S2-T0 決策來源：採方案 B（暫緩）——不授權 S2-T0 (0)～(7) 施工、不掛 🔍 頁、不接 Google Sheet；X1 與 `pool_not_cloud` 其他未裁語意維持既有狀態（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 決策日 2026-11-14（客戶於「#1246 收尾與 UI／OneBrain 下一階段裁示」訊息表示本輪選方案 B；於「#1247 合併、Stage 1 S-VM 與 D2 三列正式裁示」訊息第四項正式確認並要求補登）；登記日同。 |
+| 決策者／原話 | 同 `DEC-2026-11-14-05`；來源是否客戶本人〔待核〕；要點轉述，非逐字。先前 `docs/HANDOFF.md` 對此決定只有轉述（標「無 DEC 登記，來源待核」），本筆補登，**不回改已合併 PR**。 |
+| 決策內容摘要 | **S2-T0 採方案 B：暫緩**。不授權 S2-T0 (0)～(7) 施工，不掛 🔍 頁，不接 Google Sheet。X1（之十八其八標題行是否併入 P2 amendment）與 `pool_not_cloud` 其他未裁語意維持既有狀態，不因本次 S2-T0 暫緩而自動裁定。（前一則訊息另表示：X1 方向同意納入 P2 相關修正，但須經原 Amendment Gate、逐字 QA 與正式 DEC 後才能動 frozen 44，不得擴大 #1246；`pool_not_cloud` 三個顯示候選本輪不選定。） |
+| 授權範圍 | 純登記；**不授權**任何施工、不修改 frozen 44、不接 Google Sheet、不掛 🔍 頁、不修改 registry。 |
+| 影響範圍 | 文件登記：本檔、`docs/BACKLOG.md`、`docs/HANDOFF.md`（取代先前「無 DEC 登記，來源待核」字樣）。 |
+| 是否可逆 | 可逆（客戶可推翻）。 |
+| supersedes／superseded by | **補登來源、不取代**：`docs/evidence/exp_s2_wiring_scope_and_first_visible_slice_2026_11_14.md` 的請示 (0)～(7) 與方案 A／B／C 表維持原文（作者推薦 C 為當時推論，已由客戶選 B 取代其推薦）；`DEC-2026-11-14-04` 中「S2 另審、S0 不自動核准 S2」不變。 |
+| evidence／source | `docs/evidence/exp_s2_wiring_scope_and_first_visible_slice_2026_11_14.md`；`docs/HANDOFF.md`（2026-11-14 補）。 |
+| provenance | 要點轉述；純登記，無新語意；尚待非作者獨立 QA（低風險登記）。 |
+
+---
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
