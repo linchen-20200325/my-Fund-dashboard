@@ -3109,6 +3109,20 @@
 | evidence／source | `docs/evidence/exp_decision_card_2026_11_14.md`（裁示卡，本筆所回覆）；`docs/evidence/exp_wireframe_approval_draft_and_slice_request_2026_11_14.md`（核准稿與切片申請）；`DEC-2026-11-13-06`、`DEC-2026-11-14-01`。 |
 | provenance | **要點轉述**（客戶訊息送達專案 AI，無逐字存檔，QA 無法獨立核對）；「採 44 之二 其三不需 amendment」這類歸類**不是**本筆內容——客戶明文保留「如正式治理要求 amendment 另走 Gate」；本筆為**作者單組草稿，尚待非作者獨立 QA**（涉 data semantics／UI 行為邊界，依 `DEC-2026-10-16-05` 須至少 1 組真正獨立稽核）。本筆**未**宣稱任何 CI／QA 已通過。 |
 
+### DEC-2026-11-14-03｜方向登記：Amendment 採方案 C（僅 Q4 第一屏三處）、施工路徑採 A、S0 有條件同意——不構成 frozen 44 修改或任何 UI 施工授權（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-11-14 |
+| 決策者／原話 | 使用者帳號送達之訊息（文風為協作總管整合，內容為「先前的決策方向維持」三點）；**訊息未明示是否為客戶本人逐項裁示〔待核〕**；repo 內無逐字存檔、QA 無法獨立核對；本筆為專案 AI 整理之要點，**非逐字**；客戶可推翻。 |
+| 決策內容摘要 | (1) **Amendment＝方案 C**：僅準備 Q4 第一屏三處規格衝突的最小修正。(2) **施工路徑＝A**：先完成整頁線框核准，再處理 `ui_v3` 接線授權。(3) **S0 有條件同意**：作為首個內部純函式切片候選，正式核准前不得施工。(4) 訊息明文：以上**尚不構成 frozen 44 修改或 UI 施工的正式授權**；後續沿用 2026-11-14 整合提示語（不重建 PR、不重複研究、不設新的檢查排程）。 |
+| 授權範圍 | 僅文件：準備方案 C 的最小修正草稿（不修改 44）、整頁線框核准的拍板請求、S0 預申請。**不授權**：修改 frozen 44（含 amendment 的實際 commit，仍須客戶批准逐字句）、任何 `ui_v2`／`ui_v3`／Old UI 施工、S0 施工、`ui_v3` 資料接線、Schema／資料來源／FX／DG2／公式／ISIN、解鎖 BL-0545（仍為唯一全域 NEXT，BLOCKED）、新增 Agent／MCP／付費項目。 |
+| 影響範圍 | 僅文件：本檔、`docs/BACKLOG.md`（檔尾索引一行）、`docs/HANDOFF.md`（基準與「下一階段」）、新 evidence `docs/evidence/exp_amendment_c_draft_and_s0_preapplication_2026_11_14.md`。 |
+| 是否可逆 | 可逆（純文件）。 |
+| supersedes／superseded by | **補充 `DEC-2026-11-14-02`、不取代**（其 Q4＝A 附限制與「先送最小 Decision／Amendment Gate」的要求，本筆是該 Gate 的方向回覆）。不 supersede 其他任何 DEC。 |
+| evidence／source | `docs/evidence/exp_amendment_c_draft_and_s0_preapplication_2026_11_14.md`；`docs/evidence/exp_wireframe_approval_draft_and_slice_request_2026_11_14.md` §2.1、§3.2。 |
+| provenance | **要點轉述**；來源性質見「決策者／原話」欄（是否客戶本人〔待核〕）；本筆為**作者單組草稿，尚待非作者獨立 QA**（涉 frozen 規格邊界）；未宣稱任何 CI／QA 已通過。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
