@@ -513,6 +513,8 @@ _REQUIRED_PROVISIONAL_KEYS = {
     "market_basis_blocked_symbol_and_category", "a00_states_without_approved_symbol",
     "cause_basis_not_approved_plain_wording_derived", "a52_four_setting_states", "first_screen_count_policies",
     "complete_requires_zero_skip_evidence", "bucket_blank_semantics_gap", "provisional_row_fields_exclude_amounts",
+    "problems_override_contradicting_coverage", "limit_no_fx_conversion_always_present",
+    "undetermined_with_rows_claims_viewable_holdings", "row_field_missing_always_category_a", "a30_a40_share_one_missing_fact",
 }
 
 
@@ -530,13 +532,46 @@ def test_provisional_items_key_set_is_locked_and_every_item_is_explained_and_uni
             vm.ProvisionalItem(**bad)
 
 
-def test_provisional_wording_in_the_source_docstrings_points_at_the_registered_items():
-    adapter_src = inspect.getsource(adapter)
-    vm_src = inspect.getsource(vm)
-    for key in ("complete_no_rows_is_category_a", "partial_narrow_definition", "complete_requires_zero_skip_evidence",
-                "entry_extra_coverage_and_blocked_conditions", "entry_shown_when_undetermined_with_rows", "a60_field_set",
-                "a20_cells_share_one_missing_fact", "bucket_blank_semantics_gap"):
-        assert key in adapter_src or key in vm_src, key
-    assert "不得升格" in inspect.getdoc(adapter._causes_for) and "(c)" in inspect.getdoc(adapter._causes_for)
-    assert "不得升格" in inspect.getdoc(adapter._resolve) and "不得升格" in inspect.getdoc(vm.A60Evidence) and "不得升格" in inspect.getdoc(vm.A20Summary)
+def _carriers():
+    """每個登記項 → 承載它引用的**指定物件**（docstring、公開字串屬性或暫時字樣的 source）。逐 key 檢查，不用整檔字串包含。"""
+    return {
+        "partial_narrow_definition": adapter._resolve,
+        "complete_requires_zero_skip_evidence": adapter._resolve,
+        "problems_override_contradicting_coverage": adapter._resolve,
+        "complete_no_rows_is_category_a": adapter._causes_for,
+        "undetermined_with_rows_claims_viewable_holdings": adapter._causes_for,
+        "market_basis_blocked_symbol_and_category": vm.A00Status,
+        "a00_states_without_approved_symbol": vm.A00Status,
+        "entry_shown_when_undetermined_with_rows": adapter.provisional_holding_entry_available,
+        "entry_extra_coverage_and_blocked_conditions": adapter.provisional_holding_entry_available,
+        "a20_cells_share_one_missing_fact": vm.A20Summary,
+        "a30_a40_share_one_missing_fact": vm.NoResultLine,
+        "a52_four_setting_states": vm.A52Section,
+        "a60_field_set": vm.A60Evidence,
+        "limit_no_fx_conversion_always_present": vm.A10Card,
+        "row_field_missing_always_category_a": adapter._row_fact,
+        "first_screen_count_policies": vm.FirstScreenCountPolicy,
+        "cause_basis_not_approved_plain_wording_derived": vm.pending_wording("cause_basis_not_approved").source,
+        "provisional_row_fields_exclude_amounts": adapter.PROVISIONAL_ROW_FIELDS_NOTE,
+        "bucket_blank_semantics_gap": adapter.PROVISIONAL_ROW_FIELDS_NOTE,
+    }
+
+
+def _text_of(carrier):
+    return carrier if isinstance(carrier, str) else (inspect.getdoc(carrier) or "")
+
+
+def test_every_registered_provisional_item_is_cited_by_its_own_designated_object():
+    carriers = _carriers()
+    assert set(carriers) == set(vm.PROVISIONAL_KEYS)                      # 沒有登記項漏掉承載物，也沒有多餘的
+    for key, carrier in carriers.items():
+        assert key in _text_of(carrier), key
+        assert "不得升格" in _text_of(carrier) or "待 UI Review" in _text_of(carrier), key
     assert "cause_key" in inspect.getdoc(vm) and "UI-1" in inspect.getdoc(vm)
+
+
+def test_no_docstring_or_comment_still_claims_a_test_locks_the_loader_or_producer():
+    for rel in ("ui_v3/adapters/assets_page.py", "ui_v3/viewmodels/assets_page.py"):
+        text = lib.read(ROOT / rel)
+        assert "逐字對載入端" not in text and "（測試鎖" not in text and "(測試鎖" not in text and "詞彙鏡像" not in text and "代碼的鏡像" not in text, rel
+    assert "NOT VERIFIED" in inspect.getdoc(adapter)

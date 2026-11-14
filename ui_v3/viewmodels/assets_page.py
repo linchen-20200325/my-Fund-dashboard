@@ -50,7 +50,7 @@ BLOCK_ORDER = ("A00", "A10", "A20", "A30", "A40", "A50", "A52", "A60")
 A20_CELL_CODES = ("a20_cell_1", "a20_cell_2", "a20_cell_3", "a20_cell_4")   # 內部候選；位置代碼，不是金融名詞
 # Formula Gate：A20 四格的正式計算未核准 → 本階段任何非 None 的值都拒絕。日後客戶核准後由授權的批次改這個常數（含測試）。
 A20_VALUES_ENABLED = False
-# 與載入端 adapter 的 `CHART_CLAIM_WITHHELD` 同值（測試鎖；VM 不 import adapters）。
+# 與載入端 adapter 的 `CHART_CLAIM_WITHHELD` 同值（讀碼對照，但**未經本批測試鎖定，NOT VERIFIED**；真生產者形狀對照已延後，需另行授權；VM 不 import adapters）。
 CHART_CLAIM_WITHHELD = "withheld_pending_approval"
 
 # 本層可引用的**已核准**狀態字樣（規則表 `ENTRIES` 的鍵；不複製字樣，不新增任何一個）。
@@ -261,7 +261,8 @@ class A10Card:
     - `missing`：狀態字樣鍵＋原因（類別 (a)(b) 分開並列，不混成一句）。
     - `basis_state`／`basis_value`：SPEC 的「基準」一項；`basis_value` 是使用者設定的原值（使用者資料，不是系統字樣），僅 `basis_state=='set'` 時可有。
       SPEC 的其餘項（單位、時點、缺項）屬 T5，**本批不建模**。
-    - `limit_codes`：必要資料限制代碼。
+    - `limit_codes`：必要資料限制代碼。暫行（`PROVISIONAL_ITEMS`：`limit_no_fx_conversion_always_present`）：`LIMIT_NO_FX_CONVERSION` 在所有來源狀態都出現
+      （含 blocked 與無列）；82 只明寫情境三要有「限制」一列。待 UI Review，不得升格。
     - `entry`：持倉入口（可為 None）。
     """
 
@@ -327,7 +328,11 @@ class A20Summary:
 
 @dataclass(frozen=True)
 class NoResultLine:
-    """A30（偏離／未評估）、A40（配息／近期事件）的單行狀態：**不顯示結果**。是否保留此行屬 T7（82 §11.9.11 標〔待裁示〕）。"""
+    """A30（偏離／未評估）、A40（配息／近期事件）的單行狀態：**不顯示結果**。是否保留此行屬 T7（82 §11.9.11 標〔待裁示〕）。
+
+    暫行（`PROVISIONAL_ITEMS`：`a30_a40_share_one_missing_fact`）：A30／A40 沿用與 A10 同一個 `MissingFact`；82 §11.7 要求情境三有一行狀態，
+    §11.9.7 線框未畫。已知落差，不得升格。
+    """
 
     block: str
     missing: MissingFact
@@ -516,7 +521,10 @@ class AssetsPageModel:
 
 @dataclass(frozen=True)
 class FirstScreenCountPolicy:
-    """首屏元素點數的計法選項。**A10 入口與原因句是否計入首屏預算＝〔待 UI Review〕，本檔不替客戶下結論**，故沒有預設值，呼叫端必須明選。"""
+    """首屏元素點數的計法選項。**A10 入口與原因句是否計入首屏預算＝〔待 UI Review〕，本檔不替客戶下結論**，故沒有預設值，呼叫端必須明選。
+
+    登記為 `PROVISIONAL_ITEMS` 的 `first_screen_count_policies`（待 UI Review，不得升格為客戶核准的計法）。
+    """
 
     count_a10_entry: bool
     count_a10_causes: bool
@@ -616,6 +624,22 @@ PROVISIONAL_ITEMS = (
        "已知落差：82 §11.3 規定『bucket 空白＝未分類，獨立呈現、不推斷』，而本層列事實把空白一律當缺值；因此預設欄位集合不含 bucket，"
        "呼叫端明確傳入時才擷取，且其空白語意未依 82 處理。",
        "82 §11.3；T6"),
+    _p("problems_override_contradicting_coverage",
+       "暫行：載入問題碼 no_active／holding_read_failed 優先於自相矛盾的 coverage 與有列的證據（不展示列、沒有入口）；82 未規定證據自相矛盾時的取捨。不得升格。",
+       "82 §11.9.9；UI-2；G-E"),
+    _p("limit_no_fx_conversion_always_present",
+       "暫行：『未做匯率換算』限制碼在所有來源狀態都出現（含 blocked 與無列）；82 只明寫情境三要有『限制』一列。已知落差，待 UI Review，不得升格。",
+       "82 §11.9.7；G-F"),
+    _p("undetermined_with_rows_claims_viewable_holdings",
+       "暫行：來源狀態 undetermined 且證據有列時，原因含 basis_not_approved_with_rows（『已有持倉資料可查看』），即證據不足時仍聲稱有資料可看；"
+       "與入口出現（entry_shown_when_undetermined_with_rows）分開登記，這項是原因句。已知落差，不得升格。",
+       "82 §11.9.7 情境一 類別(b)；J-8"),
+    _p("row_field_missing_always_category_a",
+       "暫行：逐檔欄位缺值（欄位沒有值或型別不可用）一律歸類別 (a)；82 未規定逐檔欄位缺值的類別。不得升格。",
+       "82 §11.9.10；T6"),
+    _p("a30_a40_share_one_missing_fact",
+       "暫行：A30／A40 沿用與 A10 同一個 MissingFact；82 §11.7 要求情境三有 A30/A40 一行狀態，§11.9.7 線框未畫。已知落差，不得升格。",
+       "82 §11.7、§11.9.7；T7"),
     _p("provisional_row_fields_exclude_amounts",
        "暫行：A50 預設欄位集合只含識別、幣別、數量欄位，不含任何金額或比例欄位（客戶明示不產生未核准金額）；欄位集合本身屬 T6，不是規格，不得升格。",
        "T6；DEC-2026-11-09-02"),
@@ -651,7 +675,7 @@ _PENDING_LIST = (
     _w("a00_complete_no_rows", "沒有有效持倉列", _SRC_82 + "：情境三 (c)，僅在來源完整的證據成立時才可使用"),
     _w("cause_partial_source", "來源不完整（部分略過）", _SRC_82 + "：情境二 類別(a)"),
     _w("cause_basis_not_approved_with_rows", "已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果", _SRC_82 + "：情境一 類別(b)"),
-    _w("cause_basis_not_approved", "配置比較的計算口徑尚未核准，故不提供結果", _SRC_EXEC + "（去掉「已有持倉資料可查看」：未讀取或無可用列時不得聲稱有）"),
+    _w("cause_basis_not_approved", "配置比較的計算口徑尚未核准，故不提供結果", _SRC_EXEC + "（去掉「已有持倉資料可查看」：未讀取或無可用列時不得聲稱有）；登記為暫行項 cause_basis_not_approved_plain_wording_derived，不得升格"),
     _w("entry_view_holdings", "查看持倉明細", _SRC_82 + "：入口文案〔待裁示〕"),
     _w("limit_no_fx_conversion", "目前未做匯率換算，各檔原幣數值不合計", _SRC_82 + "：限制列；字樣待 T5"),
 )

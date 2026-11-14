@@ -3,7 +3,7 @@
 
 **純函式：無 I/O、無 streamlit、不 import `services.*`／`repositories.*`／`infra.*`／`shared.*`、不 import `ui_v3.fixtures`、也不 import
 同層的載入端 adapter**（`AssetsLoadResult` 的產出者，BL-0542 G-2；它在載入時會連帶 import L2，本檔刻意不依賴它）。載入端的狀態／問題／設定代碼
-在這裡**各寫一次**，由 `tests/ui_v3/test_ui_v3_assets_page_adapter.py` 逐字對載入端與證據生產者鎖住（不是第二份真相源）。
+在這裡**各寫一次**：與載入端／生產者同值（讀碼對照），但**未經本批測試鎖定，NOT VERIFIED**；真生產者形狀對照已延後，需另行授權。
 本檔**沒有 production 呼叫端**、沒有頁、沒有 registry 登錄；輸入只限 fake／fixture 或測試端組出的同形 dict。
 
 輸入形狀（`AssetsLoadResult.to_primitive()`）：
@@ -37,11 +37,11 @@ from typing import Optional, Sequence, Tuple
 from ui_v3.viewmodels import assets_page as vm
 
 __all__ = (
-    "RESULT_SCHEMA_VERSION", "STATUS_EVALUATED", "STATUS_BLOCKED", "PROVISIONAL_ROW_FIELDS", "FORBIDDEN_ROW_FIELDS",
+    "RESULT_SCHEMA_VERSION", "STATUS_EVALUATED", "STATUS_BLOCKED", "PROVISIONAL_ROW_FIELDS", "PROVISIONAL_ROW_FIELDS_NOTE", "FORBIDDEN_ROW_FIELDS",
     "build_assets_page", "provisional_holding_entry_available",
 )
 
-# ───────────────────────── 載入端代碼的鏡像（測試鎖） ─────────────────────────
+# ───────────────────────── 載入端代碼的複寫（讀碼對照，未經測試鎖定，NOT VERIFIED） ─────────────────────────
 RESULT_SCHEMA_VERSION = 1
 STATUS_EVALUATED = "evaluated"
 STATUS_BLOCKED = "blocked"
@@ -54,7 +54,7 @@ _SETTING_KEY_MAP = (("alo_basis", "basis"), ("alo_target_weights", "targets"), (
 _REQUIRED_ENVELOPE_KEYS = ("schema_version", "status", "blocked_reason", "problems", "settings_status",
                            "holding_failure_code", "chart_claim", "evidence")
 
-# 證據生產者（`services.v2_domain.allocation_evidence`）的詞彙鏡像：`source_coverage.status`、`ProvidedItems.status`。
+# 證據生產者（`services.v2_domain.allocation_evidence`）的詞彙（讀碼對照，未經測試鎖定，NOT VERIFIED）：`source_coverage.status`、`ProvidedItems.status`。
 _COVERAGE_COMPLETE = "complete"
 _COVERAGE_INCOMPLETE = "incomplete"
 _COVERAGE_FAILED = "failed"
@@ -63,10 +63,12 @@ _FACET_PROVIDED = "provided"
 _SETTING_SET = "set"
 
 # 持倉列的**暫行**欄位集合：T6（欄位集合與語意）未核准，這只是讓 VM 有東西可承載的起手式，**不是欄位規格**。
-# 呼叫端可傳 `row_fields=` 換成任意一組；VM 不列舉合法欄位。**預設不含任何金額或比例欄位**（含逐檔 cost_twd、value_twd）：
-# 客戶明示不產生未核准金額；數量類（units_shares）與識別類欄位不是金額，可留。
-# **已知落差（`PROVISIONAL_ITEMS`：`bucket_blank_semantics_gap`）**：預設也不含 `bucket`——82 §11.3 規定『空白＝未分類，獨立呈現、不推斷』，
-# 而 `_row_fact` 把空白一律當缺值（語意不同）。呼叫端仍可明確傳入 `bucket`，但其空白語意未依 82 處理，不得升格。
+# 說明（含兩個暫行登記項的引用）放在公開字串 `PROVISIONAL_ROW_FIELDS_NOTE`，測試可檢。
+PROVISIONAL_ROW_FIELDS_NOTE = (
+    "暫行（PROVISIONAL_ITEMS: provisional_row_fields_exclude_amounts）：預設欄位集合只含識別、幣別、數量欄位，不含任何金額或比例欄位"
+    "（含逐檔 cost_twd、value_twd；客戶明示不產生未核准金額）；欄位集合屬 T6，不是規格，不得升格。"
+    "已知落差（PROVISIONAL_ITEMS: bucket_blank_semantics_gap）：預設也不含 bucket——82 §11.3 規定空白＝未分類、獨立呈現、不推斷，"
+    "而 _row_fact 把空白一律當缺值；呼叫端仍可明確傳入 bucket，但其空白語意未依 82 處理，不得升格。")
 PROVISIONAL_ROW_FIELDS = ("fund_name", "fund_code", "ccy", "units_shares")
 # 證據持倉列裡**會把金額／比例帶進來**的欄位名：未核准金額不得產生（T1＝B、N＝C，`DEC-2026-11-09-02`；客戶 2026-11-14 明示），
 # 呼叫端明確傳 `row_fields` 指名它們時 fail-closed（ValueError）。這是「擋已知金額／比例欄位名」的最小黑名單，**不是**允許清單：
@@ -174,7 +176,8 @@ def _resolve(env: _Envelope) -> _Resolved:
 
     暫行（`PROVISIONAL_ITEMS`）：`partial_narrow_definition`（部分缺漏只限 incomplete＋有略過證據＋有列）、
     `complete_requires_zero_skip_evidence`（coverage=complete 仍須兩項略過證據都已提供且件數為 0，否則降級 undetermined）、
-    `complete_no_rows_is_category_a`（(c) 來源完整但無列）、`entry_extra_coverage_and_blocked_conditions`（NO_ROWS 狀態一律不展示列）。
+    `complete_no_rows_is_category_a`（(c) 來源完整但無列）、`entry_extra_coverage_and_blocked_conditions`（NO_ROWS 狀態一律不展示列）、
+    `problems_override_contradicting_coverage`（問題碼 no_active／holding_read_failed 優先於矛盾的 coverage 與有列的證據）。
     以上都是執行組暫行選定，82 未規定，不得升格。
     """
     if env.status == STATUS_BLOCKED:
@@ -213,7 +216,9 @@ def _causes_for(source_state: str, row_count: int) -> Tuple[vm.CauseFact, ...]:
     暫行（`PROVISIONAL_ITEMS`，皆 82 未規定、不得升格）：
     - **(c)『來源完整但無持倉列』（complete_no_rows）歸類別 (a)**，原因＝引用 A00（`complete_no_rows_is_category_a`；待客戶 Decision Gate）；
     - 四格與 A30／A40 共用同一組原因（`a20_cells_share_one_missing_fact`）；
-    - 市值基準 blocked（not_read）歸類別 (b)（`market_basis_blocked_symbol_and_category`）。
+    - 市值基準 blocked（not_read）歸類別 (b)（`market_basis_blocked_symbol_and_category`）；
+    - undetermined 且有列時原因含『已有持倉資料可查看』的 (b)（`undetermined_with_rows_claims_viewable_holdings`，證據不足仍聲稱有資料可看）；
+    - A30／A40 沿用同一組原因（`a30_a40_share_one_missing_fact`）。
     """
     a_partial = vm.CauseFact(vm.CATEGORY_SOURCE_DATA, vm.CAUSE_PARTIAL_SOURCE)
     a_same = vm.CauseFact(vm.CATEGORY_SOURCE_DATA, vm.CAUSE_SAME_AS_SOURCE_STATUS)
@@ -240,6 +245,7 @@ def _a60_causes(source_state: str) -> Tuple[vm.CauseFact, ...]:
 
 
 def _row_fact(field_code: str, raw: Mapping) -> vm.RowFact:
+    """逐檔欄位事實。暫行（`PROVISIONAL_ITEMS`：`row_field_missing_always_category_a`）：欄位沒有值或型別不可用一律歸類別 (a)，82 未規定，不得升格。"""
     value = raw.get(field_code)
     if value is None or (isinstance(value, str) and not value.strip()):
         code = vm.CAUSE_FIELD_NOT_PROVIDED
