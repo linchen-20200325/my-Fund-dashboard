@@ -65,9 +65,9 @@ _SETTING_SET = "set"
 # 持倉列的**暫行**欄位集合：T6（欄位集合與語意）未核准，這只是讓 VM 有東西可承載的起手式，**不是欄位規格**。
 # 說明（含兩個暫行登記項的引用）放在公開字串 `PROVISIONAL_ROW_FIELDS_NOTE`，測試可檢。
 PROVISIONAL_ROW_FIELDS_NOTE = (
-    "暫行（PROVISIONAL_ITEMS: provisional_row_fields_exclude_amounts）：預設欄位集合只含識別、幣別、數量欄位，不含任何金額或比例欄位"
+    "暫行（暫行登記項：provisional_row_fields_exclude_amounts）：預設欄位集合只含識別、幣別、數量欄位，不含任何金額或比例欄位"
     "（含逐檔 cost_twd、value_twd；客戶明示不產生未核准金額）；欄位集合屬 T6，不是規格，不得升格。"
-    "已知落差（PROVISIONAL_ITEMS: bucket_blank_semantics_gap）：預設也不含 bucket——82 §11.3 規定空白＝未分類、獨立呈現、不推斷，"
+    "已知落差（暫行登記項：bucket_blank_semantics_gap）：預設也不含 bucket——82 §11.3 規定空白＝未分類、獨立呈現、不推斷，"
     "而 _row_fact 把空白一律當缺值；呼叫端仍可明確傳入 bucket，但其空白語意未依 82 處理，不得升格。")
 PROVISIONAL_ROW_FIELDS = ("fund_name", "fund_code", "ccy", "units_shares")
 # 證據持倉列裡**會把金額／比例帶進來**的欄位名：未核准金額不得產生（T1＝B、N＝C，`DEC-2026-11-09-02`；客戶 2026-11-14 明示），
@@ -177,7 +177,9 @@ def _resolve(env: _Envelope) -> _Resolved:
     暫行（`PROVISIONAL_ITEMS`）：`partial_narrow_definition`（部分缺漏只限 incomplete＋有略過證據＋有列）、
     `complete_requires_zero_skip_evidence`（coverage=complete 仍須兩項略過證據都已提供且件數為 0，否則降級 undetermined）、
     `complete_no_rows_is_category_a`（(c) 來源完整但無列）、`entry_extra_coverage_and_blocked_conditions`（NO_ROWS 狀態一律不展示列）、
-    `problems_override_contradicting_coverage`（問題碼 no_active／holding_read_failed 優先於矛盾的 coverage 與有列的證據）。
+    `problems_override_contradicting_coverage`（問題碼 no_active／holding_read_failed 優先於矛盾的 coverage 與有列的證據）、
+    `early_return_skips_row_and_coverage_validation`（有 no_active／holding_read_failed 問題碼時提早回傳，**略過持倉列 Mapping 驗證與
+    source_coverage 驗證**——此時持倉列形狀錯誤不會被偵測；已知落差）。
     以上都是執行組暫行選定，82 未規定，不得升格。
     """
     if env.status == STATUS_BLOCKED:

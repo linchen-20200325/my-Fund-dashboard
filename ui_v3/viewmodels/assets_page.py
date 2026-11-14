@@ -27,7 +27,7 @@ VM 物件本身只存代碼（`cause_key`、`source_state`…），不存字樣�
   VM 不列舉合法欄位，且 `A50Section.field_set_status` 恆為 `FIELD_SET_PENDING_T6`。
 - 入口（A10 的「持倉入口」）只在 A50 有可用列時存在；a（未選 Active）、b（讀取失敗）、c（完整但無列）、市值基準 blocked 一律沒有入口，
   也不寫「持倉 0」。入口條件對映是 UI-2 的**暫行候選**（82 §11.9.9 自標 NOT VERIFIED），見 adapter。
-- `chart_claim` 恆為 `withheld_pending_approval`（與載入端 adapter 的 `AssetsLoadResult` 一致）；本層沒有圖、沒有圖表可比性欄位。
+- `chart_claim` 恆為 `withheld_pending_approval`（與載入端 adapter 的 `AssetsLoadResult` 一致；讀碼對照，NOT VERIFIED）；本層沒有圖、沒有圖表可比性欄位。
 
 **暫行標示**：本批凡是「82 沒有規定、由執行組暫行選定」的歸類與條件，一律登記在公開常數 `PROVISIONAL_ITEMS`（唯一 key＋說明＋對應缺口），
 並在相關 docstring 標「暫行：…不得升格」。它們都不是客戶核准的規則，升格需客戶 Decision Gate。
@@ -207,6 +207,8 @@ class A00Status:
     - 暫行（`PROVISIONAL_ITEMS`：`a00_states_without_approved_symbol`、`market_basis_blocked_symbol_and_category`）：
       complete／partial／not_selected／complete_no_rows 沒有已核准符號，改走暫時字樣；市值基準 blocked 的 `not_read` 借用已核准的
       `undetermined` 符號——82 都沒有規定，不得升格。
+    - 暫行（`PROVISIONAL_ITEMS`：`failure_code_kept_only_for_read_failed`）：`failure_code` 只在 `read_failed` 狀態保留，其他狀態即使輸入帶有也丟棄
+      （adapter 不傳入）；82 未規定。不得升格。
     - `cause_key`：僅 `not_read` 可有（市值基準 blocked 的原因碼，原樣透傳；內部候選）。
     """
 
@@ -263,6 +265,8 @@ class A10Card:
       SPEC 的其餘項（單位、時點、缺項）屬 T5，**本批不建模**。
     - `limit_codes`：必要資料限制代碼。暫行（`PROVISIONAL_ITEMS`：`limit_no_fx_conversion_always_present`）：`LIMIT_NO_FX_CONVERSION` 在所有來源狀態都出現
       （含 blocked 與無列）；82 只明寫情境三要有「限制」一列。待 UI Review，不得升格。
+    - 暫行（`PROVISIONAL_ITEMS`：`blocked_basis_state_without_value`）：blocked 時 `basis_state` 取自載入結果的設定狀態（可能是 'set'），但
+      `basis_value` 為 None（blocked 沒有證據），畫面上會成為『基準已設定但沒有值』。已知落差，不得升格。
     - `entry`：持倉入口（可為 None）。
     """
 
@@ -640,6 +644,15 @@ PROVISIONAL_ITEMS = (
     _p("a30_a40_share_one_missing_fact",
        "暫行：A30／A40 沿用與 A10 同一個 MissingFact；82 §11.7 要求情境三有 A30/A40 一行狀態，§11.9.7 線框未畫。已知落差，不得升格。",
        "82 §11.7、§11.9.7；T7"),
+    _p("early_return_skips_row_and_coverage_validation",
+       "暫行：_resolve 在 no_active／holding_read_failed 問題碼時提早回傳，略過持倉列 Mapping 驗證與 source_coverage 驗證，此時持倉列形狀錯誤不會被偵測。已知落差，不得升格。",
+       "82 §11.9.9；UI-2"),
+    _p("blocked_basis_state_without_value",
+       "暫行：blocked 時 A10 的 basis_state 取自載入結果的設定狀態（可能是 set）但 basis_value 為 None，畫面上會是『基準已設定但沒有值』。已知落差，不得升格。",
+       "82 §11.9.7 SPEC；G-F"),
+    _p("failure_code_kept_only_for_read_failed",
+       "暫行：failure_code 只在 read_failed 狀態保留，其他狀態即使輸入帶有也丟棄。82 未規定。不得升格。",
+       "82 §11.7 A00 (b)"),
     _p("provisional_row_fields_exclude_amounts",
        "暫行：A50 預設欄位集合只含識別、幣別、數量欄位，不含任何金額或比例欄位（客戶明示不產生未核准金額）；欄位集合本身屬 T6，不是規格，不得升格。",
        "T6；DEC-2026-11-09-02"),

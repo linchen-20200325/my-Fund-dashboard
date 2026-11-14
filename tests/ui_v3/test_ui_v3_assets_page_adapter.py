@@ -17,6 +17,7 @@ import ast
 import copy
 import inspect
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -515,6 +516,7 @@ _REQUIRED_PROVISIONAL_KEYS = {
     "complete_requires_zero_skip_evidence", "bucket_blank_semantics_gap", "provisional_row_fields_exclude_amounts",
     "problems_override_contradicting_coverage", "limit_no_fx_conversion_always_present",
     "undetermined_with_rows_claims_viewable_holdings", "row_field_missing_always_category_a", "a30_a40_share_one_missing_fact",
+    "early_return_skips_row_and_coverage_validation", "blocked_basis_state_without_value", "failure_code_kept_only_for_read_failed",
 }
 
 
@@ -538,6 +540,9 @@ def _carriers():
         "partial_narrow_definition": adapter._resolve,
         "complete_requires_zero_skip_evidence": adapter._resolve,
         "problems_override_contradicting_coverage": adapter._resolve,
+        "early_return_skips_row_and_coverage_validation": adapter._resolve,
+        "blocked_basis_state_without_value": vm.A10Card,
+        "failure_code_kept_only_for_read_failed": vm.A00Status,
         "complete_no_rows_is_category_a": adapter._causes_for,
         "undetermined_with_rows_claims_viewable_holdings": adapter._causes_for,
         "market_basis_blocked_symbol_and_category": vm.A00Status,
@@ -575,3 +580,66 @@ def test_no_docstring_or_comment_still_claims_a_test_locks_the_loader_or_produce
         text = lib.read(ROOT / rel)
         assert "逐字對載入端" not in text and "（測試鎖" not in text and "(測試鎖" not in text and "詞彙鏡像" not in text and "代碼的鏡像" not in text, rel
     assert "NOT VERIFIED" in inspect.getdoc(adapter)
+
+
+# ───────────────────────── 暫行登記項的行為鎖（補登的三項） ─────────────────────────
+
+def test_early_return_on_problem_codes_does_not_inspect_row_shapes_known_gap():
+    """已知落差（暫行）：有 no_active／holding_read_failed 問題碼時，持倉列形狀錯誤不會被偵測；沒有問題碼時才驗證。"""
+    bad_rows = [["not", "a", "mapping"]]
+    for problem in ("no_active_source", "holding_read_failed"):
+        result = S.complete_result(1)
+        result["problems"] = [problem]
+        result["evidence"]["holdings"] = bad_rows
+        assert build(result).a50.rows == ()
+    result = S.complete_result(1)
+    result["evidence"]["holdings"] = bad_rows
+    with pytest.raises(ValueError):
+        build(result)
+
+
+def test_blocked_page_shows_basis_set_but_no_basis_value_known_gap():
+    model = build(S.market_blocked_result())
+    assert (model.a10.basis_state, model.a10.basis_value) == ("set", None)
+
+
+def test_failure_code_is_kept_only_when_read_failed_and_dropped_in_every_other_state():
+    for name, make in S.SCENARIOS.items():
+        result = make()
+        result["holding_failure_code"] = "NETWORK_ERROR"
+        model = build(result)
+        assert (model.a00.failure_code == "NETWORK_ERROR") is (model.a00.source_state == vm.SRC_READ_FAILED), name
+
+
+# ───────────────────────── 不外漏工程資訊形的字串常數（輕量重現既有守衛的偵測，不依賴 streamlit） ─────────────────────────
+# 既有守衛 `test_ui_v3_no_engineering_leak_guard::test_ui_v3_source_has_no_env_var_shaped_string_literal` 因 `importorskip("streamlit...")`
+# 在沒有 streamlit 的環境會整檔跳過；這裡用 ast 重現同一偵測（`_ENV_SHAPE`，排除 docstring、`raise` 內字串、`__all__`），
+# 直接掃本批兩個實作檔，讓這類違規在輕量環境也會紅燈。
+
+_ENV_SHAPE_COPY = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b")
+
+
+def _screen_string_constants(source):
+    tree = ast.parse(source)
+    skip = {id(n.body[0].value) for n in ast.walk(tree)
+            if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.body
+            and isinstance(n.body[0], ast.Expr) and isinstance(getattr(n.body[0], "value", None), ast.Constant)}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Raise) or (isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets)):
+            skip |= {id(n) for n in ast.walk(node) if isinstance(n, ast.Constant)}
+    return [n.value for n in ast.walk(tree)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip]
+
+
+@pytest.mark.parametrize("rel", _NEW_FILES)
+def test_new_files_have_no_env_var_shaped_string_constant(rel):
+    hits = [s[:60] for s in _screen_string_constants(lib.read(ROOT / rel)) if _ENV_SHAPE_COPY.search(s)]
+    assert hits == []
+
+
+def test_env_shape_scan_negative_control_turns_red_and_exclusions_hold():
+    bad = 'NAME = "X" + "_Y"\nNOTE = "see SOME_CONSTANT here"\n'
+    assert _screen_string_constants(bad) and [s for s in _screen_string_constants(bad) if _ENV_SHAPE_COPY.search(s)] == ["see SOME_CONSTANT here"]
+    allowed = '__all__ = ("SOME_CONSTANT",)\ndef f():\n    """SOME_CONSTANT in a docstring"""\n    raise ValueError("SOME_CONSTANT in a raise")\n'
+    assert [s for s in _screen_string_constants(allowed) if _ENV_SHAPE_COPY.search(s)] == []
