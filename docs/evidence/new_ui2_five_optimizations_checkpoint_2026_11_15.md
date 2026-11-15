@@ -57,7 +57,7 @@
 ## 4. 對話中斷／零記憶恢復指令（供下一個 Claude Code 或 ChatGPT 使用）
 
 1. Repo：`linchen-20200325/my-Fund-dashboard`；先核實最新 main／Open PR／head／diff／CI／QA／branch。**不要照抄本檔觀測 SHA**。
-2. 順序閱讀：`CLAUDE.md` → `PROJECT_RULES.md` → `docs/DECISIONS.md` → `docs/BACKLOG.md` → `docs/HANDOFF.md` 相關最新段落；再讀本檔以及 44／67／75／79／80／82 的必要條款（只讀相關節）。
+2. 順序閱讀：`CLAUDE.md` → `PROJECT_RULES.md` → `docs/HANDOFF.md` → `docs/BACKLOG.md` → `docs/DECISIONS.md` 相關最新段落；再讀本檔以及 44／67／75／79／80／82 的必要條款（只讀相關節）。
 3. 本檔的五項 O1～O5 是**下一階段規劃／防返工方向**。不要將 O1 建 components、O4 建 AI schema、O5 改治理規則視為已批准施工。
 4. 正在進行中的 PR 優先完成原 scope 的 QA／CI／結案；不因本檔存在就中斷施工。若本檔仍在 Draft PR，先讀 Draft PR 的最新 head；**PR 存在 ≠ 文件已入 main**。
 5. 下一個唯一安全動作：**核實 GitHub 實況與已授權工作，再產出 Batch 1 三題最小 Gate 裁示卡**；在客戶核准其正式語意與施工 scope 前不開新的 renderer／Provider／資料接線。
