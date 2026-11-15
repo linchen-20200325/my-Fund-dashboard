@@ -164,7 +164,7 @@ L3b New UI2 pages／components         <pkg>/pages/、<pkg>/shell/、<pkg>/desig
 ```text
 <pkg>/
   app_preview.py          獨立 preview 入口（Streamlit main file）；不 import ui_v2
-  shell/                  導覽（底部五項／側欄）、頁框、登入卡位置
+  shell/                  導覽（手機頁首五格 S1／桌機側欄；現行方向見 §18；舊底部列僅歷史）、頁框、登入卡位置
   design/                 tokens 命名與元件契約（第 5 節）；不放業務字樣
   viewmodels/<page>.py    純 Python：下層結果 → 元件級 schema（第 6 節）
   pages/<page>.py         Streamlit render：只吃 view model
@@ -190,7 +190,7 @@ shared/<presentation-semantic 常數模組>  狀態類別、Missing 字樣 token
 | chart container | 標題＋≤3 chips＋圖＋「▸」detail（44 之十九圖卡模板）；缺段斷線不補、不畫零；不畫目標價線與方向箭頭；非顏色辨識至少一種；期間 3M／6M／1Y／3Y、預設 1Y（`DEC-2026-10-27-31`） | `chart.height.primary`、`chart.height.secondary`、`chart.period` |
 | empty／error／loading | 四空狀態沿用 44（未設定／資料未備／取數失敗／無資料）；Missing 恆為 `◇ 資料未備`；loading 不得顯示假值或骨架數字 | `state.empty.*`、`state.loading` |
 | CTA hierarchy | 每頁至多 1 個主 CTA；第一階段唯讀，CTA 只能是導覽、展開、查詢、加入 session 比較，不得是寫入或交易語意 | `cta.primary`、`cta.secondary`、`cta.link` |
-| mobile navigation | 底部五項導覽；🤖 Phase 7 前不掛（只四項可見）；≤2 次互動到達任何區（`DEC-2026-10-27-11`） | `nav.bottom`、`nav.item` |
+| mobile navigation | **現行手機採頁首 S1 固定五格、全部可見且不水平捲動**（`DEC-2026-11-06-01`、`DEC-2026-11-07-02`；詳 §18）；🤖 Phase 7 前顯示禁入但不註冊頁面；原「底部五項」是已取代的歷史設計，不可再當新版施工規則 | 實作依 `ui_v3/pages/chrome.py`／`ui_v3/shell/nav.py` 與相應守衛；舊 `nav.bottom` 指標已非現行目標（§17／§18 歷史與適用性） |
 
 **視覺語言沿用範圍**：見 NG-4（推薦沿用狀態符號、語意色名、字樣規範；版面、元件、spacing、typography 重建）。
 
