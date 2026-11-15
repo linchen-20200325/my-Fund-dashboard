@@ -310,3 +310,116 @@ def test_decisions_structure_negative_control():
     assert decisions_structure_problems(good + "### DEC-2026-11-03-12｜b\n")
     # 行中引文不算標題行（真實事故：反引號引文被誤取代成標題）
     assert decisions_structure_problems(good + "- 原文 `## 五、歷史索引（x）` 逐字恢復\n") == []
+
+
+# ---------------------------------------------------------------- 2026-11-15 現行入口回歸（歷史本文不當現行）
+def current_block(text: str, name: str) -> str:
+    """只取顯式 CURRENT 入口；缺標記／重複入口直接失敗。"""
+    begin, end = f"<!-- CURRENT-{name}-BEGIN -->", f"<!-- CURRENT-{name}-END -->"
+    assert text.count(begin) == text.count(end) == 1, name
+    return text.split(begin, 1)[1].split(end, 1)[0]
+
+
+def operation_entry_problems(text: str, name: str) -> list[str]:
+    requirements = {
+        "SILENT": ("3.3", "四類回報一次", "GitHub final verification", "收緊而不取代 3.1／3.2", "3.2 第 3 點格式", "PENDING-GATE"),
+        "EFFORT": ("第 8 點", "第 9 點", "第 10 點", "第 11 點", "升級或降級皆", "送出後全面停手", "已切換／可以開始", "必要 High correctness 驗證不得降級", "途中能力不足依第 9 點立即停止", "真 Stop Gate 依第 4 節立即停止", "PENDING-GATE"),
+    }
+    forbidden = {
+        "SILENT": ("3.3 完全取代 3.1／3.2", "允許回報 CI 等待進度"),
+        "EFFORT": ("調低不停工", "Gate 後仍可工作", "為省 token 降低必要 High"),
+    }
+    # 引述舊句並明寫其 superseded／不得適用，仍為合法保留。
+    # 另增「現行規則」宣告不能靠保留正向 required 字串繞過。
+    revived = []
+    for sentence in re.split(r"[。\n]", text):
+        old_rule = any(old in sentence for old in (
+            "調低只標示、不停工", "等待期間不受影響的安全工作照常進行", "能力不足仍先收尾"
+        ))
+        historical = any(marker in sentence for marker in ("舊", "歷史", "superseded", "不得用於"))
+        if old_rule and ("現行規則：" in sentence or not historical):
+            revived.append(sentence)
+    return ([f"missing:{s}" for s in requirements[name] if s not in text]
+            + [f"revived:{s}" for s in forbidden[name] if s in text]
+            + revived)
+
+
+def test_operation_entries_and_mutants():
+    rules = _read("PROJECT_RULES.md")
+    for name in ("SILENT", "EFFORT"):
+        block = current_block(rules, name)
+        assert operation_entry_problems(block, name) == []
+    silent = current_block(rules, "SILENT")
+    effort = current_block(rules, "EFFORT")
+    for mutant in (silent.replace("收緊而不取代 3.1／3.2", "3.3 完全取代 3.1／3.2"),
+                   silent + "允許回報 CI 等待進度"):
+        assert operation_entry_problems(mutant, "SILENT")
+    assert operation_entry_problems(
+        effort + "歷史引文『等待期間不受影響的安全工作照常進行』已 superseded，不作現行。", "EFFORT"
+    ) == []
+    for mutant in (effort.replace("送出後全面停手", "Gate 後仍可工作"),
+                   effort.replace("升級或降級皆", "調低不停工"),
+                   effort + "為省 token 降低必要 High",
+                   effort + "現行規則：調低只標示、不停工。",
+                   effort + "調低只標示、不停工。",
+                   effort + "現行規則：等待期間不受影響的安全工作照常進行。",
+                   effort + "現行規則：能力不足仍先收尾。",
+                   effort.replace("途中能力不足依第 9 點立即停止", "途中能力不足先收尾")):
+        assert operation_entry_problems(mutant, "EFFORT")
+    with pytest.raises(AssertionError):
+        current_block(rules + "<!-- CURRENT-SILENT-BEGIN -->", "SILENT")
+
+
+def wireframe_index_problems(text: str) -> list[str]:
+    """輸入只限 canonical 頁面索引，不掃 historical 原文。"""
+    required = ("Stage 1 最小切片線框基準已核准", "DEC-2026-11-14-06",
+                "U／D／L 線框基準已核准", "DEC-2026-11-14-04", "S2-T0 採 B 暫緩")
+    bad = ("💼 尚無核准線框", "🔍 尚無核准線框")
+    return [s for s in required if s not in text] + [s for s in bad if s in text]
+
+
+def test_wireframe_index_tracks_approved_decisions_with_negative_controls():
+    index = _read("PROJECT_RULES.md").split("### 0.4 ", 1)[1].split("### 0.5 ", 1)[0]
+    assert wireframe_index_problems(index) == []
+    for approved, stale in (("Stage 1 最小切片線框基準已核准", "💼 尚無核准線框"),
+                            ("U／D／L 線框基準已核准", "🔍 尚無核准線框")):
+        assert wireframe_index_problems(index.replace(approved, stale))
+    legacy_gate = _read("PROJECT_RULES.md").split("### 13.6 ", 1)[1].split("## 第 14 節", 1)[0]
+    assert "Stage 1 有限線框基準已依 `DEC-2026-11-14-06` 核准" in legacy_gate
+    # 正式裁示存在，防止只新增自說自話的入口。
+    decisions = _read("docs/DECISIONS.md")
+    for decision in ("DEC-2026-11-14-04", "DEC-2026-11-14-06"):
+        assert f"### {decision}｜" in decisions
+
+
+def nav_target_problems(text: str) -> list[str]:
+    required = ("S1", "頁首", "五格")
+    return [s for s in required if s not in text] + (["bottom revived"] if "現行手機採底部" in text else [])
+
+
+def test_mobile_navigation_current_targets_reject_old_bottom_rule():
+    architecture = _read("docs/v2/80_new_ui2_architecture_proposal.md")
+    # 只檢查兩處現行設計目標；§17 舊版實作與 §18 歷史敘事保留。
+    targets = [line for line in architecture.splitlines() if line.startswith(("  shell/", "| mobile navigation |"))]
+    assert len(targets) == 2
+    for line in targets:
+        assert nav_target_problems(line) == []
+        assert nav_target_problems(line.replace("頁首", "底部").replace("S1", "舊版"))
+    assert "DEC-2026-11-07-02" in architecture
+    assert 'TOP_KEY = "uv3-top-nav"' in _read("ui_v3/shell/nav.py")  # 既有 Shell／Visual 守衛另驗行為。
+
+
+def chip_current_problems(text: str) -> list[str]:
+    required = ("DEC-2026-11-03-09", "採 C：兩個獨立欄位、各一枚", "基準日移到 Primary 圖旁的純文字揭露行", "不再是目前 New UI2 首屏的執行判準")
+    return [s for s in required if s not in text] + (["historical rule revived"] if "仍是目前 New UI2 首屏的執行判準" in text else [])
+
+
+def test_market_current_chip_pointer_rejects_merged_chip_mutant():
+    doc = _read("docs/v2/81_new_ui2_wireframe_01_market.md")
+    header = doc.split("- **狀態**", 1)[0]
+    assert chip_current_problems(header) == []
+    assert chip_current_problems(header.replace("採 C：兩個獨立欄位、各一枚", "採 B：共用一枚"))
+    assert chip_current_problems(header.replace("不再是目前 New UI2 首屏的執行判準", "仍是目前 New UI2 首屏的執行判準"))
+    assert chip_current_problems(header.replace("基準日移到 Primary 圖旁的純文字揭露行", "基準日保留 chip"))
+    # 歷史共用 chip 選項可以保留，不能讓歷史字串使此守衛假綠。
+    assert "共用一枚 chip" in header
