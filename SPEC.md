@@ -1,4 +1,7 @@
 # 基金戰情室 — 系統需求規格書 (SPEC.md)
+
+> ⚠️ **2026-11-15 現行性標記｜2026-05-05 既有系統規格快照，非 New UI2 的獨立實作授權**：本檔保留早期基金系統設計與治理背景，其中「全面 `df.ffill()` 對齊」等舊資料處理描述**不得逕行套用**至現行資料契約：缺值不填 0、不補無證據觀測、不把 stale／unavailable 當 evaluated，正式語意依 `CLAUDE.md`、`PROJECT_RULES.md`、`docs/v2/44_fund_ui_ssot.md`、子法 1＋57、`docs/v2/79_final_ui_contract_freeze.md` 與其後 `docs/DECISIONS.md`。新 UI 的架構／Reuse Gate 見 `docs/v2/80_new_ui2_architecture_proposal.md`。**以下歷史內文保留供回溯；本標記不授權修改公式、資料來源或既有 legacy 行為。**
+
 > **版本**: v10.1 機構級事件防護與組合層級重分配專業版
 > **最後更新**: 2026-05-05
 > **核心禁令**: 🚫 全面排除 ETF，本系統專注**共同基金**，嚴禁引入任何 ETF 相關模組、折溢價計算或 ETF Ticker 操作。
