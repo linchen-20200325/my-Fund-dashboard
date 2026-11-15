@@ -1,5 +1,7 @@
 # 82｜New UI2 💼 我的資產：UI × Data × Evidence 施工前設計草案（U1～U5 UI 設計已核准〔DEC-2026-11-04-02〕；其餘仍待裁示）
 
+> **2026-11-14 狀態補指標（非新裁示）**：`DEC-2026-11-14-06` 已核准 **Stage 1 最小切片線框基準**（僅 A00／A10／A20、A50／A60 及明示方向），#1248 已合併 **S-VM 純函式**。下方 2026-11-04「非已核准 wireframe」是當時的整份草稿狀態，**不得再讀成 Stage 1 完全沒有核准**；但 **G-A～G-G、完整視覺驗收、renderer、registry、正式資料接線仍未核准**。本註保留舊文和 provenance，不解除 FX、D2、BL-0545、frozen 44 Gate。
+
 > **定位**：ChatGPT 產品／資料契約初稿，2026-11-04（區塊順序已由 DEC-2026-11-04-01 核准主圖在前，見 §0.1；其餘仍待核准；~~U1～U5 仍待核准~~ 已由 DEC-2026-11-04-02 核准 UI 設計，見 §9.8）。**非已核准 wireframe、非公式或資料語意裁示、非程式實作授權**。此檔不取代 frozen `44`、`79`、`80`、`73`、`74`；同一事實以原正式契約為準。**區塊順序以 §0.1／`DEC-2026-11-04-01` 為準，其餘仍以 `80`／`44` 為準。**先驗既有 capability／欄位，再由客戶核准具體版面。不得因本草案把舊 UI 程式直接搬入 `ui_v3`。
 >
 > **讀碼範圍**：`services/v2_tables/alo_holdings.py`、`services/v2_domain/{holdings,deviation}.py`、`services/v2_tables/nav_dividend.py`、`ui_v2/{hld,alo}/{source,logic}.py`；對照 `docs/v2/{73,74,79,80}_*.md`。此為 ChatGPT 單組盤點，**尚未由獨立組逐欄複驗**。
