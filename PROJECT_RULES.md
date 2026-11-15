@@ -50,8 +50,8 @@
 | 頁面 | 現行規格 | 備註 |
 |---|---|---|
 | 🌍 市場與趨勢 | `docs/v2/81`（已裁示線框；字樣＝`shared/ui_semantics/rules.py::APPROVED_WORDING`） | `docs/v2/72` 為 ui_v2 時期，版面僅供 reuse（NG-5），語意仍有效 |
-| 💼 我的資產 | 尚無 New UI2 wireframe（BL-0536-G2） | 現有 `docs/v2/73`、`76` 為 ui_v2 時期，版面須重核，語意仍有效；`docs/v2/82`＝U1～U5 UI 設計已核准（`DEC-2026-11-04-02`）、其餘仍待裁示的草案＋獨立稽核核實結果，不是現行規格（BL-0542） |
-| 🔍 找基金 | 尚無 New UI2 wireframe（BL-0536-G3） | 現有 `docs/v2/78` 同上 |
+| 💼 我的資產 | **Stage 1 最小切片線框基準已核准**（`DEC-2026-11-14-06`，僅 A00／A10／A20、A50／A60 等明示範圍）；**不是完整視覺或正式頁面驗收** | `docs/v2/82` §11.9 與 `docs/evidence/assets_stage1_gap_supplement_2026_11_14.md`；S-VM 已於 #1248 合併，但 renderer／registry／真實資料接線仍未核准；G-A～G-G 與其他金融語意仍循原 Gate；舊 `73`／`76` 版面僅參考（BL-0542） |
+| 🔍 找基金 | **U／D／L 線框基準已核准**（`DEC-2026-11-14-04`，未決候選不因核准而升格）；**不是正式接線／頁面上線** | `docs/evidence/exp_wireframe_approval_draft_and_slice_request_2026_11_14.md`；S0 只限純函式（`ui_v3/viewmodels/exp_counts.py`）；S2-T0 採 B 暫緩（`DEC-2026-11-14-08`），不掛頁、不接 Google Sheet；舊 `78` 版面僅參考 |
 | 🤖 AI 投資總結 | `docs/v2/67` 6.1／8.9、`docs/v2/75`；Phase 7 前導覽可見但不可點，不註冊頁面（`docs/v2/80` 第 7.4 節；舊句見 `docs/evidence/history/2026-11-04_after_1136_handoff_backlog_superseded.md` 區塊 P2，NOT CURRENT） | 輸出「六項」對映待客戶確認（BL-0540） |
 | ⚙️ 設定 | 尚無 New UI2 wireframe（BL-0536-G4） | 現有 `docs/v2/65` 同上；資料健康度見 `docs/v2/80` 第 16 節 |
 
