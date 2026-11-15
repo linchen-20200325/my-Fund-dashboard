@@ -1,4 +1,7 @@
 # Requirements.md — 系統需求真理來源
+
+> ⚠️ **2026-11-15 現行性標記｜歷史需求快照，NOT CURRENT for New UI2（稽核導覽註記）**：本檔建立於 2026-04-13，仍包含個股、ETF、股票策略選股與股債比自動建議，與現行基金 New UI2 的五頁需求及正式規格不能直接相容。下方「真理來源」是**當時的原始標題**，不是目前 New UI2 的授權來源。現行規格請先依 `CLAUDE.md`、`PROJECT_RULES.md`、`docs/v2/44_fund_ui_ssot.md`、正式子法 1＋57、`docs/v2/79_final_ui_contract_freeze.md`、`docs/v2/80_new_ui2_architecture_proposal.md` 及 `docs/DECISIONS.md` 交叉核對；未經新 Decision Gate 不得把本檔早期選股、配置、顏色與 AI 決策規則搬入 New UI2。**保留以下歷史原文，不刪除資料，不宣稱正式合約已被此註記改寫。**
+
 > **版本**: v1.0 | **建立**: 2026-04-13 | **對應 SPEC**: v16.0 / v2.0
 > 本文件定義「做什麼」與「如何驗收」，工程細節見 `SPEC.md`。
 

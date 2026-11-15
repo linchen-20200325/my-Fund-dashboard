@@ -1,4 +1,7 @@
 # 基金戰情室 — 技術架構書 (ARCHITECTURE.md)
+
+> ⚠️ **2026-11-15 現行性標記｜v12.0（2026-06-30）歷史架構快照，NOT CURRENT as a complete New UI2 architecture map**：本檔原有分層與模組說明保留作 legacy codebase 歷史參考；自後續 New UI2 開始，現行新版 presentation 分層及遷移邊界另依 `docs/v2/79_final_ui_contract_freeze.md`、`docs/v2/80_new_ui2_architecture_proposal.md`、`docs/DECISIONS.md` 與實際 `ui_v3/`、`services/v2_tables/`、`services/v2_domain/` 讀碼驗證。**不可因本檔 v12.0 的「至今有效」或舊檔案清單，就認為 `ui_v3` 已正式接線、五頁已全部實作，或認為 Old UI／ui_v2 可自由重構或刪除。** 不改下列歷史原文，不代表某項 legacy 模組已被淘汰。
+
 > 版本：**v12.0**(v19.251 深層稽核後 doc-sync) | 更新：2026-06-30 | 分支：`claude/restore-context-protocol-lH9kg`
 > 歷史版本:v11.0 (2026-05-16, v18.109 分層完工總結,完整保留於 §0 下方)
 > **核心禁令**：🚫 全面排除 ETF，本系統專注**共同基金**。
