@@ -204,7 +204,7 @@
 | 【暫緩】 | R-NAV-3（採 B） | `DEC-2026-11-14-07`；維持 Pending |
 | 【Pending】共 13 列 | R-ID-2、R-ID-3、R-NAV-3、R-NAV-4、R-NAV-6、R-PERF-1～R-PERF-8 | `docs/evidence/d2_contract_approval_prep_2026_11_12.md`、`docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md` |
 
-注意：R-PERF-1／3／6 分別與已核准的 R-ID-1／R-NAV-5／R-NAV-2 重複，但 `DEC-2026-11-13-06` 明文**不自動升格**，仍列【Pending】。「已核准」只指契約**文字**，不等於程式已實作或 Schema 已生效。
+注意：R-NAV-3 計入 13 列【Pending】，不是第 14 列。R-PERF-1／3／6 分別與已核准的 R-ID-1／R-NAV-5／R-NAV-2 重複，但 `DEC-2026-11-13-06` 明文**不自動升格**，仍列【Pending】。「已核准」只指契約**文字**，不等於程式已實作或 Schema 已生效。
 
 ### 2　Evidence 保留度（`services/v2_domain/allocation_evidence.py`，`SCHEMA_VERSION` 為 CANDIDATE，非已核准契約）
 
@@ -214,7 +214,7 @@
 | freshness | 部分 | 無 `stale_after` 門檻（D3(b) 未裁） |
 | missing reason | 已有 | |
 | coverage 與分母 | 已有 | |
-| provenance | 部分 | `ccy_source` 位於旁路，R-NAV-6 未核准 |
+| provenance | 部分 | `allocation_evidence.py` 內查無 `ccy_source` 欄（單組字面搜尋；僅見 `ui_v2/exp/*` 與 tests），R-NAV-6 未核准 |
 | 規則結果與適用限制 | 部分 | `rule_ref` 為 `NOT_DEFINED`；`rule_version` 格式未定（BL-0527） |
 | counter-evidence（反證） | 缺（NOT IMPLEMENTED） | 投資語意未裁（D5，BL-0542 G-1 (b)） |
 | 未核准欄位的 Pending 狀態 | 文件有、程式缺 | 程式不攜帶「此欄位尚未核准」旗標 |

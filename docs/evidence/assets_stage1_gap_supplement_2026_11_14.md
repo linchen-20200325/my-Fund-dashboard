@@ -96,7 +96,7 @@ A60 欄位／字樣（G-A）；入口、原因句計入與否，SPEC／限制若
 
 | 項目 | 狀態 |
 |---|---|
-| frozen 44 首屏預算 ≤5、Missing 不隱藏也不當 0、A20 固定四格、兩類原因不得混同（UI-1）、不得新增 chip／狀態詞 | 【已核准】`DEC-2026-11-03-11`、`DEC-2026-11-09-04`（UI-1） |
+| frozen 44 首屏預算 ≤5、Missing 不隱藏也不當 0、A20 固定四格、兩類原因不得混同（UI-1）、不得新增 chip／狀態詞 | 【已核准】`DEC-2026-11-03-11`、`DEC-2026-11-09-04`（UI-1）；`DEC-2026-11-14-06` 驗收條件含「A20 固定四格、缺值不填 0」。註：`DEC-2026-11-03-11` 的 ≤5 先例原為 🌍 降級首屏〔推〕，不自動適用 💼 |
 | A10 入口、原因句、SPEC、限制是否計入名額 | 【待客戶正式裁示】 |
 | 實際 390px 首屏驗收 | 【NOT VERIFIED】（renderer 完成前不可能量測） |
 
@@ -121,7 +121,7 @@ A60 欄位／字樣（G-A）；入口、原因句計入與否，SPEC／限制若
 | 項目 | 狀態 |
 |---|---|
 | 四類必須分開：來源未取得、取數失敗、來源完整但零有效列、已有資料但計算契約未核准 | 【分開本身已核准】`DEC-2026-11-09-04`（UI-1） |
-| 來源完整零有效列歸原因類別 (a)／(b)／其他；「可用持倉列」門檻 | 【待客戶正式裁示】（客戶尚未定義門檻，見 `DEC-2026-11-09-04` 與本檔 G-D） |
+| 來源完整零有效列歸原因類別 (a)／(b)／其他；「可用持倉列」門檻 | 【待客戶正式裁示】（客戶尚未定義門檻，見 `DEC-2026-11-09-04` 與本檔 G-E） |
 | 下列 VM／adapter 現行判準 | 【候選·暫行·不得升格】，留待下一個契約 Decision Gate |
 
 **消歧**：「原因類別 (a)」（`CATEGORY_SOURCE_DATA`，資料缺漏或取數失敗）≠「來源情境三 (a)」（`SRC_NOT_SELECTED`，未選 Active）。兩者不得混用。
@@ -140,8 +140,8 @@ A60 欄位／字樣（G-A）；入口、原因句計入與否，SPEC／限制若
 |---|---|---|
 | 1 | 略過證據 >0 且 coverage=complete、且無列 | 降為 `SRC_UNDETERMINED`，不會被寫成「沒有有效持倉列」；使用者看不到「完整讀完但真的是零列」，與 82 §11.7 情境三 (c) 的可達性有落差 |
 | 2 | 略過證據未提供（status 非 provided）卻 coverage=complete | 同上降級；真實來源若永遠不提供略過證據，`SRC_COMPLETE`／`SRC_COMPLETE_NO_ROWS` 永遠無法出現 |
-| 3 | 設定讀取失敗（settings 類 problems） | `_resolve` 不看 `settings_status`（本檔 G-D open）；若 coverage 仍為 complete，來源狀態不反映設定失敗，呈現方式未定 |
-| 4 | 行只含金額欄位 | `FORBIDDEN_ROW_FIELDS`（`value_twd`、`cost_twd`、`cost_orig_ccy`、`share_of_covered_pct`、`weight_ratio`）擋下；若 `row_fields` 全是禁用欄位會 `ValueError`，列「有」但可顯示欄位為零，「可用持倉列」是否成立未定 |
+| 3 | 設定讀取失敗（settings 類 problems） | `_resolve` 不看 `settings_status`（本檔 G-E open）；若 coverage 仍為 complete，來源狀態不反映設定失敗，呈現方式未定 |
+| 4 | 列存在，但各被指名欄位的值皆為 Missing／不可用 | `_row_fact` 只取 `row_fields` 指名的欄位，缺值或型別不可用者成為 Missing 事實；列仍算「有」但可顯示值為零，「可用持倉列」是否成立未定。另註：`FORBIDDEN_ROW_FIELDS`（`value_twd`、`cost_twd`、`cost_orig_ccy`、`share_of_covered_pct`、`weight_ratio`）是 `_check_row_fields` 對**呼叫端傳入 row_fields 清單**的守衛（任一禁用欄位或空清單即 `ValueError`），**不是**對資料列內容的過濾；持倉原始資料含金額鍵不會被擋，只是不會被取用〔推〕 |
 | 5 | 市值基準 blocked | `rows` 恆空、`SRC_NOT_READ`，與「有持倉但看不到」無法區分（見卡 3） |
 | 6 | 有 no_active／holding_read_failed 問題碼 | 提前回傳，**略過持倉列形狀驗證**（`early_return_skips_row_and_coverage_validation`，已知落差） |
 
