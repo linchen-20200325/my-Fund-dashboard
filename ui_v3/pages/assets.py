@@ -1,15 +1,20 @@
 # -*- coding: utf-8 -*-
-"""💼 我的資產頁的 renderer（隔離式 Preview 第一批：A00 來源狀態、A10 降級卡、A20 固定四格）。頁只吃 `AssetsPageModel`，不取數、不計算領域值。
+"""💼 我的資產頁的 renderer（隔離式 Preview：A00 來源狀態、A10 降級卡、A20 固定四格、A50 單一容器四欄唯讀持倉）。頁只吃 `AssetsPageModel`，不取數、不計算領域值。
 
 - `streamlit` 只在函式內 import（import `ui_v3` 時不得載入 Streamlit）。HTML 組裝是純函式，可在沒有 Streamlit 的環境單測。
 - 字樣：已核准字樣一律取規則表；尚未核准的取 `assets_page.ASSETS_PENDING_WORDING` 與 `assets_preview_wording`，並以 `data-pending-wording`
   標記。**本檔不硬寫任何中文字樣。** 色與尺寸一律經 `design/theme.py` 取 token。
 - 畫面字只依「原因鍵」與「來源狀態」決定；**不讀**原因的分類欄位（類別 (a)(b) 由 view model 的順序表達，畫面各一行、不混成一句）。
 - 失敗代碼、市值基準被擋的原因碼、內部鍵一律不上畫面。
-- 沒有任何金額、百分比、合計、配置比例、風險判定或建議；沒有匯率換算、沒有跨幣別合計。
-- 不畫「持倉入口」：現階段沒有合法的導向目標（持倉區尚未實作），所以即使 view model 帶有入口也不畫（有測試鎖定）。
-- 首屏元素（供瀏覽器守衛點數）：A00 一個、A20 四格各一個；A10 的文字不計（標 `data-first-screen` 的只有這五個）。
-- A30～A60 不在這一批，不畫。
+- 沒有任何金額、百分比、合計、配置比例、風險判定或建議；沒有匯率換算、沒有跨幣別合計（A50 的 fund_code／ccy／units_shares 是原值，不是合計）。
+- 不畫「持倉入口」：現階段沒有合法的導向目標（A10 入口的正式目標另經技術 Gate），所以即使 view model 帶有入口也不畫（有測試鎖定）。
+- 首屏元素（供瀏覽器守衛點數）：A00 一個、A20 四格各一個；A10 的文字不計（標 `data-first-screen` 的只有這五個）。A50 不標首屏。
+- A50（DEC-2026-11-16-01）：**單一** HTML `<details>` 展開容器（零 rerun；逐檔不再展開、不巢狀、不放進任何其他展開容器；A51 不在本批），
+  內含逐檔唯讀列，每列四欄 `fund_name`／`fund_code`／`ccy`／`units_shares`。**暫行**：預設收合（DEC 待確認 (c) 未裁）；`units_shares` 以原值字串輸出
+  （不做千分位或換算，顯示格式未裁）。缺值／不可用一律 `◇ 資料未備`（走規則表），絕不顯示 0 或空白。`holding_id` 只作身份鍵：不上畫面、不進 DOM（列以 ordinal 做 `data-row`）。
+  A50 區沒有合計、換算、金額、占比、報酬、配息、建議。**只有 `model.a50.state == rows` 才畫容器**；`status_only` 只畫一列引用 A00 狀態的文字
+  （不畫空表、不畫導向空內容的入口、不寫「持倉 0」）。
+- A30、A40、A52、A60 不在這一批，不畫。
 """
 from __future__ import annotations
 
@@ -46,6 +51,11 @@ h3{{font-size:{section} !important}}
 .uv3-card h4{{margin:0 0 4px 0;font-size:{body}}}
 .uv3-a20{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:{space};margin-bottom:{space}}}
 .uv3-a20 > .uv3-card{{margin-bottom:0;min-width:0}}
+.uv3-a50{{margin-bottom:{space}}}
+.uv3-a50 > summary{{box-sizing:border-box;min-height:{nav.TOUCH_MIN_PX}px;padding:12px 0;cursor:pointer;font-size:{body};font-weight:600}}
+.uv3-a50-body{{max-height:70vh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}}
+.uv3-a50-row{{border-top:1px solid {border};padding:{theme.v("space.1")} 0}}
+.uv3-a50-field{{margin:2px 0;line-height:1.5;overflow-wrap:anywhere;word-break:break-word}}
 @media (min-width:{nav.MOBILE_MAX_PX + 1}px){{
   .uv3-a20{{grid-template-columns:repeat(4,minmax(0,1fr))}}
 }}
@@ -173,13 +183,45 @@ def a20_html(a20: vm.A20Summary) -> str:
     return f'<div class="uv3-a20" data-block="a20">{"".join(cells)}</div>{note}'
 
 
+# ───────────────────────────── A50 ─────────────────────────────
+
+def _cell_html(fact: vm.RowFact) -> str:
+    """一個欄位事實 → 值的 HTML。present：原值轉字串（不做千分位或換算；空白摺成單一空格，避免空行截斷 HTML 區塊）並 escape；
+    missing：已核准的 `◇ 資料未備`（絕不是 0 或空白）。"""
+    if fact.state == vm.ROW_STATE_MISSING:
+        return _missing()
+    return escape(" ".join(str(fact.value).split()))
+
+
+def a50_row_html(row: vm.HoldingRow) -> str:
+    """一列四欄。列以 ordinal 做 `data-row`；`holding_id` 不進 DOM。欄位集合不是 A50 四欄 → ValueError（不猜）。"""
+    labels = dict(AW.A50_FIELD_LABEL_KEYS)
+    fields = []
+    for fact in row.facts:
+        if fact.field_code not in labels:
+            raise ValueError(f"unsupported A50 field_code {fact.field_code!r}")
+        fields.append(f'<div class="uv3-a50-field" data-field="{escape(fact.field_code)}"><span class="uv3-label">{_label(labels[fact.field_code])}</span>'
+                      f'{_cell_html(fact)}</div>')
+    return f'<div class="uv3-a50-row" data-row="{row.ordinal}">{"".join(fields)}</div>'
+
+
+def a50_html(a50: vm.A50Section, source_state: str) -> str:
+    """A50：有列才畫單一 `<details>`（預設收合，暫行）；`status_only` 只畫一列引用 A00 狀態的文字。**全程不產生 HTML 空行**（空行會截斷 Markdown 的 HTML 區塊）。"""
+    if a50.state == vm.A50_STATUS_ONLY:
+        return f'<div class="uv3-row" data-a50="status-only"><span class="uv3-label">{_label("a50_title")}</span>{source_state_html(source_state)}</div>'
+    rows = "".join(a50_row_html(r) for r in a50.rows)
+    note = f'<div class="uv3-note" data-a50="labels-note">{_label("a50_labels_note")}</div>'
+    return (f'<details class="uv3-a50" data-block="a50"><summary>{_label("a50_title")}</summary>'
+            f'{note}<div class="uv3-a50-body" data-a50="body">{rows}</div></details>')
+
+
 # ───────────────────────────── 整頁 ─────────────────────────────
 
 def page_html(model: vm.AssetsPageModel) -> str:
-    """A00 → A10 → A20（順序固定）。A30～A60 不在這一批。"""
+    """A00 → A10 → A20 → A50（順序固定）。A30／A40／A52／A60 不在這一批。"""
     if not isinstance(model, vm.AssetsPageModel):
         raise TypeError("model must be an AssetsPageModel")
-    return a00_html(model.a00) + a10_html(model.a10, model.a00.source_state) + a20_html(model.a20)
+    return a00_html(model.a00) + a10_html(model.a10, model.a00.source_state) + a20_html(model.a20) + a50_html(model.a50, model.a00.source_state)
 
 
 def render(model: vm.AssetsPageModel) -> None:

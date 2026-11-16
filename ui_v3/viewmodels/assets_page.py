@@ -380,16 +380,35 @@ class RowFact:
                 raise ValueError("missing 的事實必須帶 MissingFact")
 
 
+def check_holding_id(holding_id: object) -> str:
+    """`holding_id` 身份鍵的單值驗證：必須是非空字串、無前後空白（含全空白）。違反 → `ValueError`，**訊息不外洩資料值**。
+
+    不 strip、不補值、不以 `fund_code` 取代（DEC-2026-11-16-01 要點 2）。與 `ui_v2/hld/logic.py::_check_holding_ids` 同向（單值面）；
+    唯一性由 `A50Section` 驗證。
+    """
+    if not isinstance(holding_id, str):
+        raise ValueError(f"holding_id 必須是字串（收到 {type(holding_id).__name__}）")
+    if holding_id == "" or holding_id != holding_id.strip():
+        raise ValueError("holding_id 不得為空，且不得有前後空白")
+    return holding_id
+
+
 @dataclass(frozen=True)
 class HoldingRow:
-    """一列持倉（來源既有順序，`ordinal` 從 1 起；無排序、無 Top N、無排名）。欄位集合不固定（見 `RowFact`）。"""
+    """一列持倉（來源既有順序，`ordinal` 從 1 起；無排序、無 Top N、無排名）。欄位集合不固定（見 `RowFact`）。
+
+    `holding_id`：身份鍵（必填；非空字串、無前後空白，`A50Section` 內唯一）。**只作身份鍵：不顯示、不進 DOM、不生成、不靜默修正、
+    不以基金代號取代**（DEC-2026-11-16-01 要點 2）。
+    """
 
     ordinal: int
     facts: Tuple[RowFact, ...]
+    holding_id: str
 
     def __post_init__(self) -> None:
         if isinstance(self.ordinal, bool) or not isinstance(self.ordinal, int) or self.ordinal < 1:
             raise ValueError(f"ordinal 必須是 >=1 的整數，收到 {self.ordinal!r}")
+        check_holding_id(self.holding_id)
         _tuple_of("facts", self.facts, RowFact, non_empty=True)
         codes = [f.field_code for f in self.facts]
         if len(set(codes)) != len(codes):
@@ -418,6 +437,9 @@ class A50Section:
             raise ValueError("status_only 不得帶列")
         if [r.ordinal for r in self.rows] != list(range(1, len(self.rows) + 1)):
             raise ValueError("rows 的 ordinal 必須是 1..n 連續且依來源順序")
+        ids = [r.holding_id for r in self.rows]
+        if len(set(ids)) != len(ids):
+            raise ValueError("rows 的 holding_id 不得重複")
 
     @property
     def row_count(self) -> int:
@@ -645,7 +667,7 @@ PROVISIONAL_ITEMS = (
        "暫行：A30／A40 沿用與 A10 同一個 MissingFact；82 §11.7 要求情境三有 A30/A40 一行狀態，§11.9.7 線框未畫。已知落差，不得升格。",
        "82 §11.7、§11.9.7；T7"),
     _p("early_return_skips_row_and_coverage_validation",
-       "暫行：_resolve 在 no_active／holding_read_failed 問題碼時提早回傳，略過持倉列 Mapping 驗證與 source_coverage 驗證，此時持倉列形狀錯誤不會被偵測。已知落差，不得升格。",
+       "暫行：_resolve 在 no_active／holding_read_failed 問題碼時提早回傳，略過持倉列 Mapping 驗證與 source_coverage 驗證，此時持倉列形狀錯誤不會被偵測，包含 holding_id 也不驗。已知落差，不得升格。",
        "82 §11.9.9；UI-2"),
     _p("blocked_basis_state_without_value",
        "暫行：blocked 時 A10 的 basis_state 取自載入結果的設定狀態（可能是 set）但 basis_value 為 None，畫面上會是『基準已設定但沒有值』。已知落差，不得升格。",
@@ -690,7 +712,7 @@ _PENDING_LIST = (
     _w("cause_basis_not_approved_with_rows", "已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果", _SRC_82 + "：情境一 類別(b)"),
     _w("cause_basis_not_approved", "配置比較的計算口徑尚未核准，故不提供結果", _SRC_EXEC + "（去掉「已有持倉資料可查看」：未讀取或無可用列時不得聲稱有）；登記為暫行項 cause_basis_not_approved_plain_wording_derived，不得升格"),
     _w("entry_view_holdings", "查看持倉明細", _SRC_82 + "：入口文案〔待裁示〕"),
-    _w("limit_no_fx_conversion", "目前未做匯率換算，各檔原幣數值不合計", _SRC_82 + "：限制列；字樣待 T5"),
+    _w("limit_no_fx_conversion", "此預覽不提供匯率換算或跨幣別合計", "客戶 DEC-2026-11-16-01 要點轉述：限制行指定字樣（暫行字樣，不進已核准字樣表；是否定稿待客戶確認）"),
 )
 
 

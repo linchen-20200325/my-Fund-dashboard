@@ -48,8 +48,9 @@ def page(*, a00=None, a50=None, entry=None, a60=None, fact=None):
         a60=a60 or vm.A60Evidence(0, 0, (), ()))
 
 
-def one_row(n=1, **facts):
-    return vm.HoldingRow(n, tuple(vm.RowFact(code, vm.ROW_STATE_PRESENT, value, None) for code, value in (facts or {"fund_name": "FAKE"}).items()))
+def one_row(n=1, holding_id=None, **facts):
+    return vm.HoldingRow(n, tuple(vm.RowFact(code, vm.ROW_STATE_PRESENT, value, None) for code, value in (facts or {"fund_name": "FAKE"}).items()),
+                         holding_id if holding_id is not None else f"FAKE-ID-{n}")
 
 
 # ───────────────────────── 區塊順序、A20 恆 4 格 ─────────────────────────
@@ -153,7 +154,7 @@ def test_a60_counts_accept_zero_and_none_and_none_is_not_zero():
 @pytest.mark.parametrize("bad", [0, -1, True, 1.0, "1", None])
 def test_row_ordinal_is_a_strict_positive_int(bad):
     with pytest.raises(ValueError):
-        vm.HoldingRow(bad, (one_row().facts[0],))
+        vm.HoldingRow(bad, (one_row().facts[0],), "FAKE-ID-1")
 
 
 def test_first_screen_count_is_a_strict_int():
@@ -279,9 +280,9 @@ def test_a50_rows_state_needs_rows_and_status_only_has_none_and_order_is_source_
     with pytest.raises(ValueError):
         vm.A50Section(vm.A50_ROWS, (one_row(1), one_row(3)))        # 序號不連續（不得略列／Top N）
     with pytest.raises(ValueError):
-        vm.HoldingRow(1, (vm.RowFact("a", vm.ROW_STATE_PRESENT, "x", None), vm.RowFact("a", vm.ROW_STATE_PRESENT, "y", None)))
+        vm.HoldingRow(1, (vm.RowFact("a", vm.ROW_STATE_PRESENT, "x", None), vm.RowFact("a", vm.ROW_STATE_PRESENT, "y", None)), "FAKE-ID-1")
     with pytest.raises(ValueError):
-        vm.HoldingRow(1, ())
+        vm.HoldingRow(1, (), "FAKE-ID-1")
 
 
 def test_entry_is_a_provisional_candidate_and_carries_no_number():
@@ -417,15 +418,20 @@ def test_pending_wording_is_pending_sourced_disjoint_and_never_impersonates_an_a
         assert item.key == key and item.status == W.STATUS_PENDING and item.source.strip()
         assert item.text not in approved and not any(sym in item.text for sym in symbols), key
         assert not _ENV_SHAPE.search(item.text) and not _SNAKE.search(item.text), key   # 不得外漏工程資訊形的字
-        assert "候選" in item.source or "衍生" in item.source, key
+        if key == "limit_no_fx_conversion":   # 客戶指定字樣：出處為 DEC 要點轉述（唯一放寬的 key）
+            assert "客戶 DEC-2026-11-16-01 要點轉述" in item.source
+        else:
+            assert "候選" in item.source or "衍生" in item.source or "暫擬" in item.source, key
 
 
 def test_pending_wording_texts_contain_no_forbidden_word_except_the_one_negated_82_candidate():
-    """82 的限制列候選逐字含「不合計」（否定句，不是產生合計）；其餘字樣不得含任何禁用字。"""
+    """限制行（客戶 DEC-2026-11-16-01 指定字樣）含「跨幣別合計」（否定句「不提供…」，不是產生合計）；其餘字樣不得含任何禁用字。"""
     for key, item in vm.ASSETS_PENDING_WORDING.items():
-        text = item.text.replace("不合計", "") if key == "limit_no_fx_conversion" else item.text
+        text = item.text.replace("跨幣別合計", "") if key == "limit_no_fx_conversion" else item.text
         assert not [w for w in _FORBIDDEN_WORDS if w in text], (key, item.text)
-    assert "合計" in vm.ASSETS_PENDING_WORDING["limit_no_fx_conversion"].text
+    limit = vm.ASSETS_PENDING_WORDING["limit_no_fx_conversion"]
+    assert limit.text == "此預覽不提供匯率換算或跨幣別合計" and "DEC-2026-11-16-01" in limit.source and limit.status == W.STATUS_PENDING
+    assert "limit_no_fx_conversion" not in rules.APPROVED_WORDING and limit.text not in {a.text for a in rules.APPROVED_WORDING.values()}
 
 
 def test_every_state_without_an_approved_word_has_a_pending_candidate_and_cause_wording_exists_where_82_gives_one():
@@ -449,3 +455,34 @@ def test_the_two_basis_causes_differ_in_whether_they_claim_viewable_holdings():
     assert build("market_blocked").a10.missing.causes[-1].cause_key == vm.CAUSE_BASIS_NOT_APPROVED
     for name in ("no_active", "read_failed", "complete_no_rows"):
         assert vm.CATEGORY_BASIS_NOT_APPROVED not in build(name).a10.missing.categories, name   # 無列時不寫 (b)，不暗示有資料可看
+
+
+# ───────────────────────── holding_id 身份鍵（DEC-2026-11-16-01 要點 2） ─────────────────────────
+
+@pytest.mark.parametrize("bad", [None, "", " ", "  x", "x ", "\tx", 1, 1.5, True, b"id", ("a",), ["a"]])
+def test_holding_row_rejects_a_missing_empty_padded_or_non_string_holding_id(bad):
+    with pytest.raises(ValueError):
+        vm.HoldingRow(1, one_row().facts, bad)
+
+
+def test_holding_row_requires_holding_id_it_is_never_generated_or_defaulted():
+    with pytest.raises(TypeError):
+        vm.HoldingRow(1, one_row().facts)   # 不給就是程式錯誤，不補預設值
+    assert vm.HoldingRow(1, one_row().facts, "a b|c").holding_id == "a b|c"   # 內部空白合法；不 strip、不改寫
+
+
+def test_a50_section_rejects_duplicate_holding_ids_without_leaking_the_value():
+    with pytest.raises(ValueError) as exc:
+        vm.A50Section(vm.A50_ROWS, (one_row(1, "SECRET-DUP-ID"), one_row(2, "SECRET-DUP-ID")))
+    assert "SECRET-DUP-ID" not in str(exc.value)
+    assert vm.A50Section(vm.A50_ROWS, (one_row(1, "id-a"), one_row(2, "id-b"))).row_count == 2
+
+
+@pytest.mark.parametrize("bad", ["", " pad", 7, None])
+def test_holding_id_error_messages_never_contain_the_value(bad):
+    with pytest.raises(ValueError) as exc:
+        vm.check_holding_id(bad)
+    assert " pad" not in str(exc.value)
+    with pytest.raises(ValueError) as exc2:
+        vm.check_holding_id("SECRET-PAD ")
+    assert "SECRET" not in str(exc2.value)

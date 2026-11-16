@@ -172,6 +172,24 @@ def market_blocked_result() -> dict:
     return fake_result(status="blocked", blocked_reason="market_basis_assembly_not_available_in_preview", evidence=None)
 
 
+def same_fund_two_policies_result() -> dict:
+    """多保單同基金：同 fund_code、不同 policy_id ＝ 兩列、兩個 holding_id（不合併；身份鍵是 policy_id＋fund_code）。FAKE。"""
+    rows = [fake_holding(1, policy_id="FAKE-POLICY-A", fund_code="FK0001", holding_id="FAKE-POLICY-A|FK0001|1", fund_name="FAKE 基金 同基金"),
+            fake_holding(2, policy_id="FAKE-POLICY-B", fund_code="FK0001", holding_id="FAKE-POLICY-B|FK0001|1", fund_name="FAKE 基金 同基金",
+                         units_shares=2500.5)]
+    return fake_result(evidence=fake_evidence(holdings=rows))
+
+
+FAKE_MANY_ROWS = 50
+FAKE_MARKUP_NAME = 'FAKE <b>基金</b> & "引號" <script>x</script>'
+
+
+def many_rows_result(n: int = FAKE_MANY_ROWS) -> dict:
+    """大量列（預設 50 列），第 1 列的基金名稱含 HTML 特殊字元（測 escape 與捲動）。FAKE。"""
+    rows = [fake_holding(i, fund_name=FAKE_MARKUP_NAME if i == 1 else f"FAKE 基金 {i}", ccy="TWD" if i % 3 == 0 else "USD") for i in range(1, n + 1)]
+    return fake_result(evidence=fake_evidence(holdings=rows))
+
+
 SCENARIOS = {
     "complete": complete_result,
     "partial": partial_result,
