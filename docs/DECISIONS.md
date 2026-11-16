@@ -3231,6 +3231,20 @@
 
 ---
 
+### DEC-2026-11-15-01｜基金規則清理接續任務：本輪重新指派與增量收尾範圍（非永久角色變更）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-15；客戶本輪明文任務，執行組由總管派工轉達；要點轉述，非全文逐字存檔。 |
+| 決策內容摘要 | 先驗收 #1251～#1253，再接續指定五項問題；每批最多三項。ChatGPT Work 本輪重新承接必要修正、非作者 QA、exact-head Fast／Schema／Slow／Visual 與符合既有 Auto-Ship Gate 後合併及新 main 後驗。不得重啟全庫盤點、重開重複 PR 或另立 SSOT。 |
+| 本批限縮 | 第二批只做原任務第2／3／4項：有負控的規則防回歸守衛、3.3 單一操作入口、5.1 第10＋11點操作入口；只加原地適用指標，保留原文／DEC／evidence／hash，不搬歷史。其餘指定問題留後批／Gate。 |
+| 不構成裁示 | 不宣稱 BL-0538 讀法已核准；BL-0541 真正歷史搬移仍 PENDING-GATE。不取消每次 merge／audit 更新 HANDOFF 的義務；HANDOFF SHA 循環仍須 A／B／C 正式裁示。不改 frozen 44、子法1／57、來源語意、公式、Risk Cap、FX、DG2、OneBrain、真實資料或 workflow。 |
+| evidence／source | 2026-11-15 客戶「ChatGPT Work｜基金專案規則清理接續任務」；本批實作與驗收見 `docs/evidence/fund_rule_cleanup_2026_11_15.md`、對應 PR exact-head 證據。 |
+| supersedes／superseded by | 僅本輪重新指派 `DEC-2026-11-07-04` 分工的任務 owner，不改其永久分工與 QA／Auto-Ship 前置條件；其餘正式 DEC 不取代。 |
+| provenance | 客戶原任務可由本輪對話核對；文件由執行組整理，尚待非作者 QA；測試自驗不等於 QA，未合併不宣稱 FIXED。 |
+
+---
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
