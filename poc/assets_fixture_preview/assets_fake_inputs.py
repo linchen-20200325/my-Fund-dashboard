@@ -70,7 +70,7 @@ def fake_result(*, status="evaluated", blocked_reason=None, evidence="default", 
     }
 
 
-# ───────────── 七個情境 ─────────────
+# ───────────── 九個情境（①～⑦沿用，⑧⑨為 A50 新增） ─────────────
 
 def multi_currency_result() -> dict:
     """①來源完整、兩列：一列新臺幣、一列美元（只呈現原幣事實；本 Preview 不做任何匯率換算或合計）。"""
@@ -115,6 +115,24 @@ def unprovided_skip_evidence_result() -> dict:
     return fake_result(evidence=ev)
 
 
+def same_fund_two_policies_result() -> dict:
+    """⑧多保單同基金：同 fund_code、不同 policy_id ＝ 兩列、兩個 holding_id（不合併）。"""
+    rows = [fake_holding(1, policy_id="FAKE-POLICY-A", fund_code="FK0001", holding_id="FAKE-POLICY-A|FK0001|1", fund_name="FAKE 基金 同基金"),
+            fake_holding(2, policy_id="FAKE-POLICY-B", fund_code="FK0001", holding_id="FAKE-POLICY-B|FK0001|1", fund_name="FAKE 基金 同基金",
+                         units_shares=2500.5)]
+    return fake_result(evidence=fake_evidence(holdings=rows))
+
+
+FAKE_MANY_ROWS = 50
+FAKE_MARKUP_NAME = 'FAKE <b>基金</b> & "引號" <script>x</script>'
+
+
+def many_rows_result(n: int = FAKE_MANY_ROWS) -> dict:
+    """⑨大量列（50 列），第 1 列的基金名稱含 HTML 特殊字元（測 escape 與捲動）。"""
+    rows = [fake_holding(i, fund_name=FAKE_MARKUP_NAME if i == 1 else f"FAKE 基金 {i}", ccy="TWD" if i % 3 == 0 else "USD") for i in range(1, n + 1)]
+    return fake_result(evidence=fake_evidence(holdings=rows))
+
+
 # 情境 id → (畫面上的情境名, 建構器)；順序即 selectbox 順序。
 SCENARIOS = {
     "multi_currency": ("①完整（新臺幣＋美元）", multi_currency_result),
@@ -124,6 +142,8 @@ SCENARIOS = {
     "no_active": ("⑤未選定來源", no_active_result),
     "read_failed": ("⑥讀取失敗", read_failed_result),
     "unprovided_skip_evidence": ("⑦略過證據未提供", unprovided_skip_evidence_result),
+    "same_fund_two_policies": ("⑧多保單同基金", same_fund_two_policies_result),
+    "many_rows": ("⑨大量列（50 列）", many_rows_result),
 }
 DEFAULT_SCENARIO = "multi_currency"
 

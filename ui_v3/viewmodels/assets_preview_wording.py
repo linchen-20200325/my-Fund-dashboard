@@ -19,6 +19,11 @@ from ui_v3.viewmodels.preview_wording import STATUS_PENDING, PendingWording
 _SRC_LABEL = "docs/v2/82 摘要標籤說明（程式現行標籤；暫行、未核准、可被客戶推翻）"
 _SRC_WIRE = "docs/v2/82 §11.9.4 線框欄位名（暫行、未核准、可被客戶推翻）"
 _SRC_EXEC = "執行組暫擬（Preview 用；暫行、未核准）"
+_SRC_DEC = "客戶 DEC-2026-11-16-01 要點轉述（四欄中文名稱依既有欄位語意；字樣是否定稿待客戶確認；暫行、未核准、不進已核准字樣表）"
+
+# A50 四欄的欄位代碼 → 暫行欄名字樣鍵（順序＝`adapters.assets_page.PROVISIONAL_ROW_FIELDS`；本檔不 import adapter，順序由測試鎖定）。
+A50_FIELD_LABEL_KEYS: Tuple[Tuple[str, str], ...] = (
+    ("fund_name", "a50_col_fund_name"), ("fund_code", "a50_col_fund_code"), ("ccy", "a50_col_ccy"), ("units_shares", "a50_col_units_shares"))
 
 # A20 四格位置代碼 → 暫行標籤字樣鍵（順序＝`A20_CELL_CODES`）。
 A20_LABEL_KEYS: Tuple[Tuple[str, str], ...] = tuple(zip(A20_CELL_CODES, (
@@ -34,6 +39,12 @@ _LIST = (
     PendingWording("a10_title", "資產配置", _SRC_WIRE),
     PendingWording("a10_basis_label", "基準", _SRC_WIRE),
     PendingWording("separator", "｜", _SRC_WIRE),
+    PendingWording("a50_title", "完整持倉", _SRC_WIRE + "：A50 標題「完整持倉」"),
+    PendingWording("a50_col_fund_name", "基金名稱", _SRC_DEC),
+    PendingWording("a50_col_fund_code", "基金代號", _SRC_DEC),
+    PendingWording("a50_col_ccy", "幣別", _SRC_DEC),
+    PendingWording("a50_col_units_shares", "單位數", _SRC_DEC),
+    PendingWording("a50_labels_note", "欄名與單位數顯示為暫行字樣，尚未核准", _SRC_EXEC),
 )
 
 

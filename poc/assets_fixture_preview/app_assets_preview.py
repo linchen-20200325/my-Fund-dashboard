@@ -3,7 +3,7 @@
 
 `streamlit run poc/assets_fixture_preview/app_assets_preview.py`
 
-頁頂固定一列 FAKE 標示（屬 harness，不屬 renderer）；下方用 selectbox 切換七個 FAKE 情境，
+頁頂固定一列 FAKE 標示（屬 harness，不屬 renderer）；下方用 selectbox 切換九個 FAKE 情境，
 情境 dict → `build_assets_page` → renderer。不取數、不讀憑證、不寫任何東西。
 """
 from __future__ import annotations

@@ -181,6 +181,9 @@ def _resolve(env: _Envelope) -> _Resolved:
     `early_return_skips_row_and_coverage_validation`（有 no_active／holding_read_failed 問題碼時提早回傳，**略過持倉列 Mapping 驗證與
     source_coverage 驗證**——此時持倉列形狀錯誤不會被偵測；已知落差）。
     以上都是執行組暫行選定，82 未規定，不得升格。
+
+    身份鍵（DEC-2026-11-16-01）：非提早回傳的路徑上，所有持倉列的 `holding_id` 都先驗（缺／空／非字串／前後空白／重複 → ValueError）。
+    提早回傳的兩種問題碼路徑同樣不看列（`early_return_skips_row_and_coverage_validation`），所以那兩條路徑不驗身份鍵；與 ui_v2 的範圍差異，已登記、不處置。
     """
     if env.status == STATUS_BLOCKED:
         return _Resolved(vm.SRC_NOT_READ, (), None, None)
@@ -193,6 +196,7 @@ def _resolve(env: _Envelope) -> _Resolved:
     if _PROBLEM_HOLDING_READ_FAILED in env.problems:
         return _Resolved(vm.SRC_READ_FAILED, (), skipped_tabs, skipped_rows)
     rows = tuple(_require_mapping("evidence['holdings'] 的列", r) for r in evidence["holdings"])
+    _validated_holding_ids(rows)   # 身份鍵缺／空／非字串／前後空白／重複 → ValueError（連不展示的列也驗，與 ui_v2 同向）
     coverage = _require_mapping("evidence['source_coverage']", evidence["source_coverage"]).get("status")
     if coverage == _COVERAGE_NOT_SELECTED:
         state = vm.SRC_NOT_SELECTED
@@ -259,11 +263,32 @@ def _row_fact(field_code: str, raw: Mapping) -> vm.RowFact:
                       vm.MissingFact("missing", (vm.CauseFact(vm.CATEGORY_SOURCE_DATA, code),)))
 
 
-def _rows(holdings: Sequence, row_fields: Tuple[str, ...]) -> Tuple[vm.HoldingRow, ...]:
-    out = []
+def _validated_holding_ids(holdings: Sequence[Mapping]) -> Tuple[str, ...]:
+    """持倉列的身份鍵驗證（缺／空／非字串／前後空白／重複 → ValueError）；回傳依序的 holding_id。
+
+    不 strip、不生成、不以 fund_code 取代；訊息不含資料值。與 `ui_v2/hld/logic.py::_check_holding_ids` 同向（接受／拒絕一致；
+    差異測試 `test_ui_v3_assets_holding_id_identity.py` 鎖定）。非提早回傳的路徑上，**連不展示的列也驗**（與 ui_v2 一致；fail loud，不靜默丟掉壞身份鍵）。
+    """
+    ids = []
+    seen = set()
     for ordinal, raw in enumerate(holdings, start=1):
-        out.append(vm.HoldingRow(ordinal, tuple(_row_fact(code, raw) for code in row_fields)))
-    return tuple(out)
+        if "holding_id" not in raw:
+            raise ValueError(f"第 {ordinal} 列缺 holding_id")
+        try:
+            holding_id = vm.check_holding_id(raw["holding_id"])
+        except ValueError as exc:
+            raise ValueError(f"第 {ordinal} 列：{exc}") from None
+        if holding_id in seen:
+            raise ValueError(f"第 {ordinal} 列的 holding_id 與先前的列重複")
+        seen.add(holding_id)
+        ids.append(holding_id)
+    return tuple(ids)
+
+
+def _rows(holdings: Sequence, row_fields: Tuple[str, ...]) -> Tuple[vm.HoldingRow, ...]:
+    ids = _validated_holding_ids(holdings)
+    return tuple(vm.HoldingRow(ordinal, tuple(_row_fact(code, raw) for code in row_fields), holding_id)
+                 for ordinal, (raw, holding_id) in enumerate(zip(holdings, ids), start=1))
 
 
 def _check_row_fields(row_fields) -> Tuple[str, ...]:
@@ -272,6 +297,8 @@ def _check_row_fields(row_fields) -> Tuple[str, ...]:
     fields = tuple(row_fields)
     if len(set(fields)) != len(fields):
         raise ValueError("row_fields 不得重複")
+    if "holding_id" in fields:
+        raise ValueError("row_fields 不得指名 holding_id（身份鍵只作鍵，不作顯示欄位；DEC-2026-11-16-01）")
     banned = [f for f in fields if f in FORBIDDEN_ROW_FIELDS]
     if banned:
         raise ValueError(f"row_fields 不得指名會帶進金額／比例的欄位 {banned!r}（T1＝B、N＝C）")
