@@ -185,3 +185,55 @@ A60 欄位／字樣（G-A）；入口、原因句計入與否，SPEC／限制若
 四個最低測試情境【候選】：(1) TWD＋USD 持倉；(2) 來源成功但零有效持倉列；(3) FX Gate blocked；(4) NAV／配息／1Y 含息局部 Missing。
 
 **驗證狀態**：單組、僅讀文件與原始碼；未量測像素、未跑測試；全稱句均〔推〕。
+
+## 2026-11-16 A50 逐檔展開最小授權包候選（待客戶裁示，不構成授權）
+
+> **狀態：全部【候選／Pending】。** 本小節不新增 DEC、不授權任何程式修改；符號均已 grep 驗證存在（不寫行號）。隔離 Preview（#1256，merge `a1e5a38e`）目前畫面不顯示逐檔持倉。
+
+### 舊 UI／L2 能力對照與 A50 最小修改
+
+| 舊 UI／L2 能力 | 可重用符號 | New UI2 現況 | A50 最小修改 |
+|---|---|---|---|
+| 個人 Active 載入 | `load_alo_tables_active`／`ActiveSourceError`／`assets_source.l2_reads` | 轉接層已有 | 不改；A50 隔離階段不呼叫 |
+| 未選 Active vs 讀取失敗 | `is_no_active`／`_resolve`（`ui_v3/adapters/assets_page.py`） | 已區分 | 不改 |
+| 空持倉 vs 讀不到 | `_build_hld5` 的 `holding_unknown`（`ui_v2/hld/`）vs `SRC_COMPLETE_NO_ROWS`／`SRC_UNDETERMINED`／`SRC_PARTIAL` | VM 已有三態 | 不改；A50 `status_only` 只畫一列狀態文字 |
+| 逐檔欄位 | `build_alo_tables`／`PROVISIONAL_ROW_FIELDS`（`fund_name`,`fund_code`,`ccy`,`units_shares`） | 已有 | 欄位不變 |
+| 逐檔展開鍵 | `_holding_id`（`services/v2_tables/alo_holdings.py`）／`_check_holding_ids`（`ui_v2/hld/logic.py`）vs `HoldingRow` 目前只有 `ordinal`【缺】 | 無穩定鍵 | `HoldingRow` 加 `holding_id`；adapter `_rows` 取並驗證唯一；差異測試對 `ui_v2` |
+| 多保單同基金 | `aggregate_holding_rows`（`services/v2_domain/holdings.py`）【缺測試】 | 未測 | fixture 加「同 `fund_code` 兩保單＝兩列兩鍵」 |
+| 配置與 NAV／FX | — | — | 不碰 |
+| A50 renderer | — | 無 | 新增 `ui_v3/pages/assets_a50.py`，`pages/assets.py` 呼叫；修改「不得出現 A50／href／button」測試 |
+
+### 需改到已合併檔案（需客戶明確授權）
+
+`ui_v3/viewmodels/assets_page.py`、`ui_v3/adapters/assets_page.py`、`ui_v3/pages/assets.py`、`poc/assets_fixture_preview/assets_fake_inputs.py`、`ui_v3/viewmodels/assets_preview_wording.py`，以及三份既有測試。
+
+### 展開互動
+
+- 舊版為 `st.button`＋`session_state`（每次點擊 rerun；是否重讀 Active Sheet 無實測依據，不照搬）。
+- 候選：單層 HTML `<details>`；展開鍵 `holding_id` 只當 key、不顯示。A10 入口跳轉暫不做。
+- 【NOT VERIFIED】需實測：Streamlit HTML 消毒是否保留 `details`／`name`／`id`；點擊是否 rerun；手機收合／桌面條件式展開可能需兩份 DOM（影響首屏計數）；鍵盤開合與觸控 ≥48px；50 列以上與特殊字元 escape。
+
+### 有效列判定
+
+現行暫行判準（`_resolve` 流程；入口條件 `len(holdings)>0`）標【候選·暫行·不得升格】。反例：
+- 略過證據未提供但 coverage=complete → `SRC_UNDETERMINED` 仍有列；
+- 略過件數>0 且無列 → `SRC_UNDETERMINED`；
+- 列存在但指名欄位全 Missing；
+- 設定讀取失敗，`_resolve` 不看；
+- 同 `fund_code` 兩保單聚合列對應多筆原始列。
+
+### 待客戶裁示
+
+1. 授權修改上列已合併檔案，並限定 A50 逐檔四欄、無金額；
+2. A50 欄位字樣與限制行字樣；
+3. `<details>` 是否算巢狀展開、是否要求同時最多展開一檔／收回零檔機制；
+4. 卡 1 首屏名額口徑、卡 2「可用持倉列」門檻（前置）；
+5. A10 入口目標（未裁前不畫）。
+
+### 絕對不做
+
+原幣金額、台幣總額、占比、報酬、配息、建議；import `ui_v2` page／CSS／shell；新 Sheet reader／OAuth／快取／NAV·FX 引擎；service account／`POLICY_SHEET_ID` 回退；動 token／scope／來源；接 registry／`app_preview`；把 holdings 長度>0 升格為正式契約；對 blocked 狀態讀持倉。
+
+### 建議 Model／Effort（總管讀法，可被推翻）
+
+Sonnet 5.5／Medium；若 `holding_id` 驗證與 `ui_v2` 差異測試出現語意分歧，屬資料身分 → 停下送 Change Gate 升 High。
