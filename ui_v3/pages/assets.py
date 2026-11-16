@@ -150,8 +150,9 @@ def _limit_html(code: str) -> str:
 
 def a10_html(a10: vm.A10Card, source_state: str) -> str:
     """降級卡：`◇ 資料未備` 純文字（不是 chip）＋每個原因一行＋基準一列＋限制一列。**不畫入口**；文字不計入首屏元素。"""
+    sep = _label("separator")
     rows = "".join(
-        f'<div class="uv3-row" data-a10="cause">{_missing()}{_label('separator')}{cause_html(c, source_state)}</div>' for c in a10.missing.causes)
+        f'<div class="uv3-row" data-a10="cause">{_missing()}{sep}{cause_html(c, source_state)}</div>' for c in a10.missing.causes)
     spec = f'<div class="uv3-row" data-a10="spec"><span class="uv3-label">{_label("a10_basis_label")}</span>{_basis_html(a10)}</div>'
     limits = "".join(f'<div class="uv3-row" data-a10="limit">{_limit_html(c)}</div>' for c in a10.limit_codes)
     return f'<div class="uv3-card" data-block="a10"><h4>{_label("a10_title")}</h4>{rows}{spec}{limits}</div>'
