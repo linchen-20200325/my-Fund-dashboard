@@ -188,3 +188,68 @@
 | D10 | 是否補齊或重新確認 `DEC-2026-11-05-02/-04` 的客戶授權（目前為要點轉述、無逐字）並同步 `-04` 的實作狀態 | 承重生產者的授權鏈 | `DEC-2026-11-05-02/-04` |
 
 > 以上每項在本文件中**僅登記為待決**，不起草選項、不預設答案，也不視為已由客戶同意。
+
+---
+
+## 2026-11-16 Evidence 缺口增量核對（唯讀；單組字面搜尋，未經第二組驗證）
+
+> 本小節只整理既有文件與 `services/v2_domain/allocation_evidence.py` 的現況，不新增決策、不起草 DEC、不授權施工。〔事〕＝讀到的內容，〔推〕＝本稿判讀（INFERENCE）。「查無」皆為單組字面搜尋結果，不宣稱窮舉。
+
+### 1　D2 逐列待審表現況（共 17 列）
+
+| 狀態 | 列 | 依據 |
+|---|---|---|
+| 【已核准契約文字】 | R-ID-1、R-NAV-1 | `DEC-2026-11-13-06` |
+| 【已核准契約文字】 | R-NAV-2（採 C，核准 T-NAV2＋附註）、R-NAV-5（採 A 附嚴格限制，核准 T-NAV5） | `DEC-2026-11-14-07` |
+| 【暫緩】 | R-NAV-3（採 B） | `DEC-2026-11-14-07`；維持 Pending |
+| 【Pending】共 13 列 | R-ID-2、R-ID-3、R-NAV-3、R-NAV-4、R-NAV-6、R-PERF-1～R-PERF-8 | `docs/evidence/d2_contract_approval_prep_2026_11_12.md`、`docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md` |
+
+注意：R-NAV-3 計入 13 列【Pending】，不是第 14 列。R-PERF-1／3／6 分別與已核准的 R-ID-1／R-NAV-5／R-NAV-2 重複，但 `DEC-2026-11-13-06` 明文**不自動升格**，仍列【Pending】。「已核准」只指契約**文字**，不等於程式已實作或 Schema 已生效。
+
+### 2　Evidence 保留度（`services/v2_domain/allocation_evidence.py`，`SCHEMA_VERSION` 為 CANDIDATE，非已核准契約）
+
+| 項目 | 保留度〔推〕 | 備註 |
+|---|---|---|
+| 來源與資料日期 | 部分 | 程式內有 `fetched_at` 等欄位處理；根層資料時點見缺口 2 |
+| freshness | 部分 | 無 `stale_after` 門檻（D3(b) 未裁） |
+| missing reason | 已有 | |
+| coverage 與分母 | 已有 | |
+| provenance | 部分 | `allocation_evidence.py` 內查無 `ccy_source` 欄（單組字面搜尋；僅見 `ui_v2/exp/*` 與 tests），R-NAV-6 未核准 |
+| 規則結果與適用限制 | 部分 | `rule_ref` 為 `NOT_DEFINED`；`rule_version` 格式未定（BL-0527） |
+| counter-evidence（反證） | 缺（NOT IMPLEMENTED） | 投資語意未裁（D5，BL-0542 G-1 (b)） |
+| 未核准欄位的 Pending 狀態 | 文件有、程式缺 | 程式不攜帶「此欄位尚未核准」旗標 |
+
+### 3　六項缺口（依 UI 最先需要排序〔推〕）
+
+| # | 缺口 | 關聯 |
+|---|---|---|
+| 1 | Provider 名稱與 `ccy_source` | R-NAV-4／R-NAV-6 |
+| 2 | Evidence 根層資料時點／產生時間 | 無對應 D2 列，屬 Digest 層（D2／D3） |
+| 3 | `stale_after` 門檻 | D3(b)；連帶 R-NAV-3 |
+| 4 | 狀態字彙對照表 | D3 |
+| 5 | `rule_version` 與規則適用限制格式 | BL-0527、D4 |
+| 6 | 反證欄位與定義 | D5、BL-0542 |
+
+### 4　推進批次建議（INFERENCE、【候選】、非核准、可被推翻）
+
+與 `d2_contract_approval_prep_2026_11_12.md` §4 的原順序**不同**（該處順序為 R-ID-1＋R-NAV-1 → Q0 → S7 → 1Y 含息；本稿依「UI 最先需要」重排），差異需註明，兩者皆非核准。
+
+| 批 | 列 | 備註 |
+|---|---|---|
+| A | R-NAV-4、R-NAV-6 | Provider 與 `ccy_source` |
+| B | R-PERF-1、R-PERF-3、R-PERF-6 | 與已核准列重複，仍須各自審 |
+| C | R-ID-2、R-ID-3 | 擋在 identity Stop Gate S7（`full_key`／後綴） |
+| D | R-PERF-7、R-PERF-8、R-NAV-3 | |
+| E | R-PERF-2、R-PERF-4、R-PERF-5 | 1Y 含息，綁 BL-0427 |
+
+下一批可先**準備** R-NAV-4、R-NAV-6 的文件候選，**不代表核准**。
+
+### 5　AI 洞察／反證位置
+
+- 版面預留只在文件：`docs/v2/80_new_ui2_architecture_proposal.md` 第 7.4 節、`docs/v2/67_ai_action_vocabulary.md` 第 8.9 節。
+- 資料層無反證欄位、無 typed interface〔推〕。
+- 單組字面搜尋：`ai_summary_stub` 在 `.py` 檔未見；未發現 AI Runtime 違規（非窮舉）。
+
+### 6　未授權清單（以文件為準）
+
+Provider、Claude API、Digest 正式 Schema、Shadow、Phase 7、FX、DG2 皆**未授權**。位置：`DEC-2026-11-13-06` 授權範圍欄（「不授權」清單，含 Schema、runtime、FX、DG2、ISIN、`full_key`）；Phase 7 見 `PROJECT_RULES.md` 的 Phase 7 研究類條目（Non-Production）；BL-0545 仍為唯一全域 NEXT 且 BLOCKED（`docs/HANDOFF.md`）。

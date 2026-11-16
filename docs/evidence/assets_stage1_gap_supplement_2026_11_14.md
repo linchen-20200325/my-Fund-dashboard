@@ -85,3 +85,103 @@ A60 欄位／字樣（G-A）；入口、原因句計入與否，SPEC／限制若
 
 ## 驗證狀態
 單組、僅讀文件與原始碼（含 PR #1248 五檔）；**未量測像素、未跑測試**；客戶裁示為要點轉述；2026-11-14 裁示登記於 `DEC-2026-11-14-06`。點數為設計值；全稱句均〔推〕、未經第二組驗證。**待獨立 QA。**
+
+---
+
+## 2026-11-16 三張最小裁示卡（待客戶正式裁示）與第一個隔離式 Preview 施工授權包候選
+
+> **狀態：三張卡全部【待客戶正式裁示】。** 下列 A／B／C 的「推薦」只是總管讀法，**可被客戶推翻**；不是已核准、不授權 renderer、不授權任何 `ui_v3/pages/`、registry、`app_preview` 或資料接線的施工。本小節不新增 DEC、不改 82 原文。表內〔事〕＝由文件／原始碼讀到，〔推〕＝本稿判讀（單組、未經第二組驗證）。符號名引自 `ui_v3/viewmodels/assets_page.py` 與 `ui_v3/adapters/assets_page.py`，不寫行號。
+
+### 卡 1　390px 首屏元素名額口徑
+
+| 項目 | 狀態 |
+|---|---|
+| frozen 44 首屏預算 ≤5、Missing 不隱藏也不當 0、A20 固定四格、兩類原因不得混同（UI-1）、不得新增 chip／狀態詞 | 【已核准】`DEC-2026-11-03-11`、`DEC-2026-11-09-04`（UI-1）；`DEC-2026-11-14-06` 驗收條件含「A20 固定四格、缺值不填 0」。註：`DEC-2026-11-03-11` 的 ≤5 先例原為 🌍 降級首屏〔推〕，不自動適用 💼 |
+| A10 入口、原因句、SPEC、限制是否計入名額 | 【待客戶正式裁示】 |
+| 實際 390px 首屏驗收 | 【NOT VERIFIED】（renderer 完成前不可能量測） |
+
+設計值（〔事〕由既有 G-B 矩陣與 `first_screen_element_count` 推算，**非量測**），情境依序為 一 完整／二 部分缺漏／三 未取得或無列：
+
+| 口徑 | 一／二／三 |
+|---|---|
+| 不計入（入口、原因句、SPEC、限制皆為文字） | 5／5／5 |
+| 計入入口與原因句 | 7／8／6 |
+| 再計入 SPEC 與限制（各 +2） | 9／10／8 |
+
+| 方案 | 內容 | 風險／張力 |
+|---|---|---|
+| A | 明文裁定入口、原因句、SPEC、限制為文字、不計名額，並設密度上限（入口 ≤1 行、原因句 ≤2 短句且兩類不混、SPEC ≤1 行、限制 ≤1 行）；Preview 同時回報三種口徑 | 需客戶接受「文字不計名額」；密度上限數值為本稿提議【候選】 |
+| B | 全部計入，超出者折疊 | 與 UI-1（兩類原因不得混同、Missing 不隱藏）有張力；`DEC-2026-11-03-11` 的先例只限 🌍〔推〕 |
+| C | 不裁，只報告兩種點數 | 無法形成驗收條件 |
+
+**推薦 A（總管讀法，可被客戶推翻）。** 附註：(1) VM 的 `POLICY_A10_TEXT_INCLUDED` 只計入 A10 入口與原因句，**不含 SPEC／限制**，不得稱為最保守口徑；(2) 不得為了湊數刪必要的風險說明。
+
+### 卡 2　空持倉語意
+
+| 項目 | 狀態 |
+|---|---|
+| 四類必須分開：來源未取得、取數失敗、來源完整但零有效列、已有資料但計算契約未核准 | 【分開本身已核准】`DEC-2026-11-09-04`（UI-1） |
+| 來源完整零有效列歸原因類別 (a)／(b)／其他；「可用持倉列」門檻 | 【待客戶正式裁示】（客戶尚未定義門檻，見 `DEC-2026-11-09-04` 與本檔 G-E） |
+| 下列 VM／adapter 現行判準 | 【候選·暫行·不得升格】，留待下一個契約 Decision Gate |
+
+**消歧**：「原因類別 (a)」（`CATEGORY_SOURCE_DATA`，資料缺漏或取數失敗）≠「來源情境三 (a)」（`SRC_NOT_SELECTED`，未選 Active）。兩者不得混用。
+
+**現行暫行判準（〔事〕讀 `ui_v3/adapters/assets_page.py::_resolve`、`_causes_for` 與 `ui_v3/viewmodels/assets_page.py` 的 `SRC_*` 常數）**：
+- 問題碼 no_active → `SRC_NOT_SELECTED`；holding_read_failed → `SRC_READ_FAILED`（優先於矛盾的 coverage）。
+- 來源涵蓋為 complete：兩項略過證據（略過分頁、略過列）**皆已提供且件數為 0** 且有列 → `SRC_COMPLETE`；同條件但無列 → `SRC_COMPLETE_NO_ROWS`（暫歸原因類別 (a)、原因引用 A00）。
+- 來源涵蓋為 complete 但任一略過證據未提供或件數 >0 → 降為 `SRC_UNDETERMINED`；有列時原因含類別 (b)，無列時只有類別 (a)。
+- 來源涵蓋為 incomplete 且有列且有略過證據 → `SRC_PARTIAL`；未知值或 incomplete 無略過證據 → `SRC_UNDETERMINED`。
+- 進入 NO_ROWS 狀態（未選、失敗、完整無列、未讀）一律清空列；市值基準 blocked → `SRC_NOT_READ`，列為空。
+- 入口 `provisional_holding_entry_available`：額外排除未選／失敗／blocked；`SRC_UNDETERMINED` 但有列仍出現入口。
+
+**反例／邊界（〔推〕，單組閱讀，未實跑）**：
+
+| # | 情境 | 影響 |
+|---|---|---|
+| 1 | 略過證據 >0 且 coverage=complete、且無列 | 降為 `SRC_UNDETERMINED`，不會被寫成「沒有有效持倉列」；使用者看不到「完整讀完但真的是零列」，與 82 §11.7 情境三 (c) 的可達性有落差 |
+| 2 | 略過證據未提供（status 非 provided）卻 coverage=complete | 同上降級；真實來源若永遠不提供略過證據，`SRC_COMPLETE`／`SRC_COMPLETE_NO_ROWS` 永遠無法出現 |
+| 3 | 設定讀取失敗（settings 類 problems） | `_resolve` 不看 `settings_status`（本檔 G-E open）；若 coverage 仍為 complete，來源狀態不反映設定失敗，呈現方式未定 |
+| 4 | 列存在，但各被指名欄位的值皆為 Missing／不可用 | `_row_fact` 只取 `row_fields` 指名的欄位，缺值或型別不可用者成為 Missing 事實；列仍算「有」但可顯示值為零，「可用持倉列」是否成立未定。另註：`FORBIDDEN_ROW_FIELDS`（`value_twd`、`cost_twd`、`cost_orig_ccy`、`share_of_covered_pct`、`weight_ratio`）是 `_check_row_fields` 對**呼叫端傳入 row_fields 清單**的守衛（任一禁用欄位或空清單即 `ValueError`），**不是**對資料列內容的過濾；持倉原始資料含金額鍵不會被擋，只是不會被取用〔推〕 |
+| 5 | 市值基準 blocked | `rows` 恆空、`SRC_NOT_READ`，與「有持倉但看不到」無法區分（見卡 3） |
+| 6 | 有 no_active／holding_read_failed 問題碼 | 提前回傳，**略過持倉列形狀驗證**（`early_return_skips_row_and_coverage_validation`，已知落差） |
+
+| 方案 | 內容 |
+|---|---|
+| A | Preview 沿用暫歸原因類別 (a)，並標「暫行」 |
+| B | 不歸類，只顯示 A00 |
+| C | 歸原因類別 (b) |
+
+**推薦 A，僅限 Preview（總管讀法，可被客戶推翻）。** A50 入口判定維持【候選】（`DEC-2026-11-09-04` UI-2）；無可用列時**不顯示**導向空內容的入口。
+
+### 卡 3　FX blocked 下的原幣呈現
+
+〔事〕載入端在市值基準下一律 blocked、**不讀持倉**；`FX_OBS_DATE_RULE_VERIFIED = False`；現行 VM／adapter 結構無法承載原幣事實（本檔 G-F 未決）。82 §11.3 的原幣事實**有證據來源，尚待實跑及獨立 QA**，目前不是「已驗證的原幣事實」。
+
+| 方案 | 內容 | 風險 |
+|---|---|---|
+| A | 兩組完全分離的 fake fixture。成本基準 fixture：`ccy`、`units_shares`，標「假資料／使用者填寫（模擬）」，不換算、不合計、不給配置百分比。真實 blocked：維持 blocked、不讀持倉、不顯示原幣 | fixture 不代表真實資料路徑；仍屬【待客戶正式裁示】 |
+| B | 擴 adapter／VM，使 blocked 也讀持倉 | 需改 #1248 已合併檔，須新授權，且涉淨值門檻 |
+| C | 列後續 Gate | 本基準留一個無畫面情境 |
+
+**推薦 A（總管讀法，可被客戶推翻）。**
+
+### 第一個隔離式 Preview 施工授權包候選
+
+> **本節不構成授權。** 以下是供客戶「一次核准」的候選清單，核准前一切為【Pending】。**前置：卡 1 的名額口徑須先裁。**
+
+| 項目 | 狀態 |
+|---|---|
+| 新增 `ui_v3/pages/assets.py`（唯一 renderer） | 【候選】 |
+| `ui_v3/shell/registry.py` 的 ast 頁由未啟用改啟用 | 【候選】 |
+| 最小 `app_preview` 接線 | 【候選】 |
+| fixture 位置與 fake 標示方式 | 【候選】 |
+| 場景切換器是否屬新增正式 UI 元件 | 【Pending】找不到依據，需客戶判定 |
+| 範圍僅 A00、A10、A20；A30–A60 不做 | 【候選】 |
+| A10 入口無合法目標時，不得做可點擊的空內容假入口 | 【候選】 |
+| 字樣只用 `shared/ui_semantics/rules.py` 已核准鍵與 `ASSETS_PENDING_WORDING`（顯示為「暫行」） | 【候選】 |
+| 不碰 services／公式／FX／真實資料 | 【候選】 |
+| 驗收：390×844、768、1280 視覺與操作；AppTest／Playwright；獨立 QA；exact-head CI。fixture 通過不等同 Cloud／真機 | 【候選】驗收條件 |
+
+四個最低測試情境【候選】：(1) TWD＋USD 持倉；(2) 來源成功但零有效持倉列；(3) FX Gate blocked；(4) NAV／配息／1Y 含息局部 Missing。
+
+**驗證狀態**：單組、僅讀文件與原始碼；未量測像素、未跑測試；全稱句均〔推〕。
