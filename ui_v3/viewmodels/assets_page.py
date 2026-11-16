@@ -667,7 +667,7 @@ PROVISIONAL_ITEMS = (
        "暫行：A30／A40 沿用與 A10 同一個 MissingFact；82 §11.7 要求情境三有 A30/A40 一行狀態，§11.9.7 線框未畫。已知落差，不得升格。",
        "82 §11.7、§11.9.7；T7"),
     _p("early_return_skips_row_and_coverage_validation",
-       "暫行：_resolve 在 no_active／holding_read_failed 問題碼時提早回傳，略過持倉列 Mapping 驗證與 source_coverage 驗證，此時持倉列形狀錯誤不會被偵測。已知落差，不得升格。",
+       "暫行：_resolve 在 no_active／holding_read_failed 問題碼時提早回傳，略過持倉列 Mapping 驗證與 source_coverage 驗證，此時持倉列形狀錯誤不會被偵測，包含 holding_id 也不驗。已知落差，不得升格。",
        "82 §11.9.9；UI-2"),
     _p("blocked_basis_state_without_value",
        "暫行：blocked 時 A10 的 basis_state 取自載入結果的設定狀態（可能是 set）但 basis_value 為 None，畫面上會是『基準已設定但沒有值』。已知落差，不得升格。",

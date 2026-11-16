@@ -335,19 +335,35 @@ def test_a50_never_exposes_holding_id_or_policy_in_dom(server_and_browser):
         ctx.close()
 
 
-def test_mutation_a50_wide_row_and_small_summary_and_nesting_are_flagged(server_and_browser):
+def _a50_mutated(server_and_browser, *, css=None, js=None):
     base, browser = server_and_browser
     ctx, page = _open(browser, base, 390)
     try:
         page.locator('details[data-block="a50"] > summary').click()
-        page.add_style_tag(content=".uv3-a50-row{width:1000px !important} .uv3-a50 > summary{min-height:20px !important;padding:0 !important}")
+        page.wait_for_function("() => document.querySelector('details[data-block=\"a50\"]').open === true", timeout=10000)
+        assert lib.a50_violations(page.evaluate(lib.A50_JS), expect_open=True, expect_rows=2) == []   # 正控：未變異時全綠
+        if css:
+            page.add_style_tag(content=css)
+        if js:
+            page.evaluate(js)
         page.wait_for_timeout(300)
-        a = page.evaluate(lib.A50_JS)
-        problems = [v[0] for v in lib.a50_violations(a, expect_open=True, expect_rows=2)]
-        assert any("水平溢出" in x or "觸控" in x for x in problems), problems
-        assert lib.overflow_violations(page.evaluate(lib.MEASURE_JS))
-        page.evaluate("() => document.querySelector('details[data-block=\"a50\"] [data-a50=\"body\"]').insertAdjacentHTML('beforeend', '<details><summary>x</summary>y</details>')")
-        a2 = page.evaluate(lib.A50_JS)
-        assert any("巢狀" in v[0] or "各恰一個" in v[0] for v in lib.a50_violations(a2, expect_open=True, expect_rows=2))
+        return page.evaluate(lib.A50_JS), page.evaluate(lib.MEASURE_JS)
     finally:
         ctx.close()
+
+
+def test_mutation_a50_wide_row_is_flagged_alone(server_and_browser):
+    a, m = _a50_mutated(server_and_browser, css=".uv3-a50-row{width:1000px !important}")
+    # 容器 overflow-x:hidden 會裁掉過寬列，所以由「頁本體元素超出視窗右緣」判定抓到（a50_violations 的整頁溢出判定在此不觸發）
+    assert any("頁本體元素超出視窗右緣" in v[0] for v in lib.overflow_violations(m)), (a, m)
+
+
+def test_mutation_a50_small_summary_is_flagged_alone(server_and_browser):
+    a, _ = _a50_mutated(server_and_browser, css=".uv3-a50 > summary{min-height:20px !important;padding:0 !important}")
+    assert any("觸控" in v[0] for v in lib.a50_violations(a, expect_open=True, expect_rows=2))
+
+
+def test_mutation_a50_second_details_is_flagged_alone(server_and_browser):
+    js = "() => document.querySelector('details[data-block=\"a50\"] [data-a50=\"body\"]').insertAdjacentHTML('beforeend', '<details><summary>x</summary>y</details>')"
+    a, _ = _a50_mutated(server_and_browser, js=js)
+    assert any("巢狀" in v[0] or "各恰一個" in v[0] for v in lib.a50_violations(a, expect_open=True, expect_rows=2))

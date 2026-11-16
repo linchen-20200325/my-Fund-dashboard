@@ -418,7 +418,10 @@ def test_pending_wording_is_pending_sourced_disjoint_and_never_impersonates_an_a
         assert item.key == key and item.status == W.STATUS_PENDING and item.source.strip()
         assert item.text not in approved and not any(sym in item.text for sym in symbols), key
         assert not _ENV_SHAPE.search(item.text) and not _SNAKE.search(item.text), key   # 不得外漏工程資訊形的字
-        assert "候選" in item.source or "衍生" in item.source or "要點轉述" in item.source, key
+        if key == "limit_no_fx_conversion":   # 客戶指定字樣：出處為 DEC 要點轉述（唯一放寬的 key）
+            assert "客戶 DEC-2026-11-16-01 要點轉述" in item.source
+        else:
+            assert "候選" in item.source or "衍生" in item.source or "暫擬" in item.source, key
 
 
 def test_pending_wording_texts_contain_no_forbidden_word_except_the_one_negated_82_candidate():

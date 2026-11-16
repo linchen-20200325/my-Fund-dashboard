@@ -272,8 +272,8 @@ def test_sentinel_numbers_and_row_facts_never_leak_into_the_page(name):
     for sentinel in (sup.SENTINEL_CATEGORY_VALUE, sup.SENTINEL_HOLDING_VALUE, sup.SENTINEL_COST_TWD, sup.SENTINEL_COST_ORIG, sup.SENTINEL_SHARE_PCT):
         for form in (str(sentinel), f"{sentinel:,.2f}", f"{sentinel:,.1f}", str(int(sentinel)), f"{int(sentinel):,}"):
             assert form not in outside, form                 # 非 A50 區：所有寫法都不得出現（不放寬）
-            if "." in form or "," in form:
-                assert form not in a50, form                 # A50 區：帶小數點／千分位的寫法不得出現（純整數寫法可能與 FAKE 編號巧合相同，不查）
+            if "." in form or "," in form or len(form) >= 6:
+                assert form not in a50, form                 # A50 區：帶小數點／千分位、或 6 位以上整數（不可能與 FAKE 編號巧合）不得出現；僅短整數（如 33）豁免
     for fact in ("FAKE 基金", "FK0001", "FAKE-POLICY", "FAKE-TAB"):
         assert fact not in outside                           # 非 A50 區不得有逐檔事實（不放寬）
     for fact in ("FAKE-POLICY", "FAKE-TAB", "FAKE-X", "|"):
@@ -516,7 +516,7 @@ def test_fifty_rows_are_all_present_and_the_container_scrolls_instead_of_truncat
     assert "text-overflow" not in assets.CSS and "line-clamp" not in assets.CSS
 
 
-def test_a50_summary_meets_the_touch_target_floor_and_css_uses_no_hardcoded_colour():
+def test_a50_summary_css_sets_the_touch_target_min_height():
     from ui_v3.shell import nav
 
     assert re.search(rf"\.uv3-a50 > summary\{{[^}}]*min-height:{nav.TOUCH_MIN_PX}px", assets.CSS)
@@ -540,3 +540,38 @@ def test_limit_line_uses_the_customer_specified_pending_wording_in_every_scenari
         limit = re.search(r'data-a10="limit">(.*?)</div>', html).group(1)
         assert visible(limit).strip() == "此預覽不提供匯率換算或跨幣別合計", name
     assert "此預覽不提供匯率換算或跨幣別合計" not in {a.text for a in rules.APPROVED_WORDING.values()}
+
+
+def _structure_problems(a50_html_text):
+    """A50 結構判定（與 `test_a50_is_exactly_one_collapsed_details…` 同一組規則的純字串版，供負控使用）。"""
+    bad = []
+    if a50_html_text.count("<details") != 1 or a50_html_text.count("</details>") != 1 or a50_html_text.count("<summary") != 1:
+        bad.append("count")
+    if re.search(r"<details[^>]*\sopen[\s>=]", a50_html_text):
+        bad.append("open")
+    inner = a50_html_text[a50_html_text.index("<details") + 1:] if "<details" in a50_html_text else ""
+    if "<details" in inner:
+        bad.append("nested")
+    return bad
+
+
+def test_structure_checker_is_green_on_the_real_page_and_red_on_injected_mutations():
+    html = html_of("multi_currency")
+    assert _structure_problems(html) == []
+    assert "count" in _structure_problems(html + html[html.index("<details"):])                            # 第二個 <details>
+    assert "open" in _structure_problems(html.replace("<details class", "<details open class", 1))          # 注入 open
+    nested = html.replace('<div class="uv3-a50-body"', '<details><summary>x</summary>y</details><div class="uv3-a50-body"', 1)
+    assert {"count", "nested"} <= set(_structure_problems(nested))                                          # 巢狀 <details>
+
+
+@pytest.mark.parametrize("name,raw,shown", [
+    ("ideographic_space", "甲\u3000乙", "甲 乙"),
+    ("nbsp", "\u00a0甲\u00a0\u00a0乙\u00a0", "甲 乙"),
+    ("leading_trailing", "  甲  ", "甲"),
+])
+def test_value_whitespace_folding_is_not_verbatim_locked_as_is(name, raw, shown):
+    """現況：`str.split()` 會把 U+3000、NBSP 等也摺成 ASCII 空格並修剪頭尾——畫面值不是逐字原值（已於 README 揭露；是否改為保留由客戶決定）。"""
+    result = sup.complete_result(1)
+    result["evidence"]["holdings"][0]["fund_name"] = raw
+    a50 = split_a50(assets.page_html(build_assets_page(result)))[1]
+    assert re.search(r'data-field="fund_name"><span class="uv3-label">.*?</span></span>(.*?)</div>', a50).group(1) == shown

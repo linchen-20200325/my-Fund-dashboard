@@ -8,13 +8,18 @@
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 import assets_page_support as S
 from ui_v3.adapters import assets_page as adapter
 from ui_v3.viewmodels import assets_page as vm
 
-hld_logic = pytest.importorskip("ui_v2.hld.logic", reason="本環境匯入不到 ui_v2（差異測試需要它）")
+
+def v2():
+    """只有差異測試需要 ui_v2；匯入不到就只 skip 那幾個測試，不連累其他（洩漏、row_fields、順序、多保單）。"""
+    return pytest.importorskip("ui_v2.hld.logic", reason="本環境匯入不到 ui_v2（差異測試需要它）")
 
 
 def build(holdings, **kw):
@@ -63,7 +68,7 @@ CASES = [
 
 def _accepts_v2(holdings) -> bool:
     try:
-        hld_logic._check_holding_ids(holdings)
+        v2()._check_holding_ids(holdings)
     except ValueError:
         return False
     return True
@@ -72,7 +77,9 @@ def _accepts_v2(holdings) -> bool:
 def _accepts_v3(holdings) -> bool:
     try:
         build(holdings)
-    except ValueError:
+    except ValueError as exc:
+        # 確認拒絕是 holding_id 規則造成，不是別的驗證
+        assert "holding_id" in str(exc) or re.search(r"第 \d+ 列", str(exc)), str(exc)
         return False
     return True
 
@@ -85,19 +92,26 @@ def test_ui_v3_accepts_and_rejects_exactly_like_ui_v2(name, holdings, expected):
 
 
 def test_both_sides_raise_the_value_error_family_and_the_differential_has_both_outcomes():
-    assert hld_logic.HoldingIdError.__mro__[1] is ValueError
+    assert v2().HoldingIdError.__mro__[1] is ValueError
     assert {c[2] for c in CASES} == {True, False}   # 正控：母體同時含接受與拒絕，不是單向空綠
-    with pytest.raises(hld_logic.HoldingIdError):
-        hld_logic._check_holding_ids([_h(1, holding_id="")])
+    with pytest.raises(v2().HoldingIdError):
+        v2()._check_holding_ids([_h(1, holding_id="")])
     with pytest.raises(ValueError):
         build([_h(1, holding_id="")])
 
 
-def test_differential_has_teeth_a_checker_that_never_rejects_would_be_caught():
-    """負控：若 ui_v3 一律接受（等於沒驗），上面的差異測試必須報紅——這裡現編一個永不拒絕的檢查器，驗證比較邏輯真的會抓到分歧。"""
-    never_rejects = lambda holdings: True   # noqa: E731
-    disagreements = [name for name, holdings, _ in CASES if never_rejects(holdings) is not _accepts_v2(holdings)]
-    assert disagreements   # 至少有一個案例會暴露
+def test_differential_has_teeth_mutating_the_real_validator_flips_expected_rejections(monkeypatch):
+    """真變異：把 ui_v3 的單值驗證改成永遠接受，至少一個預期拒絕的案例必須轉為『v3 接受』（否則差異測試抓不到退化）。"""
+    monkeypatch.setattr(vm, "check_holding_id", lambda value: value)
+    def accepts_mutated(holdings):
+        try:
+            return _accepts_v3(holdings)
+        except TypeError:   # 變異後不可雜湊的值（list）走到 set：不是被規則拒絕，不算翻轉
+            return False
+
+    flipped = [name for name, holdings, expected in CASES if not expected and accepts_mutated(holdings)]
+    assert flipped   # 例如 空字串、前後空白、非字串
+    # 重複仍由 A50Section 擋，所以「duplicate」類案例不在此列也合理；只要有案例翻轉即證明比較有牙齒
 
 
 # ───────────────────────── adapter：身份鍵進 VM、不外洩資料值 ─────────────────────────
@@ -126,6 +140,19 @@ def test_rejection_messages_do_not_leak_the_data_value(name, holdings, expected)
         assert secret not in message.replace("holding_id", ""), (name, message)
 
 
+@pytest.mark.parametrize("make", [
+    lambda: _h(1, holding_id="LEAK  SENTINEL\t7 "),            # 前後空白
+    lambda: _h(1, holding_id=" LEAK  SENTINEL\t7"),
+])
+def test_rejection_messages_do_not_leak_a_distinctive_value_with_inner_whitespace(make):
+    with pytest.raises(ValueError) as exc:
+        build([make()])
+    assert "LEAK" not in str(exc.value) and "SENTINEL" not in str(exc.value)
+    with pytest.raises(ValueError) as exc2:
+        build([_h(1, holding_id="LEAK  SENTINEL\t7"), _h(2, holding_id="LEAK  SENTINEL\t7")])   # 重複
+    assert "LEAK" not in str(exc2.value) and "SENTINEL" not in str(exc2.value)
+
+
 def test_holding_id_is_never_a_displayable_row_field():
     with pytest.raises(ValueError):
         build([_h(1)], row_fields=("fund_name", "holding_id"))
@@ -148,4 +175,4 @@ def test_known_scope_difference_early_return_problem_codes_do_not_inspect_rows()
     model = adapter.build_assets_page(result)   # 不丟例外
     assert model.a50.state == vm.A50_STATUS_ONLY and model.a50.rows == ()
     with pytest.raises(ValueError):
-        hld_logic._check_holding_ids(result["evidence"]["holdings"])
+        v2()._check_holding_ids(result["evidence"]["holdings"])

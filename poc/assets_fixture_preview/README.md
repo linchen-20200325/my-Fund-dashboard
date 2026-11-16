@@ -62,6 +62,12 @@
 - 390×844、768×844、1280×800：收合與展開狀態皆無水平溢出；summary 高度 48px（`ui_v3.shell.nav.TOUCH_MIN_PX`），中心點未被其他元素蓋住。
 - 50 列：容器 `max-height:70vh` 內垂直捲動，捲到底最後一列完整可見、不截斷；整頁無水平溢出。
 - 特殊字元：基金名稱的 `<b>`、`&`、引號、`<script>` 以文字顯示，DOM 中沒有被解析出的 `b`／`script` 元素。`holding_id`／`policy_id` 不進 DOM（因此改以基金名稱測 escape）。
-- 變異驗證：注入過寬列、縮小 summary、塞入第二個 `<details>`，判定函式都報紅（在記憶體現編，不寫檔）。
+- 變異驗證：過寬列、縮小 summary、第二個 `<details>` 三條各自獨立注入，判定函式都各自報紅（在記憶體現編，不寫檔）。
 
 **NOT VERIFIED（未驗，不得當成已驗）**：真實 Streamlit Cloud、真機（390px 實機高度、iOS／Android 觸控與瀏覽器行為）、非 Chromium 瀏覽器、螢幕閱讀器朗讀 `<details>` 的行為、深色模式下的對比；DEC 待確認 (d)「`<details>` 是否算巢狀展開」仍待客戶裁示（本實作是單層、不巢狀）。
+
+## 已知限制（如實揭露，由客戶決定是否處置）
+
+- **值不是逐字原值**：A50 文字值用 `str.split()` 摺疊空白，會把 U+3000（全形空格）、NBSP 等也摺成 ASCII 空格並修剪頭尾，所以畫面上的基金名稱等不一定與來源逐字相同（有單元測試鎖現況）。
+- **暫行提示在容器內**：`a50_labels_note`（「欄名與單位數顯示為暫行字樣，尚未核准」）位於 `<details>` 內，預設收合時看不到（A20 的暫行提示在首屏外區仍可見）。登記為已知限制，是否移出由客戶決定；本批不移動。
+- **早期回傳路徑不驗身份鍵**：登記項 `early_return_skips_row_and_coverage_validation` 的範圍包含 `holding_id`——問題碼 `no_active_source`／`holding_read_failed` 提早回傳時不看列，所以不驗 `holding_id`（ui_v2 一律先驗）。
