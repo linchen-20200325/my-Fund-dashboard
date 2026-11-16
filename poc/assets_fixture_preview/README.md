@@ -25,7 +25,12 @@
 - `limit_no_fx_conversion_always_present`：「目前未做匯率換算」的限制列在所有情境都出現（含無持倉列的情境）。
 - `undetermined_with_rows_claims_viewable_holdings`：證據不足但有列時，原因會出現「已有持倉資料可查看」。本 Preview 的第七個情境刻意不帶列，所以畫面上看不到這個落差；它仍存在於 view model。
 
+- `limit_no_fx_conversion` 字樣「各檔原幣數值不合計」在未讀取（市值基準）、未選定來源、讀取失敗、來源完整但沒有列的情境也會出現；「各檔原幣數值」可能暗示有逐檔持倉。這是字樣問題，待客戶裁示，本 PR 不改。
+
 ## 其他限制
+
+- 本 Preview 須相容 Python 3.11（CI 版本）：不得使用 3.12 才有的語法（例如 f-string 內重用同種引號）。
+- renderer 會 import `ui_v3.shell.registry`（取 `IA_PAGES` 的頁名）與 `ui_v3.shell.nav`，所以隔離入口會「間接」載入 registry（只讀、registry 未被修改）；入口的靜態白名單禁止的是入口檔**直接** import。
 
 - 驗證範圍：AppTest 與本機 Chromium 的版面守衛；真實 Streamlit Cloud 與真機（390px 實機高度）**未驗**。
 - 首屏元素點數（A00 一個、A20 四格各一個＝5）採 A10 文字不計入；若 A10 原因句與入口也計入，數字會不同，該口徑屬待 UI Review，本 Preview 只量測、不下結論。

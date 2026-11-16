@@ -89,21 +89,39 @@ def test_every_scenario_renders_exactly_five_first_screen_marks_and_no_exception
     assert marks == ["a00", "a20_cell_1", "a20_cell_2", "a20_cell_3", "a20_cell_4"]
 
 
-def test_scenarios_work_with_the_network_blocked(monkeypatch):
+def _block_network(monkeypatch, calls):
     import socket
 
     def blocked(*a, **k):
+        calls.append(a)
         raise AssertionError("Preview 不得連網")
 
     monkeypatch.setattr(socket.socket, "connect", blocked)
     monkeypatch.setattr(socket, "create_connection", blocked)
+    return socket
+
+
+def test_network_block_positive_control_really_fires(monkeypatch):
+    """正控：斷網攔截被觸發時一定會報錯並留下紀錄（否則下面的「斷網仍綠」可能是空綠）。"""
+    calls = []
+    socket = _block_network(monkeypatch, calls)
+    with pytest.raises(AssertionError):
+        socket.create_connection(("127.0.0.1", 9))
+    with pytest.raises(AssertionError):
+        socket.socket().connect(("127.0.0.1", 9))
+    assert len(calls) == 2
+
+
+def test_scenarios_work_with_the_network_blocked(monkeypatch):
+    calls = []
+    _block_network(monkeypatch, calls)
     at = _run()
     for sid in IDS:
         _select(at, sid)
+    assert calls == []   # 整段執行沒有任何連線嘗試
 
 
-def test_no_credential_or_secret_access_in_a_run(monkeypatch):
-    seen = []
+def _spy_environ(monkeypatch, seen):
     real_env_get = os.environ.get
 
     def spy(key, *a, **k):
@@ -112,6 +130,20 @@ def test_no_credential_or_secret_access_in_a_run(monkeypatch):
         return real_env_get(key, *a, **k)
 
     monkeypatch.setattr(os.environ, "get", spy)
+
+
+def test_environ_spy_positive_control_records_a_credential_like_read(monkeypatch):
+    """正控：偷看環境變數的觀察器真的會記錄憑證形名稱（否則「沒有讀憑證」可能是空綠）。"""
+    seen = []
+    _spy_environ(monkeypatch, seen)
+    os.environ.get("SOME_API_KEY")
+    os.environ.get("HARMLESS_NAME")
+    assert seen == ["SOME_API_KEY"]
+
+
+def test_no_credential_or_secret_access_in_a_run(monkeypatch):
+    seen = []
+    _spy_environ(monkeypatch, seen)
     at = _run()
     for sid in IDS:
         _select(at, sid)

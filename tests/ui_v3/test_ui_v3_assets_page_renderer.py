@@ -189,12 +189,38 @@ def test_multi_currency_is_shown_without_any_total_or_conversion():
 
 # ───────────────────────── 入口不畫 ─────────────────────────
 
-def test_position_entry_is_never_drawn_even_when_the_model_has_one():
-    model = model_of("multi_currency")
+ENTRY_SCENARIOS = [n for n in ALL if model_of(n).a10.entry is not None]
+
+
+def test_entry_scenarios_include_complete_and_partial():
+    assert {"multi_currency", "partial"} <= set(ENTRY_SCENARIOS)   # 正控：參數化母體真的含「帶入口」的情境
+
+
+@pytest.mark.parametrize("name", ENTRY_SCENARIOS)
+def test_position_entry_is_never_drawn_even_when_the_model_has_one(name):
+    model = model_of(name)
     assert model.a10.entry is not None   # 前提：VM 真的帶了入口
     html = assets.page_html(model)
     assert "entry_view_holdings" not in html and "查看持倉明細" not in html
     assert not re.search(r"<a[ >]|href=|<button|role=\"link\"|data-entry|A50", html)
+
+
+def test_registered_gap_undetermined_with_rows_claims_viewable_holdings_is_locked_as_is():
+    """已登記落差 `undetermined_with_rows_claims_viewable_holdings`：證據不足（undetermined）但有列時，VM 的原因含「已有持倉資料可查看」。
+    Preview 刻意不使用此情境；這裡只鎖 renderer 對該 model 的實際輸出（不改 renderer 行為）：A00 仍是無法判定、不聲稱來源已讀完，
+    A10 兩個原因各一行（先同 A00 的無法判定，再「已有持倉資料可查看…」），仍不畫入口。"""
+    result = sup.complete_with_unprovided_skip_evidence_result(rows=1)
+    model = build_assets_page(result)
+    assert model.a00.source_state == "undetermined" and model.a50.row_count == 1
+    assert [c.cause_key for c in model.a10.missing.causes] == ["same_as_source_status", "basis_not_approved_with_rows"]
+    html = assets.page_html(model)
+    a00 = html[:html.index('data-block="a10"')]
+    assert rules.entry("undetermined").wording in visible(a00) and "來源已讀完" not in visible(html)
+    causes = re.findall(r'data-a10="cause">(.*?)</div>', html)
+    assert len(causes) == 2
+    assert 'data-status-key="undetermined"' in causes[0] and 'data-pending-wording="cause_basis_not_approved_with_rows"' in causes[1]
+    assert "已有持倉資料可查看" in visible(html)   # 落差本身：不足以判定卻聲稱有資料可看（待客戶裁示，不在本批處置）
+    assert model.a10.entry is not None and "查看持倉明細" not in html
 
 
 # ───────────────────────── 全頁禁止內容 ─────────────────────────
