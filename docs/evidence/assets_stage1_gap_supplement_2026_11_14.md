@@ -195,11 +195,11 @@ A60 欄位／字樣（G-A）；入口、原因句計入與否，SPEC／限制若
 | 舊 UI／L2 能力 | 可重用符號 | New UI2 現況 | A50 最小修改 |
 |---|---|---|---|
 | 個人 Active 載入 | `load_alo_tables_active`／`ActiveSourceError`／`assets_source.l2_reads` | 轉接層已有 | 不改；A50 隔離階段不呼叫 |
-| 未選 Active vs 讀取失敗 | `is_no_active`／`_resolve`（`ui_v3/adapters/assets_page.py`） | 已區分 | 不改 |
+| 未選 Active vs 讀取失敗 | `is_no_active`（`ui_v2/active_gate.py`；`ui_v3/adapters/assets_source.py::l2_reads` 內另有同判定的鏡像區域函式）；`ui_v3/adapters/assets_page.py::_resolve` 靠問題碼 `_PROBLEM_NO_ACTIVE`／`_PROBLEM_HOLDING_READ_FAILED` 分流 | 已區分 | 不改 |
 | 空持倉 vs 讀不到 | `_build_hld5` 的 `holding_unknown`（`ui_v2/hld/`）vs `SRC_COMPLETE_NO_ROWS`／`SRC_UNDETERMINED`／`SRC_PARTIAL` | VM 已有三態 | 不改；A50 `status_only` 只畫一列狀態文字 |
-| 逐檔欄位 | `build_alo_tables`／`PROVISIONAL_ROW_FIELDS`（`fund_name`,`fund_code`,`ccy`,`units_shares`） | 已有 | 欄位不變 |
+| 逐檔欄位 | `build_alo_tables`（`services/v2_tables/alo_holdings.py`）；`PROVISIONAL_ROW_FIELDS`（`ui_v3/adapters/assets_page.py`：`fund_name`,`fund_code`,`ccy`,`units_shares`） | 已有 | 欄位不變 |
 | 逐檔展開鍵 | `_holding_id`（`services/v2_tables/alo_holdings.py`）／`_check_holding_ids`（`ui_v2/hld/logic.py`）vs `HoldingRow` 目前只有 `ordinal`【缺】 | 無穩定鍵 | `HoldingRow` 加 `holding_id`；adapter `_rows` 取並驗證唯一；差異測試對 `ui_v2` |
-| 多保單同基金 | `aggregate_holding_rows`（`services/v2_domain/holdings.py`）【缺測試】 | 未測 | fixture 加「同 `fund_code` 兩保單＝兩列兩鍵」 |
+| 多保單同基金 | `aggregate_holding_rows`（`services/v2_domain/holdings.py`；身分鍵 `policy_id`＋`fund_code`） | `tests/test_v2_domain_port.py` 有直接呼叫，但只測 `ccy` 不一致錯誤路徑；缺「同 `fund_code`、不同 `policy_id`＝兩列兩個 `holding_id`」案例【缺】 | fixture 加「同 `fund_code`、不同 `policy_id`＝兩列兩鍵」 |
 | 配置與 NAV／FX | — | — | 不碰 |
 | A50 renderer | — | 無 | 新增 `ui_v3/pages/assets_a50.py`，`pages/assets.py` 呼叫；修改「不得出現 A50／href／button」測試 |
 
@@ -220,7 +220,7 @@ A60 欄位／字樣（G-A）；入口、原因句計入與否，SPEC／限制若
 - 略過件數>0 且無列 → `SRC_UNDETERMINED`；
 - 列存在但指名欄位全 Missing；
 - 設定讀取失敗，`_resolve` 不看；
-- 同 `fund_code` 兩保單聚合列對應多筆原始列。
+- 同保單同基金（同 `policy_id`＋`fund_code`）的聚合列對應多筆原始列（不同保單不會合併成一列）。
 
 ### 待客戶裁示
 
