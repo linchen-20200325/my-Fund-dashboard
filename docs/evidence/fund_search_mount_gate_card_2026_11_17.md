@@ -11,7 +11,7 @@
 | 現在要不要問客戶 Gate-M？ | **現在不建議單獨問**（理由見第 4 節）；裁示卡已備妥（第 5 節），客戶若想看「🔍 在真實 Shell 導覽內的樣子」可隨時用。 |
 | Gate-D（真實資料接線）？ | **維持暫緩**，直到 `DEC-2026-11-14-08` 的 S2-T0 解凍；不在本卡問。 |
 | 不需新 Gate 的下一個 🔍 可見切片？ | **沒有**（第 6 節）。 |
-| 最大的結構性發現 | 掛載不是「改 registry 一格」：🔍 的 renderer／wording／logic 現住 `poc/`，ui_v3 不能 import `poc/`；FAKE 輸入又不能經 `ui_v3.fixtures` 進 `app_preview`（既有守衛禁止）。**掛載必然連帶「搬 renderer」「FAKE 輸入供應處」「放寬或新增守衛」三件事，每一件都需新授權。**【碼】 |
+| 最大的結構性發現 | 掛載不是「改 registry 一格」：🔍 的 renderer／logic／wording／fake_inputs 四個模組現住 `poc/`，ui_v3 不能 import `poc/`；FAKE 輸入又不能經 `ui_v3.fixtures` 進 `app_preview`（既有守衛禁止）。**掛載必然連帶「搬 renderer」「FAKE 輸入供應處」「放寬或新增守衛」三件事，每一件都需新授權。**【碼】 |
 
 ## 1　掛載需要改哪些檔（精確範圍，單組估計）
 
@@ -40,7 +40,8 @@
 | `tests/ui_v3/test_ui_v3_preview_navigation_pages_guard.py` | **多半自動跟 registry 走**（比較 `st.navigation` 頁集合與 `registered_pages()`）；其負控（插入 `zz` 頁）應仍紅。需 CI 實跑確認【未驗】 |
 | `tests/ui_v3/test_ui_v3_preview_not_formal_guard.py` | 負控用 `ast` 當「已掛載卻無 renderer」，與 `exp` 無關，**預期不用改**；`app_preview` 模組層零 streamlit／零 fixtures 的檢查須維持 |
 | `tests/ui_v3/test_ui_v3_import_guard.py`、`test_ui_v3_fixtures_are_fake_guard.py`、`ui_v3_guard_lib.py` | 若 FAKE 供應處放 `adapters`／`viewmodels`，需新增「FAKE 專用模組白名單＋必須有 FAKE 標示」規則；放 `fixtures` 則必須放寬「`app_preview`／`pages` 不得 import fixtures」（`DEC` 外的原則改變，**不建議**） |
-| `tests/poc_fund_search_preview/*` | 隨 renderer／logic／wording 搬遷改 import 路徑，並保留 drift 鎖 |
+| `tests/poc_fund_search_preview/*` | 隨 renderer／logic／wording／fake_inputs 搬遷改 import 路徑，並保留 drift 鎖 |
+| **待查守衛（本組未讀其內容，是否受影響須實查）**【未驗】 | `tests/poc_fund_search_preview/test_fund_search_guards.py`（poc 目錄 import 白名單與隔離守衛）、`tests/poc_assets_preview/test_assets_preview_apptest.py`、`tests/visual_fidelity/test_ci_fixture_screenshots.py` |
 | 新增 | `tests/ui_v3/test_ui_v3_exp_page_*`（renderer／AppTest）、FAKE 標示守衛、註冊狀態守衛、nav 內 🔍 可進／可聚焦的瀏覽器斷言 |
 
 ### 1-C　可見成果與回滾
@@ -75,7 +76,7 @@
 
 | # | 授權條目 | 為什麼現有 DEC 不涵蓋 |
 |---|---|---|
-| A1 | 於 `ui_v3/pages/exp.py` 與 `ui_v3/viewmodels/` 新增 🔍 renderer／logic／wording（由 poc 搬入） | DEC 明列「不修改正式 `ui_v3/pages` 或導覽」 |
+| A1 | 於 `ui_v3/pages/exp.py` 與 `ui_v3/viewmodels/` 新增 🔍 renderer／logic／wording（由 poc 搬入；第四個模組 fake_inputs 轉入 FAKE-only adapter，見 S6） | DEC 明列「不修改正式 `ui_v3/pages` 或導覽」 |
 | A2 | 修改 `ui_v3/shell/registry.py`（`exp` 掛載；可能加欄位） | DEC 明列不授權 |
 | A3 | 修改 `ui_v3/app_preview.py`（`_render_exp`／`renderers`） | DEC 明列不授權 |
 | A4 | 新增／放寬守衛：FAKE 專用模組白名單、FAKE 橫幅必備、`registered` 與資料真假的關係、nav 測試改寫 | 原則性改變（R3） |
@@ -84,7 +85,7 @@
 
 ## 4　為什麼現在不建議單獨問 Gate-M
 
-1. **價值低於成本**：客戶今天已可 `streamlit run poc/fund_search_fixture_preview/app_fund_search_preview.py` 看到同一份 FAKE 版面；掛載多出來的只是「在 Shell 導覽內點得到」，卻要動 registry／`app_preview`／至少 6 個守衛檔並搬 3 個模組。
+1. **價值低於成本**：客戶今天已可 `streamlit run poc/fund_search_fixture_preview/app_fund_search_preview.py` 看到同一份 FAKE 版面；掛載多出來的只是「在 Shell 導覽內點得到」，卻要動 registry／`app_preview`／至少 6 個守衛檔並搬 4 個模組（renderer／logic／wording／fake_inputs；其中 fake_inputs 轉入 FAKE-only adapter，見 S6）。
 2. **原則衝突需先裁**：A5 會推翻 `app_preview`「不顯示 fake 資料」；💼（A50／A60）、⚙️（BL-0550）同為 FAKE 隔離預覽，**目前皆未掛載**。若只掛 🔍，對其餘兩頁形成不一致先例；較合理是一次裁「Preview 導覽可否含離線 FAKE 頁」的政策（第 7 節），再逐頁套用。
 3. **待定字樣尚多**：`DEC-2026-11-17-02` 的 (a)～(g) 未裁；掛進 Shell 會讓暫行字樣更接近使用者可見位置。
 4. **對「往正式前進」的貢獻有限**：正式可用的真正阻擋在 Gate-D（S2-T0 暫緩、選股池 `pool_not_cloud`、D2 Pending、ISIN 無對照來源），掛載 FAKE 頁不縮短這條路徑。
@@ -95,16 +96,16 @@
 | 方案 | 內容 | 優點 | 缺點 | 風險 | AI 推薦 |
 |---|---|---|---|---|---|
 | **M-0　維持現狀（不問）** | 🔍 FAKE 只留 `poc/`；registry 不動 | 零改動、零誤讀 | Shell 內仍看不到 🔍 | 無新增 | **推薦（現在）** |
-| **M-1　Gate-M：掛載離線 FAKE（兩步：先搬 M0、後掛 M1）** | A1～A6；🔍 `registered=True`＋`offline_fake` 標記＋頁頂 FAKE 橫幅＋FAKE-only adapter；全部 FAKE，不接資料 | 可在真 Shell 驗導覽／手機頁首／選取態；回滾乾淨（revert M1） | 檔案面廣（S1～S7＋守衛）；推翻「Preview 不顯示 fake」原則；暫行字樣更顯眼 | R1、R2、R3、R5 | 客戶明確要看 Shell 內效果時才推薦 |
-| **M-2　先裁「FAKE 頁掛載政策」再逐頁** | 一次裁示 🔍／💼／⚙️ 是否可進 Preview 導覽及標示規格；之後各頁各自小 Gate | 避免不一致先例；守衛只改一次 | 比 M-1 多一輪對話 | 低 | 若客戶有意掛三頁則優於 M-1 |
+| **M-1　Gate-M：掛載離線 FAKE（兩步：先搬 M0、後掛 M1）** | A1～A6；🔍 `registered=True`＋`offline_fake` 標記＋頁頂 FAKE 橫幅＋FAKE-only adapter；全部 FAKE，不接資料 | 可在真 Shell 驗導覽／手機頁首／選取態；回滾乾淨（revert M1） | 檔案面廣（S1～S7＋守衛）；推翻「Preview 不顯示 fake」原則；暫行字樣更顯眼 | R1、R2、R3、R5 | 客戶只想看 🔍 一頁在 Shell 內的效果、且不打算同時掛 💼／⚙️ 時才推薦 |
+| **M-2　先裁「FAKE 頁掛載政策」再逐頁** | 一次裁示 🔍／💼／⚙️ 是否可進 Preview 導覽及標示規格；之後各頁各自小 Gate | 避免不一致先例；守衛只改一次 | 比 M-1 多一輪對話 | 低 | 客戶有意讓 🔍／💼／⚙️ 多頁掛載時優於 M-1（🔍 可當第一頁套用） |
 | **D-0　Gate-D 維持暫緩** | 不授權任何真實資料接線；等 S2-T0 解凍 | 與 `DEC-2026-11-14-08` 一致 | 無進度 | 無 | **推薦（維持）** |
 | D-1　Gate-D：接真實資料 | 需另有完整接線 Gate | — | 見第 8 節各項阻擋 | 高 | **不在本卡問** |
 
 ### Gate-M 最小裁示卡（若客戶要問才用；商業語言，附推薦）
 
 > **問**：是否同意把「🔍 找基金」的**離線 FAKE 版面**掛進 New UI2 Preview 導覽（僅供看版面與操作感，所有基金名稱／數字都是模擬，不接任何真實資料）？
-> **推薦**：現在先不掛（M-0）；若要看 Shell 內效果，選 M-2→M-1，且 🔍 頁頂永遠顯示「FAKE／離線測試資料」。
-> **做法與範圍（M-1）**：僅 `ui_v3/shell/registry.py`、`ui_v3/app_preview.py`、`ui_v3/pages/exp.py`、`ui_v3/viewmodels/` 新增三檔內（logic／wording）、一個 FAKE-only adapter、`poc/fund_search_fixture_preview/` 薄化、對應測試與守衛。
+> **推薦**：現在先不掛（M-0）；若客戶要看 Shell 內效果：只想看 🔍 一頁選 M-1；有意讓多頁掛載選 M-2（先裁政策，再逐頁套用，🔍 可當第一頁）。兩者皆須 🔍 頁頂永遠顯示「FAKE／離線測試資料」。
+> **做法與範圍（M-1）**：僅 `ui_v3/shell/registry.py`、`ui_v3/app_preview.py`、`ui_v3/pages/exp.py`、`ui_v3/viewmodels/` 新增 logic、wording 兩檔、一個 FAKE-only adapter（承接 fake_inputs）、`poc/fund_search_fixture_preview/` 薄化、對應測試與守衛。
 > **使用者可見**：Preview 導覽 🔍 可點入離線 FAKE 版面。
 > **不得觸碰**：Google Sheet、選股池、frozen 44、正式公式、Schema、FX、ISIN 解析與對照、secrets、任何網路請求、D2 Pending 欄位值、EXP-3／4／5／6、使用者設定寫入；不得宣稱 🔍 功能完成。
 > **字樣規則**：沿用 `PendingWording`；新字樣一律暫行，已核准字樣取規則表；不得自行定稿。

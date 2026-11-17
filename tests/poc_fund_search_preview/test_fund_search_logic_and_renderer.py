@@ -452,9 +452,18 @@ def test_empty_pool_has_a_visual_only_marker_on_all_three_result_cards_without_n
         view = L.build_filter_view(sc["pool"], (1, 2, 3), COUNT)
         for html in (R.exp0_html(view, False), R.exp2_html(view, False), R.exp7_html(view, False)):
             assert f'data-pool-size="{size}"' in html
-    he, hn = (re.sub(r"<[^>]+>", "", R.exp0_html(L.build_filter_view(fake.build(s)["pool"], (1, 2, 3), COUNT), False)) for s in ("empty_pool", "no_match"))
-    assert he == hn                                              # 可見文字完全相同：區分只靠視覺樣式
-    assert '.uv3-card[data-pool-size="0"]{border-style:dashed' in R.CSS
+    views = {s: L.build_filter_view(fake.build(s)["pool"], (1, 2, 3), COUNT) for s in ("empty_pool", "no_match")}
+    for render in (R.exp0_html, R.exp2_html):                    # EXP-0／EXP-2：可見文字完全相同，區分只靠視覺樣式
+        assert [re.sub(r"<[^>]+>", "", render(views[s], False)) for s in ("empty_pool", "no_match")][0] == \
+               re.sub(r"<[^>]+>", "", render(views["no_match"], False))
+    # EXP-7：各列的檔數是真實數字（0 vs 4 等），本來就會不同；把所有數字遮掉後，可見文字（欄位名稱、字樣）必須相同＝沒有新增文字
+    t7 = [re.sub(r"\d+", "#", re.sub(r"<[^>]+>", "|", R.exp7_html(views[s], False))) for s in ("empty_pool", "no_match")]
+    assert t7[0] == t7[1]
+    css = re.sub(r"\s+", "", R.CSS)
+    assert '.uv3-card[data-pool-size="0"]{border-style:dashed;background:' in css          # 空池：虛線框＋灰底
+    grey_bg = R.theme.m("color.tone.grey")["background"]
+    assert f'.uv3-card[data-pool-size="0"]{{border-style:dashed;background:{grey_bg}}}'.replace(" ", "") in css
+    assert '.fs-fund[data-row-state="undetermined"]{border-style:dashed}' in css           # 整檔無法判定列：虛線框
     assert 'data-pool-size' not in R.exp0_html(None, True) and 'data-pool-size' not in R.exp2_html(None, True)   # 來源失敗不標池大小
 
 
