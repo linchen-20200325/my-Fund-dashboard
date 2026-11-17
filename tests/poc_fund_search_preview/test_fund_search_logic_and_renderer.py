@@ -390,7 +390,8 @@ def test_the_formal_mode_missing_wording_never_appears_in_any_preview_html():
         for active in ((), (1,), (1, 2, 3)):
             parts.append(_exp_html(sid, active)[0] if sid != "source_failed" else R.exp0_html(None, True))
     assert all(formal not in p for p in parts)
-    assert formal in "x " + formal and not any(formal in p for p in parts)   # 負控：判定式本身抓得到
+    known_bad = f'<span>{formal}</span>'                 # 負控：對一段已知含正式缺值字樣的 HTML 跑同一判定式
+    assert any(formal in p for p in parts + [known_bad]) and not any(formal in p for p in parts)
 
 
 def _oracle_trace(pool, active):
@@ -450,7 +451,7 @@ def test_zero_conditions_never_shows_a_pool_size_or_counts_even_for_the_empty_po
 
 
 def test_exp7_columns_are_the_fake_preview_four_and_zero_conditions_say_only_the_no_condition_text():
-    """FAKE 專屬（DEC-2026-11-17-02 四資訊值：條件、套用前、符合、無法判定），**不是** frozen 44 §EXP-7 的三欄（條件文字／套用前檔數／套用後檔數），
+    """FAKE 專屬（執行組／ChatGPT UI 設計方向的四格：條件、套用前、符合、無法判定；見提示語，repo 無逐字存檔，NOT VERIFIED；DEC-2026-11-17-02 (e) 待裁），**不是** frozen 44 §EXP-7 的三欄（條件文字／套用前檔數／套用後檔數），
     也不升格正式 EXP-7 契約；零條件時 44 寫『來源缺＋尚未設定條件』，本預覽只寫『尚未設定條件』，不含『來源缺』（兩者差異列為待 Gate，見 README『EXP-7 規則對照』）。"""
     html, view = _exp_html("mixed", (1, 2, 3))
     exp7 = html[html.index('data-block="exp7"'):]
@@ -460,3 +461,11 @@ def test_exp7_columns_are_the_fake_preview_four_and_zero_conditions_say_only_the
     assert "套用後檔數" not in html and "來源缺" not in html
     zero, _ = _exp_html("mixed", ())
     assert exp_counts.TEXT_NO_CONDITION in zero and "來源缺" not in zero
+
+
+@pytest.mark.parametrize("raw", ["---", "123", "AAA", "-A-"])
+def test_code_shape_is_a_heuristic_so_dash_or_digit_only_input_gets_the_code_typed_row(raw):
+    """現況揭露（不改行為）：`_CODE_SHAPE` 只看字元集與長度，這類輸入也會判 no_fixture 並出現『輸入類型』列。"""
+    r = L.classify_lookup(raw, fake.LOOKUP_FIXTURES)
+    assert r.outcome == L.OUT_NO_FIXTURE
+    assert 'data-row="input-type"' in R.lookup_card_html(r, fake.FAKE_FOUND_NAME)
