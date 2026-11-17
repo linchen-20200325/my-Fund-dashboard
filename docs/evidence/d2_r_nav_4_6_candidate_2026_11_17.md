@@ -18,7 +18,7 @@
 | 名稱 | 住處 | 值／值域 | 實測依據 |
 |---|---|---|---|
 | `source_tier`（表欄） | `services/v2_tables/contract.py::SOURCE_TIER_VALUES` ＝ `("淨值", "配息", "市場指標", "其他")`；`nav` 列由 `services/v2_tables/nav_dividend.py` 的 `SOURCE_TIER_NAV = "淨值"` 賦值 | 封閉四值；**nav 列恆為「淨值」** | 讀 `contract.py:40`、`nav_dividend.py:83`、`contract.py` 值域檢查（不在值域→該列不寫）。**對 NAV 列資訊量為零**：不辨識供應者 |
-| `provenance[fund_code].source`（旁路，非表欄） | `nav_dividend.py` 組 `out["provenance"]` 時取 `attrs.get("source")`（約 `:548`、`:560`、`:739`） | L1 `attrs["source"]` 字串，格式「供應者前綴:細節」，例 `FundClear:GetFundNAV`、`AllianzGI:JSON_API`、`Cnyes:fund_nav_api`（`repositories/fund/sources.py` 多處）；**無封閉值域** | `grep 'attrs\["source"\]' repositories/fund/` 見到上列字面。**缺值不阻擋寫列**（`d2_contract_approval_prep_2026_11_12.md` R-NAV-4 ④ 讀碼結論；本組複查 `nav_dividend.py` 組 provenance 處未見對 `source` 設閘，單組未驗） |
+| `provenance[fund_code].source`（旁路，非表欄） | `nav_dividend.py` 組 `out["provenance"]` 時取 `attrs.get("source")`（符號式引用：`nav_dividend.py::_rows_from_segment`、`_chain_ccy_gate` 等組 `out["provenance"]` 處；不寫行號，行號會漂移） | L1 `attrs["source"]` 字串，格式「供應者前綴:細節」，例 `FundClear:GetFundNAV`、`AllianzGI:JSON_API`、`Cnyes:fund_nav_api`（`repositories/fund/sources.py` 多處）；**無封閉值域** | `grep 'attrs\["source"\]' repositories/fund/` 見到上列字面。**缺值不阻擋寫列**（`d2_contract_approval_prep_2026_11_12.md` R-NAV-4 ④ 讀碼結論；本組複查 `nav_dividend.py` 組 provenance 處未見對 `source` 設閘，單組未驗） |
 | `chain.data_source`（A 鏈旁路） | `attrs["v2_chain"]["data_source"]`（`nav_dividend.py:664` 定義 `CHAIN_ATTR`、`:1031` 賦值），值來自 `fund_orchestration.py` 的 `result["data_source"]`（例 `moneydj_legacy_scrape`） | **另一套小寫字彙**，與上列「供應者前綴:細節」格式不同 | 讀 `nav_dividend.py:1031`、`fund_orchestration.py:1957`。完整值域 **NOT VERIFIED** |
 
 另：1Y 報酬的 `source`（`R-PERF-4`）是**第四種不同東西**，不在本檔範圍（`d2_contract_approval_prep_2026_11_12.md` N3）。
@@ -29,6 +29,7 @@
 - 值：`holding_user_input`（`LABEL_SOURCE_HOLDING`，持倉手填）／`source_reported`（序列自報，`:470`）／`meta:<來源>`（🔍 入口，`declared_ccy_source`）。白名單 `_RESERVED_CCY_SOURCES = (LABEL_SOURCE_HOLDING, "source_reported")` 防撞名（`:154`、`:173`）。
 - **衝突或缺值 → `ccy_source` 為 `None`**（`resolve_nav_ccy` 於衝突／缺值時回 `None, None, WITHHELD_CCY_*`；A 鏈閘擋下時 provenance 亦寫 `ccy_source: None`，`:739`）。
 - **A 鏈路徑上 `source_reported` 不出現**：`build_nav_table` 的 A 鏈刻意**不採用** A 鏈回的幣別，序列 attrs 的 `currency` 一律拿掉、只用持倉手填（`nav_dividend.py:972-973`、`:1013`）。本組讀此兩處**支持**核可包 §3.2 的推論（`d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md` §3.2 已知落差 (2)）；但「所有生產入口皆如此」是全稱句，**單組未驗**；直接呼叫 `rows_from_nav_series` 路徑仍可能產出 `source_reported`。**須重驗後才可寫進契約文字。**
+- **範圍**：R-NAV-6 本次僅就 **nav 列**討論，配息路徑不在範圍。補充事實：`ccy_source: "source_reported"` 也會在**配息路徑**寫入（`nav_dividend.py::rows_from_dividends` 內組 provenance 處，有列時固定寫 `source_reported`；2026-11-17 grep 確認），所以「`source_reported` 只在直接呼叫 `rows_from_nav_series` 時出現」僅對 nav 成立。
 - 位置：旁路 `provenance[fund_code].ccy_source`，**不在 frozen 44 §4.2 表欄內**；`ui_v2` 三頁不渲染（核可包 §五；單組未驗）。
 
 ### 2.3　已核准的相鄰限制（`DEC-2026-11-14-07`，已逐字核對）
