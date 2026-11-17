@@ -76,6 +76,7 @@ A50_JS = r"""
   return {vw, vh, open: d.open, detailsTotal: document.querySelectorAll('details').length, nestedInside: d.querySelectorAll('details').length,
           insideAnotherDetails: !!d.parentElement.closest('details'), summaryCount: d.querySelectorAll('summary').length,
           summaryH: sr.height, summaryW: sr.width, summaryCovered: !(hit && (hit === s || s.contains(hit))),
+          a60Sibling: !!document.querySelector('details[data-block="a60"]') && !d.contains(document.querySelector('details[data-block="a60"]')),
           rowCount: rows.length, fieldCount: d.querySelectorAll('[data-field]').length,
           bodyClientH: body.clientHeight, bodyScrollH: body.scrollHeight, bodyH: br.height, bodyOverflowY: getComputedStyle(body).overflowY,
           rowsClippedX: rows.filter(r => r.scrollWidth > r.clientWidth + 1).length,
@@ -103,8 +104,8 @@ def a50_violations(a, *, expect_open, expect_rows):
     bad = []
     if a is None:
         return [("沒有 A50 容器",)]
-    if a["detailsTotal"] != 1 or a["summaryCount"] != 1:
-        bad.append(("<details>／<summary> 不是各恰一個", a["detailsTotal"], a["summaryCount"]))
+    if a["detailsTotal"] != 2 or a["summaryCount"] != 1 or not a["a60Sibling"]:
+        bad.append(("<details> 不是 A50＋A60 各恰一個（A50 內恰一個 <summary>）", a["detailsTotal"], a["summaryCount"], a["a60Sibling"]))
     if a["nestedInside"] or a["insideAnotherDetails"]:
         bad.append(("A50 巢狀或被放進別的展開容器", a["nestedInside"], a["insideAnotherDetails"]))
     if a["open"] is not expect_open:
@@ -118,3 +119,58 @@ def a50_violations(a, *, expect_open, expect_rows):
     if a["hasFirstScreenMark"] or a["hasHoldingIdAttr"]:
         bad.append(("A50 內有首屏標記或身份鍵屬性", a["hasFirstScreenMark"], a["hasHoldingIdAttr"]))
     return bad
+
+
+# ───────────────────────── A60（獨立 `<details>`，A50 之後；DEC-2026-11-17-01） ─────────────────────────
+
+A60_JS = r"""
+() => {
+  const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+  const d = document.querySelector('details[data-block="a60"]');
+  if (!d) return null;
+  const a50 = document.querySelector('details[data-block="a50"], [data-a50="status-only"]');
+  const s = d.querySelector(':scope > summary'), body = d.querySelector('[data-a60="body"]');
+  const sr = s.getBoundingClientRect(), br = body.getBoundingClientRect(), dr = d.getBoundingClientRect();
+  const hit = document.elementFromPoint(Math.min(Math.max(sr.x + sr.width / 2, 0), vw - 1), Math.min(Math.max(sr.y + sr.height / 2, 0), vh - 1));
+  const blocks = [...document.querySelectorAll('[data-block]')].map(e => e.dataset.block);
+  return {vw, vh, open: d.open, detailsTotal: document.querySelectorAll('details').length, countA60: document.querySelectorAll('details[data-block="a60"]').length,
+          nestedInside: d.querySelectorAll('details').length, insideAnotherDetails: !!d.parentElement.closest('details'),
+          summaryCount: d.querySelectorAll('summary').length, summaryH: sr.height, summaryCovered: !(hit && (hit === s || s.contains(hit))),
+          docScrollW: document.documentElement.scrollWidth, detailsRight: dr.right, bodyRight: br.right,
+          bodyClipped: [...d.querySelectorAll('*')].filter(e => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX === 'visible' && e.getBoundingClientRect().right > vw + 0.5).length,
+          hasFirstScreenMark: !!d.querySelector('[data-first-screen]'), lastBlock: blocks[blocks.length - 1], blocks,
+          afterA50: !a50 || !!(a50.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING),
+          stateAttr: (d.querySelector('[data-a60="state"]') || {dataset: {}}).dataset.a60State || null,
+          countsText: [...d.querySelectorAll('[data-a60="skipped-tabs"], [data-a60="skipped-rows"]')].map(e => e.textContent),
+          html: d.outerHTML, text: d.textContent};
+}
+"""
+
+
+def a60_violations(a, *, expect_open, expect_total_details):
+    """A60 結構與幾何判定（純函式）。a ＝ A60_JS 的量測結果；expect_total_details＝頁面上 `<details>` 總數（有列 2、無列 1）。"""
+    bad = []
+    if a is None:
+        return [("沒有 A60 容器",)]
+    if a["countA60"] != 1 or a["detailsTotal"] != expect_total_details or a["summaryCount"] != 1:
+        bad.append(("<details> 數量不符（A60 恰一個、A50 有列才有）", a["countA60"], a["detailsTotal"], a["summaryCount"]))
+    if a["nestedInside"] or a["insideAnotherDetails"]:
+        bad.append(("A60 巢狀或被放進別的展開容器", a["nestedInside"], a["insideAnotherDetails"]))
+    if a["open"] is not expect_open:
+        bad.append(("展開狀態不符", a["open"], expect_open))
+    if a["lastBlock"] != "a60" or not a["afterA50"]:
+        bad.append(("A60 不是最後一個區塊或不在 A50 之後", a["blocks"], a["afterA50"]))
+    if a["summaryH"] < 48 or a["summaryCovered"]:
+        bad.append(("摘要的觸控目標小於 48px 或被蓋住", a["summaryH"], a["summaryCovered"]))
+    if a["docScrollW"] > a["vw"] or a["detailsRight"] > a["vw"] + 0.5 or a["bodyClipped"]:
+        bad.append(("A60 造成水平溢出", a["docScrollW"], a["detailsRight"], a["vw"], a["bodyClipped"]))
+    if a["hasFirstScreenMark"]:
+        bad.append(("A60 內有首屏標記",))
+    return bad
+
+
+def leak_violations(html, text, tokens):
+    """畫面（DOM 原文與文字）裡出現任一禁止字串（含 escape 後形態）→ 回傳命中的字串。"""
+    from html import escape
+
+    return sorted({t for t in tokens if t in html or escape(t) in html or t in text})

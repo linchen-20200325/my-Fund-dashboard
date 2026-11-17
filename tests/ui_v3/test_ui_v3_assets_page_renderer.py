@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""💼 我的資產頁 renderer（A00／A10／A20＋A50 單一容器四欄唯讀持倉，隔離式 FAKE Preview）單元與守衛。純 HTML 層，不需要瀏覽器。
+"""💼 我的資產頁 renderer（A00／A10／A20＋A50 單一容器四欄唯讀持倉＋A60 來源與缺項證據，隔離式 FAKE Preview）單元與守衛。純 HTML 層，不需要瀏覽器。
 
-資料全部是 `assets_page_support` 的 FAKE 輸入；九個情境與隔離入口的 FAKE 輸入同形（drift 測試在 `tests/poc_assets_preview/`）。
+資料全部是 `assets_page_support` 的 FAKE 輸入；十一個情境與隔離入口的 FAKE 輸入同形（drift 測試在 `tests/poc_assets_preview/`）。
 A50 區（`<details>` 容器或 status-only 那一列）允許 fund_name／fund_code／ccy／units_shares 的 FAKE 值；**非 A50 區**的「無數字／無 FAKE 事實」斷言維持原樣不放寬，
 A50 區另有針對性斷言（無 %、金額字樣、合計、占比、「資產 0」「持倉 0」，不含 holding_id、policy_id、cost_*）。
+A60 區（DEC-2026-11-17-01）在頁面最後、A50 之後：`split_a50` 的「A50 區」不含 A60，`split_a60` 另切；A60 允許顯示略過件數（整數），其餘區塊的斷言不放寬。
 負控一律在記憶體內現編，不寫檔、不改任何 production 檔。
 """
 from __future__ import annotations
@@ -43,10 +44,13 @@ SCENARIOS = {
     "unprovided_skip_evidence": lambda: sup.complete_with_unprovided_skip_evidence_result(rows=0),
     "same_fund_two_policies": sup.same_fund_two_policies_result,
     "many_rows": sup.many_rows_result,
+    "a60_sensitive_strings": sup.a60_sensitive_strings_result,
+    "complete_counts_unprovided": sup.complete_counts_unprovided_result,
 }
 EXPECTED_STATE = {"multi_currency": "complete", "complete_no_rows": "complete_no_rows", "market_blocked": "not_read", "partial": "partial",
                   "no_active": "not_selected", "read_failed": "read_failed", "unprovided_skip_evidence": "undetermined",
-                  "same_fund_two_policies": "complete", "many_rows": "complete"}
+                  "same_fund_two_policies": "complete", "many_rows": "complete", "a60_sensitive_strings": "partial",
+                  "complete_counts_unprovided": "undetermined"}
 
 
 def model_of(name):
@@ -80,8 +84,18 @@ A50_SCENARIOS = [n for n in ALL if model_of(n).a50.state == vm.A50_ROWS]
 STATUS_ONLY_SCENARIOS = [n for n in ALL if model_of(n).a50.state == vm.A50_STATUS_ONLY]
 
 
+A60_MARK = '<details class="uv3-a60"'
+
+
+def split_a60(html):
+    """(A60 之前, A60 區)。A60 是最後一個區塊（A50 之後、獨立 `<details>`）；沒有 A60 標記 → 整頁與空字串（讓缺 A60 的頁在結構測試中變紅）。"""
+    i = html.find(A60_MARK)
+    return (html, "") if i < 0 else (html[:i], html[i:])
+
+
 def split_a50(html):
-    """(非 A50 區, A50 區)。A50 是最後一個區塊：容器 `<details` 或 status-only 那一列之後都算 A50。"""
+    """(非 A50 區, A50 區)。A50 區止於 A60 之前：容器 `<details`（第一個）或 status-only 那一列之後、A60 之前都算 A50。"""
+    html = split_a60(html)[0]
     marks = [html.find(m) for m in ("<details", 'data-a50="status-only"') if html.find(m) >= 0]
     if not marks:
         return html, ""
@@ -106,8 +120,12 @@ def test_blocks_in_fixed_order_and_first_screen_marks_are_exactly_five(name):
     assert marks == ["a00", *vm.A20_CELL_CODES]
     assert len(marks) == vm.first_screen_element_count(model_of(name), vm.POLICY_A10_TEXT_EXCLUDED) == 5
     assert html.index('data-block="a00"') < html.index('data-block="a10"') < html.index('data-block="a20"')
-    for forbidden in ('data-block="a30"', 'data-block="a40"', 'data-block="a52"', 'data-block="a60"'):
+    for forbidden in ('data-block="a30"', 'data-block="a40"', 'data-block="a51"', 'data-block="a52"'):
         assert forbidden not in html
+    # A60（DEC-2026-11-17-01）恆畫一次，在 A50（若有）之後、整頁最後；不標首屏
+    assert html.count('data-block="a60"') == 1 and html.index('data-block="a20"') < html.index('data-block="a60"')
+    assert html.index('data-block="a60"') > max(html.find('data-block="a50"'), html.find('data-a50="status-only"'))
+    assert "data-first-screen" not in split_a60(html)[1] and html.endswith("</details>")
     # A50 只有「有列」才畫容器，且在 A20 之後；沒有列時不畫容器（status-only 只有一列文字）
     assert ('data-block="a50"' in html) is (name in A50_SCENARIOS)
     if name in A50_SCENARIOS:
@@ -413,13 +431,13 @@ def test_a50_scenario_populations_are_not_empty_positive_controls():
 
 @pytest.mark.parametrize("name", A50_SCENARIOS)
 def test_a50_is_exactly_one_collapsed_details_container_with_one_summary_and_no_nesting(name):
-    html = html_of(name)
+    html = split_a60(html_of(name))[0]   # A50 區在 A60 之前；A60 的結構另有 `test_page_has_a50_and_a60_as_two_sibling_collapsed_details`
     assert html.count("<details") == 1 and html.count("</details>") == 1 and html.count("<summary") == 1
     assert html.count('data-block="a50"') == 1
     assert not re.search(r"<details[^>]*\sopen[\s>=]", html)              # 預設收合（DEC 待確認 (c) 未裁；暫行）
     a50 = html[html.index("<details"):html.index("</details>")]
     assert a50.index("<summary") < a50.index("data-row=")              # 摘要（可點的列）在逐檔列之前
-    assert html.index("</details>") == len(html) - len("</details>")      # A50 是頁面最後一個區塊
+    assert html.index("</details>") == len(html) - len("</details>")      # A50 是 A60 之前的最後一個區塊
     # 沒有任何其他展開元件：逐檔不展開（A51 不在本批）、不放進別的展開容器
     for bad in ("<details", "expander", "<dialog", 'role="button"', "<button", "<a ", "href=", "onclick", "<script"):
         assert a50.count(bad) <= (1 if bad == "<details" else 0), bad
@@ -450,7 +468,7 @@ def test_a50_field_labels_are_pending_wording_aligned_with_the_adapter_field_set
 
 @pytest.mark.parametrize("name", STATUS_ONLY_SCENARIOS)
 def test_status_only_draws_a_single_line_quoting_a00_and_no_container_table_entry_or_zero(name):
-    html = html_of(name)
+    html = split_a60(html_of(name))[0]   # A60 另有自己的獨立 `<details>` 與件數（見 A60 測試）；此處只看 A50 的 status-only
     model = model_of(name)
     assert model.a50.state == vm.A50_STATUS_ONLY and model.a50.rows == ()
     for bad in ("<details", "<summary", 'data-block="a50"', "data-row=", "<table", "<a ", "href=", "<button", "data-entry"):
@@ -519,7 +537,7 @@ def test_fifty_rows_are_all_present_and_the_container_scrolls_instead_of_truncat
 def test_a50_summary_css_sets_the_touch_target_min_height():
     from ui_v3.shell import nav
 
-    assert re.search(rf"\.uv3-a50 > summary\{{[^}}]*min-height:{nav.TOUCH_MIN_PX}px", assets.CSS)
+    assert re.search(rf"\.uv3-a50 > summary,\.uv3-a60 > summary\{{[^}}]*min-height:{nav.TOUCH_MIN_PX}px", assets.CSS)   # A50 與 A60 的摘要共用同一條規則
 
 
 def test_a50_renderer_rejects_a_field_it_does_not_know_instead_of_guessing():
@@ -556,7 +574,7 @@ def _structure_problems(a50_html_text):
 
 
 def test_structure_checker_is_green_on_the_real_page_and_red_on_injected_mutations():
-    html = html_of("multi_currency")
+    html = split_a60(html_of("multi_currency"))[0]
     assert _structure_problems(html) == []
     assert "count" in _structure_problems(html + html[html.index("<details"):])                            # 第二個 <details>
     assert "open" in _structure_problems(html.replace("<details class", "<details open class", 1))          # 注入 open
@@ -575,3 +593,318 @@ def test_value_whitespace_folding_is_not_verbatim_locked_as_is(name, raw, shown)
     result["evidence"]["holdings"][0]["fund_name"] = raw
     a50 = split_a50(assets.page_html(build_assets_page(result)))[1]
     assert re.search(r'data-field="fund_name"><span class="uv3-label">.*?</span></span>(.*?)</div>', a50).group(1) == shown
+
+
+# ───────────────────────── A60：來源與缺項證據（DEC-2026-11-17-01，D1～D8） ─────────────────────────
+# A60＝A50 之後的獨立 `<details>`（預設收合、並列、不巢狀、不標首屏）；只呈現略過分頁數／略過列數／依來源狀態的暫行說明／既有 (a) 原因。
+# 全部資料是 FAKE；字樣皆 PendingWording；不進規則表。
+
+# 情境 → (略過分頁數, 略過列數, A60 說明採用的狀態)
+A60_EXPECT = {
+    "multi_currency": (0, 0, "complete"), "complete_no_rows": (0, 0, "complete_no_rows"), "market_blocked": (None, None, "not_read"),
+    "partial": (1, 2, "partial"), "no_active": (None, None, "not_selected"), "read_failed": (None, None, "read_failed"),
+    "unprovided_skip_evidence": (0, None, "undetermined"), "same_fund_two_policies": (0, 0, "complete"), "many_rows": (0, 0, "complete"),
+    "a60_sensitive_strings": (1, 2, "partial"), "complete_counts_unprovided": (None, None, "undetermined"),
+}
+_A60_STATE_KEY = {"read_failed": "a60_state_read_failed", "partial": "a60_state_partial", "complete": "a60_state_complete",
+                  "complete_no_rows": "a60_state_complete_no_rows", "not_selected": "a60_state_not_selected", "not_read": "a60_state_not_read"}
+
+
+def a60_of(name):
+    return split_a60(html_of(name))[1]
+
+
+def _page_structure_problems(page, *, with_a50):
+    """整頁展開容器結構判定（純字串；供負控）：A50（有列才有）與 A60 各恰一個 `<details>`／`<summary>`、都不 open、互不巢狀、A60 在 A50 之後。"""
+    bad = []
+    want = 2 if with_a50 else 1
+    if not (page.count("<details") == page.count("</details>") == page.count("<summary") == want):
+        bad.append("count")
+    if re.search(r"<details[^>]*\sopen[\s>=]", page):
+        bad.append("open")
+    depth = 0
+    for m in re.finditer(r"<details|</details>", page):
+        depth += 1 if m.group(0) == "<details" else -1
+        if depth > 1:
+            bad.append("nested")
+            break
+    if page.count('data-block="a60"') != 1 or page.count('data-block="a50"') != (1 if with_a50 else 0):
+        bad.append("blocks")
+    if with_a50 and 'data-block="a60"' in page and page.find('data-block="a50"') > page.find('data-block="a60"'):
+        bad.append("order")
+    if with_a50 and page.find("</details>") > page.find('data-block="a60"'):
+        bad.append("a60-inside-a50")
+    return bad
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_page_has_a50_and_a60_as_two_sibling_collapsed_details(name):
+    assert _page_structure_problems(html_of(name), with_a50=name in A50_SCENARIOS) == []
+
+
+def test_page_structure_checker_is_red_on_injected_mutations():
+    html = html_of("multi_currency")
+    assert _page_structure_problems(html, with_a50=True) == []
+    a60 = html[html.index(A60_MARK):]
+    assert "count" in _page_structure_problems(html + a60, with_a50=True)                                              # 第二個 A60
+    assert "open" in _page_structure_problems(html.replace(A60_MARK, '<details open class="uv3-a60"', 1), with_a50=True)   # A60 展開
+    assert "nested" in _page_structure_problems(html.replace('data-a60="body">', 'data-a60="body"><details><summary>x</summary>y</details>', 1),
+                                                with_a50=True)                                                         # A60 內再巢一個
+    assert "count" in _page_structure_problems(split_a60(html)[0], with_a50=True)                                      # 缺 A60
+    inner = html.replace('<div class="uv3-a50-body" data-a50="body">', '<div class="uv3-a50-body" data-a50="body">' + a60.replace("</details>", "") + "</details>", 1)
+    assert _page_structure_problems(inner, with_a50=True)                                                              # A60 被塞進 A50 內
+    assert "count" in _page_structure_problems(html, with_a50=False)                                                   # 沒有 A50 卻有兩個 details
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_a60_shows_integer_counts_as_is_and_missing_counts_as_the_approved_missing_status_never_zero(name):
+    tabs, rows, _ = A60_EXPECT[name]
+    model = model_of(name)
+    assert (model.a60.skipped_tab_count, model.a60.skipped_row_count) == (tabs, rows)   # 前提：情境真的落在預期的件數
+    a60 = a60_of(name)
+    for code, expected in (("skipped-tabs", tabs), ("skipped-rows", rows)):
+        cell = re.search(rf'data-a60="{code}">(.*?)</div>', a60).group(1)
+        value = cell.split("</span></span>", 1)[1]
+        if expected is None:
+            assert 'data-status-key="missing"' in value and rules.entry("missing").wording in visible(value)   # D2：既有 `◇ 資料未備`
+            assert not re.search(r"[0-9]", visible(value))
+        else:
+            assert value == str(expected)   # 0 也照顯示 0（D1）；只是數字，不宣稱完整
+    assert re.findall(r"\d+", visible(a60)) == [str(n) for n in (tabs, rows) if n is not None]   # A60 裡的數字只有件數本身
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_a60_state_line_follows_the_source_state_and_the_approved_undetermined_wording_when_evidence_is_short(name):
+    state = A60_EXPECT[name][2]
+    a60 = a60_of(name)
+    line = re.search(r'<div class="uv3-row" data-a60="state" data-a60-state="([a-z_]+)">(.*?)</div>', a60)
+    assert line.group(1) == state and a60.count('data-a60="state"') == 1
+    if state == "undetermined":
+        assert 'data-status-key="undetermined"' in line.group(2) and rules.entry("undetermined").wording in visible(line.group(2))   # D3：證據不足
+    else:
+        key = _A60_STATE_KEY[state]
+        assert f'data-pending-wording="{key}"' in line.group(2) and AW.preview_wording(key).text in visible(line.group(2))
+
+
+@pytest.mark.parametrize("name", [n for n in ALL if A60_EXPECT[n][2] != "complete_no_rows"])
+def test_the_complete_no_rows_sentence_is_absent_unless_the_source_state_is_complete_no_rows(name):
+    assert 'data-pending-wording="a60_state_complete_no_rows"' not in a60_of(name)
+    assert AW.preview_wording("a60_state_complete_no_rows").text not in visible(html_of(name))
+
+
+def test_complete_no_rows_sentence_appears_exactly_for_complete_no_rows_with_both_counts_zero():
+    html = a60_of("complete_no_rows")
+    assert html.count('data-pending-wording="a60_state_complete_no_rows"') == 1 and 'data-a60-state="complete_no_rows"' in html
+
+
+_COUNT_COMBOS = [(0, 0), (0, None), (None, 0), (None, None), (1, 0), (0, 3), (2, 2)]
+
+
+@pytest.mark.parametrize("tabs,rows", _COUNT_COMBOS)
+@pytest.mark.parametrize("source_state", [vm.SRC_COMPLETE, vm.SRC_COMPLETE_NO_ROWS])
+def test_zero_alone_proves_nothing_complete_claims_need_both_counts_to_be_integer_zero(source_state, tabs, rows):
+    html = assets.a60_html(vm.A60Evidence(tabs, rows, (), ()), source_state)
+    both_zero = (tabs, rows) == (0, 0)
+    state = re.search(r'data-a60-state="([a-z_]+)"', html).group(1)
+    assert state == (source_state if both_zero else "undetermined")
+    if not both_zero:
+        assert "a60_state_complete" not in html and 'data-status-key="undetermined"' in html
+        assert "已完整讀取" not in visible(html) and "沒有持倉列" not in visible(html)
+
+
+@pytest.mark.parametrize("tabs,rows", _COUNT_COMBOS)
+def test_partial_needs_at_least_one_positive_count_else_undetermined(tabs, rows):
+    html = assets.a60_html(vm.A60Evidence(tabs, rows, (), (vm.CauseFact(vm.CATEGORY_SOURCE_DATA, vm.CAUSE_PARTIAL_SOURCE),)), vm.SRC_PARTIAL)
+    positive = (tabs or 0) > 0 or (rows or 0) > 0
+    assert ('data-a60-state="partial"' in html) is positive and ('data-pending-wording="a60_cause_partial"' in html) is positive
+    assert ('data-a60-state="undetermined"' in html) is (not positive)
+
+
+@pytest.mark.parametrize("tabs,rows", _COUNT_COMBOS)
+@pytest.mark.parametrize("source_state,state", [(vm.SRC_READ_FAILED, "read_failed"), (vm.SRC_NOT_SELECTED, "not_selected"),
+                                                (vm.SRC_NOT_READ, "not_read"), (vm.SRC_UNDETERMINED, "undetermined")])
+def test_failure_not_selected_not_read_and_undetermined_never_claim_completeness_whatever_the_counts(source_state, state, tabs, rows):
+    html = assets.a60_html(vm.A60Evidence(tabs, rows, (), ()), source_state)
+    assert f'data-a60-state="{state}"' in html
+    for key in ("a60_state_complete", "a60_state_complete_no_rows", "a60_state_partial", "a60_cause_partial"):
+        assert f'data-pending-wording="{key}"' not in html
+
+
+def test_blocked_and_not_read_never_say_the_source_was_read_to_the_end():
+    for name in ("market_blocked", "read_failed", "no_active", "complete_counts_unprovided", "unprovided_skip_evidence"):
+        a60 = a60_of(name)
+        assert "已完整讀取" not in visible(a60) and "未發現略過" not in visible(a60) and "a60_state_complete" not in a60, name
+
+
+def test_a60_unknown_source_state_and_wrong_types_fail_loudly():
+    evidence = model_of("partial").a60
+    with pytest.raises(ValueError):
+        assets.a60_html(evidence, "no_such_state")
+    with pytest.raises(TypeError):
+        assets.a60_html(None, vm.SRC_PARTIAL)
+    with pytest.raises(ValueError):
+        assets._a60_count_html(True)
+    with pytest.raises(ValueError):
+        assets._a60_count_html("1")
+
+
+def test_a60_never_carries_a_category_b_cause_and_unknown_cause_keys_fail_loudly():
+    b_cause = vm.CauseFact(vm.CATEGORY_BASIS_NOT_APPROVED, vm.CAUSE_BASIS_NOT_APPROVED)
+    with pytest.raises(ValueError):
+        vm.A60Evidence(1, 1, (), (b_cause,))   # 契約層就擋
+    with pytest.raises(ValueError):
+        assets._a60_cause_rows_html((b_cause,), "partial")   # renderer 再擋一次，不畫
+    weird = vm.CauseFact(vm.CATEGORY_SOURCE_DATA, vm.CAUSE_PARTIAL_SOURCE)
+    object.__setattr__(weird, "cause_key", "no_such_cause")
+    with pytest.raises(ValueError):
+        assets._a60_cause_rows_html((weird,), "partial")
+    for name in ALL:
+        assert "計算口徑" not in visible(a60_of(name)) and "basis_not_approved" not in a60_of(name), name
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_a60_output_is_invariant_to_the_category_field(name):
+    model = model_of(name)
+    before = assets.page_html(model)
+    other = {vm.CATEGORY_SOURCE_DATA: vm.CATEGORY_BASIS_NOT_APPROVED, vm.CATEGORY_BASIS_NOT_APPROVED: vm.CATEGORY_SOURCE_DATA}
+    for cause in model.a60.causes:
+        object.__setattr__(cause, "category", other[cause.category])
+    assert assets.page_html(model) == before
+
+
+def test_partial_has_exactly_one_a_cause_row_and_it_is_the_a60_own_pending_sentence():
+    for name in ("partial", "a60_sensitive_strings"):
+        a60 = a60_of(name)
+        assert a60.count('data-a60="cause"') == 1 and 'data-pending-wording="a60_cause_partial"' in a60
+    for name in ALL:
+        if A60_EXPECT[name][2] != "partial":
+            assert 'data-a60="cause"' not in a60_of(name), name
+
+
+# ── D4／D8：內部碼、略過原始字串、網址、試算表 ID、例外、敏感資訊完全不上畫面 ──
+
+def _internal_tokens(model):
+    tokens = set(model.a60.problem_codes) | set(vm.CAUSE_KEYS) | {c.cause_key for c in model.a60.causes}
+    for value in (model.a00.failure_code, model.a00.cause_key):
+        if value:
+            tokens.add(value)
+    return tokens
+
+
+def leaks(html, sentinels):
+    """HTML 原樣與 escape 後的形態、可見文字裡出現哨兵 → 回傳命中的哨兵。"""
+    from html import escape
+
+    text = visible(html)
+    return sorted({s for s in sentinels if s in html or escape(s) in html or s in text})
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_a60_exposes_no_internal_code_sensitive_string_or_percent(name):
+    model = model_of(name)
+    tokens = _internal_tokens(model) | set(sup.FAKE_SENSITIVE_STRINGS) | {"NETWORK_ERROR", "market_basis", "problem_codes", "cause_key", "failure_code"}
+    a60 = a60_of(name)
+    assert leaks(a60, tokens) == []
+    page_tokens = set(model.a60.problem_codes) | {t for t in (model.a00.failure_code, model.a00.cause_key) if t}
+    assert leaks(html_of(name), page_tokens) == []   # 整頁也不得有問題碼、失敗代碼、市值基準被擋的原因碼
+    assert "%" not in a60 and "％" not in a60 and "<script" not in a60 and "href" not in a60 and "<a " not in a60
+
+
+def test_sensitive_scenario_really_carries_the_sentinels_in_the_input_and_the_model_has_problem_codes():
+    result = sup.a60_sensitive_strings_result()
+    raw = repr(result)
+    assert sup.FAKE_SENSITIVE_SHEET_ID in raw and "docs.google.com" in raw and "Traceback" in raw   # 正控：輸入裡真的有，所以「畫面沒有」不是空綠
+    model = build_assets_page(result)
+    assert model.a60.problem_codes == sup.FAKE_A60_PROBLEM_CODES and model.a60.skipped_tab_count == 1 and model.a60.skipped_row_count == 2
+    html = assets.page_html(model)
+    assert leaks(html, set(sup.FAKE_SENSITIVE_STRINGS) | set(sup.FAKE_A60_PROBLEM_CODES)) == []
+
+
+def test_read_failed_sensitive_failure_code_and_exception_text_never_reach_the_page():
+    code = f"{sup.FAKE_SENSITIVE_URL} {sup.FAKE_SENSITIVE_EXCEPTION}"
+    model = build_assets_page(sup.read_failed_result(code))
+    assert model.a00.failure_code == code   # VM 有、畫面不得有
+    html = assets.page_html(model)
+    assert leaks(html, set(sup.FAKE_SENSITIVE_STRINGS) | {"holding_read_failed"}) == []
+
+
+def test_leak_checker_negative_control_turns_red():
+    html = html_of("a60_sensitive_strings")
+    assert leaks(html + f"<div>{sup.FAKE_SENSITIVE_URL}</div>", sup.FAKE_SENSITIVE_STRINGS)
+    assert leaks(html + "<div>&lt;Traceback&gt;</div>", ["<Traceback>"])
+    assert leaks(html.replace("</details>", f"{sup.FAKE_A60_PROBLEM_CODES[0]}</details>"), sup.FAKE_A60_PROBLEM_CODES)
+    assert leaks(a60_of("partial"), [str(1)]) == ["1"]   # 檢查器本身能抓到可見文字裡的內容
+
+
+_INTERNAL_NAMES = ("problem_codes", "failure_code")
+
+
+def internal_code_reads(source):
+    """原始碼中對內部碼欄位的任何讀取或引用：屬性、名稱、字串常數、getattr、asdict／vars／__dict__。"""
+    hits = []
+    for n in ast.walk(ast.parse(source)):
+        if isinstance(n, ast.Attribute) and (n.attr in _INTERNAL_NAMES or n.attr in ("__dict__", "asdict")):
+            hits.append(f".{n.attr}")
+        elif isinstance(n, ast.Name) and (n.id in _INTERNAL_NAMES or n.id in ("asdict", "vars")):
+            hits.append(n.id)
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in _INTERNAL_NAMES:
+            hits.append(repr(n.value))
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "getattr" and len(n.args) > 1 \
+                and isinstance(n.args[1], ast.Constant) and n.args[1].value in _INTERNAL_NAMES:
+            hits.append("getattr")
+    return hits
+
+
+def test_renderer_source_never_reads_problem_codes_or_failure_code():
+    assert internal_code_reads(RENDERER_SRC) == []
+
+
+@pytest.mark.parametrize("snippet", ["x = a60.problem_codes\n", "y = a00.failure_code\n", "z = getattr(a60, 'problem_codes')\n",
+                                     "w = d['failure_code']\n", "v = dataclasses.asdict(a60)\n", "u = vars(a60)\n", "t = a60.__dict__\n"])
+def test_negative_control_internal_code_checker_turns_red(snippet):
+    assert internal_code_reads(snippet)
+
+
+A60_STATE_DOMAIN = {"read_failed", "partial", "complete", "complete_no_rows", "not_selected", "not_read", "undetermined"}
+
+
+def test_a60_state_attribute_domain_is_closed_over_scenarios_and_count_matrix():
+    seen = set()
+    for name in ALL:
+        seen.add(re.search(r'data-a60-state="([^"]*)"', a60_of(name)).group(1))
+    states = (vm.SRC_COMPLETE, vm.SRC_PARTIAL, vm.SRC_NOT_SELECTED, vm.SRC_READ_FAILED, vm.SRC_COMPLETE_NO_ROWS, vm.SRC_UNDETERMINED, vm.SRC_NOT_READ)
+    for state in states:
+        for tabs, rows in _COUNT_COMBOS:
+            html = assets.a60_html(vm.A60Evidence(tabs, rows, (), ()), state)
+            seen.add(re.search(r'data-a60-state="([^"]*)"', html).group(1))
+    assert seen <= A60_STATE_DOMAIN and seen == A60_STATE_DOMAIN   # 值域只能是這七個，且七個都有被走到（不是空綠）
+
+
+# ── D6：新增字樣全是 PendingWording，不進規則表 ──
+
+def test_every_a60_wording_is_pending_and_none_is_in_the_approved_table():
+    keys = [k for k in AW.ASSETS_PREVIEW_WORDING if k.startswith("a60_")]
+    assert set(keys) == {"a60_title", "a60_labels_note", "a60_label_skipped_tabs", "a60_label_skipped_rows", "a60_state_read_failed", "a60_state_partial",
+                         "a60_cause_partial", "a60_state_complete", "a60_state_complete_no_rows", "a60_state_not_selected", "a60_state_not_read"}
+    for key in keys:
+        item = AW.preview_wording(key)
+        assert item.status == "pending" and item.source.strip()
+        assert key == "a60_labels_note" or "DEC-2026-11-17-01" in item.source
+        assert key not in rules.ENTRIES and key not in rules.APPROVED_WORDING
+        assert item.text not in {a.text for a in rules.APPROVED_WORDING.values()}
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_a60_text_is_only_pending_spans_approved_status_and_counts(name):
+    a60 = a60_of(name)
+    rest = re.sub(r'<span class="uv3-pending" data-pending-wording="[a-z0-9_]+">.*?</span>', "", a60)
+    rest = re.sub(r'<span class="uv3-st uv3-st-[a-z]+" data-status-key="[a-z_]+">.*?</span>', "", rest)
+    assert re.fullmatch(r"[0-9\s]*", visible(rest)), visible(rest)   # 剩下的可見文字只有件數數字
+    keys = re.findall(r'data-pending-wording="([^"]+)"', a60)
+    assert keys and all(k in AW.ASSETS_PREVIEW_WORDING for k in keys)
+    assert set(re.findall(r'data-status-key="([^"]+)"', a60)) <= {"missing", "undetermined"}   # 只用兩個已核准狀態字樣
+
+
+def test_a60_labels_note_is_visible_inside_the_collapsed_container_not_in_a_new_first_screen_element():
+    a60 = a60_of("multi_currency")
+    assert 'data-a60="labels-note"' in a60 and "暫行字樣，尚未核准" in visible(a60) and "data-first-screen" not in a60
