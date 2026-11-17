@@ -601,13 +601,13 @@ def test_value_whitespace_folding_is_not_verbatim_locked_as_is(name, raw, shown)
 
 # 情境 → (略過分頁數, 略過列數, A60 說明採用的狀態)
 A60_EXPECT = {
-    "multi_currency": (0, 0, "complete"), "complete_no_rows": (0, 0, "complete_no_rows"), "market_blocked": (None, None, "not_read"),
-    "partial": (1, 2, "partial"), "no_active": (None, None, "not_selected"), "read_failed": (None, None, "read_failed"),
-    "unprovided_skip_evidence": (0, None, "undetermined"), "same_fund_two_policies": (0, 0, "complete"), "many_rows": (0, 0, "complete"),
+    "multi_currency": (0, 0, "undetermined"), "complete_no_rows": (0, 0, "complete_no_rows"), "market_blocked": (None, None, "undetermined"),
+    "partial": (1, 2, "partial"), "no_active": (None, None, "undetermined"), "read_failed": (None, None, "read_failed"),
+    "unprovided_skip_evidence": (0, None, "undetermined"), "same_fund_two_policies": (0, 0, "undetermined"), "many_rows": (0, 0, "undetermined"),
     "a60_sensitive_strings": (1, 2, "partial"), "complete_counts_unprovided": (None, None, "undetermined"),
 }
-_A60_STATE_KEY = {"read_failed": "a60_state_read_failed", "partial": "a60_state_partial", "complete": "a60_state_complete",
-                  "complete_no_rows": "a60_state_complete_no_rows", "not_selected": "a60_state_not_selected", "not_read": "a60_state_not_read"}
+_A60_STATE_KEY = {"read_failed": "a60_state_read_failed", "partial": "a60_state_partial", "complete_no_rows": "a60_state_complete_no_rows"}
+_A60_FORBIDDEN_KEYS = ("a60_state_complete", "a60_state_not_selected", "a60_state_not_read", "a60_cause_partial")
 
 
 def a60_of(name):
@@ -706,34 +706,83 @@ def test_zero_alone_proves_nothing_complete_claims_need_both_counts_to_be_intege
     html = assets.a60_html(vm.A60Evidence(tabs, rows, (), ()), source_state)
     both_zero = (tabs, rows) == (0, 0)
     state = re.search(r'data-a60-state="([a-z_]+)"', html).group(1)
-    assert state == (source_state if both_zero else "undetermined")
-    if not both_zero:
-        assert "a60_state_complete" not in html and 'data-status-key="undetermined"' in html
-        assert "已完整讀取" not in visible(html) and "沒有持倉列" not in visible(html)
+    assert state == ("complete_no_rows" if (both_zero and source_state == vm.SRC_COMPLETE_NO_ROWS) else "undetermined")   # complete（有列）恆為無法判定
+    if state == "undetermined":
+        assert 'data-pending-wording="a60_state_complete_no_rows"' not in html and 'data-status-key="undetermined"' in html
+        assert "完整" not in visible(html) and "沒有可顯示的持倉列" not in visible(html)
 
 
 @pytest.mark.parametrize("tabs,rows", _COUNT_COMBOS)
 def test_partial_needs_at_least_one_positive_count_else_undetermined(tabs, rows):
     html = assets.a60_html(vm.A60Evidence(tabs, rows, (), (vm.CauseFact(vm.CATEGORY_SOURCE_DATA, vm.CAUSE_PARTIAL_SOURCE),)), vm.SRC_PARTIAL)
     positive = (tabs or 0) > 0 or (rows or 0) > 0
-    assert ('data-a60-state="partial"' in html) is positive and ('data-pending-wording="a60_cause_partial"' in html) is positive
+    assert ('data-a60-state="partial"' in html) is positive and 'data-pending-wording="a60_cause_partial"' not in html
     assert ('data-a60-state="undetermined"' in html) is (not positive)
 
 
 @pytest.mark.parametrize("tabs,rows", _COUNT_COMBOS)
-@pytest.mark.parametrize("source_state,state", [(vm.SRC_READ_FAILED, "read_failed"), (vm.SRC_NOT_SELECTED, "not_selected"),
-                                                (vm.SRC_NOT_READ, "not_read"), (vm.SRC_UNDETERMINED, "undetermined")])
+@pytest.mark.parametrize("source_state,state", [(vm.SRC_READ_FAILED, "read_failed"), (vm.SRC_NOT_SELECTED, "undetermined"),
+                                                (vm.SRC_NOT_READ, "undetermined"), (vm.SRC_UNDETERMINED, "undetermined")])
 def test_failure_not_selected_not_read_and_undetermined_never_claim_completeness_whatever_the_counts(source_state, state, tabs, rows):
     html = assets.a60_html(vm.A60Evidence(tabs, rows, (), ()), source_state)
     assert f'data-a60-state="{state}"' in html
-    for key in ("a60_state_complete", "a60_state_complete_no_rows", "a60_state_partial", "a60_cause_partial"):
+    for key in (*_A60_FORBIDDEN_KEYS, "a60_state_complete_no_rows", "a60_state_partial"):
         assert f'data-pending-wording="{key}"' not in html
+    if state == "undetermined":
+        assert 'data-status-key="undetermined"' in html and rules.entry("undetermined").wording in visible(html)
 
 
 def test_blocked_and_not_read_never_say_the_source_was_read_to_the_end():
     for name in ("market_blocked", "read_failed", "no_active", "complete_counts_unprovided", "unprovided_skip_evidence"):
         a60 = a60_of(name)
         assert "已完整讀取" not in visible(a60) and "未發現略過" not in visible(a60) and "a60_state_complete" not in a60, name
+
+
+# ── 防誤判（ChatGPT UI 設計方向 2026-11-17）：件數為 0 不得被讀成「來源完整」；說明句只留四類；blocked／未選定只剩 `⬜ 無法判定` ──
+_COMPLETE_CLAIMS = ("完整", "已讀取", "未發現略過", "沒有略過", "無略過")
+
+
+@pytest.mark.parametrize("name", ["multi_currency", "same_fund_two_policies", "many_rows"])
+def test_complete_with_rows_and_zero_counts_never_claims_completeness_only_the_counts_and_undetermined(name):
+    a60 = a60_of(name)
+    assert A60_EXPECT[name][:2] == (0, 0) and 'data-a60-state="undetermined"' in a60   # 前提：件數 (0,0) 且 complete 有持倉列
+    text = visible(a60)
+    assert not any(w in text for w in _COMPLETE_CLAIMS) and "沒有可顯示的持倉列" not in text
+    assert rules.entry("undetermined").wording in text and 'data-pending-wording="a60_state_' not in a60
+
+
+@pytest.mark.parametrize("name", ["market_blocked", "no_active"])
+def test_blocked_and_not_selected_show_only_undetermined_and_invent_no_cause_sentence(name):
+    a60 = a60_of(name)
+    assert 'data-a60-state="undetermined"' in a60 and 'data-status-key="undetermined"' in a60
+    assert 'data-a60="cause"' not in a60 and 'data-pending-wording="a60_state_' not in a60 and 'data-pending-wording="a60_cause_' not in a60
+    # 狀態列只有 `⬜ 無法判定`；整個 A60 不得有除標題說明、欄名、件數外的原因句
+    line = re.search(r'data-a60="state"[^>]*>(.*?)</div>', a60).group(1)
+    assert visible(line).strip() == rules.entry("undetermined").wording
+
+
+def test_none_counts_show_missing_never_zero_and_int_zero_shows_zero():
+    for name in ("market_blocked", "no_active", "read_failed", "complete_counts_unprovided"):
+        a60 = a60_of(name)
+        assert "0" not in re.findall(r"\d+", visible(a60)) and visible(a60).count(rules.entry("missing").wording) == 2, name
+    a60 = a60_of("complete_no_rows")
+    assert re.findall(r"\d+", visible(a60)) == ["0", "0"] and rules.entry("missing").wording not in visible(a60)
+
+
+def test_mutation_old_complete_claim_is_caught_by_the_guards(monkeypatch):
+    """變異：把 complete 改回舊聲稱（兩件數為 0 就說『已完整讀取』）→ 上面的防誤判條件必須轉紅。"""
+    original = assets._a60_effective_state
+
+    def old_claim(a60, source_state):
+        if source_state == vm.SRC_COMPLETE and (a60.skipped_tab_count, a60.skipped_row_count) == (0, 0):
+            return "complete_no_rows"   # 舊行為的等價：宣稱完整
+        return original(a60, source_state)
+
+    monkeypatch.setattr(assets, "_a60_effective_state", old_claim)
+    a60 = split_a60(assets.page_html(model_of("multi_currency")))[1]
+    text = visible(a60)
+    assert 'data-a60-state="undetermined"' not in a60 or any(w in text for w in _COMPLETE_CLAIMS) or 'a60_state_' in a60
+    assert 'data-a60-state="undetermined"' not in a60   # 守衛條件會因此失敗＝變異被偵測
 
 
 def test_a60_unknown_source_state_and_wrong_types_fail_loudly():
@@ -772,13 +821,12 @@ def test_a60_output_is_invariant_to_the_category_field(name):
     assert assets.page_html(model) == before
 
 
-def test_partial_has_exactly_one_a_cause_row_and_it_is_the_a60_own_pending_sentence():
+def test_partial_has_one_state_sentence_and_no_duplicate_cause_row():
     for name in ("partial", "a60_sensitive_strings"):
         a60 = a60_of(name)
-        assert a60.count('data-a60="cause"') == 1 and 'data-pending-wording="a60_cause_partial"' in a60
+        assert a60.count('data-pending-wording="a60_state_partial"') == 1 and 'data-a60="cause"' not in a60 and "a60_cause_partial" not in a60
     for name in ALL:
-        if A60_EXPECT[name][2] != "partial":
-            assert 'data-a60="cause"' not in a60_of(name), name
+        assert 'data-a60="cause"' not in a60_of(name), name
 
 
 # ── D4／D8：內部碼、略過原始字串、網址、試算表 ID、例外、敏感資訊完全不上畫面 ──
@@ -865,7 +913,7 @@ def test_negative_control_internal_code_checker_turns_red(snippet):
     assert internal_code_reads(snippet)
 
 
-A60_STATE_DOMAIN = {"read_failed", "partial", "complete", "complete_no_rows", "not_selected", "not_read", "undetermined"}
+A60_STATE_DOMAIN = {"read_failed", "partial", "complete_no_rows", "undetermined"}   # 測試屬性，不是使用者可見的正式狀態契約
 
 
 def test_a60_state_attribute_domain_is_closed_over_scenarios_and_count_matrix():
@@ -877,7 +925,7 @@ def test_a60_state_attribute_domain_is_closed_over_scenarios_and_count_matrix():
         for tabs, rows in _COUNT_COMBOS:
             html = assets.a60_html(vm.A60Evidence(tabs, rows, (), ()), state)
             seen.add(re.search(r'data-a60-state="([^"]*)"', html).group(1))
-    assert seen <= A60_STATE_DOMAIN and seen == A60_STATE_DOMAIN   # 值域只能是這七個，且七個都有被走到（不是空綠）
+    assert seen <= A60_STATE_DOMAIN and seen == A60_STATE_DOMAIN   # 值域只能是這四個，且四個都有被走到（不是空綠）
 
 
 # ── D6：新增字樣全是 PendingWording，不進規則表 ──
@@ -885,11 +933,12 @@ def test_a60_state_attribute_domain_is_closed_over_scenarios_and_count_matrix():
 def test_every_a60_wording_is_pending_and_none_is_in_the_approved_table():
     keys = [k for k in AW.ASSETS_PREVIEW_WORDING if k.startswith("a60_")]
     assert set(keys) == {"a60_title", "a60_labels_note", "a60_label_skipped_tabs", "a60_label_skipped_rows", "a60_state_read_failed", "a60_state_partial",
-                         "a60_cause_partial", "a60_state_complete", "a60_state_complete_no_rows", "a60_state_not_selected", "a60_state_not_read"}
+                         "a60_state_complete_no_rows"}
     for key in keys:
         item = AW.preview_wording(key)
         assert item.status == "pending" and item.source.strip()
-        assert key == "a60_labels_note" or "DEC-2026-11-17-01" in item.source
+        assert key == "a60_labels_note" or "DEC-2026-11-17-01" in item.source or "ChatGPT UI 設計方向 2026-11-17" in item.source
+        assert "客戶逐字" not in item.source.replace("非客戶逐字裁示", "")   # 出處不得寫成客戶裁示
         assert key not in rules.ENTRIES and key not in rules.APPROVED_WORDING
         assert item.text not in {a.text for a in rules.APPROVED_WORDING.values()}
 
