@@ -86,9 +86,10 @@ def test_default_scenario_is_the_first_and_the_fake_banner_is_in_the_harness_onl
 def test_every_scenario_renders_without_exception_with_pending_notices_and_no_interactive_renderer_element(sid):
     at = _select(_run(), sid)
     md = _md(at)
-    assert 'data-pending-wording="pending_notice"' in md and 'data-pending-wording="live_test_note"' in md
+    assert 'data-pending-wording="pending_notice"' in md and 'data-pending-wording="offline_note"' in md
     renderer = "\n".join(m.value for m in at.markdown if "data-harness" not in m.value)
-    assert not re.search(r"<\s*(?:button|a|input|select|textarea|form|details|summary)\b|\bhref\s*=", renderer, re.I)
+    assert not re.search(r"<\s*(?:button|a|input|select|textarea|form)\b|\bhref\s*=", renderer, re.I)
+    assert len(re.findall(r"<details\b", renderer)) == 1 and not re.search(r"<details\b[^>]*\bopen\b", renderer)   # 只有那一個預設收合的 details
     assert not at.button and not at.text_input   # 沒有假的「立即測試」按鈕、沒有輸入框
 
 

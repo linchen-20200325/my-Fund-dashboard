@@ -16,9 +16,13 @@
 
 - `proxy_configured`：是否已設定 NAS 中繼站（True／False／None＝不知道）。
 - `nas_reachable`：**NAS 出口是否可用於取得目標**（網路可達、驗證通過，且出口沒有被目標網站封鎖；True／False／None＝沒檢查）。
+  **採信標準（2026-11-17 明寫）**：`route_used=nas` 且 `nas_reachable=True`，最終結果是目標側回應（含 403／429／其他）時採信 NAS 軸 ok——
+  因為已有「經由 NAS 收到目標網站回的 HTTP 回應」這個證據，代表 NAS 這一段至少轉得通。逾時／名稱解析／TLS 沒有收到任何 HTTP 回應，
+  無法區分是 NAS 側或目標側，故兩軸皆無法判定。經 NAS 的 403／429／其他是否也該改無法判定，**待客戶／設計者裁示**（BL-0550 Pending (7)），本檔暫不改。
   所以「NAS 出口被目標 403 封鎖後降級直連」是 `nas_reachable=False`＋`nas_error_class=forbidden_403`；
   而目標網站直接回 403 給經由 NAS 的請求、且沒有降級（`route_used=nas`）時，NAS 出口仍被視為可用（目標軸失敗）——這是預覽約定。
-  `route_used=nas` 時逾時／名稱解析／TLS 判目標軸失敗、NAS 軸正常，亦為預覽約定（真實情況可能是 NAS 側問題）。
+  `route_used=nas` 時逾時／名稱解析／TLS **沒有證據區分是 NAS 側或目標側**：兩軸皆「無法判定」（reason＝no_side_evidence），
+  該分類另存 `unattributed_cause_key`（不歸給任何一側）。（舊預覽約定「判 NAS 軸正常」已於 2026-11-17 移除。）
 - 狀態碼與分類：407 允許沒有狀態碼；403／429 沒有狀態碼時以分類為準（目前**允許**，畫面狀態碼顯示缺值），不判矛盾。
 - 目標軸為「尚未測試」（例：407，沒有任何目標嘗試）時，狀態碼與延遲屬於 NAS 這一段，目標卡不顯示。
 - `route_used`：產出「最終目標結果」的路徑：`nas`／`direct`／`fallback_direct`（NAS 失敗後改走直連）／`none`（沒有任何路徑取得結果）。
@@ -39,6 +43,7 @@ ROUTES = ("nas", "direct", "fallback_direct", "none")
 ERROR_CLASSES = ("ok", "proxy_auth_407", "forbidden_403", "rate_limited_429", "timeout", "dns", "tls",
                  "proxy_unreachable", "other")
 NAS_FAULT_CLASSES = ("proxy_auth_407", "proxy_unreachable")          # 只可能是 NAS 這一段的故障
+SIDE_AMBIGUOUS_CLASSES = ("timeout", "dns", "tls")                    # route=nas 時缺少區分 NAS 側／目標側的證據
 TARGET_FAILURE_CLASSES = ("forbidden_403", "rate_limited_429", "timeout", "dns", "tls", "other")
 NO_HTTP_STATUS_CLASSES = ("timeout", "dns", "tls", "proxy_unreachable")  # 沒有收到 HTTP 回應，不該有狀態碼
 
@@ -68,7 +73,11 @@ ROUTE_CODES = (ROUTE_NAS, ROUTE_DIRECT, ROUTE_FALLBACK, ROUTE_UNTESTED, ROUTE_NO
 
 # reason_key＝整體結論的結構性原因（細節分類在 nas_cause_key／target_cause_key）。
 REASON_KEYS = ("not_configured", "not_tested", "ok", "degraded", "target_failed", "nas_failed", "both_failed",
-               "contradiction", "incomplete", "config_unknown", "no_timestamp", "nas_not_evaluated")
+               "contradiction", "incomplete", "config_unknown", "no_timestamp", "nas_not_evaluated", "no_side_evidence")
+CONFIG_SET = "configured"
+CONFIG_NOT_SET = "not_configured"
+CONFIG_UNKNOWN = "unknown"
+CONFIG_STATES = (CONFIG_SET, CONFIG_NOT_SET, CONFIG_UNKNOWN)
 # 原因分類鍵（人話原因查表用）：error_class → cause key。
 CAUSE_OF_CLASS = {
     "proxy_auth_407": "cause_auth_407", "forbidden_403": "cause_blocked_403", "rate_limited_429": "cause_rate_limited_429",
@@ -200,8 +209,18 @@ class NasDiagView:
     target_http_status: Optional[int]
     latency_ms: Optional[int]
     checked_at: Optional[str]
+    config_state: str = CONFIG_UNKNOWN                      # NAS 設定狀態（與本次檢查結果分開呈現）
+    unattributed_cause_key: Optional[str] = None            # 無法歸屬 NAS 側或目標側的失敗分類（只在 no_side_evidence 用）
 
     def __post_init__(self) -> None:
+        if self.config_state not in CONFIG_STATES:
+            raise ValueError("config_state 不在允許的列舉內")
+        if self.unattributed_cause_key is not None and (self.unattributed_cause_key not in CAUSE_KEYS
+                                                        or self.reason_key != "no_side_evidence"):
+            raise ValueError("unattributed_cause_key 只能搭配 no_side_evidence 且須在允許的列舉內")
+        if self.reason_key == "no_side_evidence" and (self.state != STATE_UNDETERMINED or self.nas_health != HEALTH_UNDETERMINED
+                                                      or self.target_health != HEALTH_UNDETERMINED):
+            raise ValueError("no_side_evidence 要求兩軸皆無法判定")
         if self.state not in STATES:
             raise ValueError("state 不在六態內")
         if self.route_code not in ROUTE_CODES:
@@ -269,18 +288,33 @@ def _target_axis(error_class: Optional[str], status: Optional[int]) -> Tuple[str
     return HEALTH_FAILED, CAUSE_OF_CLASS[error_class]
 
 
+def _config_of(obs: NasDiagObservation) -> str:
+    if obs.proxy_configured is None:
+        return CONFIG_UNKNOWN
+    return CONFIG_SET if obs.proxy_configured else CONFIG_NOT_SET
+
+
 def _make(obs: NasDiagObservation, state: str, route_code: str, reason: str, nas: str, target: str,
           nas_cause: Optional[str] = None, target_cause: Optional[str] = None) -> NasDiagView:
     return NasDiagView(state=state, route_code=route_code, reason_key=reason, nas_health=nas, target_health=target,
                        nas_cause_key=nas_cause, target_cause_key=target_cause, target_label=obs.target_label,
-                       target_http_status=obs.target_http_status, latency_ms=obs.latency_ms, checked_at=obs.checked_at)
+                       target_http_status=obs.target_http_status, latency_ms=obs.latency_ms, checked_at=obs.checked_at,
+                       config_state=_config_of(obs))
+
+
+def _no_side_evidence(obs: NasDiagObservation) -> NasDiagView:
+    """route=nas 的逾時／名稱解析／TLS：兩軸都不下結論；保留路徑、延遲與檢查時間（這些是事實），失敗分類不歸給任何一側。"""
+    return NasDiagView(state=STATE_UNDETERMINED, route_code=ROUTE_NAS, reason_key="no_side_evidence", nas_health=HEALTH_UNDETERMINED,
+                       target_health=HEALTH_UNDETERMINED, nas_cause_key=None, target_cause_key=None, target_label=obs.target_label,
+                       target_http_status=None, latency_ms=obs.latency_ms, checked_at=obs.checked_at, config_state=_config_of(obs),
+                       unattributed_cause_key=CAUSE_OF_CLASS[obs.error_class])
 
 
 def _undetermined(obs: NasDiagObservation, reason: str) -> NasDiagView:
     """無法判定：兩軸都不下結論；不帶 route／原因分類／狀態碼／延遲（避免把矛盾或不完整的事實當證據）。"""
     return NasDiagView(state=STATE_UNDETERMINED, route_code=ROUTE_UNKNOWN, reason_key=reason, nas_health=HEALTH_UNDETERMINED,
                        target_health=HEALTH_UNDETERMINED, nas_cause_key=None, target_cause_key=None, target_label=obs.target_label,
-                       target_http_status=None, latency_ms=None, checked_at=obs.checked_at)
+                       target_http_status=None, latency_ms=None, checked_at=obs.checked_at, config_state=_config_of(obs))
 
 
 def _no_result_facts(obs: NasDiagObservation) -> bool:
@@ -320,6 +354,8 @@ def _classify_configured(obs: NasDiagObservation) -> NasDiagView:
     if route == "nas":
         if obs.nas_reachable is not True or obs.nas_error_class is not None or obs.error_class in NAS_FAULT_CLASSES:
             raise _Contradiction("contradiction")
+        if obs.error_class in SIDE_AMBIGUOUS_CLASSES:
+            return _no_side_evidence(obs)       # 沒有證據區分 NAS 側或目標側：兩軸皆不下結論
         target, cause = _target_axis(obs.error_class, obs.target_http_status)
         if target == HEALTH_OK:
             return _make(obs, STATE_OK, ROUTE_NAS, "ok", HEALTH_OK, HEALTH_OK)
@@ -340,6 +376,8 @@ def _classify_configured(obs: NasDiagObservation) -> NasDiagView:
     # route == "none"：沒有任何路徑取得目標結果；NAS 必為不可用
     if obs.nas_reachable is not False or obs.error_class == "ok":
         raise _Contradiction("contradiction")
+    if obs.error_class in NAS_FAULT_CLASSES and nas_cls in NAS_FAULT_CLASSES and obs.error_class != nas_cls:
+        raise _Contradiction("contradiction")   # 兩個都是 NAS 自身故障卻不相同（例：407 vs 無法連線）：同一段不可能同時是兩種故障
     if obs.error_class in NAS_FAULT_CLASSES:
         return _make(obs, STATE_FAILED, ROUTE_NONE, "nas_failed", HEALTH_FAILED, HEALTH_NOT_TESTED, nas_cause, None)
     return _make(obs, STATE_FAILED, ROUTE_NONE, "both_failed", HEALTH_FAILED, HEALTH_FAILED, nas_cause, CAUSE_OF_CLASS[obs.error_class])

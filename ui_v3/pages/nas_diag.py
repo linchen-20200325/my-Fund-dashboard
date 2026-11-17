@@ -4,10 +4,11 @@
 - `streamlit` 只在函式內 import；HTML 組裝是純函式，可在沒有 Streamlit 的環境單測。
 - 字樣：已核准字樣取規則表（尚未設定、無法判定、缺值）；其餘取 `nas_diag_wording` 的暫行字樣，並以 `data-pending-wording` 標記。
   **本檔不硬寫任何中文字樣。** 色與尺寸一律經 `design/theme.py` 取 token。
-- 畫面：「NAS 中繼站狀態」區塊（六態徽章＋一句話結論＋實際路徑）、兩軸卡片（NAS 中繼健康度／目標網站可用性）、最近檢查、人話原因與建議。
-  「已降級直連」用醒目橫幅標示 NAS 並未正常，色與詞都和「連線成功」不同。
+- 頁內順序：①NAS 設定狀態＋本次檢查結果（徽章：符號＋文字，不單靠顏色）→ ②並列「NAS 中繼檢查結果」與「目標網站本次回應」兩軸
+  → ③實際使用路徑、HTTP 結果、檢查時間 → ④原因與建議（人話）→ ⑤預設收合的單一 `<details>`（詳細技術證據，不巢狀）→ 說明。
+  「已降級直連」用醒目橫幅標示 NAS 並未正常，色與詞都和「本次連線成功」不同。
 - 不顯示 proxy 主機、帳密、完整網址、標頭、任何例外文字；目標只顯示白名單標籤。
-- 「立即測試連線」：此預覽**沒有**按鈕或連結，只放一段說明（即時測試尚未核准）。
+- 「立即測試連線」：**目前不渲染任何可操作的測試按鈕**（未來經核准後才出現；預留位置只寫在 README，不上畫面）。唯一的可互動元素是那個收合的 `<details>`。
 """
 from __future__ import annotations
 
@@ -23,6 +24,11 @@ from ui_v3.viewmodels import nas_diag_wording as W
 # 狀態 → tone 鍵（顏色只是輔助，每個狀態都有各自的文字）。規則表來源的狀態取規則表的 tone，其餘暫行。
 _PENDING_STATE_TONE: Mapping[str, str] = {
     vm.STATE_NOT_TESTED: "grey", vm.STATE_OK: "neutral", vm.STATE_FAILED: "red", vm.STATE_DEGRADED: "yellow"}
+# 「尚未設定」沿用規則表字樣，但 NAS 未設定不算故障：此預覽的徽章用中性灰（規則表 tone 不動；與規則表的差異見 README／回報）。
+_PREVIEW_TONE_OVERRIDE: Mapping[str, str] = {vm.STATE_NOT_CONFIGURED: "grey"}
+
+
+_PREVIEW_TONE_OVERRIDE_BY_KEY: Mapping[str, str] = {"not_configured": "grey"}
 
 
 def _css() -> str:
@@ -52,6 +58,9 @@ h3{{font-size:{section} !important}}
 .uv3n-title{{margin:0 0 4px 0;font-size:{body};font-weight:700}}
 .uv3n-badge{{display:inline-block;box-sizing:border-box;max-width:100%;border:2px solid {border};border-radius:{theme.v("radius.card")};padding:4px 12px;font-size:{body};font-weight:700;overflow-wrap:anywhere}}
 {tones}.uv3n-banner{{box-sizing:border-box;margin:{space} 0;padding:10px 12px;border-left:8px solid {yellow['border']};background:{yellow['background']};color:{yellow['text']};font-size:{body};font-weight:700;line-height:1.5;overflow-wrap:anywhere}}
+.uv3n-evidence{{box-sizing:border-box;margin:0 0 {space} 0;border:1px solid {border};border-radius:{theme.v("radius.card")};padding:0 12px}}
+.uv3n-evidence > summary{{display:flex;align-items:center;min-height:48px;cursor:pointer;font-size:{body};font-weight:700;overflow-wrap:anywhere}}
+.uv3n-evidence[open] > summary{{border-bottom:1px solid {border}}}
 .uv3n-axes{{display:grid;grid-template-columns:minmax(0,1fr);gap:{space};margin-bottom:{space}}}
 .uv3n-axes > .uv3-card{{margin-bottom:0;min-width:0}}
 .uv3n-cause{{border-top:1px solid {border};padding:{theme.v("space.1")} 0;line-height:1.55;overflow-wrap:anywhere}}
@@ -80,7 +89,8 @@ def _title(key: str) -> str:
 
 def _status(key: str) -> str:
     entry = rules.entry(key)
-    return f'<span class="uv3-st uv3-st-{entry.tone}" data-status-key="{escape(key)}">{escape(entry.wording)}</span>'
+    tone = _PREVIEW_TONE_OVERRIDE_BY_KEY.get(key, entry.tone)   # 未設定在本預覽不帶紅色語意 class（規則表不動）
+    return f'<span class="uv3-st uv3-st-{tone}" data-status-key="{escape(key)}">{escape(entry.wording)}</span>'
 
 
 def _label(key: str) -> str:
@@ -101,6 +111,8 @@ def _missing() -> str:
 
 
 def state_tone(state: str) -> str:
+    if state in _PREVIEW_TONE_OVERRIDE:
+        return _PREVIEW_TONE_OVERRIDE[state]
     source = W.STATE_LABEL_SOURCE[state]
     return rules.entry(source[1]).tone if source[0] == "rule" else _PENDING_STATE_TONE[state]
 
@@ -119,10 +131,16 @@ def conclusion_html(view: vm.NasDiagView) -> str:
     return f'<div class="uv3-row" data-conclusion="{escape(view.state)}">{_pending(key)}</div>'
 
 
+_CONFIG_SOURCE: Mapping[str, Tuple[str, str]] = {
+    vm.CONFIG_SET: ("pending", "config_set"), vm.CONFIG_NOT_SET: ("rule", "not_configured"), vm.CONFIG_UNKNOWN: ("rule", "undetermined")}
+
+
 def status_block_html(view: vm.NasDiagView) -> str:
-    route = f'<div class="uv3-row" data-row="route">{_label("label_route")}{_sourced(W.ROUTE_LABEL_SOURCE[view.route_code])}</div>'
+    """①NAS 設定狀態＋本次檢查結果（徽章）＋一句話結論。"""
+    config = f'<div class="uv3-row" data-row="config" data-config="{escape(view.config_state)}">{_label("label_config")}{_sourced(_CONFIG_SOURCE[view.config_state])}</div>'
+    result = f'<div class="uv3-row" data-row="result">{_label("label_result")}{badge_html(view)}</div>'
     return (f'<div class="uv3-card" data-block="nas-status" data-state="{escape(view.state)}">'
-            f'{_title("section_status")}{badge_html(view)}{conclusion_html(view)}{route}</div>')
+            f'{_title("section_status")}{config}{result}{conclusion_html(view)}</div>')
 
 
 def nas_card_html(view: vm.NasDiagView) -> str:
@@ -131,16 +149,9 @@ def nas_card_html(view: vm.NasDiagView) -> str:
 
 
 def target_card_html(view: vm.NasDiagView) -> str:
-    """目標卡。目標軸「尚未測試」（例：407，沒有任何目標嘗試）時只顯示標籤與健康度：狀態碼與延遲屬於 NAS 這一段，不歸給目標。"""
+    """目標卡：只放標籤與目標軸健康度。HTTP 結果與延遲移到③／證據區（目標軸「尚未測試」時它們屬於 NAS 這一段，不歸給目標）。"""
     rows = (f'<div class="uv3-row" data-row="target-name">{_label("label_target")}{escape(str(view.target_label))}</div>'
             f'<div class="uv3-row" data-row="target-health">{_sourced(W.TARGET_HEALTH_SOURCE[view.target_health])}</div>')
-    if view.target_health in (vm.HEALTH_OK, vm.HEALTH_FAILED):
-        status = escape(str(view.target_http_status)) if view.target_http_status is not None else _missing()
-        latency = f'{escape(str(view.latency_ms))} {_pending("unit_ms")}' if view.latency_ms is not None else _missing()
-        rows += (f'<div class="uv3-row" data-row="status-code">{_label("label_status_code")}{status}</div>'
-                 f'<div class="uv3-row" data-row="latency">{_label("label_latency")}{latency}</div>')
-    else:
-        rows += f'<div class="uv3-row" data-row="no-target-result">{_missing()}</div>'
     return (f'<div class="uv3-card" data-axis="target" data-health="{escape(view.target_health)}">'
             f'{_title("label_target_card")}{rows}</div>')
 
@@ -149,35 +160,60 @@ def axes_html(view: vm.NasDiagView) -> str:
     return f'<div class="uv3n-axes" data-block="axes">{nas_card_html(view)}{target_card_html(view)}</div>'
 
 
+def _http_result(view: vm.NasDiagView) -> str:
+    """HTTP 結果：只有目標軸有結果（正常／失敗）才顯示狀態碼；其餘（含 407、無法判定）一律缺值，不拿 NAS 這一段的狀態碼冒充目標回應。"""
+    if view.target_health in (vm.HEALTH_OK, vm.HEALTH_FAILED) and view.target_http_status is not None:
+        return escape(str(view.target_http_status))
+    return _missing()
+
+
 def last_check_html(view: vm.NasDiagView) -> str:
+    """③實際使用路徑、HTTP 結果、檢查時間。"""
     when = escape(str(vm.checked_at_display(view.checked_at))) if view.checked_at is not None else _missing()
-    return (f'<div class="uv3-card" data-block="last-check"><div class="uv3-row">{_label("label_checked_at")}{when}'
-            f'{_pending("separator")}{_label("label_result")}{_sourced(W.STATE_LABEL_SOURCE[view.state])}</div></div>')
+    return (f'<div class="uv3-card" data-block="last-check">'
+            f'<div class="uv3-row" data-row="route">{_label("label_route")}{_sourced(W.ROUTE_LABEL_SOURCE[view.route_code])}</div>'
+            f'<div class="uv3-row" data-row="status-code">{_label("label_status_code")}{_http_result(view)}</div>'
+            f'<div class="uv3-row" data-row="checked-at">{_label("label_checked_at")}{when}</div></div>')
 
 
 def causes_html(view: vm.NasDiagView) -> str:
-    """人話原因與建議：只在有失敗分類時才畫（沒有失敗就不寫「沒有原因」，以免把「無法判定」說成正常）。"""
+    """④人話原因與建議：只在有失敗分類時才畫（沒有失敗就不寫「沒有原因」，以免把「無法判定」說成正常）。
+    無法歸屬任何一側的分類（逾時／名稱解析／TLS 經由 NAS）用中性說明，並標「NAS 或目標網站（無法區分）」。"""
     lines = []
     for who, cause in (("who_nas", view.nas_cause_key), ("who_target", view.target_cause_key)):
         if cause is not None:
             lines.append(f'<div class="uv3n-cause" data-cause="{escape(cause)}">{_label(who)}{_pending(cause)}</div>')
+    if view.unattributed_cause_key is not None:
+        text_key = W.UNATTRIBUTED_CAUSE_KEY[view.unattributed_cause_key]
+        lines.append(f'<div class="uv3n-cause" data-cause="{escape(text_key)}">{_label("who_unknown")}{_pending(text_key)}</div>')
     if not lines:
         return ""
     return f'<div class="uv3-card" data-block="causes">{_title("label_next_step")}{"".join(lines)}</div>'
 
 
+def evidence_html(view: vm.NasDiagView) -> str:
+    """⑤預設收合的單一 `<details>`（不巢狀）：延遲與兩軸判定。只有字樣與數值，不放任何內部代碼。"""
+    latency = f'{escape(str(view.latency_ms))} {_pending("unit_ms")}' if view.latency_ms is not None else _missing()
+    rows = (f'<div class="uv3-note" data-note="evidence-scope">{_pending("evidence_scope")}</div>'
+            f'<div class="uv3-row" data-row="latency">{_label("label_latency")}{latency}</div>'
+            f'<div class="uv3-row" data-row="evidence-nas">{_label("label_nas_card")}{_sourced(W.NAS_HEALTH_SOURCE[view.nas_health])}</div>'
+            f'<div class="uv3-row" data-row="evidence-target">{_label("label_target_card")}{_sourced(W.TARGET_HEALTH_SOURCE[view.target_health])}</div>')
+    return (f'<details class="uv3n-evidence" data-block="evidence"><summary data-summary="evidence">{_pending("evidence_summary")}</summary>'
+            f'{rows}</details>')
+
+
 def notes_html() -> str:
-    return (f'<div class="uv3-note" data-note="live-test">{_pending("live_test_note")}</div>'
+    return (f'<div class="uv3-note" data-note="offline">{_pending("offline_note")}</div>'
             f'<div class="uv3-note" data-note="pending-wording">{_pending("pending_notice")}</div>')
 
 
 # ───────────────────────────── 整頁 ─────────────────────────────
 
 def page_html(view: vm.NasDiagView) -> str:
-    """狀態區塊 → 兩軸卡片 → 最近檢查 → 原因與建議 → 說明。**不含任何按鈕或連結。**"""
+    """①設定＋結果 → ②兩軸 → ③路徑／HTTP／時間 → ④原因與建議 → ⑤收合證據 → 說明。**不含任何按鈕或連結（只有一個收合的 details）。**"""
     if not isinstance(view, vm.NasDiagView):
         raise TypeError("view must be a NasDiagView")
-    return status_block_html(view) + axes_html(view) + last_check_html(view) + causes_html(view) + notes_html()
+    return status_block_html(view) + axes_html(view) + last_check_html(view) + causes_html(view) + evidence_html(view) + notes_html()
 
 
 def render(view: vm.NasDiagView) -> None:
