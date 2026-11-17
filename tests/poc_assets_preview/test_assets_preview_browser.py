@@ -34,7 +34,7 @@ WIDTHS = (390, 768, 1280)
 IDS = list(fake.SCENARIOS)
 EXPECTED_STATE = {"multi_currency": "complete", "complete_no_rows": "complete_no_rows", "market_blocked": "not_read", "partial": "partial",
                   "no_active": "not_selected", "read_failed": "read_failed", "unprovided_skip_evidence": "undetermined",
-                  "same_fund_two_policies": "undetermined", "many_rows": "undetermined", "a60_sensitive_strings": "partial",
+                  "same_fund_two_policies": "complete", "many_rows": "complete", "a60_sensitive_strings": "partial",
                   "complete_counts_unprovided": "undetermined"}
 EXPECTED_ROWS = {"multi_currency": 2, "partial": 2, "same_fund_two_policies": 2, "many_rows": 50, "a60_sensitive_strings": 2,
                  "complete_counts_unprovided": 2}   # 其餘情境無列（status-only，不畫容器）
