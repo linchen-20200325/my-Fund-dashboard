@@ -15,9 +15,9 @@
   A50 區沒有合計、換算、金額、占比、報酬、配息、建議。**只有 `model.a50.state == rows` 才畫容器**；`status_only` 只畫一列引用 A00 狀態的文字
   （不畫空表、不畫導向空內容的入口、不寫「持倉 0」）。
 - A60（DEC-2026-11-17-01，D1～D8）：A50 之後的**獨立** `<details>`（預設收合、與 A50 並列、不巢狀、不標首屏；不新增 A00 指向入口、不畫 A52）。只呈現「略過分頁數」「略過列數」
-  （整數照顯示，0 也顯示 0 但**不得因此宣稱來源完整**；None → 已核准的 `◇ 資料未備`，絕不顯示 0）、一行依來源狀態的暫行說明，以及既有 (a) 原因。
-  「來源完整、沒有持倉列」只在來源狀態為 complete_no_rows 且兩個件數皆為整數 0 才說；`complete` 同樣須兩個件數皆為整數 0；`partial` 須至少一個件數 > 0；
-  其餘一律「無法判定」（規則表 `undetermined`）。**不讀**原因的分類欄位；內部問題碼（`problem_codes`）、`cause_key`、失敗代碼、略過的原始字串、網址、試算表 ID、例外
+  （整數照顯示，0 也顯示 0 但**不得因此宣稱來源完整**；None → 已核准的 `◇ 資料未備`，絕不顯示 0）、一行依來源狀態的暫行說明，以及（不重複的）說明句；(a) 原因不另列。
+  說明句只留四類（出處 ChatGPT UI 設計方向 2026-11-17）：讀取失敗、部分略過（須至少一個件數 > 0）、完整但沒有有效持倉列（只在 complete_no_rows 且兩個件數皆為整數 0 才說）、
+  其餘（含 complete 有持倉列、未選定來源、blocked 未讀取、證據不足）一律「無法判定」（規則表 `undetermined`）；complete 不得聲稱已完整讀取，也不另創原因句。**不讀**原因的分類欄位；內部問題碼（`problem_codes`）、`cause_key`、失敗代碼、略過的原始字串、網址、試算表 ID、例外
   一律不上畫面。(b)「計算口徑未核准」原因不放進 A60（遇到即 ValueError）。新增字樣全是 `PendingWording`。
 - A30、A40、A51、A52 不在這一批，不畫。
 """
@@ -233,30 +233,24 @@ def _a60_count_html(value) -> str:
 
 
 def _a60_effective_state(a60: vm.A60Evidence, source_state: str) -> str:
-    """A60 實際採用的說明狀態（fail-closed）。數量顯示 0 不能單獨證明來源完整：complete／complete_no_rows 須兩個件數皆為整數 0；
-    partial 須至少一個件數 > 0；證據不足一律 `undetermined`（無法判定）。只看來源狀態與件數，不讀原因的分類欄位。"""
+    """A60 說明列採用的狀態（fail-closed，只留四類說明句）：read_failed／partial／complete_no_rows／undetermined。
+    partial 須至少一個件數 > 0；complete_no_rows 須兩個件數皆為整數 0；其餘（complete 有持倉列、未選定來源、未讀取、證據不足、未知）一律 `undetermined`
+    （`⬜ 無法判定`）。件數為 0 不能單獨證明來源完整，complete 也不聲稱「已完整讀取」。只看來源狀態與件數，不讀原因的分類欄位。"""
     tabs, rows = a60.skipped_tab_count, a60.skipped_row_count
-    both_zero = tabs == 0 and rows == 0
+    both_zero = type(tabs) is int and type(rows) is int and tabs == 0 and rows == 0
     if source_state == vm.SRC_READ_FAILED:
         return "read_failed"
-    if source_state == vm.SRC_NOT_SELECTED:
-        return "not_selected"
-    if source_state == vm.SRC_NOT_READ:
-        return "not_read"
     if source_state == vm.SRC_PARTIAL:
         return "partial" if ((tabs or 0) > 0 or (rows or 0) > 0) else "undetermined"
-    if source_state == vm.SRC_COMPLETE:
-        return "complete" if both_zero else "undetermined"
     if source_state == vm.SRC_COMPLETE_NO_ROWS:
         return "complete_no_rows" if both_zero else "undetermined"
-    if source_state == vm.SRC_UNDETERMINED:
+    if source_state in (vm.SRC_COMPLETE, vm.SRC_NOT_SELECTED, vm.SRC_NOT_READ, vm.SRC_UNDETERMINED):
         return "undetermined"
     raise ValueError(f"unknown source_state {source_state!r}")
 
 
 _A60_STATE_WORDING = {
-    "read_failed": "a60_state_read_failed", "partial": "a60_state_partial", "complete": "a60_state_complete",
-    "complete_no_rows": "a60_state_complete_no_rows", "not_selected": "a60_state_not_selected", "not_read": "a60_state_not_read",
+    "read_failed": "a60_state_read_failed", "partial": "a60_state_partial", "complete_no_rows": "a60_state_complete_no_rows",
 }
 
 
@@ -264,20 +258,12 @@ def _a60_state_html(state: str) -> str:
     return _status("undetermined") if state == "undetermined" else _label(_A60_STATE_WORDING[state])
 
 
-def _a60_cause_rows_html(causes, state: str) -> str:
-    """A60 只承載既有 (a) 原因（每個一行）。只依原因鍵決定，不讀分類欄位；(b) 的原因鍵（計算口徑未核准）遇到即 ValueError，不放進 A60。
-    引用 A00 同一狀態的原因（same_as_source_status）已由上方「說明列」表達，不另列。部分略過的原因句只在說明列也採 partial 時才出現（不與降級後的「無法判定」並存）。"""
-    rows = []
+def _a60_check_causes(causes) -> None:
+    """A60 不另畫原因列（「部分略過」說明已由說明列的 partial 句承擔，不重複）；仍只依原因鍵檢查、不讀分類欄位：
+    (b) 的原因鍵（計算口徑未核准）或未知鍵遇到即 ValueError，不放進 A60。引用 A00 同一狀態的原因與部分略過原因都不另列（本函式不輸出任何 HTML）。"""
     for cause in causes:
-        key = cause.cause_key
-        if key == vm.CAUSE_SAME_AS_SOURCE_STATUS:
-            continue
-        if key == vm.CAUSE_PARTIAL_SOURCE:
-            if state == "partial":
-                rows.append(f'<div class="uv3-row" data-a60="cause">{_label("a60_cause_partial")}</div>')
-            continue
-        raise ValueError(f"unsupported cause_key {key!r} in A60")
-    return "".join(rows)
+        if cause.cause_key not in (vm.CAUSE_SAME_AS_SOURCE_STATUS, vm.CAUSE_PARTIAL_SOURCE):
+            raise ValueError(f"unsupported cause_key {cause.cause_key!r} in A60")
 
 
 def a60_html(a60: vm.A60Evidence, source_state: str) -> str:
@@ -290,9 +276,10 @@ def a60_html(a60: vm.A60Evidence, source_state: str) -> str:
             f'{_a60_count_html(a60.skipped_tab_count)}</div>')
     rows = (f'<div class="uv3-row" data-a60="skipped-rows"><span class="uv3-label">{_label("a60_label_skipped_rows")}</span>'
             f'{_a60_count_html(a60.skipped_row_count)}</div>')
+    _a60_check_causes(a60.causes)
     line = f'<div class="uv3-row" data-a60="state" data-a60-state="{state}">{_a60_state_html(state)}</div>'
     return (f'<details class="uv3-a60" data-block="a60"><summary>{_label("a60_title")}</summary>{note}'
-            f'<div class="uv3-a60-body" data-a60="body">{tabs}{rows}{line}{_a60_cause_rows_html(a60.causes, state)}</div></details>')
+            f'<div class="uv3-a60-body" data-a60="body">{tabs}{rows}{line}</div></details>')
 
 
 # ───────────────────────────── 整頁 ─────────────────────────────

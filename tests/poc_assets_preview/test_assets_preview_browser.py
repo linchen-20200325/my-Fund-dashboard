@@ -378,9 +378,9 @@ def test_mutation_a50_second_details_is_flagged_alone(server_and_browser):
 # 開合零 rerun（websocket framesent 增量 0＋正控）、鍵盤 Enter／Space、390／768／1280 無水平溢出、觸控目標 ≥48px、A50 與 A60 同時展開不溢出；
 # 變異驗證（巢狀、第二個 details、提前 open、順序顛倒、首屏標記、過寬列、縮小摘要、洩漏哨兵）判定函式都各自報紅。
 
-A60_EXPECT_STATE = {"multi_currency": "complete", "complete_no_rows": "complete_no_rows", "market_blocked": "not_read", "partial": "partial",
-                    "no_active": "not_selected", "read_failed": "read_failed", "unprovided_skip_evidence": "undetermined",
-                    "same_fund_two_policies": "complete", "many_rows": "complete", "a60_sensitive_strings": "partial",
+A60_EXPECT_STATE = {"multi_currency": "undetermined", "complete_no_rows": "complete_no_rows", "market_blocked": "undetermined", "partial": "partial",
+                    "no_active": "undetermined", "read_failed": "read_failed", "unprovided_skip_evidence": "undetermined",
+                    "same_fund_two_policies": "undetermined", "many_rows": "undetermined", "a60_sensitive_strings": "partial",
                     "complete_counts_unprovided": "undetermined"}
 A60_EXPECT_COUNTS = {"multi_currency": ["0", "0"], "partial": ["1", "2"], "a60_sensitive_strings": ["1", "2"], "complete_no_rows": ["0", "0"],
                      "same_fund_two_policies": ["0", "0"], "many_rows": ["0", "0"]}

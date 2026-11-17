@@ -20,7 +20,8 @@ _SRC_LABEL = "docs/v2/82 摘要標籤說明（程式現行標籤；暫行、未�
 _SRC_WIRE = "docs/v2/82 §11.9.4 線框欄位名（暫行、未核准、可被客戶推翻）"
 _SRC_EXEC = "執行組暫擬（Preview 用；暫行、未核准）"
 _SRC_DEC = "執行組依既有欄位語意暫擬（DEC-2026-11-16-01 待確認 (b) 未裁；暫行、未核准、不進已核准字樣表）"
-_SRC_A60 = "執行組依 DEC-2026-11-17-01 D3／D6 要點暫擬（A60 標題與欄名、件數措辭、說明句皆待客戶確認；暫行、未核准、不進已核准字樣表）"
+_SRC_A60 = "執行組依 DEC-2026-11-17-01 D3／D6 要點暫擬（A60 標題與欄名、件數措辭皆待客戶確認；暫行、未核准、不進已核准字樣表）"
+_SRC_A60_UI = "ChatGPT UI 設計方向 2026-11-17（非客戶逐字裁示；暫行、未核准、不進已核准字樣表；件數 None 顯示 `◇ 資料未備` 是 FAKE Preview 對已核准正式模式字樣的預覽演示，不自動使其成為所有示範模式的正式契約）"
 
 # A50 四欄的欄位代碼 → 暫行欄名字樣鍵（順序＝`adapters.assets_page.PROVISIONAL_ROW_FIELDS`；本檔不 import adapter，順序由測試鎖定）。
 A50_FIELD_LABEL_KEYS: Tuple[Tuple[str, str], ...] = (
@@ -50,13 +51,9 @@ _LIST = (
     PendingWording("a60_labels_note", "標題、欄名與說明句為暫行字樣，尚未核准", _SRC_EXEC),
     PendingWording("a60_label_skipped_tabs", "略過分頁數", _SRC_A60),
     PendingWording("a60_label_skipped_rows", "略過列數", _SRC_A60),
-    PendingWording("a60_state_read_failed", "來源讀取失敗，略過情形無法確認", _SRC_A60),
-    PendingWording("a60_state_partial", "來源部分略過，件數如上", _SRC_A60),
-    PendingWording("a60_cause_partial", "來源不完整，略過的內容未納入顯示", _SRC_A60),
-    PendingWording("a60_state_complete", "來源已完整讀取，未發現略過的分頁或列", _SRC_A60),
-    PendingWording("a60_state_complete_no_rows", "來源已完整讀取，沒有持倉列", _SRC_A60),
-    PendingWording("a60_state_not_selected", "尚未選定持倉資料來源，沒有可檢視的略過情形", _SRC_A60),
-    PendingWording("a60_state_not_read", "此預覽未讀取持倉資料，無從確認略過情形", _SRC_A60),
+    PendingWording("a60_state_read_failed", "來源讀取失敗，略過情形無法確認。", _SRC_A60_UI),
+    PendingWording("a60_state_partial", "本次資料有部分略過，詳見上方件數。", _SRC_A60_UI),
+    PendingWording("a60_state_complete_no_rows", "本次已讀取的資料沒有可顯示的持倉列。", _SRC_A60_UI),
 )
 
 
