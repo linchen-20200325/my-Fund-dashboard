@@ -3279,6 +3279,23 @@
 
 ---
 
+### DEC-2026-11-17-02｜🔍 找一檔基金／依條件篩選：完全離線 FAKE 隔離 Preview 施工授權（僅 `poc/fund_search_fixture_preview/`；BL-0553 方案 A；向前生效）（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-17；客戶。客戶本人經提示語轉交，正式選擇 BL-0553 方案 A，並以五點答覆 BL-0553 所列問題；來源為對話提示語，repo 無逐字存檔，QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。UI 設計規格由 ChatGPT 規劃，非客戶逐字裁示。要點轉述，非逐字。 |
+| 決策內容摘要（客戶要點） | **授權**：開發「🔍 找一檔基金」與「🔍 依條件篩選」完全離線 FAKE Preview，以單一 Preview 入口上下排列；renderer 與 fake 輸入只放 `poc/fund_search_fixture_preview/` 及其測試目錄；可 import 已核准的 `ui_v3/viewmodels/exp_counts.py` 純函式與既有 `ui_v3/viewmodels/preview_wording.py`；新字樣一律 PendingWording，既有已核准字樣依既有 DEC 與線框，不任意重寫。<br>**五項答覆**：(1) FAKE 輸入框與按鈕可以有功能，只能操作離線 fixture；不算沒有行為的假控制項。(2) 允許已核准線框欄位的 FAKE 多欄展示；本批不做 EXP-4 排序，不新增金融欄位。(3) 零生效條件時 EXP-0 顯示「尚未設定條件」，EXP-2／EXP-7 不產生結果列；此為本次 FAKE Preview 規格，不升格正式母體契約。(4) M 由 fixture 明確提供的三態評估結果產生：符合／不符合／資料不足無法判定，僅屬測試輸入，不新增正式篩選判準。(5) Renderer 只放隔離 poc 路徑；可以 import 已核准的 exp_counts 純函式，不修改正式 `ui_v3/pages` 或導覽。<br>**畫面規格摘要（ChatGPT UI 設計方向，非客戶逐字裁示）**：任務 1 順序＝標題「找一檔基金」→ 單一輸入框「MoneyDJ 基金代碼或 ISIN」→ 常駐 ISIN 未啟用說明 →「查詢」按鈕 → 結果卡 →「基本資料｜尚未取得｜來源與限制」預設收合區；查詢須產生對應 fixture 結果（成功找到模擬項目、資料不足、查詢失敗、無法辨識格式）；不得顯示「基金不存在」，不得把模擬身份宣稱為正式 MoneyDJ 身份；所有演示資料標 FAKE。任務 2 下區順序＝EXP-0（條件與符合數／無法判定數）→ EXP-1（本次瀏覽暫時條件）→ EXP-2（結果清單）→ EXP-7（篩選軌跡）；不實作 EXP-3／4／5／6 與歸一化圖；重用 exp_counts，嚴格驗證 N、M、N＋M 一致，缺值不得轉 0，無法判定不得算作符合或不符合；fixture 三態評估不形成可搬入 production 的新金融公式。 |
+| 適用範圍 | 向前生效；僅 `poc/fund_search_fixture_preview/` 及其測試目錄的離線 FAKE Preview。 |
+| 不授權範圍 | 修改 `ui_v3/shell/registry.py`、`ui_v3/app_preview.py`；掛 🔍 頁；frozen 44、正式金融公式、Schema、FX；正式資料來源、Google Sheet、選股池接線與 user_setting 讀寫；ISIN 解析、ISIN 對照來源與正式基金身份契約；Old UI、`ui_v2` production 行為；讀 secrets、真實網路請求、寫使用者設定；D2 Pending 欄位值（含 R-NAV-4／6、R-NAV-3）；EXP-3／4／5／6；Cloud／真機／像素驗收；解除 BL-0545；不得宣稱 🔍 頁面功能已完成。不追認任何過去未授權施工。 |
+| supersedes／amends | **僅補充（amends）** `DEC-2026-11-14-04`／`DEC-2026-11-14-08` 關於「🔍 無授權可操作預覽」的空缺，不改寫其本文；`DEC-2026-11-14-08` 的 S2-T0 暫緩維持。其餘正式 DEC 不取代。 |
+| 與既有規則的關係（執行組讀法，可被客戶推翻） | 本筆為 BL-0553 方案 A 的落實，僅授權隔離 poc 施工，不構成 🔍 頁面上線或完成；零條件、三態評估等規格僅屬本次 FAKE Preview，不升格為正式母體或篩選契約；與 `DEC-2026-11-17-01`（💼 A60 FAKE-only 隔離 Preview）同屬「隔離 FAKE Preview、不接正式路徑」做法。 |
+| 待客戶確認／未裁（NOT VERIFIED） | 新字樣定稿；ISIN 常駐說明逐字句；FAKE 多欄展示的欄位集合；Preview 的 Cloud／真機驗收。 |
+| 影響範圍／可逆性 | 文件；後續實作僅限上列範圍（`poc/fund_search_fixture_preview/` 與其測試）。可逆。 |
+| evidence／source | `docs/BACKLOG.md` BL-0553；`docs/evidence/new_ui2_five_page_status_2026_11_17.md`；`DEC-2026-11-14-04`、`DEC-2026-11-14-08`。 |
+| provenance | 要點轉述；單組作者草稿，尚待非作者獨立 QA。傳遞鏈：客戶選擇與五點答覆經提示語轉交，UI 規格由 ChatGPT 規劃；原文僅存於對話提示語、repo 內無逐字存檔，QA 無法核對（NOT VERIFIED）。 |
+
+---
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
