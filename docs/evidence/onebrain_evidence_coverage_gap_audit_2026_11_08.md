@@ -201,10 +201,11 @@
 |---|---|---|
 | 【已核准契約文字】 | R-ID-1、R-NAV-1 | `DEC-2026-11-13-06` |
 | 【已核准契約文字】 | R-NAV-2（採 C，核准 T-NAV2＋附註）、R-NAV-5（採 A 附嚴格限制，核准 T-NAV5） | `DEC-2026-11-14-07` |
+| 【已核准契約文字】 | R-NAV-4（採候選方案 A，核准 T-NAV4，僅 nav 表 `source_tier`；2026-11-17 追加） | `DEC-2026-11-17-06` |
 | 【暫緩】 | R-NAV-3（採 B） | `DEC-2026-11-14-07`；維持 Pending |
-| 【Pending】共 13 列 | R-ID-2、R-ID-3、R-NAV-3、R-NAV-4、R-NAV-6、R-PERF-1～R-PERF-8 | `docs/evidence/d2_contract_approval_prep_2026_11_12.md`、`docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md` |
+| 【Pending】~~共 13 列~~ → 共 12 列（2026-11-17，R-NAV-4 移出） | ~~R-ID-2、R-ID-3、R-NAV-3、R-NAV-4、R-NAV-6、R-PERF-1～R-PERF-8~~ → R-ID-2、R-ID-3、R-NAV-3、R-NAV-6、R-PERF-1～R-PERF-8 | `docs/evidence/d2_contract_approval_prep_2026_11_12.md`、`docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md` |
 
-注意：R-NAV-3 計入 13 列【Pending】，不是第 14 列。R-PERF-1／3／6 分別與已核准的 R-ID-1／R-NAV-5／R-NAV-2 重複，但 `DEC-2026-11-13-06` 明文**不自動升格**，仍列【Pending】。「已核准」只指契約**文字**，不等於程式已實作或 Schema 已生效。
+注意：R-NAV-3 計入 ~~13~~ 12 列【Pending】（2026-11-17 起；原 13 列含 R-NAV-4），不是第 ~~14~~ 13 列。R-PERF-1／3／6 分別與已核准的 R-ID-1／R-NAV-5／R-NAV-2 重複，但 `DEC-2026-11-13-06` 明文**不自動升格**，仍列【Pending】。「已核准」只指契約**文字**，不等於程式已實作或 Schema 已生效。
 
 ### 2　Evidence 保留度（`services/v2_domain/allocation_evidence.py`，`SCHEMA_VERSION` 為 CANDIDATE，非已核准契約）
 
