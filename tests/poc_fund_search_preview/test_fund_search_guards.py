@@ -114,14 +114,37 @@ def test_module_level_has_no_side_effects_except_the_entry_path_setup_and_main_c
             assert bad == [], (path.name, bad)
 
 
-def _is_session_state(node) -> bool:
-    return (isinstance(node, ast.Attribute) and node.attr == "session_state") or (isinstance(node, ast.Name) and node.id == "session_state")
+def _is_session_state(node, aliases=frozenset()) -> bool:
+    return ((isinstance(node, ast.Attribute) and node.attr == "session_state") or (isinstance(node, ast.Name) and (node.id == "session_state" or node.id in aliases)))
+
+
+def _session_state_aliases(tree) -> frozenset:
+    """別名：`ss = st.session_state`、`ss: X = st.session_state`、`from streamlit import session_state as ss`（遞迴到不動點，涵蓋 `a = ss`）。"""
+    aliases = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "streamlit":
+            aliases |= {a.asname for a in node.names if a.name == "session_state" and a.asname}
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            value = node.value if isinstance(node, (ast.Assign, ast.AnnAssign)) else None
+            targets = node.targets if isinstance(node, ast.Assign) else ([node.target] if isinstance(node, ast.AnnAssign) else [])
+            if value is not None and _is_session_state(value, frozenset(aliases)):
+                for t in targets:
+                    if isinstance(t, ast.Name) and t.id not in aliases:
+                        aliases.add(t.id)
+                        changed = True
+    return frozenset(aliases)
 
 
 def session_state_writes(src: str):
-    """所有寫 `session_state` 的形式：下標賦值、增量賦值、刪除、屬性賦值，以及 update／setdefault／pop／popitem／clear 呼叫。回傳每處的描述。"""
+    """所有寫 `session_state` 的形式：下標賦值、增量賦值（含 `|=`）、整個物件被賦值／增量賦值、刪除、屬性賦值，以及 update／setdefault／pop／popitem／clear 呼叫；
+    別名（`ss = st.session_state`、`from streamlit import session_state as ss`）一併追蹤。回傳每處的描述。"""
+    tree = ast.parse(src)
+    aliases = _session_state_aliases(tree)
     out = []
-    for node in ast.walk(ast.parse(src)):
+    for node in ast.walk(tree):
         targets = []
         if isinstance(node, ast.Assign):
             targets = node.targets
@@ -130,11 +153,13 @@ def session_state_writes(src: str):
         elif isinstance(node, ast.Delete):
             targets = node.targets
         for t in targets:
-            if isinstance(t, ast.Subscript) and _is_session_state(t.value):
+            if isinstance(t, ast.Subscript) and _is_session_state(t.value, aliases):
                 out.append(f"{type(node).__name__}[{ast.unparse(t.slice)}]")
-            elif isinstance(t, ast.Attribute) and _is_session_state(t.value):
+            elif isinstance(t, ast.Attribute) and _is_session_state(t.value, aliases):
                 out.append(f"{type(node).__name__}.{t.attr}")
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and _is_session_state(node.func.value) \
+            elif isinstance(node, ast.AugAssign) and _is_session_state(t, aliases):
+                out.append(f"AugAssign.{type(node.op).__name__}")   # `st.session_state |= {...}`：整個物件被增量賦值
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and _is_session_state(node.func.value, aliases) \
                 and node.func.attr in {"update", "setdefault", "pop", "popitem", "clear"}:
             out.append(f"call.{node.func.attr}")
     return out
@@ -157,6 +182,14 @@ def test_no_session_state_write_outside_the_one_session_key():
     ("import streamlit as st\nst.session_state.pop('k')\n", ["call.pop"]),
     ("import streamlit as st\nst.session_state.clear()\n", ["call.clear"]),
     ("from streamlit import session_state\nsession_state['k'] = 1\n", ["Assign['k']"]),
+    ("import streamlit as st\nss = st.session_state\nss['k'] = 1\n", ["Assign['k']"]),
+    ("import streamlit as st\nss = st.session_state\ntt = ss\ntt['k'] += 1\n", ["AugAssign['k']"]),
+    ("import streamlit as st\nss: object = st.session_state\ndel ss['k']\n", ["Delete['k']"]),
+    ("import streamlit as st\nss = st.session_state\nss.update({'k': 1})\n", ["call.update"]),
+    ("from streamlit import session_state as ss\nss['k'] = 1\n", ["Assign['k']"]),
+    ("import streamlit as st\nst.session_state |= {'k': 1}\n", ["AugAssign.BitOr"]),
+    ("import streamlit as st\nss = st.session_state\nss |= {'k': 1}\n", ["AugAssign.BitOr"]),
+    ("import streamlit as st\nss = st.session_state\nx = ss.get('k')\ny = {}\ny['k'] = 1\n", []),
     ("import streamlit as st\nx = st.session_state.get('k')\n", [])])
 def test_negative_control_session_state_write_scan(src, expected):
     assert session_state_writes(src) == expected
@@ -199,11 +232,28 @@ def test_negative_control_literal_scan_would_catch_a_duplicate():
 def test_approved_wording_is_taken_from_the_rules_table_not_retyped():
     assert rules.entry("missing").wording == "◇ 資料未備" and rules.entry("undetermined").wording == "⬜ 無法判定"
     assert rules.entry("fetch_failed").wording == "⛔ 取數失敗" and rules.APPROVED_WORDING["insufficient"].text == "資料不足"
-    assert W.status("missing").count(rules.entry("missing").wording) == 1
+    assert W.undetermined().count(rules.entry("undetermined").wording) == 1
     assert rules.APPROVED_WORDING["insufficient"].text in W.plain("insufficient")
-    for bad in ("ok", "attention", "stale", "not_configured"):
+    for bad in ("missing", "ok", "attention", "stale", "not_configured"):   # `missing` 是正式模式專用，本預覽不取（見下一個測試）
         with pytest.raises(KeyError):
             W.status(bad)
+
+
+def test_demo_missing_wording_is_pending_not_the_formal_mode_rules_entry_and_never_shares_a_formatter_with_undetermined():
+    """規則表 `missing`（◇ 資料未備）只限正式模式；FAKE 預覽的缺值字樣是 PendingWording，且與『無法判定』分開函式、分開 DOM 標記。"""
+    formal = rules.entry("missing").wording
+    miss, und = W.missing_cell(), W.undetermined()
+    assert W.FUND_SEARCH_PENDING["missing_demo"].status == "pending" and W.text("missing_demo") != formal
+    assert formal not in miss and 'data-pending-wording="missing_demo"' in miss and 'data-kind="missing"' in miss
+    assert 'data-status-key="undetermined"' in und and "資料未備" not in und and 'data-kind="missing"' not in und
+    assert W.missing_cell is not W.undetermined
+    # 預覽原始碼不得取用正式模式的缺值常數／entry
+    for path in POC_PY:
+        names = {n.id for n in ast.walk(ast.parse(path.read_text(encoding="utf-8"))) if isinstance(n, ast.Name)} \
+            | {n.attr for n in ast.walk(ast.parse(path.read_text(encoding="utf-8"))) if isinstance(n, ast.Attribute)}
+        assert "MISSING_TEXT" not in names, path.name
+        assert not [c for c in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+                    if isinstance(c, ast.Call) and ast.unparse(c).replace(" ", "") in ('rules.entry("missing")', "rules.entry('missing')")], path.name
 
 
 def test_unknown_wording_keys_are_errors_not_guesses():

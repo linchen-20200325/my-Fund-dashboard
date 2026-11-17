@@ -21,6 +21,8 @@ KEY_QUERY = "fs_last_query"
 KEY_FORM = "fs_lookup_form"
 KEY_COND = "fs_cond_{n}"
 MAX_INPUT_CHARS = 100
+# 輸入像代碼（格式通過、非 ISIN 形）的查詢結果種類；空白／不像代碼（unrecognized）與 ISIN 形不標『輸入類型：代碼型字串』
+CODE_TYPED_OUTCOMES = (L.OUT_FOUND, L.OUT_INSUFFICIENT, L.OUT_FAILED, L.OUT_NO_FIXTURE)
 
 
 def safe(value: object) -> str:
@@ -108,25 +110,29 @@ def lookup_card_html(result: L.LookupResult, found_name: str) -> str:
         status = (W.status("fetch_failed") + f'<div class="uv3-note">{W.pending("fail_impact")}</div>'
                   f'<div class="uv3-note">{W.pending("fail_not_identity")}</div>')
     elif out == L.OUT_UNRECOGNIZED:
-        status = W.status("undetermined") + W.pending("suffix_unrecognized")
+        status = W.undetermined() + W.pending("suffix_unrecognized")
     elif out == L.OUT_NO_FIXTURE:
-        status = W.status("undetermined") + W.pending("suffix_no_fixture")
+        status = W.undetermined() + W.pending("suffix_no_fixture")
     else:
         raise ValueError(f"未知的查詢結果種類 {out!r}")
-    shown_input = safe(result.raw) if result.raw.strip() else W.status("missing")
+    shown_input = safe(result.raw) if result.raw.strip() else W.missing_cell()
     rows = [
         _row("row_result", status, "result"),
         _row("row_input_code", f'<span data-value="input-code">{shown_input}</span>', "input-code"),
+    ]
+    if out in CODE_TYPED_OUTCOMES:   # 只有『像代碼』的輸入才標輸入類型；不暗示已解析成正式 MoneyDJ 身份
+        rows.append(_row("row_input_type", W.pending("input_type_code"), "input-type"))
+    rows += [
         _row("row_identity", W.pending("identity_unconfirmed"), "identity"),
         f'<div class="uv3-note" data-note="single">{W.pending("single_note")}</div>',
     ]
     if out in (L.OUT_FOUND, L.OUT_INSUFFICIENT):
-        name_html = safe(found_name) if out == L.OUT_FOUND else W.status("missing")
+        name_html = safe(found_name) if out == L.OUT_FOUND else W.missing_cell()
         rows += [
             _row("row_name", name_html, "name"),
-            _row("row_inception", W.status("missing"), "inception"),
-            _row("row_dividend_mode", W.status("missing"), "dividend-mode"),
-            _row("row_mgmt_fee", W.status("missing"), "mgmt-fee"),
+            _row("row_inception", W.missing_cell(), "inception"),
+            _row("row_dividend_mode", W.missing_cell(), "dividend-mode"),
+            _row("row_mgmt_fee", W.missing_cell(), "mgmt-fee"),
         ]
     return (f'<div class="uv3-card" data-block="lookup-result" data-outcome="{escape(out)}">'
             f'<span class="fs-tag" data-tag="fake">{W.pending("fake_tag")}</span>{"".join(rows)}</div>')
@@ -134,8 +140,8 @@ def lookup_card_html(result: L.LookupResult, found_name: str) -> str:
 
 def basic_info_details_html() -> str:
     """預設收合、不巢狀的單一 `<details>`：基本資料｜尚未取得｜來源與限制。"""
-    body = (_row("row_source", W.status("missing"), "source") + _row("row_fallback", W.status("missing"), "fallback")
-            + _row("row_asof", W.status("missing"), "asof")
+    body = (_row("row_source", W.missing_cell(), "source") + _row("row_fallback", W.missing_cell(), "fallback")
+            + _row("row_asof", W.missing_cell(), "asof")
             + f'<div class="uv3-note" data-note="not-obtained">{W.pending("not_obtained_note")}</div>'
             + f'<div class="uv3-note" data-note="limits">{W.pending("limits_note")}</div>')
     return (f'<details class="fs-details" data-block="basic-info"><summary data-summary="basic-info">'
@@ -174,7 +180,8 @@ def exp0_html(view: Optional[L.FilterView], failed: bool) -> str:
                  f'<div class="uv3-row" data-row="undetermined"><span class="uv3-label">{W.pending("col_undetermined")}</span>'
                  f'<span data-value="undetermined">{int(c.undetermined)}</span></div></div>')
     shown = "yes" if c.counts_shown else "no"
-    return (f'<div class="uv3-card" data-block="exp0" data-state="ok" data-conditions="{len(view.conditions)}" data-counts-shown="{shown}"'
+    pool = f' data-pool-size="{int(view.trace[0].before)}"' if view.trace else ""   # 套用前的池大小：0＝選股池為空，≠ 有基金但零符合
+    return (f'<div class="uv3-card" data-block="exp0" data-state="ok" data-conditions="{len(view.conditions)}" data-counts-shown="{shown}"{pool}'
             + (f' data-matched="{int(c.matched)}" data-undetermined="{int(c.undetermined)}"' if c.counts_shown else "")
             + f'>{_title("exp0_title")}<div class="uv3-row" data-row="conclusion">{escape(c.text)}</div>{stats}</div>')
 
@@ -205,10 +212,10 @@ def exp2_html(view: Optional[L.FilterView], failed: bool) -> str:
     for r in view.rows:
         tag = ""
         if r.state == L.UNDET:
-            tag = f'<div class="uv3-row" data-row="undetermined">{W.status("undetermined")}{W.pending("row_undetermined_suffix")}</div>'
+            tag = f'<div class="uv3-row" data-row="undetermined">{W.undetermined()}{W.pending("row_undetermined_suffix")}</div>'
         cells = "".join(
             f'<div class="fs-cell" data-col="{escape(col)}"><span class="uv3-label">{W.pending(label)}</span>'
-            + (safe(r.cell(col)) if r.cell(col) is not None else W.status("missing")) + "</div>"
+            + (safe(r.cell(col)) if r.cell(col) is not None else W.missing_cell()) + "</div>"
             for col, label in _COL_KEYS)
         items.append(f'<div class="fs-fund" data-fund="{escape(r.code)}" data-row-state="{escape(r.state)}">{tag}<div class="fs-cells">{cells}</div></div>')
     return (f'<div class="uv3-card" data-block="exp2" data-state="rows" data-rows="{len(view.rows)}">{_title("exp2_title")}{"".join(items)}</div>')

@@ -142,9 +142,9 @@ def test_lookup_and_exp_sections_do_not_affect_each_other():
 
 # ───────────────────────── 下區互動 ─────────────────────────
 
-def test_five_scenarios_in_a_selectbox_and_every_scenario_renders():
+def test_six_scenarios_in_a_selectbox_and_every_scenario_renders():
     at = _run()
-    assert list(at.selectbox(key=S.KEY_SCENARIO).options) == [fake.SCENARIOS[i][0] for i in IDS] and len(IDS) == 5
+    assert list(at.selectbox(key=S.KEY_SCENARIO).options) == [fake.SCENARIOS[i][0] for i in IDS] and len(IDS) == 6
     for sid in IDS:
         _scenario(at, sid)
         _cond(at, 1, 2, 3)
