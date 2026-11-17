@@ -432,9 +432,8 @@ def test_a50_scenario_populations_are_not_empty_positive_controls():
 @pytest.mark.parametrize("name", A50_SCENARIOS)
 def test_a50_is_exactly_one_collapsed_details_container_with_one_summary_and_no_nesting(name):
     html = split_a60(html_of(name))[0]   # A50 區在 A60 之前；A60 的結構另有 `test_page_has_a50_and_a60_as_two_sibling_collapsed_details`
-    assert html.count("<details") == 1 and html.count("</details>") == 1 and html.count("<summary") == 1
+    assert _structure_problems(html) == []                                # 與負控共用同一判定：恰一個 <details>／<summary>、預設收合（DEC 待確認 (c) 未裁；暫行）、不巢狀
     assert html.count('data-block="a50"') == 1
-    assert not re.search(r"<details[^>]*\sopen[\s>=]", html)              # 預設收合（DEC 待確認 (c) 未裁；暫行）
     a50 = html[html.index("<details"):html.index("</details>")]
     assert a50.index("<summary") < a50.index("data-row=")              # 摘要（可點的列）在逐檔列之前
     assert html.index("</details>") == len(html) - len("</details>")      # A50 是 A60 之前的最後一個區塊
@@ -454,6 +453,23 @@ def test_a50_rows_follow_source_order_with_the_four_fields_in_fixed_order(name):
         assert re.findall(r'data-pending-wording="(a50_col_[a-z_]+)"', body) == [k for _, k in AW.A50_FIELD_LABEL_KEYS]
 
 
+def _a50_source_problems(source):
+    """A50 字樣出處判定（供真測試與負控共用）：須含「暫擬」，且不得含「要點轉述」。"""
+    bad = []
+    if "暫擬" not in source:
+        bad.append("missing_provisional")
+    if "要點轉述" in source:
+        bad.append("paraphrase_claim")
+    return bad
+
+
+def test_a50_source_checker_is_green_on_real_sources_and_red_on_mutations():
+    real = AW.preview_wording("a50_title").source
+    assert _a50_source_problems(real) == []
+    assert "paraphrase_claim" in _a50_source_problems(real.replace("暫擬", "要點轉述"))
+    assert "missing_provisional" in _a50_source_problems(real.replace("暫擬", "擬定"))
+
+
 def test_a50_field_labels_are_pending_wording_aligned_with_the_adapter_field_set():
     from ui_v3.adapters import assets_page as adapter
 
@@ -462,6 +478,7 @@ def test_a50_field_labels_are_pending_wording_aligned_with_the_adapter_field_set
     for key in [k for _, k in AW.A50_FIELD_LABEL_KEYS] + ["a50_title", "a50_labels_note"]:
         item = AW.preview_wording(key)
         assert item.status == "pending" and item.source.strip() and key not in rules.APPROVED_WORDING
+        assert _a50_source_problems(item.source) == [], key   # 出處須明標「暫擬」，不得寫成「要點轉述」（#1259 S1）
     html = html_of("multi_currency")
     assert "暫行字樣，尚未核准" in visible(html) and 'data-a50="labels-note"' in html
 
@@ -561,7 +578,7 @@ def test_limit_line_uses_the_customer_specified_pending_wording_in_every_scenari
 
 
 def _structure_problems(a50_html_text):
-    """A50 結構判定（與 `test_a50_is_exactly_one_collapsed_details…` 同一組規則的純字串版，供負控使用）。"""
+    """A50 結構判定（`test_a50_is_exactly_one_collapsed_details…` 與負控共用的同一個函式）。"""
     bad = []
     if a50_html_text.count("<details") != 1 or a50_html_text.count("</details>") != 1 or a50_html_text.count("<summary") != 1:
         bad.append("count")
