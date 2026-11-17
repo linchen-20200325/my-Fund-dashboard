@@ -115,7 +115,7 @@ def test_switching_the_selectbox_really_changes_the_page(measures, width):
 def test_degraded_direct_badge_and_banner_are_visible_and_differ_from_success(measures, width, sid):
     deg, ok = measures[width][sid], measures[width]["nas_ok"]
     assert lib.degraded_distinct_violations(deg, ok) == []
-    assert deg["badge"]["text"] == "已降級直連" and ok["badge"]["text"] == "連線成功"
+    assert deg["badge"]["text"] == "▲ 已降級直連" and ok["badge"]["text"] == "✓ 本次連線成功"
     assert deg["banner"]["text"] == "NAS 失敗，改走直連；NAS 並未正常" and deg["banner"]["right"] <= deg["vw"] + 0.5
     assert ok["banner"] is None   # 成功時沒有降級橫幅
 
@@ -125,6 +125,36 @@ def test_no_interactive_element_in_the_renderer_so_no_touch_target_below_minimum
     assert all(measures[width][sid]["interactiveCount"] == 0 for sid in IDS)
     # harness 的 selectbox 是 Streamlit 預設高度（約 40px），未達 48px 觸控下限：據實記錄，不屬 renderer
     assert all(measures[width][sid]["selectH"] and measures[width][sid]["selectH"] >= 38 for sid in IDS)
+
+
+@pytest.mark.parametrize("width", WIDTHS)
+def test_evidence_details_is_collapsed_by_default_and_opening_it_neither_overflows_nor_adds_links(server_and_browser, width):
+    base, browser = server_and_browser
+    ctx, page = _open(browser, base, width)
+    try:
+        before = page.evaluate(lib.MEASURE_JS)
+        assert before["evidence"]["open"] is False and lib.structure_violations(before) == []
+        assert page.locator('[data-block="evidence"] [data-row="latency"]').first.is_visible() is False   # 收合時內容不可見
+        page.locator('[data-summary="evidence"]').click()
+        page.wait_for_timeout(300)
+        after = page.evaluate(lib.MEASURE_JS)
+        assert after["evidence"]["open"] is True and lib.overflow_violations(after) == [] and after["mainLinks"] == 0
+        assert page.locator('[data-block="evidence"] [data-row="latency"]').first.is_visible() is True
+    finally:
+        ctx.close()
+
+
+@pytest.mark.parametrize("width", WIDTHS)
+def test_summary_is_keyboard_operable_with_enter(server_and_browser, width):
+    base, browser = server_and_browser
+    ctx, page = _open(browser, base, width)
+    try:
+        page.locator('[data-summary="evidence"]').focus()
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(300)
+        assert page.evaluate("() => document.querySelector('details[data-block=\"evidence\"]').open") is True
+    finally:
+        ctx.close()
 
 
 def test_selectbox_is_keyboard_reachable_and_changes_the_scenario_with_arrow_and_enter(server_and_browser):
@@ -176,7 +206,7 @@ def test_unmutated_pages_pass_the_same_checks(server_and_browser, measures):
 
 
 def test_mutation_degraded_rendered_with_the_success_wording_is_flagged(server_and_browser, measures):
-    js = "() => { document.querySelector('[data-badge=\"state\"]').textContent = '連線成功'; }"
+    js = "() => { document.querySelector('[data-badge=\"state\"]').textContent = '✓ 本次連線成功'; }"
     m = _mutated(server_and_browser, "degraded_direct", js=js)
     assert any("同詞" in v[0] for v in lib.degraded_distinct_violations(m, measures[390]["nas_ok"]))
 
@@ -194,7 +224,7 @@ def test_mutation_degraded_without_the_banner_is_flagged(server_and_browser, mea
 
 
 def test_mutation_success_text_leaking_into_the_degraded_page_is_flagged(server_and_browser, measures):
-    js = "() => { document.querySelector('[data-block=\"nas-status\"]').insertAdjacentHTML('beforeend', '<div>連線成功</div>'); }"
+    js = "() => { document.querySelector('[data-block=\"nas-status\"]').insertAdjacentHTML('beforeend', '<div>✓ 本次連線成功</div>'); }"
     m = _mutated(server_and_browser, "degraded_direct", js=js)
     assert any("連線成功字樣" in v[0] for v in lib.degraded_distinct_violations(m, measures[390]["nas_ok"]))
 
@@ -208,6 +238,18 @@ def test_mutation_injected_fake_test_button_is_flagged(server_and_browser):
     js = "() => { document.querySelector('[data-block=\"nas-status\"]').insertAdjacentHTML('beforeend', '<button>立即測試連線</button>'); }"
     m = _mutated(server_and_browser, "nas_ok", js=js)
     assert any("可互動元素" in v[0] for v in lib.structure_violations(m))
+
+
+def test_mutation_summary_shrunk_below_48px_is_flagged(server_and_browser):
+    m = _mutated(server_and_browser, "nas_ok", css=".uv3n-evidence > summary{min-height:20px !important;height:20px !important}")
+    assert any("48px" in v[0] for v in lib.structure_violations(m))
+
+
+def test_mutation_details_open_by_default_or_nested_is_flagged(server_and_browser):
+    m = _mutated(server_and_browser, "nas_ok", js="() => { document.querySelector('details[data-block=\"evidence\"]').open = true; }")
+    assert any("預設不是收合" in v[0] for v in lib.structure_violations(m))
+    m = _mutated(server_and_browser, "nas_ok", js="() => { document.querySelector('details[data-block=\"evidence\"]').insertAdjacentHTML('beforeend', '<details><summary>x</summary></details>'); }")
+    assert any("不巢狀" in v[0] for v in lib.structure_violations(m))
 
 
 def test_mutation_axes_forced_side_by_side_on_mobile_is_flagged(server_and_browser):

@@ -18,7 +18,15 @@ MEASURE_JS = r"""
     return {axis: e.dataset.axis, health: e.dataset.health, top: b.top, left: b.left, right: b.right, bottom: b.bottom, width: b.width, shown: shown(e)}; });
   const body = [...main.querySelectorAll('[data-block], [data-block] *, [data-harness]')].filter(shown);
   const rendererEls = [...main.querySelectorAll('[data-block], [data-block] *')];
-  const interactive = rendererEls.filter(e => e.matches('button, a, input, select, textarea, summary, details, [tabindex], [onclick], [href]'));
+  const evid = document.querySelector('details[data-block="evidence"]');
+  const sum = evid ? evid.querySelector(':scope > summary') : null;
+  const sumR = sum ? sum.getBoundingClientRect() : null;
+  const detailsAll = rendererEls.filter(e => e.matches('details'));
+  // 唯一允許的可互動元素：那一個 details 與它自己的 summary；其餘一律算「可互動元素」
+  const interactive = rendererEls.filter(e => e.matches('button, a, input, select, textarea, summary, details, [tabindex], [onclick], [href]')
+                                              && e !== evid && e !== sum);
+  const evidence = evid ? {count: detailsAll.length, open: evid.open, nested: evid.querySelectorAll('details').length,
+                           summaryH: sumR.height, summaryW: sumR.width, summaryRight: sumR.right, summaryShown: shown(sum)} : null;
   const bs = badge ? getComputedStyle(badge) : null;
   const mainLinks = main.querySelectorAll('a[href]').length;
   const pending = document.querySelectorAll('[data-pending-wording="pending_notice"]').length;
@@ -31,7 +39,7 @@ MEASURE_JS = r"""
                           right: badge.getBoundingClientRect().right} : null,
           banner: banner ? {text: banner.innerText.trim(), shown: shown(banner), right: banner.getBoundingClientRect().right, weight: getComputedStyle(banner).fontWeight,
                             borderLeft: getComputedStyle(banner).borderLeftWidth} : null,
-          axes, interactiveCount: interactive.length, mainLinks, pendingNotice: pending, blocks: [...document.querySelectorAll('[data-block]')].map(e => e.dataset.block),
+          axes, evidence, interactiveCount: interactive.length, mainLinks, pendingNotice: pending, blocks: [...document.querySelectorAll('[data-block]')].map(e => e.dataset.block),
           overflowing: body.filter(e => e.getBoundingClientRect().right > vw + 0.5).map(e => e.tagName + '.' + (e.className || '')).slice(0, 5),
           selectH: selR ? selR.height : null,
           text: [...document.querySelectorAll('[data-block]')].map(e => e.innerText).join('\n')};
@@ -59,8 +67,15 @@ def structure_violations(m):
         bad.append(("兩軸卡片不是各一個且可見", [a["axis"] for a in m["axes"]]))
     if m["pendingNotice"] != 1:
         bad.append(("暫行字樣提示不是恰好一個", m["pendingNotice"]))
-    if m["blocks"][:3] != ["nas-status", "axes", "last-check"]:
-        bad.append(("區塊順序不對", m["blocks"]))
+    if m["blocks"][:3] != ["nas-status", "axes", "last-check"] or m["blocks"][-1] != "evidence":
+        bad.append(("區塊順序不對（①設定與結果 → ②兩軸 → ③路徑／HTTP／時間 →（原因）→ ⑤收合證據）", m["blocks"]))
+    ev = m["evidence"]
+    if not ev or ev["count"] != 1 or ev["nested"] != 0:
+        bad.append(("收合證據不是恰好一個、不巢狀的 details", ev))
+    elif ev["open"]:
+        bad.append(("收合證據預設不是收合", ev))
+    elif not ev["summaryShown"] or ev["summaryH"] < 48 or ev["summaryW"] < 48 or ev["summaryRight"] > m["vw"] + 0.5:
+        bad.append(("summary 觸控目標不足 48px 或超出視窗", ev))
     if m["interactiveCount"]:
         bad.append(("renderer 內有可互動元素（不得有假按鈕或連結）", m["interactiveCount"]))
     if m["mainLinks"]:

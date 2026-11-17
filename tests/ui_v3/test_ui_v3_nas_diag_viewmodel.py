@@ -299,7 +299,7 @@ def test_every_reachable_state_reason_pair_has_a_conclusion_sentence_and_degrade
     assert set(W.CONCLUSION_KEY.values()) <= set(W.NAS_DIAG_WORDING)
     assert W.NAS_DIAG_WORDING["concl_degraded"].text == "NAS 失敗，改走直連；NAS 並未正常"
     assert "成功" not in W.NAS_DIAG_WORDING["concl_degraded"].text and "成功" not in W.NAS_DIAG_WORDING["state_degraded"].text
-    assert W.NAS_DIAG_WORDING["state_ok"].text == "連線成功" != W.NAS_DIAG_WORDING["state_degraded"].text
+    assert W.NAS_DIAG_WORDING["state_ok"].text == "✓ 本次連線成功" != W.NAS_DIAG_WORDING["state_degraded"].text
 
 
 def test_human_causes_say_which_side_and_never_ask_to_open_the_nas_to_the_public_or_disable_verification():
@@ -384,6 +384,7 @@ REASON_INPUTS = {
     "incomplete": dict(proxy_configured=True, checked_at=sup.CHECKED_AT),
     "config_unknown": dict(),
     "no_timestamp": dict(proxy_configured=True, nas_reachable=True, route_used="nas", target_http_status=200, error_class="ok"),
+    "no_side_evidence": sup.kwargs("timeout"),
     "nas_not_evaluated": dict(proxy_configured=True, route_used="direct", target_http_status=200, error_class="ok", latency_ms=300,
                               checked_at=sup.CHECKED_AT),
 }
@@ -442,3 +443,58 @@ def test_407_view_keeps_status_but_target_axis_is_untested_so_the_card_must_not_
 
 def test_blocked_403_wording_names_the_nas_exit_block():
     assert "NAS 出口被目標網站封鎖" in W.NAS_DIAG_WORDING["cause_blocked_403"].text and "不是 NAS 斷線" in W.NAS_DIAG_WORDING["cause_blocked_403"].text
+
+
+# ───────────────────────── 2026-11-17：route=nas 的逾時／名稱解析／TLS 缺少區分兩側的證據 ─────────────────────────
+
+@pytest.mark.parametrize("cls", ["timeout", "dns", "tls"])
+def test_route_nas_timeout_dns_tls_judges_neither_axis_healthy(cls):
+    """原預覽約定「route=nas 時 timeout／dns／tls 判 NAS 軸 ok」已移除：兩軸皆無法判定，不擅自判定任一側正常。"""
+    view = _classify(**{**sup.kwargs("nas_ok"), "target_http_status": None, "error_class": cls})
+    assert (view.state, view.reason_key) == (vm.STATE_UNDETERMINED, "no_side_evidence")
+    assert view.nas_health == vm.HEALTH_UNDETERMINED and view.target_health == vm.HEALTH_UNDETERMINED
+    assert view.nas_cause_key is None and view.target_cause_key is None          # 失敗分類不歸給任何一側
+    assert view.unattributed_cause_key == vm.CAUSE_OF_CLASS[cls]
+    assert view.route_code == vm.ROUTE_NAS and view.target_http_status is None   # 路徑與檢查時間是事實，保留
+    assert view.checked_at == sup.CHECKED_AT
+
+
+def test_other_route_nas_target_failures_keep_their_judgement_and_direct_paths_are_unaffected():
+    for sid, expect in (("blocked_403", "target_failed"), ("rate_limited", "target_failed")):
+        view = _classify(**sup.kwargs(sid))
+        assert (view.reason_key, view.nas_health, view.target_health) == (expect, vm.HEALTH_OK, vm.HEALTH_FAILED)
+        assert view.unattributed_cause_key is None
+    # 降級後直連才失敗（直連路徑沒有 NAS，證據屬目標側）仍判目標軸失敗
+    view = _classify(**{**sup.kwargs("degraded_direct"), "target_http_status": None, "error_class": "timeout"})
+    assert (view.state, view.target_health, view.target_cause_key) == (vm.STATE_FAILED, vm.HEALTH_FAILED, "cause_timeout")
+    assert view.unattributed_cause_key is None
+
+
+def test_unattributed_cause_is_validated_and_only_allowed_with_no_side_evidence():
+    base = dataclasses.asdict(_classify(**sup.kwargs("timeout")))
+    vm.NasDiagView(**base)
+    with pytest.raises(ValueError):
+        vm.NasDiagView(**{**base, "unattributed_cause_key": "bogus"})
+    with pytest.raises(ValueError):
+        vm.NasDiagView(**{**base, "nas_health": vm.HEALTH_OK})                      # no_side_evidence 要求兩軸皆無法判定
+    other = dataclasses.asdict(_classify(**sup.kwargs("blocked_403")))
+    with pytest.raises(ValueError):
+        vm.NasDiagView(**{**other, "unattributed_cause_key": "cause_timeout"})      # 不是 no_side_evidence 不得帶
+
+
+def test_route_none_with_two_different_nas_faults_is_a_contradiction_and_same_fault_is_not():
+    base = sup.kwargs("auth_407")                                   # error_class＝nas_error_class＝407
+    assert _classify(**base).reason_key == "nas_failed"
+    mixed = {**base, "target_http_status": None, "error_class": "proxy_unreachable"}   # 407 vs 無法連線：不可能同時成立
+    assert _classify(**mixed).reason_key == "contradiction"
+    mixed2 = {**base, "nas_error_class": "proxy_unreachable", "target_http_status": None, "error_class": "proxy_auth_407"}
+    assert _classify(**mixed2).reason_key == "contradiction"
+    same = {**base, "target_http_status": None, "nas_error_class": "proxy_unreachable", "error_class": "proxy_unreachable"}
+    assert _classify(**same).reason_key == "nas_failed"
+
+
+def test_config_state_follows_the_observation_even_when_undetermined():
+    assert _classify(proxy_configured=False).config_state == vm.CONFIG_NOT_SET
+    assert _classify(**sup.kwargs("nas_ok")).config_state == vm.CONFIG_SET
+    assert _classify(**sup.kwargs("contradiction")).config_state == vm.CONFIG_SET   # 無法判定也不丟掉「已設定」這個事實
+    assert _classify().config_state == vm.CONFIG_UNKNOWN

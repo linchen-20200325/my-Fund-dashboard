@@ -52,9 +52,9 @@ EXPECTED = {
     "auth_407": ("failed", "failed", "not_tested", "nas_failed"),
     "blocked_403": ("failed", "ok", "failed", "target_failed"),
     "blocked_403_then_direct": ("degraded_direct", "failed", "ok", "degraded"),
-    "timeout": ("failed", "ok", "failed", "target_failed"),
-    "tls": ("failed", "ok", "failed", "target_failed"),
-    "dns": ("failed", "ok", "failed", "target_failed"),
+    "timeout": ("undetermined", "undetermined", "undetermined", "no_side_evidence"),   # route=nas 缺少區分 NAS 側／目標側的證據
+    "tls": ("undetermined", "undetermined", "undetermined", "no_side_evidence"),   # route=nas 缺少區分 NAS 側／目標側的證據
+    "dns": ("undetermined", "undetermined", "undetermined", "no_side_evidence"),   # route=nas 缺少區分 NAS 側／目標側的證據
     "contradiction": ("undetermined", "undetermined", "undetermined", "contradiction"),
     "rate_limited": ("failed", "ok", "failed", "target_failed"),
 }

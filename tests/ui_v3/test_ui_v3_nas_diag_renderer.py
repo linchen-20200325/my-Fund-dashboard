@@ -123,9 +123,13 @@ def test_every_scenario_shows_both_axes_route_last_check_and_pending_notices(sid
     assert html.count('data-axis="nas"') == 1 and html.count('data-axis="target"') == 1
     assert f'data-axis="nas" data-health="{view.nas_health}"' in html and f'data-axis="target" data-health="{view.target_health}"' in html
     assert 'data-row="route"' in html and 'data-block="last-check"' in html
-    assert 'data-pending-wording="pending_notice"' in html and 'data-pending-wording="live_test_note"' in html
-    assert "即時測試尚未核准，本預覽為離線注入結果" in visible(html) and "暫行字樣，尚未核准" in visible(html)
-    assert html.index('data-block="nas-status"') < html.index('data-block="axes"') < html.index('data-block="last-check"')
+    assert 'data-pending-wording="pending_notice"' in html and 'data-pending-wording="offline_note"' in html
+    assert "本預覽為離線注入結果" in visible(html) and "暫行字樣，尚未核准" in visible(html)
+    # 資訊層級：①設定＋結果 → ②兩軸 → ③路徑／HTTP／時間 →（④原因，有才畫）→ ⑤收合證據 → 說明
+    order = [html.index(m) for m in ('data-block="nas-status"', 'data-block="axes"', 'data-block="last-check"', 'data-block="evidence"', 'data-note="offline"')]
+    assert order == sorted(order)
+    if 'data-block="causes"' in html:
+        assert html.index('data-block="last-check"') < html.index('data-block="causes"') < html.index('data-block="evidence"')
 
 
 def test_route_shows_the_actual_path_and_untested_is_not_a_path():
@@ -136,34 +140,40 @@ def test_route_shows_the_actual_path_and_untested_is_not_a_path():
         assert word in visible(row), (sid, visible(row))
 
 
-def test_untested_target_axis_shows_no_status_code_or_latency_only_the_missing_wording():
-    """目標軸尚未測試／無法判定（含 407：狀態碼與延遲屬於 NAS 這一段）時，目標卡只有標籤、健康度與缺值字樣，沒有狀態碼與延遲。"""
-    for sid in ("not_configured", "configured_untested", "contradiction", "auth_407"):
+def test_untested_target_axis_shows_no_status_code_only_the_missing_wording_in_the_http_row():
+    """目標軸尚未測試／無法判定（含 407：狀態碼屬於 NAS 這一段）時，目標卡只有標籤與健康度；③的 HTTP 結果一律是缺值，不拿 407 冒充目標回應。"""
+    for sid in ("not_configured", "configured_untested", "contradiction", "auth_407", "timeout", "tls", "dns"):
         html = html_of(sid)
         card = html.split('data-axis="target"')[1].split('data-block="last-check"')[0]
         assert 'data-row="status-code"' not in card and 'data-row="latency"' not in card, sid
-        assert 'data-row="no-target-result"' in card and rules.MISSING_TEXT in visible(card), sid
-        assert "407" not in visible(card) and "210" not in visible(card), sid
         assert 'data-pending-wording="target_health_ok"' not in card and 'data-pending-wording="target_health_failed"' not in card, sid
+        http = re.search(r'data-row="status-code">(.*?)</div>', html).group(1)
+        assert rules.MISSING_TEXT in visible(http) and "407" not in visible(http), sid
     card407 = html_of("auth_407").split('data-axis="target"')[1]
     assert text_of("health_not_tested") in visible(card407)
 
 
-def test_tested_target_axis_shows_status_code_and_latency_and_missing_status_uses_the_approved_wording_never_zero():
+def test_http_result_and_latency_moved_out_of_the_target_card_and_missing_never_becomes_zero():
     ok = html_of("nas_ok")
-    assert "200" in ok and "380 " in ok
-    timeout_card = html_of("timeout").split('data-axis="target"')[1]
-    status_row = re.search(r'data-row="status-code">(.*?)</div>', timeout_card).group(1)
-    assert rules.MISSING_TEXT in visible(status_row)
+    http = re.search(r'data-row="status-code">(.*?)</div>', ok).group(1)
+    assert "200" in visible(http) and text_of("label_status_code") == "HTTP 結果"
+    assert "380 " in re.search(r'<details.*?</details>', ok, re.S).group(0)   # 延遲在收合證據裡
+    card = ok.split('data-axis="target"')[1].split('data-block="last-check"')[0]
+    assert "200" not in visible(card) and "380" not in visible(card)
+    blocked = html_of("blocked_403")
+    assert "403" in visible(re.search(r'data-row="status-code">(.*?)</div>', blocked).group(1))
     direct = pg.page_html(vm.classify(vm.NasDiagObservation(target_label=sup.TARGET, proxy_configured=False, route_used="direct",
                                                             target_http_status=200, error_class="ok", latency_ms=0, checked_at=sup.CHECKED_AT)))
-    assert "0 " in re.search(r'data-row="latency">(.*?)</div>', direct).group(1) and 'data-row="status-code"' in direct   # 0 是值、不是缺值
+    assert "0 " in re.search(r'data-row="latency">(.*?)</div>', direct).group(1)   # 0 是值、不是缺值
+    no_latency = html_of("configured_untested")
+    assert rules.MISSING_TEXT in visible(re.search(r'data-row="latency">(.*?)</div>', no_latency).group(1))
 
 
 def test_approved_wording_is_reused_not_copied():
     assert 'data-status-key="not_configured"' in html_of("not_configured") and rules.entry("not_configured").wording in visible(html_of("not_configured"))
     assert 'data-status-key="undetermined"' in html_of("contradiction") and rules.entry("undetermined").wording in visible(html_of("contradiction"))
     assert 'data-status-key="missing"' in html_of("configured_untested")
+    assert 'data-config="not_configured"' in html_of("not_configured") and 'data-config="configured"' in html_of("nas_ok")
     for key in ("state_not_tested", "state_ok", "state_failed", "state_degraded"):
         assert f'data-pending-wording="{key}"' in "".join(html_of(s) for s in SIDS)
 
@@ -175,6 +185,11 @@ def test_causes_are_human_and_say_which_side_for_the_failure_scenarios():
     both = visible(html_of("both_failed"))
     assert "NAS 這一段" in both and "目標網站這一段" in both
     assert "不要為了通過而關閉憑證驗證" in visible(html_of("tls"))
+    # 逾時／名稱解析／TLS（經 NAS）沒有證據區分兩側：用「無法區分」標籤，且不出現歸給某一側的標籤
+    for sid in ("timeout", "dns", "tls"):
+        causes = visible(re.search(r'data-block="causes">.*?</div></div>', html_of(sid), re.S).group(0))   # 只看原因區的標籤（結論句會合理地同時提到兩側）
+        assert text_of("who_unknown") in causes and text_of("who_nas") + text_of("label_target") not in causes, sid
+        assert not re.search(r'data-cause="cause_(auth|blocked|rate|timeout|dns|tls|nas|other)', html_of(sid)), sid
     for sid in ("nas_ok", "not_configured", "configured_untested", "contradiction"):
         assert 'data-block="causes"' not in html_of(sid)   # 沒有失敗分類就不寫「原因」，更不寫「沒有原因」
 
@@ -210,11 +225,37 @@ def test_no_button_link_or_form_control_so_there_is_no_fake_test_button(sid):
     assert "立即測試" not in visible(html)
 
 
+_DETAILS_OPEN = '<details class="uv3n-evidence" data-block="evidence"><summary data-summary="evidence">'
+
+
 def interactive_elements(html: str) -> list:
-    return re.findall(r"<\s*(?:button|a|input|select|textarea|form|summary|details|script|iframe)\b|\bhref\s*=|\bonclick\s*=|\btabindex\s*=|javascript:", html, re.I)
+    """唯一允許的可互動元素是那一個預設收合、不巢狀的 `<details>`／`<summary>` 本身；只拿掉這兩個標籤殼（開頭＋收尾各一次），
+    **details 內部照掃**（input／onclick／tabindex／button 等一律不准，與瀏覽器版一致）。"""
+    rest = html.replace(_DETAILS_OPEN, "", 1).replace("</summary>", "", 1).replace("</details>", "", 1)
+    return re.findall(r"<\s*(?:button|a|input|select|textarea|form|summary|details|script|iframe)\b|\bhref\s*=|\bonclick\s*=|\btabindex\s*=|javascript:", rest, re.I)
+
+
+@pytest.mark.parametrize("sid", SIDS)
+def test_exactly_one_collapsed_non_nested_details_and_no_open_attribute(sid):
+    html = html_of(sid)
+    assert len(re.findall(r"<details\b", html)) == 1 and len(re.findall(r"<summary\b", html)) == 1 and html.count("</details>") == 1
+    assert not re.search(r"<details\b[^>]*\bopen\b", html, re.I)   # 預設收合
+    body = re.search(r"<details[^>]*>(.*)</details>", html, re.S).group(1)
+    assert "<details" not in body and "<button" not in body and "href" not in body
+    assert text_of("evidence_summary") in visible(re.search(r"<summary[^>]*>(.*?)</summary>", html, re.S).group(1))
+
+
+def test_details_css_gives_a_48px_touch_target():
+    rule = re.search(r"\.uv3n-evidence > summary\{([^}]*)\}", pg.CSS).group(1)
+    assert "min-height:48px" in rule
 
 
 def test_interactive_element_detector_negative_control():
+    nas_ok = html_of("nas_ok")
+    inner = lambda bad: nas_ok.replace('</details>', bad + '</details>')   # noqa: E731  注入到 details 內部
+    for bad in ("<button>x</button>", "<input>", '<div onclick="f()">', '<div tabindex="0">', '<a href="#">x</a>', "<details>", "<select>"):
+        assert interactive_elements(inner(bad)), ("details 內部", bad)
+    assert interactive_elements(nas_ok) == []
     for bad in ("<button>x</button>", '<a href="#">x</a>', "<input>", "<details><summary>x</summary></details>", '<div onclick="f()">',
                 '<div tabindex="0">', "<form>", "<script>"):
         assert interactive_elements(html_of("nas_ok") + bad), bad
@@ -436,3 +477,104 @@ def test_new_non_test_files_use_no_environment_secret_process_or_network_names(r
                                  "import socket", "import requests", "import urllib.request", "import httpx", "from urllib import request"])
 def test_forbidden_ast_scan_negative_controls_turn_red(bad):
     assert forbidden_ast_uses(bad)
+
+
+# ───────────────────────── 2026-11-17 UX 收斂：符號＋文字、未設定中性灰、無法區分兩側 ─────────────────────────
+
+def _badge_text(sid: str) -> str:
+    return visible(re.search(r'data-badge="state"[^>]*>(.*?)</span></span>', html_of(sid)).group(1)).strip()
+
+
+def test_every_state_badge_has_a_distinct_symbol_and_text_not_color_alone():
+    by_state = {}
+    for sid in SIDS:
+        view = vm.classify(vm.NasDiagObservation(**sup.kwargs(sid)))
+        by_state[view.state] = _badge_text(sid)
+    assert len(set(by_state.values())) == 6, by_state
+    symbols = {t.split(" ")[0] for t in by_state.values()}
+    assert len(symbols) == 6, by_state          # 六態六個不同的前綴符號（neutral／grey 同色時靠符號＋文字區分）
+    assert by_state["not_tested"].startswith("◌") and by_state["undetermined"].startswith("⬜") and by_state["not_configured"].startswith("⛔")
+    assert "本次" in by_state["ok"] and "本次" in by_state["failed"]
+
+
+def test_not_configured_is_neutral_grey_not_a_fault_and_the_rule_table_is_untouched():
+    html = html_of("not_configured")
+    assert "uv3n-tone-grey" in html and "uv3n-tone-red" not in html
+    assert "uv3-st-red" not in html and 'uv3-st uv3-st-grey" data-status-key="not_configured"' in html   # 不帶紅色語意 class
+    assert rules.entry("not_configured").tone == "red" and rules.entry("not_configured").wording == "⛔ 尚未設定"   # 規則表不覆寫
+    assert pg.state_tone(vm.STATE_NOT_TESTED) == "grey" and pg.state_tone(vm.STATE_UNDETERMINED) == "grey"
+    assert "不是故障" in visible(html)
+
+
+def test_preview_tone_override_is_a_single_source_shared_by_badge_and_status_span():
+    assert vm.STATE_NOT_CONFIGURED == "not_configured"          # 鍵同時是狀態值與規則表鍵，兩處才能共用同一張表
+    assert pg._PREVIEW_TONE_OVERRIDE == {"not_configured": "grey"}
+    assert not hasattr(pg, "_PREVIEW_TONE_OVERRIDE_BY_KEY")
+    html = html_of("not_configured")
+    assert html.count("uv3n-tone-grey") >= 1 and 'uv3-st uv3-st-grey" data-status-key="not_configured"' in html
+
+
+def test_success_wording_says_this_time_and_never_implies_permanent_health():
+    ok = visible(html_of("nas_ok"))
+    assert "本次" in ok and "不代表 NAS 之後都正常" in ok
+
+
+@pytest.mark.parametrize("sid", ["timeout", "dns", "tls"])
+def test_timeout_dns_tls_via_nas_show_both_axes_undetermined_with_the_missing_evidence_explained(sid):
+    html = html_of(sid)
+    assert 'data-axis="nas" data-health="undetermined"' in html and 'data-axis="target" data-health="undetermined"' in html
+    v = visible(html)
+    assert "缺少區分 NAS 這一段或目標網站這一段的證據" in v
+    assert text_of("nas_health_ok") not in v and text_of("target_health_ok") not in v and text_of("state_ok") not in v
+    assert 'data-state="undetermined"' in html and 'data-status-key="undetermined"' in html
+    assert "本次有經過 NAS" in v and "NAS 中繼" in visible(re.search(r'data-row="route">(.*?)</div>', html).group(1))
+
+
+def test_both_axes_titles_and_config_vs_result_rows_exist():
+    html = html_of("nas_ok")
+    assert text_of("label_nas_card") == "NAS 中繼檢查結果" and text_of("label_target_card") == "目標網站本次回應"
+    assert 'data-row="config"' in html and 'data-row="result"' in html and text_of("label_config") in visible(html)
+
+
+def test_no_operable_test_button_is_rendered_and_the_old_live_test_note_is_gone():
+    for sid in SIDS:
+        v = visible(html_of(sid))
+        assert "立即測試" not in v and "即時測試" not in v
+        assert 'data-pending-wording="live_test_note"' not in html_of(sid)
+
+
+# ───────────────────────── QA 追加：fallback／none 路徑的失敗歸屬措辭 ─────────────────────────
+
+def test_direct_path_failures_use_attributed_wording_not_the_cannot_tell_wording():
+    """both_failed（route=none，直連逾時）與 fallback_direct＋直連失敗：直連沒有 NAS 參與，失敗歸目標側；
+    原因字樣不得再說「無法分辨是 NAS 還是目標網站」，也不得掛在單側標籤下自相矛盾。"""
+    cases = {
+        "both_failed": ("cause_timeout", "cause_nas_unreachable"),
+        "fb_timeout": ("cause_timeout", "cause_nas_unreachable"),
+        "fb_dns": ("cause_dns", "cause_nas_unreachable"),
+        "fb_tls": ("cause_tls", "cause_nas_unreachable"),
+        "none_dns": ("cause_dns", "cause_nas_unreachable"),
+        "none_tls": ("cause_tls", "cause_nas_unreachable"),
+    }
+    kws = {"both_failed": sup.kwargs("both_failed"),
+           "fb_timeout": {**sup.kwargs("degraded_direct"), "target_http_status": None, "error_class": "timeout"},
+           "fb_dns": {**sup.kwargs("degraded_direct"), "target_http_status": None, "error_class": "dns"},
+           "fb_tls": {**sup.kwargs("degraded_direct"), "target_http_status": None, "error_class": "tls"},
+           "none_dns": {**sup.kwargs("both_failed"), "error_class": "dns"},
+           "none_tls": {**sup.kwargs("both_failed"), "error_class": "tls"}}
+    for name, (target_cause, nas_cause) in cases.items():
+        view = vm.classify(vm.NasDiagObservation(**kws[name]))
+        assert (view.target_cause_key, view.nas_cause_key, view.unattributed_cause_key) == (target_cause, nas_cause, None), name
+        html = pg.page_html(view)
+        v = visible(html)
+        assert "無法分辨" not in v and "缺少證據區分" not in v.split("原因與建議")[-1], name
+        assert text_of("who_target") in v and text_of("who_nas") in v and text_of("who_unknown") not in v, name
+        assert f'data-cause="{target_cause}"' in html and f'data-cause="{nas_cause}"' in html, name
+        assert view.nas_health == vm.HEALTH_FAILED and view.target_health == vm.HEALTH_FAILED, name
+
+
+def test_no_wording_text_for_attributed_causes_claims_it_cannot_tell_the_side():
+    for key in ("cause_timeout", "cause_dns", "cause_tls"):
+        assert "無法分辨" not in text_of(key) and "缺少證據" not in text_of(key), key
+    for key in ("cause_unattr_timeout", "cause_unattr_dns", "cause_unattr_tls"):
+        assert "無法判定" in text_of(key), key
