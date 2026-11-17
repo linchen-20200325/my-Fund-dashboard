@@ -506,6 +506,14 @@ def test_not_configured_is_neutral_grey_not_a_fault_and_the_rule_table_is_untouc
     assert "不是故障" in visible(html)
 
 
+def test_preview_tone_override_is_a_single_source_shared_by_badge_and_status_span():
+    assert vm.STATE_NOT_CONFIGURED == "not_configured"          # 鍵同時是狀態值與規則表鍵，兩處才能共用同一張表
+    assert pg._PREVIEW_TONE_OVERRIDE == {"not_configured": "grey"}
+    assert not hasattr(pg, "_PREVIEW_TONE_OVERRIDE_BY_KEY")
+    html = html_of("not_configured")
+    assert html.count("uv3n-tone-grey") >= 1 and 'uv3-st uv3-st-grey" data-status-key="not_configured"' in html
+
+
 def test_success_wording_says_this_time_and_never_implies_permanent_health():
     ok = visible(html_of("nas_ok"))
     assert "本次" in ok and "不代表 NAS 之後都正常" in ok

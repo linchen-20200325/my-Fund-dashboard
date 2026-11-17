@@ -25,10 +25,8 @@ from ui_v3.viewmodels import nas_diag_wording as W
 _PENDING_STATE_TONE: Mapping[str, str] = {
     vm.STATE_NOT_TESTED: "grey", vm.STATE_OK: "neutral", vm.STATE_FAILED: "red", vm.STATE_DEGRADED: "yellow"}
 # 「尚未設定」沿用規則表字樣，但 NAS 未設定不算故障：此預覽的徽章用中性灰（規則表 tone 不動；與規則表的差異見 README／回報）。
+# 單一來源：鍵同時是狀態值與規則表鍵（`vm.STATE_NOT_CONFIGURED == "not_configured"`，測試鎖定），徽章與狀態字樣共用。
 _PREVIEW_TONE_OVERRIDE: Mapping[str, str] = {vm.STATE_NOT_CONFIGURED: "grey"}
-
-
-_PREVIEW_TONE_OVERRIDE_BY_KEY: Mapping[str, str] = {"not_configured": "grey"}
 
 
 def _css() -> str:
@@ -89,7 +87,7 @@ def _title(key: str) -> str:
 
 def _status(key: str) -> str:
     entry = rules.entry(key)
-    tone = _PREVIEW_TONE_OVERRIDE_BY_KEY.get(key, entry.tone)   # 未設定在本預覽不帶紅色語意 class（規則表不動）
+    tone = _PREVIEW_TONE_OVERRIDE.get(key, entry.tone)   # 未設定在本預覽不帶紅色語意 class（規則表不動）
     return f'<span class="uv3-st uv3-st-{tone}" data-status-key="{escape(key)}">{escape(entry.wording)}</span>'
 
 

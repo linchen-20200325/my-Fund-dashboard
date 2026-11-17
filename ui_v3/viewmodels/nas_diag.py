@@ -16,9 +16,9 @@
 
 - `proxy_configured`：是否已設定 NAS 中繼站（True／False／None＝不知道）。
 - `nas_reachable`：**NAS 出口是否可用於取得目標**（網路可達、驗證通過，且出口沒有被目標網站封鎖；True／False／None＝沒檢查）。
-  **採信標準（2026-11-17 明寫）**：`route_used=nas` 且 `nas_reachable=True`，最終結果是目標側回應（含 403／429／其他）時採信 NAS 軸 ok——
-  因為已有「經由 NAS 收到目標網站回的 HTTP 回應」這個證據，代表 NAS 這一段至少轉得通。逾時／名稱解析／TLS 沒有收到任何 HTTP 回應，
-  無法區分是 NAS 側或目標側，故兩軸皆無法判定。經 NAS 的 403／429／其他是否也該改無法判定，**待客戶／設計者裁示**（BL-0550 Pending (7)），本檔暫不改。
+  **目前標準（2026-11-17 明寫，只陳述事實）**：`route_used=nas` 且輸入宣稱 `nas_reachable=True`，最終結果是 403／429／其他時，本檔採信該宣稱，
+  判 NAS 軸 ok、目標軸失敗。**已知缺口**：代理自己回的 403／502／504 也是 HTTP 回應，與目標網站的回應無法區分，本檔無從分辨；
+  逾時／名稱解析／TLS 則根本沒有 HTTP 回應，故兩軸皆無法判定。經 NAS 的 403／429／其他是否也該改無法判定，**待客戶／設計者裁示**（BL-0550 Pending (7)），本檔暫不改。
   所以「NAS 出口被目標 403 封鎖後降級直連」是 `nas_reachable=False`＋`nas_error_class=forbidden_403`；
   而目標網站直接回 403 給經由 NAS 的請求、且沒有降級（`route_used=nas`）時，NAS 出口仍被視為可用（目標軸失敗）——這是預覽約定。
   `route_used=nas` 時逾時／名稱解析／TLS **沒有證據區分是 NAS 側或目標側**：兩軸皆「無法判定」（reason＝no_side_evidence），
