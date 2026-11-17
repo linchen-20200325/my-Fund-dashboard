@@ -742,13 +742,18 @@ def test_blocked_and_not_read_never_say_the_source_was_read_to_the_end():
 _COMPLETE_CLAIMS = ("完整", "已讀取", "未發現略過", "沒有略過", "無略過")
 
 
-@pytest.mark.parametrize("name", ["multi_currency", "same_fund_two_policies", "many_rows"])
-def test_complete_with_rows_and_zero_counts_never_claims_completeness_only_the_counts_and_undetermined(name):
-    a60 = a60_of(name)
-    assert A60_EXPECT[name][:2] == (0, 0) and 'data-a60-state="undetermined"' in a60   # 前提：件數 (0,0) 且 complete 有持倉列
+def _assert_zero_counts_make_no_completeness_claim(a60):
+    """防誤判守衛（真實測試與變異測試共用）：件數 (0,0) 且 complete 有列的 A60 只能是 `⬜ 無法判定`，不得有任何完整字樣或說明句。"""
     text = visible(a60)
+    assert 'data-a60-state="undetermined"' in a60
     assert not any(w in text for w in _COMPLETE_CLAIMS) and "沒有可顯示的持倉列" not in text
     assert rules.entry("undetermined").wording in text and 'data-pending-wording="a60_state_' not in a60
+
+
+@pytest.mark.parametrize("name", ["multi_currency", "same_fund_two_policies", "many_rows"])
+def test_complete_with_rows_and_zero_counts_never_claims_completeness_only_the_counts_and_undetermined(name):
+    assert A60_EXPECT[name][:2] == (0, 0)   # 前提：件數 (0,0) 且 complete 有持倉列
+    _assert_zero_counts_make_no_completeness_claim(a60_of(name))
 
 
 @pytest.mark.parametrize("name", ["market_blocked", "no_active"])
@@ -769,8 +774,9 @@ def test_none_counts_show_missing_never_zero_and_int_zero_shows_zero():
     assert re.findall(r"\d+", visible(a60)) == ["0", "0"] and rules.entry("missing").wording not in visible(a60)
 
 
-def test_mutation_old_complete_claim_is_caught_by_the_guards(monkeypatch):
-    """變異：把 complete 改回舊聲稱（兩件數為 0 就說『已完整讀取』）→ 上面的防誤判條件必須轉紅。"""
+def test_mutation_old_complete_claim_turns_the_guard_red(monkeypatch):
+    """變異：把 complete 改回舊聲稱（兩件數為 0 就說完整）→ 實際執行上面的守衛，必須轉紅（AssertionError）。"""
+    _assert_zero_counts_make_no_completeness_claim(split_a60(assets.page_html(model_of("multi_currency")))[1])   # 未變異＝綠
     original = assets._a60_effective_state
 
     def old_claim(a60, source_state):
@@ -779,10 +785,25 @@ def test_mutation_old_complete_claim_is_caught_by_the_guards(monkeypatch):
         return original(a60, source_state)
 
     monkeypatch.setattr(assets, "_a60_effective_state", old_claim)
-    a60 = split_a60(assets.page_html(model_of("multi_currency")))[1]
-    text = visible(a60)
-    assert 'data-a60-state="undetermined"' not in a60 or any(w in text for w in _COMPLETE_CLAIMS) or 'a60_state_' in a60
-    assert 'data-a60-state="undetermined"' not in a60   # 守衛條件會因此失敗＝變異被偵測
+    with pytest.raises(AssertionError):
+        _assert_zero_counts_make_no_completeness_claim(split_a60(assets.page_html(model_of("multi_currency")))[1])
+
+
+def test_mutation_partial_with_zero_counts_turns_the_guard_red(monkeypatch):
+    """變異：partial 在 (0,0) 仍回 partial → 「partial 須至少一項件數 > 0」的守衛必須轉紅。"""
+    def partial_needs_positive():
+        html = assets.a60_html(vm.A60Evidence(0, 0, (), ()), vm.SRC_PARTIAL)
+        assert 'data-a60-state="partial"' not in html and 'data-pending-wording="a60_state_partial"' not in html
+
+    partial_needs_positive()   # 未變異＝綠
+    monkeypatch.setattr(assets, "_a60_effective_state", lambda a60, source_state: "partial")
+    with pytest.raises(AssertionError):
+        partial_needs_positive()
+
+
+def test_the_three_state_sentences_cite_chatgpt_ui_direction_as_source():
+    for key in ("a60_state_read_failed", "a60_state_partial", "a60_state_complete_no_rows"):
+        assert "ChatGPT UI 設計方向" in AW.preview_wording(key).source, key
 
 
 def test_a60_unknown_source_state_and_wrong_types_fail_loudly():
@@ -802,11 +823,11 @@ def test_a60_never_carries_a_category_b_cause_and_unknown_cause_keys_fail_loudly
     with pytest.raises(ValueError):
         vm.A60Evidence(1, 1, (), (b_cause,))   # 契約層就擋
     with pytest.raises(ValueError):
-        assets._a60_cause_rows_html((b_cause,), "partial")   # renderer 再擋一次，不畫
+        assets._a60_check_causes((b_cause,))   # renderer 再擋一次，不畫
     weird = vm.CauseFact(vm.CATEGORY_SOURCE_DATA, vm.CAUSE_PARTIAL_SOURCE)
     object.__setattr__(weird, "cause_key", "no_such_cause")
     with pytest.raises(ValueError):
-        assets._a60_cause_rows_html((weird,), "partial")
+        assets._a60_check_causes((weird,))
     for name in ALL:
         assert "計算口徑" not in visible(a60_of(name)) and "basis_not_approved" not in a60_of(name), name
 

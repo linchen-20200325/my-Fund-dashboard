@@ -258,13 +258,12 @@ def _a60_state_html(state: str) -> str:
     return _status("undetermined") if state == "undetermined" else _label(_A60_STATE_WORDING[state])
 
 
-def _a60_cause_rows_html(causes, state: str) -> str:
+def _a60_check_causes(causes) -> None:
     """A60 不另畫原因列（「部分略過」說明已由說明列的 partial 句承擔，不重複）；仍只依原因鍵檢查、不讀分類欄位：
-    (b) 的原因鍵（計算口徑未核准）或未知鍵遇到即 ValueError，不放進 A60。引用 A00 同一狀態的原因與部分略過原因都不另列。"""
+    (b) 的原因鍵（計算口徑未核准）或未知鍵遇到即 ValueError，不放進 A60。引用 A00 同一狀態的原因與部分略過原因都不另列（本函式不輸出任何 HTML）。"""
     for cause in causes:
         if cause.cause_key not in (vm.CAUSE_SAME_AS_SOURCE_STATUS, vm.CAUSE_PARTIAL_SOURCE):
             raise ValueError(f"unsupported cause_key {cause.cause_key!r} in A60")
-    return ""
 
 
 def a60_html(a60: vm.A60Evidence, source_state: str) -> str:
@@ -277,9 +276,10 @@ def a60_html(a60: vm.A60Evidence, source_state: str) -> str:
             f'{_a60_count_html(a60.skipped_tab_count)}</div>')
     rows = (f'<div class="uv3-row" data-a60="skipped-rows"><span class="uv3-label">{_label("a60_label_skipped_rows")}</span>'
             f'{_a60_count_html(a60.skipped_row_count)}</div>')
+    _a60_check_causes(a60.causes)
     line = f'<div class="uv3-row" data-a60="state" data-a60-state="{state}">{_a60_state_html(state)}</div>'
     return (f'<details class="uv3-a60" data-block="a60"><summary>{_label("a60_title")}</summary>{note}'
-            f'<div class="uv3-a60-body" data-a60="body">{tabs}{rows}{line}{_a60_cause_rows_html(a60.causes, state)}</div></details>')
+            f'<div class="uv3-a60-body" data-a60="body">{tabs}{rows}{line}</div></details>')
 
 
 # ───────────────────────────── 整頁 ─────────────────────────────
