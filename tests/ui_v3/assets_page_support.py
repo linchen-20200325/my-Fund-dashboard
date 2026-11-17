@@ -190,6 +190,32 @@ def many_rows_result(n: int = FAKE_MANY_ROWS) -> dict:
     return fake_result(evidence=fake_evidence(holdings=rows))
 
 
+# ───────────── A60（DEC-2026-11-17-01）：含敏感字串的略過內容、件數未提供的完整來源 ─────────────
+# 敏感字串哨兵：A60 只呈現件數，這些字串（網址、試算表 ID、例外、密鑰樣字串）在整頁 HTML 與可見文字都不得出現。全部是人造的 FAKE。
+FAKE_SENSITIVE_SHEET_ID = "FAKESHEETID0123456789"
+FAKE_SENSITIVE_URL = f"https://docs.google.com/spreadsheets/d/{FAKE_SENSITIVE_SHEET_ID}/edit#gid=0"
+FAKE_SENSITIVE_EXCEPTION = "Traceback (most recent call last): KeyError 'FAKE_SECRET_TOKEN'"
+FAKE_SENSITIVE_STRINGS = ("docs.google.com", FAKE_SENSITIVE_SHEET_ID, "https://", "http", "Traceback", "KeyError", "FAKE_SECRET_TOKEN",
+                          "most recent call")
+FAKE_SENSITIVE_TAB_ITEM = {"tab": f"FAKE-TAB-{FAKE_SENSITIVE_URL}"}
+FAKE_SENSITIVE_ROW_ITEM = {"tab": "FAKE-TAB", "row": 7, "fund_code": "FAKE-X", "reasons": [FAKE_SENSITIVE_URL, FAKE_SENSITIVE_EXCEPTION]}
+FAKE_A60_PROBLEM_CODES = ("settings_read_failed", "settings_value_unusable")
+
+
+def a60_sensitive_strings_result() -> dict:
+    """部分略過（略過 1 分頁、2 列），略過內容含網址／試算表 ID／例外字串，且載入問題碼非空（只含設定類，不改變來源狀態）。FAKE。"""
+    rows = [fake_holding(1), fake_holding(2)]
+    ev = fake_evidence(holdings=rows, coverage="incomplete", coverage_codes=("skipped_tabs_present", "omitted_rows_present"),
+                       skipped_tabs=[FAKE_SENSITIVE_TAB_ITEM], omitted_rows=[FAKE_SENSITIVE_ROW_ITEM, dict(FAKE_SENSITIVE_ROW_ITEM, row=8)])
+    return fake_result(evidence=ev, problems=list(FAKE_A60_PROBLEM_CODES))
+
+
+def complete_counts_unprovided_result() -> dict:
+    """coverage 說 complete、有 2 列，但兩項略過證據來源都沒提供（件數為 None）→ 不得說來源已讀完（A60 顯示無法判定）。FAKE。"""
+    ev = fake_evidence(holdings=[fake_holding(1), fake_holding(2)], coverage="complete", skipped_tabs=None, omitted_rows=None)
+    return fake_result(evidence=ev)
+
+
 SCENARIOS = {
     "complete": complete_result,
     "partial": partial_result,

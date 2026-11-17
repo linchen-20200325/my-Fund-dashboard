@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """💼 我的資產｜隔離式 FAKE Preview：AppTest 與靜態守衛（不開瀏覽器）。
 
-驗：九情境（①～⑦＋A50 的 ⑧多保單同基金、⑨大量列）切換真的改變頁面、FAKE 標示在 harness 區、整頁無寫入面、斷網仍綠、子行程沒有載入取數／憑證相關模組、
+驗：十一情境（①～⑦＋A50 的 ⑧多保單同基金、⑨大量列＋A60 的 ⑩含敏感字串的部分略過、⑪完整但件數未提供）切換真的改變頁面、FAKE 標示在 harness 區、整頁無寫入面、斷網仍綠、子行程沒有載入取數／憑證相關模組、
 入口 import 白名單與禁止清單、FAKE 輸入與 `tests/ui_v3/assets_page_support.py` 同名情境逐一相等（drift）、目錄佈局、正式路徑不引用本 Preview。
 負控一律在記憶體內現編，不寫檔。
 """
@@ -34,7 +34,8 @@ KEY = "uvp_assets_scenario"
 IDS = list(fake.SCENARIOS)
 EXPECTED_STATE = {"multi_currency": "complete", "complete_no_rows": "complete_no_rows", "market_blocked": "not_read", "partial": "partial",
                   "no_active": "not_selected", "read_failed": "read_failed", "unprovided_skip_evidence": "undetermined",
-                  "same_fund_two_policies": "complete", "many_rows": "complete"}
+                  "same_fund_two_policies": "complete", "many_rows": "complete", "a60_sensitive_strings": "partial",
+                  "complete_counts_unprovided": "undetermined"}
 
 
 def _run() -> AppTest:
@@ -61,15 +62,15 @@ def _state(at: AppTest) -> str:
 
 # ───────────────────────── 行為 ─────────────────────────
 
-def test_nine_scenarios_in_a_selectbox_and_each_changes_the_page():
+def test_eleven_scenarios_in_a_selectbox_and_each_changes_the_page():
     at = _run()
-    assert len(IDS) == 9 and list(at.selectbox(key=KEY).options) == [fake.SCENARIOS[i][0] for i in IDS]
+    assert len(IDS) == 11 and list(at.selectbox(key=KEY).options) == [fake.SCENARIOS[i][0] for i in IDS]
     pages = {}
     for sid in IDS:
         _select(at, sid)
         assert _state(at) == EXPECTED_STATE[sid], sid
         pages[sid] = _md(at)
-    assert len(set(pages.values())) == 9   # 九個情境畫面兩兩不同
+    assert len(set(pages.values())) == 11   # 十一個情境畫面兩兩不同
 
 
 def test_default_scenario_is_the_first_and_banner_is_in_the_harness_only():
@@ -79,7 +80,7 @@ def test_default_scenario_is_the_first_and_banner_is_in_the_harness_only():
     assert len(banners) == 1 and "FAKE" in banners[0] and "非真實持倉" in banners[0]
     assert "data-first-screen" not in banners[0]
     renderer = [m.value for m in at.markdown if 'data-block="a00"' in m.value]
-    chrome = renderer[0].split("<details")[0]   # A50 的逐檔值本來就是 FAKE 資料（基金名稱以 FAKE 開頭）；FAKE 標示屬 harness，renderer 的版面部分不得有
+    chrome = renderer[0].split("<details")[0]   # A50 的逐檔值本來就是 FAKE 資料（基金名稱以 FAKE 開頭）；FAKE 標示屬 harness，renderer 的版面部分不得有（A50／A60 的 <details> 之前）
     assert len(renderer) == 1 and "data-harness" not in renderer[0] and "FAKE" not in chrome
     assert at.markdown[0].value == banners[0]   # 頁頂第一個元素
 
@@ -91,14 +92,15 @@ def test_every_scenario_renders_exactly_five_first_screen_marks_and_no_exception
     assert marks == ["a00", "a20_cell_1", "a20_cell_2", "a20_cell_3", "a20_cell_4"]
 
 
-HAS_ROWS = {"multi_currency", "partial", "same_fund_two_policies", "many_rows"}
+HAS_ROWS = {"multi_currency", "partial", "same_fund_two_policies", "many_rows", "a60_sensitive_strings", "complete_counts_unprovided"}
 
 
 @pytest.mark.parametrize("sid", IDS)
 def test_a50_container_is_drawn_only_for_scenarios_with_rows_and_never_in_harness(sid):
     at = _select(_run(), sid)
     md = _md(at)
-    assert (md.count("<details") == 1) is (sid in HAS_ROWS) and md.count("<details") <= 1
+    assert md.count("<details") == (2 if sid in HAS_ROWS else 1) == md.count("</details>")   # A50（有列才有）＋A60（恆有）；並列、不巢狀
+    assert md.count('data-block="a60"') == 1 and md.index('data-block="a60"') > md.find("data-a50=") and md.endswith("</details>")
     assert ('data-block="a50"' in md) is (sid in HAS_ROWS) and ('data-a50="status-only"' in md) is (sid not in HAS_ROWS)
     assert "holding_id" not in md and "FAKE-POLICY" not in md
     harness = [m.value for m in at.markdown if 'data-harness="true"' in m.value]
@@ -108,6 +110,39 @@ def test_a50_container_is_drawn_only_for_scenarios_with_rows_and_never_in_harnes
 def test_many_rows_scenario_renders_fifty_rows_and_escapes_special_characters():
     md = _md(_select(_run(), "many_rows"))
     assert md.count('class="uv3-a50-row"') == 50 and "<script" not in md and "&lt;b&gt;" in md
+
+
+def _a60_part(md: str) -> str:
+    i = md.find('<details class="uv3-a60"')
+    assert i >= 0
+    return md[i:]
+
+
+@pytest.mark.parametrize("sid", IDS)
+def test_a60_is_drawn_last_collapsed_unnested_and_outside_the_harness_in_every_scenario(sid):
+    at = _select(_run(), sid)
+    md = _md(at)
+    a60 = _a60_part(md)
+    assert a60.count("<details") == 1 and a60.count("</details>") == 1 and not re.search(r"<details[^>]*\sopen[\s>=]", md)
+    assert "data-first-screen" not in a60 and "data-harness" not in a60 and 'data-block="a52"' not in md and 'data-block="a51"' not in md
+    harness = [m.value for m in at.markdown if 'data-harness="true"' in m.value]
+    assert "a60" not in harness[0]
+
+
+@pytest.mark.parametrize("sid", IDS)
+def test_a60_never_shows_sensitive_strings_internal_codes_or_urls(sid):
+    at = _select(_run(), sid)
+    md = _md(at)
+    tokens = set(sup.FAKE_SENSITIVE_STRINGS) | set(sup.FAKE_A60_PROBLEM_CODES) | {"NETWORK_ERROR", "holding_read_failed", "no_active_source", "market_basis"}
+    for token in tokens:
+        assert token not in md, (sid, token)
+    assert "http" not in md.lower() and "traceback" not in md.lower()
+
+
+def test_sensitive_scenario_input_really_contains_the_sentinels_positive_control():
+    raw = repr(fake.build("a60_sensitive_strings"))
+    for token in ("docs.google.com", sup.FAKE_SENSITIVE_SHEET_ID, "Traceback", "FAKE_SECRET_TOKEN", "settings_read_failed"):
+        assert token in raw
 
 
 def _block_network(monkeypatch, calls):
@@ -305,6 +340,8 @@ _PAIRS = {
                        lambda: sup.fake_result(evidence=sup.fake_evidence(holdings=[sup.fake_holding(1, ccy="TWD"), sup.fake_holding(2, ccy="USD")]))),
     "same_fund_two_policies": (fake.same_fund_two_policies_result, sup.same_fund_two_policies_result),
     "many_rows": (fake.many_rows_result, sup.many_rows_result),
+    "a60_sensitive_strings": (fake.a60_sensitive_strings_result, sup.a60_sensitive_strings_result),
+    "complete_counts_unprovided": (fake.complete_counts_unprovided_result, sup.complete_counts_unprovided_result),
 }
 
 
@@ -315,10 +352,11 @@ def test_poc_fake_inputs_equal_the_test_support_builders(sid):
     assert fake.build(sid) == theirs()
 
 
-def test_all_nine_scenarios_are_covered_by_a_drift_pair_and_constants_match():
+def test_all_eleven_scenarios_are_covered_by_a_drift_pair_and_constants_match():
     assert set(_PAIRS) == set(IDS)
     for name in ("SENTINEL_CATEGORY_VALUE", "SENTINEL_HOLDING_VALUE", "SENTINEL_COST_TWD", "SENTINEL_COST_ORIG", "SENTINEL_SHARE_PCT",
-                 "FAKE_SKIPPED_TAB_ITEM", "FAKE_SKIPPED_ROW_ITEM", "FAKE_MANY_ROWS", "FAKE_MARKUP_NAME"):
+                 "FAKE_SKIPPED_TAB_ITEM", "FAKE_SKIPPED_ROW_ITEM", "FAKE_MANY_ROWS", "FAKE_MARKUP_NAME", "FAKE_SENSITIVE_SHEET_ID", "FAKE_SENSITIVE_URL",
+                 "FAKE_SENSITIVE_EXCEPTION", "FAKE_SENSITIVE_STRINGS", "FAKE_SENSITIVE_TAB_ITEM", "FAKE_SENSITIVE_ROW_ITEM", "FAKE_A60_PROBLEM_CODES"):
         assert getattr(fake, name) == getattr(sup, name), name
 
 

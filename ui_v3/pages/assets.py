@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""💼 我的資產頁的 renderer（隔離式 Preview：A00 來源狀態、A10 降級卡、A20 固定四格、A50 單一容器四欄唯讀持倉）。頁只吃 `AssetsPageModel`，不取數、不計算領域值。
+"""💼 我的資產頁的 renderer（隔離式 Preview：A00 來源狀態、A10 降級卡、A20 固定四格、A50 單一容器四欄唯讀持倉、A60 來源與缺項證據）。頁只吃 `AssetsPageModel`，不取數、不計算領域值。
 
 - `streamlit` 只在函式內 import（import `ui_v3` 時不得載入 Streamlit）。HTML 組裝是純函式，可在沒有 Streamlit 的環境單測。
 - 字樣：已核准字樣一律取規則表；尚未核准的取 `assets_page.ASSETS_PENDING_WORDING` 與 `assets_preview_wording`，並以 `data-pending-wording`
@@ -14,7 +14,12 @@
   （不做千分位或換算，顯示格式未裁）。缺值／不可用一律 `◇ 資料未備`（走規則表），絕不顯示 0 或空白。`holding_id` 只作身份鍵：不上畫面、不進 DOM（列以 ordinal 做 `data-row`）。
   A50 區沒有合計、換算、金額、占比、報酬、配息、建議。**只有 `model.a50.state == rows` 才畫容器**；`status_only` 只畫一列引用 A00 狀態的文字
   （不畫空表、不畫導向空內容的入口、不寫「持倉 0」）。
-- A30、A40、A52、A60 不在這一批，不畫。
+- A60（DEC-2026-11-17-01，D1～D8）：A50 之後的**獨立** `<details>`（預設收合、與 A50 並列、不巢狀、不標首屏；不新增 A00 指向入口、不畫 A52）。只呈現「略過分頁數」「略過列數」
+  （整數照顯示，0 也顯示 0 但**不得因此宣稱來源完整**；None → 已核准的 `◇ 資料未備`，絕不顯示 0）、一行依來源狀態的暫行說明，以及既有 (a) 原因。
+  「來源完整、沒有持倉列」只在來源狀態為 complete_no_rows 且兩個件數皆為整數 0 才說；`complete` 同樣須兩個件數皆為整數 0；`partial` 須至少一個件數 > 0；
+  其餘一律「無法判定」（規則表 `undetermined`）。**不讀**原因的分類欄位；內部問題碼（`problem_codes`）、`cause_key`、失敗代碼、略過的原始字串、網址、試算表 ID、例外
+  一律不上畫面。(b)「計算口徑未核准」原因不放進 A60（遇到即 ValueError）。新增字樣全是 `PendingWording`。
+- A30、A40、A51、A52 不在這一批，不畫。
 """
 from __future__ import annotations
 
@@ -51,9 +56,10 @@ h3{{font-size:{section} !important}}
 .uv3-card h4{{margin:0 0 4px 0;font-size:{body}}}
 .uv3-a20{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:{space};margin-bottom:{space}}}
 .uv3-a20 > .uv3-card{{margin-bottom:0;min-width:0}}
-.uv3-a50{{margin-bottom:{space}}}
-.uv3-a50 > summary{{box-sizing:border-box;min-height:{nav.TOUCH_MIN_PX}px;padding:12px 0;cursor:pointer;font-size:{body};font-weight:600}}
+.uv3-a50,.uv3-a60{{margin-bottom:{space}}}
+.uv3-a50 > summary,.uv3-a60 > summary{{box-sizing:border-box;min-height:{nav.TOUCH_MIN_PX}px;padding:12px 0;cursor:pointer;font-size:{body};font-weight:600}}
 .uv3-a50-body{{max-height:70vh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}}
+.uv3-a60-body{{max-height:70vh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}}
 .uv3-a50-row{{border-top:1px solid {border};padding:{theme.v("space.1")} 0}}
 .uv3-a50-field{{margin:2px 0;line-height:1.5;overflow-wrap:anywhere;word-break:break-word}}
 @media (min-width:{nav.MOBILE_MAX_PX + 1}px){{
@@ -215,13 +221,88 @@ def a50_html(a50: vm.A50Section, source_state: str) -> str:
             f'{note}<div class="uv3-a50-body" data-a50="body">{rows}</div></details>')
 
 
+# ───────────────────────────── A60 ─────────────────────────────
+
+def _a60_count_html(value) -> str:
+    """略過件數：整數照顯示（0 也顯示 0）；None（來源沒提供）→ 已核准的 `◇ 資料未備`，絕不顯示 0。"""
+    if value is None:
+        return _missing()
+    if type(value) is not int:
+        raise ValueError("A60 counts must be int or None")
+    return str(value)
+
+
+def _a60_effective_state(a60: vm.A60Evidence, source_state: str) -> str:
+    """A60 實際採用的說明狀態（fail-closed）。數量顯示 0 不能單獨證明來源完整：complete／complete_no_rows 須兩個件數皆為整數 0；
+    partial 須至少一個件數 > 0；證據不足一律 `undetermined`（無法判定）。只看來源狀態與件數，不讀原因的分類欄位。"""
+    tabs, rows = a60.skipped_tab_count, a60.skipped_row_count
+    both_zero = tabs == 0 and rows == 0
+    if source_state == vm.SRC_READ_FAILED:
+        return "read_failed"
+    if source_state == vm.SRC_NOT_SELECTED:
+        return "not_selected"
+    if source_state == vm.SRC_NOT_READ:
+        return "not_read"
+    if source_state == vm.SRC_PARTIAL:
+        return "partial" if ((tabs or 0) > 0 or (rows or 0) > 0) else "undetermined"
+    if source_state == vm.SRC_COMPLETE:
+        return "complete" if both_zero else "undetermined"
+    if source_state == vm.SRC_COMPLETE_NO_ROWS:
+        return "complete_no_rows" if both_zero else "undetermined"
+    if source_state == vm.SRC_UNDETERMINED:
+        return "undetermined"
+    raise ValueError(f"unknown source_state {source_state!r}")
+
+
+_A60_STATE_WORDING = {
+    "read_failed": "a60_state_read_failed", "partial": "a60_state_partial", "complete": "a60_state_complete",
+    "complete_no_rows": "a60_state_complete_no_rows", "not_selected": "a60_state_not_selected", "not_read": "a60_state_not_read",
+}
+
+
+def _a60_state_html(state: str) -> str:
+    return _status("undetermined") if state == "undetermined" else _label(_A60_STATE_WORDING[state])
+
+
+def _a60_cause_rows_html(causes, state: str) -> str:
+    """A60 只承載既有 (a) 原因（每個一行）。只依原因鍵決定，不讀分類欄位；(b) 的原因鍵（計算口徑未核准）遇到即 ValueError，不放進 A60。
+    引用 A00 同一狀態的原因（same_as_source_status）已由上方「說明列」表達，不另列。部分略過的原因句只在說明列也採 partial 時才出現（不與降級後的「無法判定」並存）。"""
+    rows = []
+    for cause in causes:
+        key = cause.cause_key
+        if key == vm.CAUSE_SAME_AS_SOURCE_STATUS:
+            continue
+        if key == vm.CAUSE_PARTIAL_SOURCE:
+            if state == "partial":
+                rows.append(f'<div class="uv3-row" data-a60="cause">{_label("a60_cause_partial")}</div>')
+            continue
+        raise ValueError(f"unsupported cause_key {key!r} in A60")
+    return "".join(rows)
+
+
+def a60_html(a60: vm.A60Evidence, source_state: str) -> str:
+    """A60：A50 之後的獨立 `<details>`（預設收合；不巢狀、不標首屏）。全程不產生 HTML 空行。`problem_codes` 與其他內部代碼不輸出。"""
+    if not isinstance(a60, vm.A60Evidence):
+        raise TypeError("a60 must be an A60Evidence")
+    state = _a60_effective_state(a60, source_state)
+    note = f'<div class="uv3-note" data-a60="labels-note">{_label("a60_labels_note")}</div>'
+    tabs = (f'<div class="uv3-row" data-a60="skipped-tabs"><span class="uv3-label">{_label("a60_label_skipped_tabs")}</span>'
+            f'{_a60_count_html(a60.skipped_tab_count)}</div>')
+    rows = (f'<div class="uv3-row" data-a60="skipped-rows"><span class="uv3-label">{_label("a60_label_skipped_rows")}</span>'
+            f'{_a60_count_html(a60.skipped_row_count)}</div>')
+    line = f'<div class="uv3-row" data-a60="state" data-a60-state="{state}">{_a60_state_html(state)}</div>'
+    return (f'<details class="uv3-a60" data-block="a60"><summary>{_label("a60_title")}</summary>{note}'
+            f'<div class="uv3-a60-body" data-a60="body">{tabs}{rows}{line}{_a60_cause_rows_html(a60.causes, state)}</div></details>')
+
+
 # ───────────────────────────── 整頁 ─────────────────────────────
 
 def page_html(model: vm.AssetsPageModel) -> str:
-    """A00 → A10 → A20 → A50（順序固定）。A30／A40／A52／A60 不在這一批。"""
+    """A00 → A10 → A20 → A50 → A60（順序固定；A60 在最後）。A30／A40／A51／A52 不在這一批。"""
     if not isinstance(model, vm.AssetsPageModel):
         raise TypeError("model must be an AssetsPageModel")
-    return a00_html(model.a00) + a10_html(model.a10, model.a00.source_state) + a20_html(model.a20) + a50_html(model.a50, model.a00.source_state)
+    return a00_html(model.a00) + a10_html(model.a10, model.a00.source_state) + a20_html(model.a20) + a50_html(model.a50, model.a00.source_state) \
+        + a60_html(model.a60, model.a00.source_state)
 
 
 def render(model: vm.AssetsPageModel) -> None:
