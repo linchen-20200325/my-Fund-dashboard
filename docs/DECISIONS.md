@@ -3289,7 +3289,7 @@
 | 不授權範圍 | 修改 `ui_v3/shell/registry.py`、`ui_v3/app_preview.py`；掛 🔍 頁；frozen 44、正式金融公式、Schema、FX；正式資料來源、Google Sheet、選股池接線與 user_setting 讀寫；ISIN 解析、ISIN 對照來源與正式基金身份契約；Old UI、`ui_v2` production 行為；讀 secrets、真實網路請求、寫使用者設定；D2 Pending 欄位值（含 R-NAV-4／6、R-NAV-3）；EXP-3／4／5／6；Cloud／真機／像素驗收；解除 BL-0545；不得宣稱 🔍 頁面功能已完成。不追認任何過去未授權施工。 |
 | supersedes／amends | **僅補充（amends）** `DEC-2026-11-14-04`／`DEC-2026-11-14-08` 關於「🔍 無授權可操作預覽」的空缺，不改寫其本文；`DEC-2026-11-14-08` 的 S2-T0 暫緩維持。其餘正式 DEC 不取代。 |
 | 與既有規則的關係（執行組讀法，可被客戶推翻） | 本筆為 BL-0553 方案 A 的落實，僅授權隔離 poc 施工，不構成 🔍 頁面上線或完成；零條件、三態評估等規格僅屬本次 FAKE Preview，不升格為正式母體或篩選契約；與 `DEC-2026-11-17-01`（💼 A60 FAKE-only 隔離 Preview）同屬「隔離 FAKE Preview、不接正式路徑」做法。 |
-| 待客戶確認／未裁（NOT VERIFIED） | 新字樣定稿；ISIN 常駐說明逐字句；FAKE 多欄展示的欄位集合；Preview 的 Cloud／真機驗收。 |
+| 待客戶確認／未裁（NOT VERIFIED） | 新字樣定稿；ISIN 常駐說明逐字句；FAKE 多欄展示的欄位集合；Preview 的 Cloud／真機驗收。**2026-11-17 #1267 非作者 QA 後補列（皆為設計者／客戶裁示項，預覽不自行改；細節見 `poc/fund_search_fixture_preview/README.md`「與規格不一致或需設計者裁示的點」）**：(a) W14 取數失敗處的替代句（決策包 W14 原句含禁用字樣「基金不存在」，預覽暫用「這次取數失敗，不是對基金身份的判斷」）；(b) ISIN 說明句核准狀態；(c) 預覽 import `shared.ui_semantics`（規則表為已核准字樣唯一來源）的追認，與「不 import `shared`」字面的關係；(d) EXP-2 缺值字樣 `◇ 資料未備` 與 44 原文 `⬜`、及 `rules.py` 檔頭「只限正式模式」的適用性；(e) EXP-7 欄位（預覽四格 vs 44 三欄）、無條件時是否寫「來源缺」、與勾選框的條件套用順序（預覽依畫面順序）；(f) 結果卡是否回顯「輸入類型：代碼型字串（原值未改寫）」；(g) 成立日／配息方式／經理費率放結果卡本體或收合區（Q6）；另 `identity_unconfirmed`（`◇ 尚未確認`）規則表無對應 entry，是否改取 `◇ 資料未備` 或新增 entry。 |
 | 影響範圍／可逆性 | 文件；後續實作僅限上列範圍（`poc/fund_search_fixture_preview/` 與其測試）。可逆。 |
 | evidence／source | `docs/BACKLOG.md` BL-0553；`docs/evidence/new_ui2_five_page_status_2026_11_17.md`；`DEC-2026-11-14-04`、`DEC-2026-11-14-08`。 |
 | provenance | 要點轉述；單組作者草稿，尚待非作者獨立 QA。傳遞鏈：自稱客戶之選擇與五點答覆經提示語轉達，UI 規格由 ChatGPT 規劃；原文僅存於對話提示語、repo 內無逐字存檔，QA 無法核對（NOT VERIFIED）。 |

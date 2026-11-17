@@ -50,54 +50,54 @@
   **待定字清單**（客戶定字後才搬進規則表並自此刪除；其中 `isin_note` 是 ISIN 常駐說明，`DEC-2026-11-17-02` 明列「ISIN 常駐說明逐字句」待客戶確認；
   句子取自決策包 0.4-#4 與 Q2 方案 A 的擬字「ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）」，核准狀態未確認，故仍標暫行）：
 
-| key | 暫行字樣 |
-|---|---|
-| `page_title` | 找一檔基金 |
-| `input_label` | MoneyDJ 基金代碼或 ISIN |
-| `isin_note` | ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源） |
-| `submit_label` | 查詢 |
-| `isin_inactive_result` | ISIN 目前未啟用 |
-| `isin_inactive_detail` | 未用 ISIN 取數、未猜測任何代碼 |
-| `fake_tag` | FAKE 模擬 |
-| `row_result` | 查詢結果 |
-| `result_found` | 找到模擬項目（FAKE） |
-| `suffix_unrecognized` | （無法辨識格式） |
-| `suffix_no_fixture` | （離線預覽沒有這個代碼的模擬資料） |
-| `fail_impact` | 無法顯示這檔基金 |
-| `fail_not_identity` | 這次取數失敗，不是對基金身份的判斷 |
-| `row_input_code` | 輸入代碼 |
-| `row_identity` | 基金身份 |
-| `identity_unconfirmed` | ◇ 尚未確認 |
-| `single_note` | 單檔查詢結果（唯讀；不會加入選股池或任何清單） |
-| `row_name` | 基金名稱 |
-| `row_inception` | 成立日 |
-| `row_dividend_mode` | 配息方式 |
-| `row_mgmt_fee` | 經理費率 |
-| `details_title` | 基本資料｜尚未取得｜來源與限制 |
-| `row_source` | 來源 |
-| `row_fallback` | 備援來源 |
-| `row_asof` | 資料日 |
-| `not_obtained_note` | 尚未取得：來源、備援來源、資料日的值尚未接線 |
-| `limits_note` | 本畫面為離線 FAKE 模擬，不是 MoneyDJ 或任何正式來源的資料；沒有發出任何請求 |
-| `section_exp_title` | 依條件篩選 |
-| `exp0_title` | 篩選結果 |
-| `exp1_title` | 本次瀏覽暫時條件 |
-| `exp1_note` | 這些條件只在本次瀏覽生效，離開本頁後會清除 |
-| `cond_label` | FAKE 條件 {n} |
-| `exp2_title` | 結果清單 |
-| `exp7_title` | 篩選軌跡 |
-| `exp_fail_impact` | 此區無法顯示篩選結果 |
-| `col_matched` | 符合 |
-| `col_undetermined` | 無法判定 |
-| `col_code` | 基金代碼 |
-| `col_name` | 基金名稱 |
-| `col_ccy` | 幣別 |
-| `col_nav_date` | 最近淨值日 |
-| `col_nav` | 最近淨值 |
-| `col_div` | 近 12 個月配息佔淨值比 |
-| `col_cond` | 條件 |
-| `col_before` | 套用前檔數 |
-| `row_undetermined_suffix` | （資料未備） |
+| key | 暫行字樣 | 實際出處（`wording.py` 的 `SOURCE`，全部同一句） | 來源性質（執行組讀法，未經第二組驗證；分類：客戶逐字／線框已列／決策包擬句／ChatGPT 新擬） |
+|---|---|---|---|
+| `page_title` | 找一檔基金 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 客戶逐字（IA 用語／裁示原句）；決策包 W1 |
+| `input_label` | MoneyDJ 基金代碼或 ISIN | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 客戶逐字（IA 用語／裁示原句）；決策包 W-入口標示 |
+| `isin_note` | ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源） | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 決策包擬句（Q2 方案 A；客戶原句為『尚未啟用／目前沒有已核准的 ISIN 對照來源』） |
+| `submit_label` | 查詢 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 決策包擬句（W2） |
+| `isin_inactive_result` | ISIN 目前未啟用 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬 |
+| `isin_inactive_detail` | 未用 ISIN 取數、未猜測任何代碼 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 決策包擬句（W5，78 S5 乙原句） |
+| `fake_tag` | FAKE 模擬 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬 |
+| `row_result` | 查詢結果 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬 |
+| `result_found` | 找到模擬項目（FAKE） | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬 |
+| `suffix_unrecognized` | （無法辨識格式） | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 決策包擬句（W4） |
+| `suffix_no_fixture` | （離線預覽沒有這個代碼的模擬資料） | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬 |
+| `fail_impact` | 無法顯示這檔基金 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 決策包擬句（W14 替代句） |
+| `fail_not_identity` | 這次取數失敗，不是對基金身份的判斷 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬（取代 W14『這不代表基金不存在』，因禁用字樣） |
+| `row_input_code` | 輸入代碼 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 決策包擬句（W7） |
+| `row_identity` | 基金身份 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（U6） |
+| `identity_unconfirmed` | ◇ 尚未確認 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（U6『◇ 尚未確認』） |
+| `single_note` | 單檔查詢結果（唯讀；不會加入選股池或任何清單） | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 決策包擬句（W6 中性句） |
+| `row_name` | 基金名稱 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（U7） |
+| `row_inception` | 成立日 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（U7） |
+| `row_dividend_mode` | 配息方式 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（U7） |
+| `row_mgmt_fee` | 經理費率 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（U7） |
+| `details_title` | 基本資料｜尚未取得｜來源與限制 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（U14／W17） |
+| `row_source` | 來源 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（U7 位置） |
+| `row_fallback` | 備援來源 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（U7 位置） |
+| `row_asof` | 資料日 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（U7 位置） |
+| `not_obtained_note` | 尚未取得：來源、備援來源、資料日的值尚未接線 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬 |
+| `limits_note` | 本畫面為離線 FAKE 模擬，不是 MoneyDJ 或任何正式來源的資料；沒有發出任何請求 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬 |
+| `section_exp_title` | 依條件篩選 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 決策包擬句（W15；79／80 線框已用） |
+| `exp0_title` | 篩選結果 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬 |
+| `exp1_title` | 本次瀏覽暫時條件 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（L5 之『暫時條件』語意） |
+| `exp1_note` | 這些條件只在本次瀏覽生效，離開本頁後會清除 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（L8／W19 改寫：刪去『與欄位設定』） |
+| `cond_label` | FAKE 條件 {n} | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬 |
+| `exp2_title` | 結果清單 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 44 EXP-2／EXP-7 規則欄既有欄名（『候選清單卡』改寫為『結果清單』） |
+| `exp7_title` | 篩選軌跡 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 44 EXP-2／EXP-7 規則欄既有欄名（『篩選軌跡』） |
+| `exp_fail_impact` | 此區無法顯示篩選結果 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | ChatGPT 新擬／執行組暫擬 |
+| `col_matched` | 符合 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（L3『符合』） |
+| `col_undetermined` | 無法判定 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（L3『無法判定』） |
+| `col_code` | 基金代碼 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 44 EXP-2／EXP-7 規則欄既有欄名 |
+| `col_name` | 基金名稱 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 44 EXP-2／EXP-7 規則欄既有欄名 |
+| `col_ccy` | 幣別 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 44 EXP-2／EXP-7 規則欄既有欄名 |
+| `col_nav_date` | 最近淨值日 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 44 EXP-2／EXP-7 規則欄既有欄名 |
+| `col_nav` | 最近淨值 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 44 EXP-2／EXP-7 規則欄既有欄名 |
+| `col_div` | 近 12 個月配息佔淨值比 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 44 EXP-2／EXP-7 規則欄既有欄名 |
+| `col_cond` | 條件 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 44 EXP-2／EXP-7 規則欄既有欄名（『條件文字』改寫） |
+| `col_before` | 套用前檔數 | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 44 EXP-2／EXP-7 規則欄既有欄名（『套用前檔數』） |
+| `row_undetermined_suffix` | （資料未備） | ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行 | 線框核准稿已列（未核准）（L2『⬜ 無法判定（資料未備）』的括號） |
 
 ## 與規格不一致或需設計者裁示的點
 
@@ -108,6 +108,26 @@
 5. **EXP-2 缺值格**：44 原文缺值格寫 `⬜`，本預覽依 `BL-0532`／`DEC-2026-11-02-01` 的正式模式缺值字樣寫 `◇ 資料未備`；無法判定列另標「⬜ 無法判定」。
 6. **harness selectbox**：Streamlit 預設高度約 40px，未達 48px 觸控下限；renderer 內的輸入框、查詢鈕、條件勾選、details 摘要列都量到 ≥48px。
 7. **隱藏 Streamlit 內建的「Press Enter to submit form」提示**：它會蓋住長輸入；Enter 仍照常提交（瀏覽器守衛驗證）。
+
+8. **EXP-7 欄位與空狀態與 44 §EXP-7 不同**：本預覽 EXP-7 每列四格（條件／套用前檔數／符合／無法判定），44 §EXP-7 規則欄為三欄（條件文字／套用前檔數／套用後檔數）；
+   無條件時 44 要求「`來源缺`＋『尚未設定條件』」，本預覽只顯示「尚未設定條件」。是否 amendment 屬設計者／客戶裁示，本預覽不改。
+9. **結果卡未回顯輸入類型**：決策包〔已核〕句「輸入類型：代碼型字串（原值未改寫）」沒有出現在結果卡；ISIN 情境不回顯輸入、也沒有基金身份列（只出「ISIN 目前未啟用」說明）。是否補回顯屬設計者裁示。
+10. **成立日／配息方式／經理費率放在結果卡本體**：決策包 Q6 方案 B 是放收合區，Q6 仍待客戶；本預覽依線框核准稿 U7 放卡內，值一律 `◇ 資料未備`。
+11. **EXP-2 缺值字樣適用性**：本預覽用 `◇ 資料未備`（44 原文 `⬜`）；`shared/ui_semantics/rules.py` 該表檔頭自述「只限正式模式，示範模式仍是 `⬜ 資料未備`」，本預覽屬 FAKE 預覽而非正式模式，哪一種適用待裁示。
+12. **ISIN 形判定為啟發式**：預覽用「2 字母＋9 英數＋1 數字」判斷輸入像不像 ISIN，只表示輸入形態、不是正式 resolver 或格式契約，可能與某些真實代碼撞型（撞型者會被擋在「ISIN 目前未啟用」）。
+13. **輸入正規化**：比對前做 `raw.strip().upper()`；未做 Unicode 正規化（全形英數、零寬字元、RTL 控制字元都不會被折疊，一律落入「無法辨識格式」）；畫面顯示的輸入仍是原值（escape 後）。
+14. **空白送出**：顯示「無法判定（無法辨識格式）」，輸入代碼列寫缺值字樣；是否改成不送出或另有提示屬設計者裁示。
+15. **缺「空選股池」情境**：目前五個情境不含「選股池為空（0 檔）」；N=0、M=0 只由「無符合」情境（有基金但全不符合）表達。
+16. **`result_found`「找到模擬項目（FAKE）」可能被讀成基金存在**：它只表示 fixture 命中，結果卡同時標「FAKE 模擬」且基金身份固定「◇ 尚未確認」；措辭是否需要再收斂屬設計者裁示。
+17. **`identity_unconfirmed`（`◇ 尚未確認`）是否改取規則表**：已查 `shared/ui_semantics/rules.py`，**沒有**對應「尚未確認」的 entry（`◇` 符號只出現在 `missing`＝`◇ 資料未備`）。故維持 PendingWording；
+    改用 `◇ 資料未備` 或新增規則表 entry，由設計者決定，本預覽不自行改。
+
+## 測試的變異對象（避免誤讀）
+
+- **對判定函式（checker）變異者**（`fund_search_support.py`／`fund_search_browser_lib.py` 的 `*_violations`，含瀏覽器 DOM 注入）：只證明「檢查函式抓得到這種壞頁面」，**不證明 production renderer 不會產生該錯誤**。
+- **真正對 production 程式變異者**（monkeypatch 後重跑 production renderer／view model；皆在 `tests/poc_fund_search_preview/test_fund_search_logic_and_renderer.py`）：
+  `test_mutation_without_escape_turns_red`（`R.safe` 換成不 escape）、`test_mutation_removing_any_safe_branch_turns_the_special_char_guard_red`（`R.safe` 逐分支拿掉：`$`、反斜線、換行）、
+  `test_mutation_renderer_with_wrong_n_raises_through_exp_counts`（餵錯 N 的 view 給 production renderer，由 `exp_counts` 驗證擋下）。
 
 ## NOT VERIFIED
 

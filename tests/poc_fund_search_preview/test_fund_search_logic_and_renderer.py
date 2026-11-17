@@ -3,6 +3,14 @@
 
 驗：單檔查詢分流（成功／資料不足／失敗／無法辨識／無 fixture／ISIN）、escape、禁用字樣、缺值不為 0、N／M／N＋M 一致、零條件、三態、
 五個情境全勾與各子集合；變異（把 N 改錯、拿掉 escape、以 0 取代缺值、顯示『基金不存在』）一律轉紅。
+
+⚠️ 變異測試分兩種，**不要混為一談**：
+- 對判定函式（checker：`fund_search_support.py` 的 `*_violations`）變異的，只證明「檢查函式抓得到這種壞 HTML」，**不證明 production renderer 不會產生該錯誤**。
+  本檔屬此類：`test_mutation_wrong_n_is_flagged`、`test_mutation_wrong_m_and_wrong_trace_and_dropped_row_are_flagged`、`test_mutation_not_exist_wording_is_flagged_everywhere`，
+  以及 `test_missing_cells_render_the_missing_wording_never_zero` 內的 0 取代缺值。
+- 真正對 production 程式變異的（monkeypatch 後重跑 production renderer／view model）：`test_mutation_without_escape_turns_red`、
+  `test_mutation_removing_any_safe_branch_turns_the_special_char_guard_red`（`R.safe` 逐分支）、`test_mutation_renderer_with_wrong_n_raises_through_exp_counts`
+  （餵錯的 view 給 production renderer，由 `exp_counts` 驗證擋下）。
 """
 from __future__ import annotations
 
@@ -58,7 +66,7 @@ def test_fixture_codes_are_not_isin_shaped_and_are_fake():
 @pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-LOW1", "FAKE-ERR1", "", "ABC123", "<script>x</script>"])
 def test_lookup_card_never_claims_identity_or_nonexistence_and_has_fake_tag(raw):
     html = R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
-    assert S.page_violations(html) == [] or all("EXP" in v for v in S.page_violations(html))
+    assert S.page_violations(html) == []   # 單看結果卡 HTML：沒有 EXP 區塊，頁面層級判定函式必須整個為空
     assert S.forbidden_word_violations(html) == [] and S.raw_script_violations(html) == []
     assert 'data-tag="fake"' in html and "FAKE 模擬" in html
     assert "◇ 尚未確認" in html and "已確認" not in html            # 身份永遠是待確認
@@ -102,8 +110,32 @@ def test_isin_shaped_input_shows_only_the_inactive_notice_no_card_no_echo():
 def test_user_input_is_escaped_in_the_result_card(raw):
     html = R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
     assert S.raw_script_violations(html) == []
-    assert "$" not in re.search(r'data-value="input-code">(.*?)</span>', html).group(1)
-    assert S.text_of(re.search(r'data-value="input-code">(.*?)</span>', html).group(1)).strip() == raw   # 還原後逐字相同
+    shown = re.search(r'data-value="input-code">(.*?)</span>', html, re.S).group(1)
+    assert S.special_char_violations(shown) == []                  # < > $ 反斜線 換行都已轉成字元參照
+    assert S.text_of(shown).strip() == raw.strip()                 # 還原後逐字相同（頭尾空白不影響判斷）
+
+
+def _safe_without(branch):
+    """production `R.safe` 的變異版：拿掉某一個分支（在記憶體內現編）。"""
+    from html import escape
+
+    def mutated(value):
+        out = escape(str(value), quote=True)
+        for char, ref in (("$", "&#36;"), ("\\", "&#92;"), ("\n", "&#10;"), ("\r", "&#13;")):
+            if char != branch:
+                out = out.replace(char, ref)
+        return out
+    return mutated
+
+
+@pytest.mark.parametrize("branch,raw", [("$", "cost $5 $x$"), ("\\", "a\\b \\$x\\$"), ("\n", "a\nb"), ("\r", "a\rb")])
+def test_mutation_removing_any_safe_branch_turns_the_special_char_guard_red(monkeypatch, branch, raw):
+    """對 production renderer 變異：拿掉 `safe()` 的任一分支，結果卡的特殊字元守衛必須報紅（含反斜線分支）。"""
+    html = R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
+    assert S.special_char_violations(re.search(r'data-value="input-code">(.*?)</span>', html, re.S).group(1)) == []   # 未變異：綠
+    monkeypatch.setattr(R, "safe", _safe_without(branch))
+    bad = R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
+    assert branch in S.special_char_violations(re.search(r'data-value="input-code">(.*?)</span>', bad, re.S).group(1))
 
 
 def test_mutation_without_escape_turns_red(monkeypatch):

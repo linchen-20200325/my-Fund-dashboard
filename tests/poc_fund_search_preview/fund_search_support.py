@@ -21,14 +21,23 @@ KEY_COND = "fs_cond_{n}"
 FORBIDDEN_WORDS = ("基金不存在", "查無基金", "查無此", "已確認", "推薦", "最佳", "排名", "精選", "NAV", "報酬", "績效", "領先", "落後")
 # 規格：暫時條件不得有存檔語彙。
 SAVE_WORDS = ("存檔", "儲存", "保存", "已存", "未存檔")
-NASTY_INPUTS = ("<script>alert(1)</script>", "<img src=x onerror=alert(1)>", "\"'><b>x</b>", "$x^2$ **b** [a](http://example.invalid) `c`", "&amp; &lt;")
+NASTY_INPUTS = ("<script>alert(1)</script>", "<img src=x onerror=alert(1)>", "\"'><b>x</b>", "$x^2$ **b** [a](http://example.invalid) `c`", "&amp; &lt;",
+                "a\\b \\$x\\$ \\\\ \\n \\<b>", "line1\nline2", "line1\n\nline2", "a\r\nb", "zero\u200bwidth\u200d\ufeffjoin", "\u202eevil\u202c rtl \u200fmark",
+                "emoji 😀🙂 ⚠️ 👨‍👩‍👧", "L" * 150 + "<b>")
+# 單行輸入（真的能從瀏覽器 text_input 打進去的）；換行與超長（maxlength=100）只在單元與 AppTest 驗
+BROWSER_PAYLOADS = tuple(p for p in NASTY_INPUTS if "\n" not in p and "\r" not in p and len(p) <= 100)
 
 
 def text_of(html: str) -> str:
     """HTML → 可見文字（粗略；去標籤、還原常見字元參照）。"""
     t = re.sub(r"<[^>]+>", " ", html)
     return (t.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"').replace("&#x27;", "'")
-             .replace("&#36;", "$").replace("&#92;", "\\").replace("&amp;", "&"))
+             .replace("&#36;", "$").replace("&#92;", "\\").replace("&#10;", "\n").replace("&#13;", "\r").replace("&amp;", "&"))
+
+
+def special_char_violations(shown_html: str):
+    """使用者輸入顯示處的 HTML 不得留下 `<`、`>`、`$`、反斜線、換行（皆須已轉成字元參照）；刪掉 `safe()` 任一分支都會讓這裡報紅。"""
+    return [c for c in ("<", ">", "$", "\\", "\n", "\r") if c in shown_html]
 
 
 def forbidden_word_violations(html: str):

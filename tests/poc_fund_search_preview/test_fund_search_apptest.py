@@ -112,8 +112,9 @@ def test_result_card_keeps_the_input_verbatim_and_escaped_for_every_nasty_input(
         at = _query(_run(), raw)
         card = _block(at, "lookup-result")
         assert S.raw_script_violations(card) == [] and S.raw_script_violations(_md(at)) == []
-        shown = re.search(r'data-value="input-code">(.*?)</span>', card).group(1)
-        assert S.text_of(shown).strip() == raw
+        shown = re.search(r'data-value="input-code">(.*?)</span>', card, re.S).group(1)
+        assert S.special_char_violations(shown) == []
+        assert S.text_of(shown).strip() == raw[:100].strip()   # 輸入框 max_chars=100：超長輸入由 widget 截斷（AppTest 也會）；完整長度的 escape 由單元測試驗
 
 
 def test_isin_shaped_input_shows_only_the_inactive_notice():

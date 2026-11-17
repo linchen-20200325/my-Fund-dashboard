@@ -24,8 +24,9 @@ MAX_INPUT_CHARS = 100
 
 
 def safe(value: object) -> str:
-    """使用者可控字串 → HTML 安全文字（escape；另把 `$` 與反斜線轉成字元參照，避免 Streamlit markdown 的數學／跳脫語法介入）。"""
-    return escape(str(value), quote=True).replace("$", "&#36;").replace("\\", "&#92;")
+    """使用者可控字串 → HTML 安全文字（escape；另把 `$`、反斜線與換行轉成字元參照，避免 Streamlit markdown 的數學／跳脫語法介入）。"""
+    return (escape(str(value), quote=True).replace("$", "&#36;").replace("\\", "&#92;")
+            .replace("\n", "&#10;").replace("\r", "&#13;"))
 
 
 def _css() -> str:

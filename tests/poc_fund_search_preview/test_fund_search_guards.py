@@ -114,16 +114,52 @@ def test_module_level_has_no_side_effects_except_the_entry_path_setup_and_main_c
             assert bad == [], (path.name, bad)
 
 
-def test_no_session_state_write_outside_the_two_session_keys_and_widgets():
-    """持久層守衛：renderer 只可寫 `fs_last_query`（本次 session 的查詢），其餘一律是 widget 自己的 key。"""
-    tree = ast.parse(RENDERER.read_text(encoding="utf-8"))
-    writes = []
-    for node in ast.walk(tree):
+def _is_session_state(node) -> bool:
+    return (isinstance(node, ast.Attribute) and node.attr == "session_state") or (isinstance(node, ast.Name) and node.id == "session_state")
+
+
+def session_state_writes(src: str):
+    """所有寫 `session_state` 的形式：下標賦值、增量賦值、刪除、屬性賦值，以及 update／setdefault／pop／popitem／clear 呼叫。回傳每處的描述。"""
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        targets = []
         if isinstance(node, ast.Assign):
-            for t in node.targets:
-                if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Attribute) and t.value.attr == "session_state":
-                    writes.append(ast.unparse(t.slice))
-    assert writes == ["KEY_QUERY"], writes
+            targets = node.targets
+        elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+            targets = [node.target]
+        elif isinstance(node, ast.Delete):
+            targets = node.targets
+        for t in targets:
+            if isinstance(t, ast.Subscript) and _is_session_state(t.value):
+                out.append(f"{type(node).__name__}[{ast.unparse(t.slice)}]")
+            elif isinstance(t, ast.Attribute) and _is_session_state(t.value):
+                out.append(f"{type(node).__name__}.{t.attr}")
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and _is_session_state(node.func.value) \
+                and node.func.attr in {"update", "setdefault", "pop", "popitem", "clear"}:
+            out.append(f"call.{node.func.attr}")
+    return out
+
+
+def test_no_session_state_write_outside_the_one_session_key():
+    """持久層守衛：整個 poc 目錄只可寫 `fs_last_query`（本次 session 的查詢）一處，其餘一律是 widget 自己的 key。"""
+    writes = {p.name: session_state_writes(p.read_text(encoding="utf-8")) for p in POC_PY}
+    assert writes["fund_search_renderer.py"] == ["Assign[KEY_QUERY]"], writes
+    assert all(v == [] for k, v in writes.items() if k != "fund_search_renderer.py"), writes
+
+
+@pytest.mark.parametrize("src,expected", [
+    ("import streamlit as st\nst.session_state['k'] = 1\n", ["Assign['k']"]),
+    ("import streamlit as st\nst.session_state['k'] += 1\n", ["AugAssign['k']"]),
+    ("import streamlit as st\ndel st.session_state['k']\n", ["Delete['k']"]),
+    ("import streamlit as st\nst.session_state.k = 1\n", ["Assign.k"]),
+    ("import streamlit as st\nst.session_state.update({'k': 1})\n", ["call.update"]),
+    ("import streamlit as st\nst.session_state.setdefault('k', 1)\n", ["call.setdefault"]),
+    ("import streamlit as st\nst.session_state.pop('k')\n", ["call.pop"]),
+    ("import streamlit as st\nst.session_state.clear()\n", ["call.clear"]),
+    ("from streamlit import session_state\nsession_state['k'] = 1\n", ["Assign['k']"]),
+    ("import streamlit as st\nx = st.session_state.get('k')\n", [])])
+def test_negative_control_session_state_write_scan(src, expected):
+    assert session_state_writes(src) == expected
 
 
 # ───────────────────────── 字樣守衛 ─────────────────────────

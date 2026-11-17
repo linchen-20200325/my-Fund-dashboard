@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlsplit
 
 MIN_TARGET = 48
 
@@ -136,7 +137,18 @@ def structure_violations(m, with_result=False):
             + static_violations(m) + count_violations(m))
 
 
+def _origin(url):
+    """(scheme, host, port)；ws／wss 視同 http／https；沒有明示 port 時取該 scheme 的預設埠。"""
+    parts = urlsplit(url)
+    scheme = {"ws": "http", "wss": "https"}.get(parts.scheme, parts.scheme)
+    try:
+        port = parts.port or {"http": 80, "https": 443}.get(scheme)
+    except ValueError:   # `8501.evil.example`、`85011` 之類不合法的埠：不可能等於本機埠，標成無效值（必判外部）
+        port = "invalid"
+    return scheme, (parts.hostname or "").lower(), port
+
+
 def external_request_violations(urls, base):
-    """所有請求都必須指向本機 Streamlit（同 origin）；任何外部主機＝違規。"""
-    origin = re.match(r"https?://[^/]+", base).group(0)
-    return [u for u in urls if not u.startswith(origin) and not u.startswith(("data:", "blob:", "about:"))]
+    """所有請求都必須與本機 Streamlit 的 scheme＋host＋port **完全相等**；`http://127.0.0.1:8501.evil.example/` 之類只是前綴相同的外部主機一律違規。"""
+    own = _origin(base)
+    return [u for u in urls if not u.startswith(("data:", "blob:", "about:")) and _origin(u) != own]

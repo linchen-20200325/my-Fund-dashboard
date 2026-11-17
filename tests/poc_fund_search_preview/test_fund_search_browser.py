@@ -3,7 +3,10 @@
 
 390×844、768、1280：無水平溢出、可見控制項觸控目標 ≥48px（harness 的 selectbox 約 40px，據實另量）、details 預設收合且不巢狀、首屏順序、
 無外部請求（攔截 request 事件）、輸入 script 字串不執行、鍵盤 Tab／Enter 可操作且結果與滑鼠點擊一致、情境切換與條件勾選真的改變結果。
-變異驗證：注入溢出、縮小觸控目標、展開／巢狀 details、插入禁用字樣、改錯 N、拿掉 escape，判定函式都必須報紅（全在記憶體內現編）。
+變異驗證：注入溢出、縮小觸控目標、展開／巢狀 details、插入禁用字樣、改錯 N、插入未 escape 標籤，判定函式都必須報紅（全在記憶體內現編）。
+⚠️ 本檔的變異測試對象是**判定函式（checker）與 DOM**，只證明「檢查函式抓得到這種壞頁面」，**不證明 production renderer 不會產生該錯誤**；
+真正對 production 程式變異者（monkeypatch 後重跑 production renderer）在 `test_fund_search_logic_and_renderer.py`：`test_mutation_without_escape_turns_red`、
+`test_mutation_removing_any_safe_branch_turns_the_special_char_guard_red`、`test_mutation_renderer_with_wrong_n_raises_through_exp_counts`。
 真實 Streamlit Cloud 與真機未驗（NOT VERIFIED）。
 """
 import pytest
@@ -73,9 +76,14 @@ def _wait_isin(page):
 
 
 def _query_by_enter(page, raw, outcome):
+    """輸入後按 Enter，等到結果卡換成這次的結果（同一種結果連續出現時，以卡片文字改變為準，避免讀到上一次的舊卡）。"""
+    before = page.evaluate("() => (document.querySelector('[data-block=\"lookup-result\"]') || {}).innerText || null")
     _input(page).fill(raw)
     page.keyboard.press("Enter")
     _wait_outcome(page, outcome)
+    if before is not None:
+        page.wait_for_function("b => (document.querySelector('[data-block=\"lookup-result\"]') || {}).innerText !== b", arg=before, timeout=30000)
+        page.wait_for_timeout(300)
 
 
 def _scenario(page, sid):
@@ -202,7 +210,7 @@ def test_script_and_html_in_the_input_never_execute_and_are_shown_as_text(server
     o = _open(browser, base, width)
     try:
         payloads = ['<script>window.__xss=1</script>', '<img src=x onerror="window.__xss=2">', '"><b id=xssb>bold</b>',
-                    "$x^2$ **b** [a](http://example.invalid) `c`"]
+                    "$x^2$ **b** [a](http://example.invalid) `c`", 'a\\b \\$x\\$ \\\\ \\<b id=xssb>'] + list(S.BROWSER_PAYLOADS)
         for raw in payloads:
             _query_by_enter(o.page, raw, "unrecognized")
             m = o.measure()
@@ -210,6 +218,21 @@ def test_script_and_html_in_the_input_never_execute_and_are_shown_as_text(server
             assert lib.static_violations(m) == [] and lib.overflow_violations(m) == []
             assert o.page.evaluate("() => window.__xss === undefined && !document.getElementById('xssb')")
         assert o.dialogs == [] and lib.external_request_violations(o.requests, base) == []
+    finally:
+        o.close()
+
+
+def test_input_longer_than_the_limit_is_cut_by_the_widget_and_never_overflows(server_and_browser):
+    base, browser = server_and_browser
+    o = _open(browser, base, 390)
+    try:
+        _input(o.page).click()
+        o.page.keyboard.type("L" * 150 + "<b id=xssb>")   # 真的逐字輸入：maxlength=100 由瀏覽器截斷（`fill` 會繞過截斷，Streamlit 反而收到空值）
+        o.page.keyboard.press("Enter")
+        _wait_outcome(o.page, "unrecognized")
+        m = o.measure()
+        assert lib.overflow_violations(m) == [] and lib.static_violations(m) == [] and "L" * 100 in m["cardText"]
+        assert o.page.evaluate("() => !document.getElementById('xssb')")
     finally:
         o.close()
 
@@ -308,7 +331,7 @@ def test_scenarios_and_conditions_change_the_result_and_keep_counts_consistent(s
             assert (m["exp0"]["matched"], m["exp0"]["undetermined"]) == expected, wanted
             assert m["fundRows"] == int(expected[0]) + int(expected[1]) and lib.structure_violations(m) == [], lib.structure_violations(m)
             seen.append(m["exp0"]["text"])
-        assert len(set(seen)) == 2   # 子集合不同，文案真的跟著變（{1,2,3} 與 {1,2} 的 N／M 相同，文案也相同）
+        assert seen[0] == seen[2] != seen[1]   # {1,2,3} 與 {1,2} 的 (N, M) 同為 (2, 2) → 文案相同；只勾 {1} 是 (4, 1) → 文案不同
         for sid, expected in (("has_match", ("2", "0")), ("no_match", ("0", "0")), ("undetermined_only", ("0", "3"))):
             _scenario(o.page, sid)
             _set_conditions(o.page, {1, 2, 3})
@@ -433,6 +456,22 @@ def test_mutation_zero_instead_of_the_missing_wording_in_a_card_is_detectable_in
     js = "() => { document.querySelector('[data-row=\"mgmt-fee\"]').lastChild.textContent = '0'; }"
     m2 = _mutated(server_and_browser, setup=setup, js=js)
     assert m2["cardText"].count("◇ 資料未備") == 3          # 缺值字樣被 0 取代 → 計數少一個，判定可抓
+
+
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1:8501.evil.example/x", "http://127.0.0.1:85011/x", "http://127.0.0.1:8502/x", "https://127.0.0.1:8501/x",
+    "http://127.0.0.1.evil.example:8501/x", "http://evil.example/?u=http://127.0.0.1:8501", "http://user@evil.example:8501/", "http://127.0.0.1/x",
+    "ftp://127.0.0.1:8501/x"])
+def test_external_request_checker_requires_exact_scheme_host_port(url):
+    base = "http://127.0.0.1:8501"
+    assert lib.external_request_violations([url], base) == [url]
+
+
+def test_external_request_checker_accepts_same_origin_variants():
+    base = "http://127.0.0.1:8501"
+    same = ["http://127.0.0.1:8501", "http://127.0.0.1:8501/", "http://127.0.0.1:8501/_stcore/health?x=1", "ws://127.0.0.1:8501/_stcore/stream",
+            "HTTP://127.0.0.1:8501/A"]
+    assert lib.external_request_violations(same, base) == []
 
 
 def test_external_request_checker_flags_a_foreign_host_and_passes_the_local_one():
