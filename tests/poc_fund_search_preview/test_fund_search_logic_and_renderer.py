@@ -77,11 +77,11 @@ def test_lookup_card_profile_fields_are_missing_not_zero_and_found_has_only_a_fa
     assert fake.FAKE_FOUND_NAME in found
     for row in ("inception", "dividend-mode", "mgmt-fee"):
         m = re.search(rf'data-row="{row}">(.*?)</div>', found)
-        assert m and "◇ 資料未備" in m.group(1) and not re.search(r">\s*0\s*<", m.group(1))
+        assert m and "⬜ 資料未備" in m.group(1) and not re.search(r">\s*0\s*<", m.group(1))
     low = R.lookup_card_html(L.classify_lookup("FAKE-LOW1", fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
     assert fake.FAKE_FOUND_NAME not in low and "資料不足" in low
     for row in ("name", "inception", "dividend-mode", "mgmt-fee"):
-        assert "◇ 資料未備" in re.search(rf'data-row="{row}">(.*?)</div>', low).group(1)
+        assert "⬜ 資料未備" in re.search(rf'data-row="{row}">(.*?)</div>', low).group(1)
 
 
 def test_failed_lookup_uses_the_approved_failure_wording_and_never_says_not_found():
@@ -146,7 +146,7 @@ def test_mutation_without_escape_turns_red(monkeypatch):
 
 def test_blank_input_row_shows_the_missing_wording_not_zero():
     html = R.lookup_card_html(L.classify_lookup("", fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
-    assert "◇ 資料未備" in re.search(r'data-row="input-code">(.*?)</div>', html).group(1)
+    assert "⬜ 資料未備" in re.search(r'data-row="input-code">(.*?)</div>', html).group(1)
 
 
 def test_details_is_one_collapsed_unnested_details_and_has_no_forbidden_words():
@@ -222,8 +222,8 @@ def test_no_match_rows_are_not_listed_and_order_is_fund_code_not_rank():
 def test_missing_cells_render_the_missing_wording_never_zero():
     _, view = _exp_html("undetermined_only", (1, 2, 3))
     html = R.exp2_html(view, False)
-    assert "◇ 資料未備" in html and S.missing_shown_as_zero_violations(html) == []
-    mutated = html.replace("◇ 資料未備", "0")
+    assert "⬜ 資料未備" in html and S.missing_shown_as_zero_violations(html) == []
+    mutated = html.replace("⬜ 資料未備", "0")
     assert S.missing_shown_as_zero_violations(mutated)                        # 變異：以 0 取代缺值 → 轉紅
 
 
@@ -333,3 +333,139 @@ def test_exp1_wording_has_no_save_vocabulary_and_section_title_is_pending():
     html = R.exp1_head_html() + R.divider_html()
     assert not [w for w in S.SAVE_WORDS if w in S.text_of(html)]
     assert "依條件篩選" in html and "本次瀏覽暫時條件" in html and 'data-block="exp-divider"' in html
+
+
+# ───────────────────────── 2026-11-17 收斂批：輸入類型列、缺值／無法判定分開、空選股池、獨立算盤 ─────────────────────────
+
+from shared.ui_semantics import rules  # noqa: E402
+
+_TYPE_LABEL, _TYPE_VALUE = "輸入類型", "代碼型字串（原值未改寫）"
+
+
+@pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-LOW1", "FAKE-ERR1", "ABC123", "  fake-ok01  "])
+def test_input_type_row_is_present_for_code_typed_inputs_and_does_not_claim_a_resolved_identity(raw):
+    html = R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
+    row = re.search(r'data-row="input-type">(.*?)</div>', html, re.S)
+    assert row and W.text("row_input_type") == _TYPE_LABEL and W.text("input_type_code") == _TYPE_VALUE
+    assert _TYPE_LABEL in row.group(1) and _TYPE_VALUE in row.group(1) and 'data-pending-wording="input_type_code"' in row.group(1)
+    assert "MoneyDJ" not in html and "已解析" not in html and "已確認" not in html and "◇ 尚未確認" in html
+    shown = re.search(r'data-value="input-code">(.*?)</span>', html, re.S).group(1)
+    assert S.text_of(shown) == raw                                  # 原值未改寫（連頭尾空白、大小寫都保留）
+    assert html.index('data-row="input-code"') < html.index('data-row="input-type"') < html.index('data-row="identity"')
+
+
+@pytest.mark.parametrize("raw", ["", "   ", "???", "<script>x</script>", "a b c"])
+def test_input_type_row_is_absent_for_blank_or_unrecognized_input(raw):
+    html = R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
+    assert 'data-row="input-type"' not in html and _TYPE_VALUE not in html
+
+
+def test_input_type_row_is_absent_in_the_isin_situation():
+    assert L.classify_lookup("US0378331005", fake.LOOKUP_FIXTURES).outcome == L.OUT_ISIN
+    html = R.isin_result_html()
+    assert _TYPE_LABEL not in html and _TYPE_VALUE not in html and "lookup-result" not in html
+
+
+def test_undetermined_and_missing_are_different_wordings_and_different_dom_markers_everywhere():
+    """『無法判定』＝資料不足以判定；『資料缺值』＝這一格沒有值。兩者不共用字樣、不共用標記。"""
+    _, view = _exp_html("undetermined_only", (1, 2, 3))
+    exp2 = R.exp2_html(view, False)
+    tags = re.findall(r'<div class="uv3-row" data-row="undetermined">(.*?)</div>', exp2)
+    assert len(tags) == 3
+    for t in tags:
+        assert S.text_of(t).replace(" ", "") == "⬜無法判定（資料未備）"      # 整檔無法判定列沿用 44 客戶逐字結構
+        assert 'data-status-key="undetermined"' in t and 'data-kind="missing"' not in t and "⬜ 資料未備" not in t   # 沿用 44 逐字結構；不含缺值格的字樣與標記
+    cells = re.findall(r'<span class="uv3-st uv3-st-grey uv3-pending" data-kind="missing"[^>]*>([^<]*)</span>', exp2)
+    assert len(cells) >= 3 and set(cells) == {W.text("missing_demo")} and "無法判定" not in W.text("missing_demo")
+    unrec = R.lookup_card_html(L.classify_lookup("???", fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
+    assert 'data-status-key="undetermined"' in unrec and "資料未備" not in re.search(r'data-row="result">(.*?)</div>', unrec).group(1)
+
+
+def test_the_formal_mode_missing_wording_never_appears_in_any_preview_html():
+    formal = rules.entry("missing").wording
+    parts = [R.basic_info_details_html(), R.isin_note_html(), R.isin_result_html(), R.exp1_head_html(), R.divider_html(), R.CSS]
+    for raw in ("FAKE-OK01", "FAKE-LOW1", "FAKE-ERR1", "", "???", "ABC123"):
+        parts.append(R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME))
+    for sid in fake.SCENARIOS:
+        for active in ((), (1,), (1, 2, 3)):
+            parts.append(_exp_html(sid, active)[0] if sid != "source_failed" else R.exp0_html(None, True))
+    assert all(formal not in p for p in parts)
+    known_bad = f'<span>{formal}</span>'                 # 負控：對一段已知含正式缺值字樣的 HTML 跑同一判定式
+    assert any(formal in p for p in parts + [known_bad]) and not any(formal in p for p in parts)
+
+
+def _oracle_trace(pool, active):
+    """獨立算盤（不呼叫 L.*）：逐條件累計套用；回傳 [(套用前, 符合, 無法判定)]。"""
+    out, remaining = [], list(pool)
+    for step in range(1, len(active) + 1):
+        before = len(remaining)
+        chosen = active[:step]
+        nxt, m, u = [], 0, 0
+        for f in pool:
+            sts = [f["states"][i - 1] for i in chosen]
+            if "nomatch" in sts:
+                continue
+            if "undetermined" in sts:
+                u += 1
+            else:
+                m += 1
+            nxt.append(f)
+        out.append((before, m, u))
+        remaining = nxt
+    return out
+
+
+@pytest.mark.parametrize("sid", ["has_match", "no_match", "undetermined_only", "mixed", "empty_pool"])
+@pytest.mark.parametrize("active", [(1,), (3,), (1, 3), (3, 1), (2, 3, 1), (1, 2, 3)])
+def test_trace_matches_an_independent_oracle_for_partial_and_multi_conditions_in_every_order(sid, active):
+    pool = fake.build(sid)["pool"]
+    view = L.build_filter_view(pool, active, COUNT)
+    assert [(t.before, t.matched, t.undetermined) for t in view.trace] == _oracle_trace(pool, active)
+    assert [t.index for t in view.trace] == list(active)             # 軌跡依畫面順序，一列一條
+    assert (view.conclusion.matched, view.conclusion.undetermined) == _oracle_trace(pool, active)[-1][1:]
+
+
+def test_application_order_changes_the_earlier_rows_but_not_the_last_row():
+    pool = fake.build("mixed")["pool"]
+    a, b = L.build_filter_view(pool, (1, 3), COUNT), L.build_filter_view(pool, (3, 1), COUNT)
+    rows = lambda v: [(t.before, t.matched, t.undetermined) for t in v.trace]   # noqa: E731
+    assert rows(a) == [(6, 4, 1), (5, 4, 1)] and rows(b) == [(6, 6, 0), (6, 4, 1)]   # 順序不同 → 前面的列不同
+    assert rows(a)[-1][1:] == rows(b)[-1][1:] == (4, 1)                              # 最後一列（＝EXP-0 的 N／M）相同
+
+
+def test_empty_pool_is_distinguishable_from_a_pool_with_zero_matches():
+    empty, none = fake.build("empty_pool")["pool"], fake.build("no_match")["pool"]
+    assert empty == [] and len(none) == 4
+    ve, vn = L.build_filter_view(empty, (1, 2, 3), COUNT), L.build_filter_view(none, (1, 2, 3), COUNT)
+    assert (ve.conclusion.matched, ve.conclusion.undetermined) == (vn.conclusion.matched, vn.conclusion.undetermined) == (0, 0)
+    assert ve.conclusion.text == vn.conclusion.text == exp_counts.TEXT_NO_MATCH           # N=M=0 的結論文案相同（文案取 exp_counts）
+    assert ve.trace[0].before == 0 and vn.trace[0].before == 4 and ve.rows == vn.rows == ()
+    he, hn = _exp_html("empty_pool", (1, 2, 3))[0], _exp_html("no_match", (1, 2, 3))[0]
+    assert 'data-pool-size="0"' in he and 'data-pool-size="4"' in hn and he != hn
+    assert S.page_violations(he) == [] and S.page_violations(hn) == []
+
+
+def test_zero_conditions_never_shows_a_pool_size_or_counts_even_for_the_empty_pool():
+    html, view = _exp_html("empty_pool", ())
+    assert "data-pool-size" not in html and 'data-counts-shown="no"' in html and view.trace == ()
+
+
+def test_exp7_columns_are_the_fake_preview_four_and_zero_conditions_say_only_the_no_condition_text():
+    """FAKE 專屬（執行組／ChatGPT UI 設計方向的四格：條件、套用前、符合、無法判定；見提示語，repo 無逐字存檔，NOT VERIFIED；DEC-2026-11-17-02 (e) 待裁），**不是** frozen 44 §EXP-7 的三欄（條件文字／套用前檔數／套用後檔數），
+    也不升格正式 EXP-7 契約；零條件時 44 寫『來源缺＋尚未設定條件』，本預覽只寫『尚未設定條件』，不含『來源缺』（兩者差異列為待 Gate，見 README『EXP-7 規則對照』）。"""
+    html, view = _exp_html("mixed", (1, 2, 3))
+    exp7 = html[html.index('data-block="exp7"'):]
+    labels = re.findall(r'<span class="uv3-label"[^>]*>(?:<span[^>]*>)?([^<]+)</span>', exp7)
+    assert labels == [W.text("col_cond"), W.text("col_before"), W.text("col_matched"), W.text("col_undetermined")] * len(view.trace)
+    assert re.findall(r'data-col="([a-z]+)"', exp7) == ["cond", "before", "matched", "undetermined"] * len(view.trace)
+    assert "套用後檔數" not in html and "來源缺" not in html
+    zero, _ = _exp_html("mixed", ())
+    assert exp_counts.TEXT_NO_CONDITION in zero and "來源缺" not in zero
+
+
+@pytest.mark.parametrize("raw", ["---", "123", "AAA", "-A-"])
+def test_code_shape_is_a_heuristic_so_dash_or_digit_only_input_gets_the_code_typed_row(raw):
+    """現況揭露（不改行為）：`_CODE_SHAPE` 只看字元集與長度，這類輸入也會判 no_fixture 並出現『輸入類型』列。"""
+    r = L.classify_lookup(raw, fake.LOOKUP_FIXTURES)
+    assert r.outcome == L.OUT_NO_FIXTURE
+    assert 'data-row="input-type"' in R.lookup_card_html(r, fake.FAKE_FOUND_NAME)

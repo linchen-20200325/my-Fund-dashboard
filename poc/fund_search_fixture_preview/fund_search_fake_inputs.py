@@ -53,6 +53,8 @@ _POOLS = {
         _fund(1, "甲", (_M, _M, _M)), _fund(2, "乙", (_M, _M, _M)), _fund(3, "丙", (_M, _U, _M), missing=("div",)),
         _fund(4, "丁", (_U, _M, _M), missing=("nav",)), _fund(5, "戊", (_X, _M, _M)), _fund(6, "己", (_M, _X, _M)),
     ),
+    # 選股池為空（0 檔）：與 no_match（有基金、但全部不符合）不同——前者連可篩的基金都沒有。全勾 N=0、M=0，EXP-7 套用前檔數為 0
+    "empty_pool": (),
 }
 
 # 情境：id → (harness 選單標籤, 池 id 或 None)。None＝來源失敗（EXP 區顯示失敗字樣，不展示 N／M）。
@@ -61,6 +63,7 @@ SCENARIOS = {
     "no_match": ("無符合（全勾 N=0、M=0）", "no_match"),
     "undetermined_only": ("只有無法判定（全勾 N=0、M=3）", "undetermined_only"),
     "mixed": ("有符合也有無法判定（全勾 N=2、M=2）", "mixed"),
+    "empty_pool": ("選股池為空（0 檔；全勾 N=0、M=0）", "empty_pool"),
     "source_failed": ("選股池來源失敗", None),
 }
 DEFAULT_SCENARIO = "has_match"

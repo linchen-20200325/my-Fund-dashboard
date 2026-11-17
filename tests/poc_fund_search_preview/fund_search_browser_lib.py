@@ -151,4 +151,11 @@ def _origin(url):
 def external_request_violations(urls, base):
     """所有請求都必須與本機 Streamlit 的 scheme＋host＋port **完全相等**；`http://127.0.0.1:8501.evil.example/` 之類只是前綴相同的外部主機一律違規。"""
     own = _origin(base)
-    return [u for u in urls if not u.startswith(("data:", "blob:", "about:")) and _origin(u) != own]
+
+    def foreign(u):
+        if u.startswith(("data:", "about:")):
+            return False
+        if u.startswith("blob:"):      # blob: 只放行『本機 origin 自己產生』的（blob:http://<本機 origin>/…）；blob:null／外部 origin 的 blob 一律視為外部
+            return _origin(u[len("blob:"):]) != own
+        return _origin(u) != own
+    return [u for u in urls if foreign(u)]

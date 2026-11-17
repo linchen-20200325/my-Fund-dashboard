@@ -173,17 +173,22 @@ def test_each_lookup_outcome_renders_without_overflow_and_with_the_right_content
     base, browser = server_and_browser
     o = _open(browser, base, width)
     try:
-        cases = [("FAKE-OK01", "found", ["FAKE 模擬", fake.FAKE_FOUND_NAME, "◇ 尚未確認", "◇ 資料未備"]),
-                 ("FAKE-LOW1", "insufficient", ["資料不足", "◇ 資料未備"]),
-                 ("FAKE-ERR1", "failed", ["⛔ 取數失敗", "無法顯示這檔基金"]),
-                 ("???", "unrecognized", ["⬜ 無法判定", "（無法辨識格式）"]),
-                 ("ABC123", "no_fixture", ["⬜ 無法判定"])]
-        for raw, outcome, needles in cases:
+        typed = ["輸入類型", "代碼型字串（原值未改寫）"]
+        cases = [("FAKE-OK01", "found", ["FAKE 模擬", fake.FAKE_FOUND_NAME, "◇ 尚未確認", "⬜ 資料未備"] + typed, True),
+                 ("FAKE-LOW1", "insufficient", ["資料不足", "⬜ 資料未備"] + typed, True),
+                 ("FAKE-ERR1", "failed", ["⛔ 取數失敗", "無法顯示這檔基金", "這次取數失敗，不是對基金身份的判斷"] + typed, True),
+                 ("???", "unrecognized", ["⬜ 無法判定", "（無法辨識格式）"], False),
+                 ("ABC123", "no_fixture", ["⬜ 無法判定"] + typed, True)]
+        for raw, outcome, needles, has_type in cases:
             _query_by_enter(o.page, raw, outcome)
             m = o.measure()
             assert lib.structure_violations(m, with_result=True) == [], (raw, lib.structure_violations(m, with_result=True))
             assert all(n in m["cardText"] for n in needles), (raw, m["cardText"])
+            assert ("輸入類型" in m["cardText"]) is has_type, (raw, m["cardText"])
             assert "已確認" not in m["cardText"] and "◇ 尚未確認" in m["cardText"]
+            assert "◇ 資料未備" not in m["text"], raw             # 正式模式缺值字樣不出現在 FAKE 預覽
+            if outcome in ("unrecognized", "no_fixture"):
+                assert "資料未備" not in m["cardText"].split("輸入代碼")[0], (raw, m["cardText"])   # 無法判定的狀態列不夾帶缺值字樣
         assert lib.external_request_violations(o.requests, base) == []
     finally:
         o.close()
@@ -360,6 +365,44 @@ def test_source_failure_scenario_shows_failure_wording_without_counts(server_and
         o.close()
 
 
+@pytest.mark.parametrize("width", WIDTHS)
+def test_empty_pool_scenario_is_distinguishable_from_zero_matches_and_keeps_counts_consistent(server_and_browser, width):
+    base, browser = server_and_browser
+    o = _open(browser, base, width)
+    try:
+        _scenario(o.page, "no_match")
+        _set_conditions(o.page, {1, 2, 3})
+        none = o.measure()
+        pool_none = o.page.evaluate("() => document.querySelector('[data-block=\"exp0\"]').dataset.poolSize")
+        _scenario(o.page, "empty_pool")
+        empty = o.measure()
+        pool_empty = o.page.evaluate("() => document.querySelector('[data-block=\"exp0\"]').dataset.poolSize")
+        for m in (none, empty):
+            assert (m["exp0"]["matched"], m["exp0"]["undetermined"]) == ("0", "0") and m["fundRows"] == 0
+            assert lib.structure_violations(m) == [], lib.structure_violations(m)
+        assert (pool_none, pool_empty) == ("4", "0") and none["traceLast"] != empty["traceLast"] or none["text"] != empty["text"]
+        assert "套用前檔數" in empty["text"] and "◇ 資料未備" not in empty["text"]
+    finally:
+        o.close()
+
+
+@pytest.mark.parametrize("width", WIDTHS)
+def test_undetermined_rows_and_missing_cells_are_visibly_different_wordings(server_and_browser, width):
+    base, browser = server_and_browser
+    o = _open(browser, base, width)
+    try:
+        _scenario(o.page, "undetermined_only")
+        _set_conditions(o.page, {1, 2, 3})
+        m = o.measure()
+        und = o.page.evaluate("() => [...document.querySelectorAll('[data-fund] [data-row=\"undetermined\"]')].map(e => e.innerText.trim())")
+        assert und and all(t == "⬜ 無法判定（資料未備）" for t in und), und   # 沿用 44 客戶逐字結構；與缺值格『⬜ 資料未備』分開
+        missing = o.page.evaluate("() => [...document.querySelectorAll('[data-kind=\"missing\"]')].map(e => e.textContent.trim())")
+        assert missing and set(missing) == {"⬜ 資料未備"}, missing
+        assert "◇ 資料未備" not in m["text"] and lib.structure_violations(m) == []
+    finally:
+        o.close()
+
+
 def test_reloading_the_page_returns_to_the_initial_state(server_and_browser):
     base, browser = server_and_browser
     o = _open(browser, base, 390)
@@ -452,16 +495,18 @@ def test_mutation_zero_instead_of_the_missing_wording_in_a_card_is_detectable_in
     def setup(page):
         _query_by_enter(page, "FAKE-LOW1", "insufficient")
     m = _mutated(server_and_browser, setup=setup)
-    assert m["cardText"].count("◇ 資料未備") == 4
+    assert m["cardText"].count("⬜ 資料未備") == 4
     js = "() => { document.querySelector('[data-row=\"mgmt-fee\"]').lastChild.textContent = '0'; }"
     m2 = _mutated(server_and_browser, setup=setup, js=js)
-    assert m2["cardText"].count("◇ 資料未備") == 3          # 缺值字樣被 0 取代 → 計數少一個，判定可抓
+    assert m2["cardText"].count("⬜ 資料未備") == 3          # 缺值字樣被 0 取代 → 計數少一個，判定可抓
 
 
 @pytest.mark.parametrize("url", [
     "http://127.0.0.1:8501.evil.example/x", "http://127.0.0.1:85011/x", "http://127.0.0.1:8502/x", "https://127.0.0.1:8501/x",
     "http://127.0.0.1.evil.example:8501/x", "http://evil.example/?u=http://127.0.0.1:8501", "http://user@evil.example:8501/", "http://127.0.0.1/x",
-    "ftp://127.0.0.1:8501/x"])
+    "ftp://127.0.0.1:8501/x", "http://127.0.0.1:8501@evil.example/", "http://127.0.0.1:8501@evil.example:8501/x", "http://127.0.0.1:8501:80@evil.example/",
+    "blob:http://evil.example/uuid", "blob:null/uuid", "blob:https://127.0.0.1:8501/uuid", "blob:http://127.0.0.1:8501.evil.example/uuid",
+    "blob:http://127.0.0.1:8501@evil.example/uuid"])
 def test_external_request_checker_requires_exact_scheme_host_port(url):
     base = "http://127.0.0.1:8501"
     assert lib.external_request_violations([url], base) == [url]
@@ -470,7 +515,7 @@ def test_external_request_checker_requires_exact_scheme_host_port(url):
 def test_external_request_checker_accepts_same_origin_variants():
     base = "http://127.0.0.1:8501"
     same = ["http://127.0.0.1:8501", "http://127.0.0.1:8501/", "http://127.0.0.1:8501/_stcore/health?x=1", "ws://127.0.0.1:8501/_stcore/stream",
-            "HTTP://127.0.0.1:8501/A"]
+            "HTTP://127.0.0.1:8501/A", "blob:http://127.0.0.1:8501/3f2a-uuid", "data:image/png;base64,AA", "about:blank"]
     assert lib.external_request_violations(same, base) == []
 
 
