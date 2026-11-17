@@ -21,7 +21,12 @@ from shared.ui_semantics import rules
 from ui_v3.viewmodels import nas_diag as vm
 from ui_v3.viewmodels import nas_diag_wording as W
 
-OBS = vm.NasDiagObservation
+def OBS(**kw):
+    """測試用建構器：target_label 現在是必填，這裡預設一個白名單標籤（真正的 dataclass 沒有預設）。"""
+    kw.setdefault("target_label", sup.TARGET)
+    return vm.NasDiagObservation(**kw)
+
+
 ALL_SCENARIOS = list(sup.SCENARIO_KWARGS)
 
 
@@ -181,7 +186,7 @@ def test_every_scenario_rejects_a_poisoned_field_and_never_echoes_it(sid):
 
 
 def test_no_raw_error_text_field_exists_and_extra_fields_are_rejected():
-    names = {f.name for f in dataclasses.fields(OBS)}
+    names = {f.name for f in dataclasses.fields(vm.NasDiagObservation)}
     assert not [n for n in names if re.search(r"raw|exception|message|traceback|text|detail|url|proxy_url|host|header", n)], names
     assert names == {"proxy_configured", "nas_reachable", "route_used", "target_label", "target_http_status", "error_class",
                      "latency_ms", "checked_at", "nas_error_class"}
@@ -320,3 +325,120 @@ def test_viewmodel_modules_import_only_stdlib_and_allowed_layers(rel):
         assert root in lib.STDLIB or module.startswith(("ui_v3.viewmodels", "shared.ui_semantics")) or module == "ui_v3", module
     for banned in ("streamlit", "requests", "urllib", "socket", "infra", "repositories", "services", "os", "subprocess"):
         assert not [m for m in lib.imports_of(ast.parse(src), lib.package_of(rel)) if m.split(".")[0] == banned], (rel, banned)
+
+
+# ───────────────────────── QA 追加：驗證補強與分支可達 ─────────────────────────
+
+@pytest.mark.parametrize("label", ["MoneyDJ\n", "MoneyDJ\r\n", "MoneyDJ\r", "\nMoneyDJ", "Money\nDJ", "MoneyDJ\n\n"])
+def test_label_with_line_breaks_is_rejected_fullmatch(label):
+    with pytest.raises(ValueError):
+        OBS(target_label=label)
+    assert vm._LABEL_RE.match("MoneyDJ\n") is None or vm._LABEL_RE.fullmatch("MoneyDJ\n") is None
+
+
+@pytest.mark.parametrize("value", ["u:p@ss@h", "u:p%40ss@h", "pw:%3A", "user:p:w@h", "a:b@c", "%3A", "x@y", "p@ss"])
+def test_credential_shapes_with_at_colon_percent_in_passwords_are_rejected_without_echo(value):
+    for field in ("target_label", "checked_at"):
+        kw = {"target_label": sup.TARGET, "checked_at": sup.CHECKED_AT, field: value}
+        with pytest.raises((ValueError, TypeError)) as info:
+            vm.NasDiagObservation(**kw)
+        assert value not in str(info.value)
+    for sid in ALL_SCENARIOS:
+        kw = sup.kwargs(sid)
+        kw["target_label"] = value
+        with pytest.raises((ValueError, TypeError)) as info:
+            vm.NasDiagObservation(**kw)
+        assert value not in str(info.value)
+
+
+def test_target_label_is_required_and_has_no_default_site():
+    with pytest.raises(TypeError):
+        vm.NasDiagObservation()
+    with pytest.raises(TypeError):
+        vm.NasDiagObservation(proxy_configured=True)
+    assert dataclasses.fields(vm.NasDiagObservation)[0].name == "target_label"
+    assert dataclasses.fields(vm.NasDiagObservation)[0].default is dataclasses.MISSING
+
+
+def test_view_validates_label_status_latency_and_checked_at_directly():
+    base = dataclasses.asdict(_classify(**sup.kwargs("nas_ok")))
+    for field, bad in (("target_label", sup.POISON_URL), ("target_label", "u:p@ss@h"), ("target_label", "MoneyDJ\n"), ("target_label", 5),
+                       ("target_http_status", True), ("target_http_status", 99), ("target_http_status", "200"), ("latency_ms", -1),
+                       ("latency_ms", "<b>"), ("latency_ms", 1.5), ("checked_at", "2026-11-16T10:30:00"), ("checked_at", sup.POISON_URL),
+                       ("checked_at", 5)):
+        with pytest.raises((ValueError, TypeError)) as info:
+            vm.NasDiagView(**{**base, field: bad})
+        assert sup.SECRET not in str(info.value) and "p@ss" not in str(info.value), (field, bad)
+
+
+# 每個 REASON_KEY 都有至少一個可達輸入，且 reason_key 有被逐一斷言
+REASON_INPUTS = {
+    "not_configured": dict(proxy_configured=False),
+    "not_tested": dict(proxy_configured=True),
+    "ok": sup.kwargs("nas_ok"),
+    "degraded": sup.kwargs("degraded_direct"),
+    "target_failed": sup.kwargs("blocked_403"),
+    "nas_failed": sup.kwargs("auth_407"),
+    "both_failed": sup.kwargs("both_failed"),
+    "contradiction": sup.kwargs("contradiction"),
+    "incomplete": dict(proxy_configured=True, checked_at=sup.CHECKED_AT),
+    "config_unknown": dict(),
+    "no_timestamp": dict(proxy_configured=True, nas_reachable=True, route_used="nas", target_http_status=200, error_class="ok"),
+    "nas_not_evaluated": dict(proxy_configured=True, route_used="direct", target_http_status=200, error_class="ok", latency_ms=300,
+                              checked_at=sup.CHECKED_AT),
+}
+
+
+def test_every_reason_key_is_reachable_and_asserted():
+    assert set(REASON_INPUTS) == set(vm.REASON_KEYS)
+    for key, kw in REASON_INPUTS.items():
+        view = _classify(**kw)
+        assert view.reason_key == key, key
+        assert (view.state, key) in W.CONCLUSION_KEY, key
+
+
+def test_configured_direct_route_is_nas_not_evaluated_not_contradiction_or_incomplete():
+    view = _classify(**REASON_INPUTS["nas_not_evaluated"])
+    assert (view.state, view.reason_key, view.nas_health, view.target_health) == ("undetermined", "nas_not_evaluated", "undetermined", "undetermined")
+    assert W.NAS_DIAG_WORDING[W.CONCLUSION_KEY[(view.state, view.reason_key)]].text == "這次檢查沒有經過 NAS，無法判定 NAS 的狀態"
+    # 直連結果本身也有失敗時同理；缺結果才是 incomplete；帶了 NAS 事實才是矛盾
+    assert _classify(proxy_configured=True, route_used="direct", target_http_status=403, error_class="forbidden_403",
+                     checked_at=sup.CHECKED_AT).reason_key == "nas_not_evaluated"
+    assert _classify(proxy_configured=True, route_used="direct", checked_at=sup.CHECKED_AT).reason_key == "incomplete"
+    for extra in (dict(nas_reachable=True), dict(nas_reachable=False), dict(nas_error_class="timeout"), dict(error_class="proxy_unreachable", target_http_status=None)):
+        kw = {**REASON_INPUTS["nas_not_evaluated"], **extra}
+        assert _classify(**kw).reason_key == "contradiction", extra
+
+
+@pytest.mark.parametrize("error_class,status", [("proxy_auth_407", 407), ("proxy_auth_407", None), ("proxy_unreachable", None)])
+def test_unconfigured_nas_with_a_nas_fault_class_is_a_contradiction(error_class, status):
+    view = _classify(proxy_configured=False, route_used="direct", target_http_status=status, error_class=error_class, checked_at=sup.CHECKED_AT)
+    assert (view.state, view.reason_key) == ("undetermined", "contradiction")
+
+
+def test_nas_reachable_semantics_forbidden_exit_block_is_nas_unusable_and_fallback_requires_it():
+    view = _classify(**sup.kwargs("blocked_403_then_direct"))
+    assert sup.kwargs("blocked_403_then_direct")["nas_reachable"] is False   # 不再出現「nas_reachable=True 卻 NAS 軸＝失敗」
+    assert (view.state, view.nas_health) == ("degraded_direct", "failed")
+    bad = {**sup.kwargs("blocked_403_then_direct"), "nas_reachable": True}
+    assert _classify(**bad).reason_key == "contradiction"
+    # route=nas 且目標回 403：NAS 出口仍可用（預覽約定），目標軸失敗
+    assert _classify(**sup.kwargs("blocked_403")).nas_health == "ok"
+
+
+def test_403_and_429_without_a_status_code_are_allowed_and_407_too_current_behaviour_is_documented():
+    for cls, extra in (("forbidden_403", {}), ("rate_limited_429", {}), ("proxy_auth_407", dict(nas_reachable=False, route_used="none", nas_error_class="proxy_auth_407"))):
+        kw = {**sup.kwargs("nas_ok"), "error_class": cls, "target_http_status": None, **extra}
+        view = _classify(**kw)
+        assert view.state == "failed" and view.target_http_status is None, cls
+    assert "403／429 沒有狀態碼時以分類為準" in vm.__doc__
+
+
+def test_407_view_keeps_status_but_target_axis_is_untested_so_the_card_must_not_show_it():
+    view = _classify(**sup.kwargs("auth_407"))
+    assert view.target_health == "not_tested" and view.target_http_status == 407 and view.nas_cause_key == "cause_auth_407"
+    assert "目標卡不顯示" in vm.__doc__
+
+
+def test_blocked_403_wording_names_the_nas_exit_block():
+    assert "NAS 出口被目標網站封鎖" in W.NAS_DIAG_WORDING["cause_blocked_403"].text and "不是 NAS 斷線" in W.NAS_DIAG_WORDING["cause_blocked_403"].text

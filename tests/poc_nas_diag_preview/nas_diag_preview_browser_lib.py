@@ -20,6 +20,7 @@ MEASURE_JS = r"""
   const rendererEls = [...main.querySelectorAll('[data-block], [data-block] *')];
   const interactive = rendererEls.filter(e => e.matches('button, a, input, select, textarea, summary, details, [tabindex], [onclick], [href]'));
   const bs = badge ? getComputedStyle(badge) : null;
+  const mainLinks = main.querySelectorAll('a[href]').length;
   const pending = document.querySelectorAll('[data-pending-wording="pending_notice"]').length;
   const selInput = document.querySelector('[data-testid="stSelectbox"] input');
   const sel = selInput ? (selInput.closest('[role="group"]') || selInput) : null;
@@ -30,7 +31,7 @@ MEASURE_JS = r"""
                           right: badge.getBoundingClientRect().right} : null,
           banner: banner ? {text: banner.innerText.trim(), shown: shown(banner), right: banner.getBoundingClientRect().right, weight: getComputedStyle(banner).fontWeight,
                             borderLeft: getComputedStyle(banner).borderLeftWidth} : null,
-          axes, interactiveCount: interactive.length, pendingNotice: pending, blocks: [...document.querySelectorAll('[data-block]')].map(e => e.dataset.block),
+          axes, interactiveCount: interactive.length, mainLinks, pendingNotice: pending, blocks: [...document.querySelectorAll('[data-block]')].map(e => e.dataset.block),
           overflowing: body.filter(e => e.getBoundingClientRect().right > vw + 0.5).map(e => e.tagName + '.' + (e.className || '')).slice(0, 5),
           selectH: selR ? selR.height : null,
           text: [...document.querySelectorAll('[data-block]')].map(e => e.innerText).join('\n')};
@@ -62,6 +63,8 @@ def structure_violations(m):
         bad.append(("區塊順序不對", m["blocks"]))
     if m["interactiveCount"]:
         bad.append(("renderer 內有可互動元素（不得有假按鈕或連結）", m["interactiveCount"]))
+    if m["mainLinks"]:
+        bad.append(("主區（含頁標題）出現連結", m["mainLinks"]))
     if not m["hasBanner"]:
         bad.append(("缺 FAKE 標示",))
     return bad

@@ -59,8 +59,8 @@ def blocked_403() -> dict:
 
 
 def blocked_403_then_direct() -> dict:
-    """⑦b NAS 路徑被 403 後降級直連成功。"""
-    return _tested(route_used="fallback_direct", latency_ms=1890, nas_error_class="forbidden_403")
+    """⑦b NAS 出口被目標網站 403 封鎖後降級直連成功（nas_reachable＝NAS 出口可否用於取得目標，故為 False）。"""
+    return _tested(nas_reachable=False, route_used="fallback_direct", latency_ms=1890, nas_error_class="forbidden_403")
 
 
 def timeout() -> dict:
@@ -97,7 +97,7 @@ SCENARIOS = {
     "both_failed": ("⑤NAS 失敗＋直連也失敗", both_failed),
     "auth_407": ("⑥代理驗證失敗（407）", auth_407),
     "blocked_403": ("⑦a 目標 403（NAS 可用）", blocked_403),
-    "blocked_403_then_direct": ("⑦b NAS 路徑 403 後降級直連成功", blocked_403_then_direct),
+    "blocked_403_then_direct": ("⑦b NAS 出口被 403 封鎖後降級直連成功", blocked_403_then_direct),
     "timeout": ("⑧逾時", timeout),
     "tls": ("⑨TLS／憑證問題", tls),
     "dns": ("⑩名稱解析失敗", dns),

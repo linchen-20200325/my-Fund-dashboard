@@ -120,7 +120,7 @@ _LIST = (
     PendingWording("concl_nas_not_evaluated", "這次檢查沒有經過 NAS，無法判定 NAS 的狀態", _SRC),
     # 各失敗分類的人話原因與建議（說明是哪一邊的問題）
     PendingWording("cause_auth_407", "代理驗證失敗（407）：NAS 中繼站拒絕了這次請求的驗證。請確認代理的帳號設定兩端一致；不需要把 NAS 管理介面開放到公網。", _SRC),
-    PendingWording("cause_blocked_403", "被來源封鎖（403）：目標網站拒絕了這個出口的請求，問題在目標網站端，不是 NAS 斷線。請稍後再試，或確認是否換個出口可取得。", _SRC),
+    PendingWording("cause_blocked_403", "被來源封鎖（403）：目標網站拒絕了 NAS 出口的請求（NAS 出口被目標網站封鎖），問題在目標網站端，不是 NAS 斷線。請稍後再試，或確認是否換個出口可取得。", _SRC),
     PendingWording("cause_rate_limited_429", "請求過多（429）：目標網站要求放慢速度。請稍後再試，不要連續重試。", _SRC),
     PendingWording("cause_timeout", "逾時：在時限內沒有收到回應，無法分辨是 NAS 還是目標網站較慢。請稍後再試。", _SRC),
     PendingWording("cause_dns", "名稱解析失敗：找不到目標網站的位址。請確認網路與名稱解析是否正常。", _SRC),

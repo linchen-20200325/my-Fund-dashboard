@@ -136,15 +136,28 @@ def test_route_shows_the_actual_path_and_untested_is_not_a_path():
         assert word in visible(row), (sid, visible(row))
 
 
-def test_missing_status_and_latency_render_the_approved_missing_wording_never_zero():
-    for sid in ("not_configured", "configured_untested", "contradiction"):
+def test_untested_target_axis_shows_no_status_code_or_latency_only_the_missing_wording():
+    """目標軸尚未測試／無法判定（含 407：狀態碼與延遲屬於 NAS 這一段）時，目標卡只有標籤、健康度與缺值字樣，沒有狀態碼與延遲。"""
+    for sid in ("not_configured", "configured_untested", "contradiction", "auth_407"):
         html = html_of(sid)
-        status_row = re.search(r'data-row="status-code">(.*?)</div>', html).group(1)
-        latency_row = re.search(r'data-row="latency">(.*?)</div>', html).group(1)
-        assert rules.MISSING_TEXT in visible(status_row) and rules.MISSING_TEXT in visible(latency_row)
-        assert not re.search(r"(?<![\d.])0(?![\d])", visible(status_row).replace(text_of("label_status_code"), ""))
+        card = html.split('data-axis="target"')[1].split('data-block="last-check"')[0]
+        assert 'data-row="status-code"' not in card and 'data-row="latency"' not in card, sid
+        assert 'data-row="no-target-result"' in card and rules.MISSING_TEXT in visible(card), sid
+        assert "407" not in visible(card) and "210" not in visible(card), sid
+        assert 'data-pending-wording="target_health_ok"' not in card and 'data-pending-wording="target_health_failed"' not in card, sid
+    card407 = html_of("auth_407").split('data-axis="target"')[1]
+    assert text_of("health_not_tested") in visible(card407)
+
+
+def test_tested_target_axis_shows_status_code_and_latency_and_missing_status_uses_the_approved_wording_never_zero():
     ok = html_of("nas_ok")
-    assert "200" in ok and "380 " in ok and rules.MISSING_TEXT in visible(html_of("timeout").split('data-row="status-code"')[1].split("</div>")[0])
+    assert "200" in ok and "380 " in ok
+    timeout_card = html_of("timeout").split('data-axis="target"')[1]
+    status_row = re.search(r'data-row="status-code">(.*?)</div>', timeout_card).group(1)
+    assert rules.MISSING_TEXT in visible(status_row)
+    direct = pg.page_html(vm.classify(vm.NasDiagObservation(target_label=sup.TARGET, proxy_configured=False, route_used="direct",
+                                                            target_http_status=200, error_class="ok", latency_ms=0, checked_at=sup.CHECKED_AT)))
+    assert "0 " in re.search(r'data-row="latency">(.*?)</div>', direct).group(1) and 'data-row="status-code"' in direct   # 0 是值、不是缺值
 
 
 def test_approved_wording_is_reused_not_copied():
@@ -330,3 +343,96 @@ def test_renderer_layer_dependencies_and_purity():
     tree = ast.parse(SRC)
     assert "streamlit" in [m.split(".")[0] for m in lib.imports_of(tree, "ui_v3.pages")]   # 確實有用到（函式內）
     assert not [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)) and "streamlit" in ast.dump(n)]
+
+
+# ───────────────────────── QA 追加 ─────────────────────────
+
+def test_css_banner_and_every_tone_rule_exist_in_the_fast_lane():
+    banner = re.search(r"\.uv3n-banner\{([^}]*)\}", pg.CSS)
+    assert banner, "缺 .uv3n-banner 規則"
+    assert "font-weight:700" in banner.group(1) and "border-left:" in banner.group(1)
+    for tone in tokens.TONE_KEYS:
+        rule = re.search(r"\.uv3n-tone-" + tone + r"\{([^}]*)\}", pg.CSS)
+        assert rule and "color:" in rule.group(1) and "background:" in rule.group(1) and "border-color:" in rule.group(1), tone
+    assert not re.search(r"\.uv3n-tone-(?!" + "|".join(tokens.TONE_KEYS) + ")", pg.CSS)
+    assert re.search(r"\.uv3n-badge\{[^}]*font-weight:700", pg.CSS)
+
+
+def _product_views():
+    import itertools
+    views, reasons_seen = set(), set()
+    for conf, reach, route, err, nerr, status, at, lat in itertools.product(
+            (False, True, None), (None, True, False), (None, "nas", "direct", "fallback_direct", "none"),
+            (None,) + vm.ERROR_CLASSES, (None,) + vm.ERROR_CLASSES, (None, 200, 403, 407, 429, 500), (None, sup.CHECKED_AT), (None, 120)):
+        obs = vm.NasDiagObservation(target_label=sup.TARGET, proxy_configured=conf, nas_reachable=reach, route_used=route, error_class=err,
+                                    nas_error_class=nerr, target_http_status=status, latency_ms=lat, checked_at=at)
+        views.add(vm.classify(obs))
+    return views
+
+
+def test_every_reachable_view_from_the_input_product_renders_without_error():
+    views = _product_views()
+    assert len(views) > 50
+    pairs = {(v.state, v.reason_key) for v in views}
+    assert pairs <= set(W.CONCLUSION_KEY) and {r for _, r in pairs} == set(vm.REASON_KEYS) and {s for s, _ in pairs} == set(vm.STATES)
+    for v in views:
+        html = pg.page_html(v)   # 不得 KeyError
+        assert 'data-axis="nas"' in html and 'data-axis="target"' in html
+        assert leaks_of(html) == []
+    combos = {(v.state, v.route_code, v.nas_cause_key, v.target_cause_key) for v in views}
+    assert (vm.STATE_FAILED, vm.ROUTE_FALLBACK, "cause_nas_unreachable", "cause_timeout") in combos          # fallback_direct＋直連也失敗
+    assert any(v.target_cause_key == "cause_other" and 'data-cause="cause_other"' in pg.page_html(v) for v in views)   # other 被渲染
+    assert any(v.state == vm.STATE_NOT_CONFIGURED and v.route_code == vm.ROUTE_DIRECT and v.target_health in ("ok", "failed") for v in views)
+    assert text_of("cause_other") in visible(next(pg.page_html(v) for v in views if v.target_cause_key == "cause_other"))
+
+
+def _poison_view(**over):
+    view = vm.classify(vm.NasDiagObservation(**sup.kwargs("nas_ok")))
+    for k, v in over.items():
+        object.__setattr__(view, k, v)   # 繞過 frozen 與驗證：模擬有人直接塞污染值給 renderer
+    return view
+
+
+def test_renderer_escapes_every_interpolation_even_for_a_view_that_bypassed_validation():
+    inject = "<script>alert(1)</script>"
+    html = pg.page_html(_poison_view(target_label=inject, target_http_status=inject, latency_ms=inject))
+    assert "<script" not in html and html.count("&lt;script&gt;") == 3
+    html = pg.page_html(_poison_view(target_label='"><img src=x onerror=1>'))
+    assert "<img" not in html and "&quot;&gt;&lt;img" in html
+
+
+def test_directly_constructing_a_poisoned_view_is_refused_and_never_reaches_the_renderer():
+    base = vm.classify(vm.NasDiagObservation(**sup.kwargs("nas_ok")))
+    import dataclasses
+    for field, bad in (("target_label", sup.POISON_URL), ("latency_ms", "<b>x</b>"), ("target_http_status", "<i>"), ("checked_at", sup.POISON_URL)):
+        with pytest.raises((ValueError, TypeError)) as info:
+            vm.NasDiagView(**{**dataclasses.asdict(base), field: bad})
+        assert sup.SECRET not in str(info.value)
+    # 就算 checked_at 被繞過驗證塞了污染值，renderer 的失敗訊息也不含該值
+    with pytest.raises(ValueError) as info:
+        pg.page_html(_poison_view(checked_at=sup.POISON_URL))
+    assert sup.SECRET not in str(info.value)
+
+
+_FORBIDDEN_NAMES = {"environ", "getenv", "secrets", "subprocess", "socket", "requests", "urllib", "urllib3", "httpx"}
+_NEW_NON_TEST_FILES = ("ui_v3/viewmodels/nas_diag.py", "ui_v3/viewmodels/nas_diag_wording.py", "ui_v3/pages/nas_diag.py",
+                       "poc/nas_diag_preview/app_nas_diag_preview.py", "poc/nas_diag_preview/nas_diag_fake_inputs.py")
+
+
+def forbidden_ast_uses(source: str) -> list:
+    tree = ast.parse(source)
+    hits = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    hits |= {m.split(".")[0] for m in lib.imports_of(tree, "x")} | {a.arg for n in ast.walk(tree) if isinstance(n, ast.arguments) for a in n.args}
+    hits |= {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and n.value in _FORBIDDEN_NAMES and isinstance(n.value, str)}
+    return sorted(hits & _FORBIDDEN_NAMES)
+
+
+@pytest.mark.parametrize("rel", _NEW_NON_TEST_FILES)
+def test_new_non_test_files_use_no_environment_secret_process_or_network_names(rel):
+    assert forbidden_ast_uses(lib.read(lib.ROOT / rel)) == []
+
+
+@pytest.mark.parametrize("bad", ["import os\nos.environ.get('X')", "import os\nos.getenv('X')", "import streamlit as st\nst.secrets['k']", "import subprocess",
+                                 "import socket", "import requests", "import urllib.request", "import httpx", "from urllib import request"])
+def test_forbidden_ast_scan_negative_controls_turn_red(bad):
+    assert forbidden_ast_uses(bad)

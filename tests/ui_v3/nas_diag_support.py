@@ -34,7 +34,7 @@ SCENARIO_KWARGS = {
     "auth_407": _tested(nas_reachable=False, route_used="none", target_http_status=407, error_class="proxy_auth_407", latency_ms=210,
                         nas_error_class="proxy_auth_407"),
     "blocked_403": _tested(target_http_status=403, error_class="forbidden_403", latency_ms=520),
-    "blocked_403_then_direct": _tested(route_used="fallback_direct", latency_ms=1890, nas_error_class="forbidden_403"),
+    "blocked_403_then_direct": _tested(nas_reachable=False, route_used="fallback_direct", latency_ms=1890, nas_error_class="forbidden_403"),
     "timeout": _tested(target_http_status=None, error_class="timeout", latency_ms=15000),
     "tls": _tested(target_http_status=None, error_class="tls", latency_ms=640),
     "dns": _tested(target_http_status=None, error_class="dns", latency_ms=95),

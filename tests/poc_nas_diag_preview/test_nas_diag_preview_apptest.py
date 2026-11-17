@@ -158,40 +158,42 @@ def test_no_credential_secret_or_proxy_environment_access_in_a_run(monkeypatch):
 
 # ───────────────────────── 子行程：沒有載入取數／憑證相關模組 ─────────────────────────
 
-def test_run_does_not_load_network_data_or_credential_modules():
-    code = f"""
-import sys
-sys.path.insert(0, {str(_ROOT)!r})
-import streamlit
-import streamlit.testing.v1
-from streamlit.testing.v1 import AppTest
-before = set(sys.modules)
-at = AppTest.from_file({str(_APP)!r}, default_timeout=60).run()
-assert not at.exception, at.exception
-for sid in ({IDS!r}):
-    at.selectbox(key={KEY!r}).set_value(sid).run()
-    assert not at.exception, at.exception
+_SCAN_TAIL = """
 new = set(sys.modules) - before
 bad = sorted(m for m in new if m.split('.')[0] in ('services', 'gspread', 'requests', 'urllib3', 'repositories', 'infra', 'httpx', 'yfinance')
              or m.startswith('ui_v3.fixtures') or m.startswith('ui_v3.adapters') or m == 'ui_v3.app_preview')
 print(repr(bad))
 print(repr(sorted(m for m in new if m.startswith('ui_v3'))))
 """
+
+
+def _scan_subprocess(app_expr: str, loop: str) -> tuple:
+    """子行程跑 AppTest 並用**同一段掃描程式**（`_SCAN_TAIL`）回報新載入的禁止模組；真測試與正控共用。"""
+    code = (f"import sys\nsys.path.insert(0, {str(_ROOT)!r})\nimport streamlit\nimport streamlit.testing.v1\n"
+            f"from streamlit.testing.v1 import AppTest\nbefore = set(sys.modules)\nat = {app_expr}.run()\nassert not at.exception, at.exception\n"
+            f"{loop}{_SCAN_TAIL}")
     out = subprocess.run([sys.executable, "-c", code], cwd=str(_ROOT), capture_output=True, text=True, timeout=300)
     assert out.returncode == 0, out.stderr[-2000:]
     bad, loaded = out.stdout.strip().splitlines()[-2:]
+    return bad, loaded
+
+
+def test_run_does_not_load_network_data_or_credential_modules():
+    loop = (f"for sid in ({IDS!r}):\n    at.selectbox(key={KEY!r}).set_value(sid).run()\n    assert not at.exception, at.exception\n")
+    bad, loaded = _scan_subprocess(f"AppTest.from_file({str(_APP)!r}, default_timeout=60)", loop)
     assert bad == "[]", bad
     # `ui_v3.shell.registry` 會被 `ui_v3.shell.nav`（renderer 取斷點常數）間接載入，屬預期；入口「直接」import 它由靜態守衛禁止。
     assert "ui_v3.pages.nas_diag" in loaded and "ui_v3.viewmodels.nas_diag" in loaded and "ui_v3.viewmodels.nas_diag_wording" in loaded
 
 
-def test_subprocess_module_scan_negative_control_flags_a_loaded_network_module():
-    code = "import sys, urllib3\nnew = set(sys.modules)\nprint(sorted(m for m in new if m.split('.')[0] in ('requests', 'urllib3')))"
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
-    if out.returncode == 0:   # 本環境有 urllib3 時，掃描必須抓到；沒有時用 requests 同理（沒有任何一個也不影響上一個測試的有效性）
-        assert "urllib3" in out.stdout
-    else:
-        pytest.skip("本環境沒有 urllib3，無法做這個負控")
+@pytest.mark.parametrize("module", ["urllib3", "requests", "httpx"])
+def test_subprocess_scan_positive_control_uses_the_same_scan_function_and_flags_an_importing_app(module):
+    """正控：用 `AppTest.from_string` 跑一段會 import 禁止模組的 app，**同一個掃描函式**必須回報它（否則上面的 `[]` 可能是空掃）。"""
+    import importlib.util
+    if importlib.util.find_spec(module) is None:
+        pytest.skip(f"本環境沒有 {module}")   # 至少 urllib3 與 requests 在本專案環境一定有；CI 缺任一個才會 skip
+    bad, _ = _scan_subprocess(f"AppTest.from_string({('import ' + module + chr(10) + 'import streamlit as st' + chr(10) + 'st.write(1)')!r})", "")
+    assert module in bad, bad
 
 
 # ───────────────────────── 靜態守衛 ─────────────────────────
@@ -292,6 +294,16 @@ def test_negative_control_reference_scan_turns_red(tmp_path):
     (tmp_path / "ui").mkdir()
     (tmp_path / "ui" / "x.py").write_text("import nas_diag_fake_inputs\n", encoding="utf-8")
     assert production_references(tmp_path)
+
+
+def test_formal_shell_and_preview_entry_do_not_mention_nas_diag():
+    """隔離守衛：app_preview.py、ui_v3/shell/*、ui_v3/pages/__init__.py 不含 nas_diag 字樣（沒有掛載）。"""
+    files = [_ROOT / "ui_v3" / "app_preview.py", _ROOT / "ui_v3" / "pages" / "__init__.py"] + sorted((_ROOT / "ui_v3" / "shell").glob("*.py"))
+    assert len(files) >= 4 and all(f.exists() for f in files)
+    for f in files:
+        text = f.read_text(encoding="utf-8")
+        assert not re.search(r"nas_diag|NasDiag", text), f.name
+    assert re.search(r"nas_diag|NasDiag", "from ui_v3.pages import nas" + "_diag")   # 負控：偵測得到
 
 
 def test_formal_page_registry_is_untouched_by_the_preview():

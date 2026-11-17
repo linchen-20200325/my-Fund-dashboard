@@ -15,7 +15,12 @@
 ## 欄位語意（本預覽的約定；皆暫行）
 
 - `proxy_configured`：是否已設定 NAS 中繼站（True／False／None＝不知道）。
-- `nas_reachable`：NAS 中繼站是否可用於轉送（網路可達且驗證通過；True／False／None＝沒檢查）。
+- `nas_reachable`：**NAS 出口是否可用於取得目標**（網路可達、驗證通過，且出口沒有被目標網站封鎖；True／False／None＝沒檢查）。
+  所以「NAS 出口被目標 403 封鎖後降級直連」是 `nas_reachable=False`＋`nas_error_class=forbidden_403`；
+  而目標網站直接回 403 給經由 NAS 的請求、且沒有降級（`route_used=nas`）時，NAS 出口仍被視為可用（目標軸失敗）——這是預覽約定。
+  `route_used=nas` 時逾時／名稱解析／TLS 判目標軸失敗、NAS 軸正常，亦為預覽約定（真實情況可能是 NAS 側問題）。
+- 狀態碼與分類：407 允許沒有狀態碼；403／429 沒有狀態碼時以分類為準（目前**允許**，畫面狀態碼顯示缺值），不判矛盾。
+- 目標軸為「尚未測試」（例：407，沒有任何目標嘗試）時，狀態碼與延遲屬於 NAS 這一段，目標卡不顯示。
 - `route_used`：產出「最終目標結果」的路徑：`nas`／`direct`／`fallback_direct`（NAS 失敗後改走直連）／`none`（沒有任何路徑取得結果）。
 - `nas_error_class`：**本預覽新增的選填欄位**——NAS 這一段失敗的分類（只在 `fallback_direct`／`none` 用）；`error_class` 則是「最終目標結果」的分類。
   這樣才分得出「NAS 為什麼失敗」與「目標網站為什麼取不到」。
@@ -84,7 +89,7 @@ BACKOFF_KIND_TO_CLASSES = {
 }
 
 # 白名單標籤：英數、空白、連字號、中點與常用中日韓字元；長度 1～40。不含 `:`、`/`、`@`、`?`、`#`、`=`、`&`、`.`。
-_LABEL_RE = re.compile(r"^[A-Za-z0-9 \-·一-鿿]{1,40}$")
+_LABEL_RE = re.compile(r"[A-Za-z0-9 \-·一-鿿]{1,40}")   # 一律 fullmatch（`$` 會放行結尾換行）
 _CRED_SHAPE = re.compile(r"[^\s/@:]+:[^\s/@]+@")
 _STATUS_CLASS = {403: "forbidden_403", 429: "rate_limited_429", 407: "proxy_auth_407"}
 
@@ -99,6 +104,33 @@ def _opt_bool(name: str, value: object) -> Optional[bool]:
     if value is not None and not isinstance(value, bool):
         raise TypeError(f"{name} 必須是 bool 或 None")
     return value
+
+
+def _validate_label(value: object) -> None:
+    if not isinstance(value, str):
+        raise TypeError("target_label 必須是字串")
+    _reject_leaky("target_label", value)
+    if not _LABEL_RE.fullmatch(value):
+        raise ValueError("target_label 不在白名單字元內（只准標籤，不准網址）")
+
+
+def _validate_status(value: object) -> None:
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int) or not 100 <= value <= 599):
+        raise ValueError("target_http_status 必須是 100～599 的整數或 None")
+
+
+def _validate_latency(value: object) -> None:
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+        raise ValueError("latency_ms 必須是非負整數或 None（缺值不是 0）")
+
+
+def _validate_checked_at(value: object) -> None:
+    if value is None:
+        return
+    if not isinstance(value, str):
+        raise TypeError("checked_at 必須是字串或 None")
+    _reject_leaky("checked_at", value)
+    parse_checked_at(value)
 
 
 def _opt_in(name: str, value: object, allowed: Tuple[str, ...]) -> Optional[str]:
@@ -131,10 +163,10 @@ def checked_at_display(value: str) -> str:
 class NasDiagObservation:
     """離線注入的「已觀測事實」。沒有任何原始例外字串欄位。"""
 
+    target_label: str   # 必填：不得預設成特定網站
     proxy_configured: Optional[bool] = None
     nas_reachable: Optional[bool] = None
     route_used: Optional[str] = None
-    target_label: str = "MoneyDJ"
     target_http_status: Optional[int] = None
     error_class: Optional[str] = None
     latency_ms: Optional[int] = None
@@ -147,22 +179,10 @@ class NasDiagObservation:
         _opt_in("route_used", self.route_used, ROUTES)
         _opt_in("error_class", self.error_class, ERROR_CLASSES)
         _opt_in("nas_error_class", self.nas_error_class, ERROR_CLASSES)
-        if not isinstance(self.target_label, str):
-            raise TypeError("target_label 必須是字串")
-        _reject_leaky("target_label", self.target_label)
-        if not _LABEL_RE.match(self.target_label):
-            raise ValueError("target_label 不在白名單字元內（只准標籤，不准網址）")
-        status = self.target_http_status
-        if status is not None and (isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599):
-            raise ValueError("target_http_status 必須是 100～599 的整數或 None")
-        latency = self.latency_ms
-        if latency is not None and (isinstance(latency, bool) or not isinstance(latency, int) or latency < 0):
-            raise ValueError("latency_ms 必須是非負整數或 None（缺值不是 0）")
-        if self.checked_at is not None:
-            if not isinstance(self.checked_at, str):
-                raise TypeError("checked_at 必須是字串或 None")
-            _reject_leaky("checked_at", self.checked_at)
-            parse_checked_at(self.checked_at)
+        _validate_label(self.target_label)
+        _validate_status(self.target_http_status)
+        _validate_latency(self.latency_ms)
+        _validate_checked_at(self.checked_at)
 
 
 @dataclass(frozen=True)
@@ -190,6 +210,10 @@ class NasDiagView:
             raise ValueError("reason_key 不在允許的列舉內")
         if self.nas_health not in NAS_HEALTHS or self.target_health not in TARGET_HEALTHS:
             raise ValueError("健康度不在允許的列舉內")
+        _validate_label(self.target_label)
+        _validate_status(self.target_http_status)
+        _validate_latency(self.latency_ms)
+        _validate_checked_at(self.checked_at)
         for name in ("nas_cause_key", "target_cause_key"):
             value = getattr(self, name)
             if value is not None and value not in CAUSE_KEYS:
@@ -267,6 +291,8 @@ def _no_result_facts(obs: NasDiagObservation) -> bool:
 def _classify_unconfigured(obs: NasDiagObservation) -> NasDiagView:
     if obs.nas_reachable is not None or obs.nas_error_class is not None or obs.route_used in ("nas", "fallback_direct"):
         raise _Contradiction("contradiction")   # 沒設定 NAS，卻聲稱經過／測過 NAS
+    if obs.error_class in NAS_FAULT_CLASSES:
+        raise _Contradiction("contradiction")   # 沒設定 NAS，卻回報 NAS 自身故障
     if obs.route_used == "direct" and obs.checked_at is not None and obs.error_class is not None:
         target, cause = _target_axis(obs.error_class, obs.target_http_status)
         return _make(obs, STATE_NOT_CONFIGURED, ROUTE_DIRECT, "not_configured", HEALTH_NOT_CONFIGURED, target, None, cause)
@@ -281,13 +307,16 @@ def _classify_configured(obs: NasDiagObservation) -> NasDiagView:
             return _make(obs, STATE_NOT_TESTED, ROUTE_UNTESTED, "not_tested", HEALTH_NOT_TESTED, HEALTH_NOT_TESTED)
         raise _Contradiction("no_timestamp")    # 有結果卻沒有時間：不知道是哪一次的證據
     route = obs.route_used
+    if route == "direct":   # 已設定但這次走直連：NAS 沒被使用，不得對 NAS 下結論（要先於「缺值」檢查，否則永遠走不到）
+        if obs.nas_reachable is not None or obs.nas_error_class is not None or obs.error_class in NAS_FAULT_CLASSES:
+            raise _Contradiction("contradiction")
+        if obs.error_class is None:
+            raise _Contradiction("incomplete")
+        _check_status_vs_class(obs.target_http_status, obs.error_class)
+        raise _Contradiction("nas_not_evaluated")
     if route is None or obs.nas_reachable is None or obs.error_class is None:
         raise _Contradiction("incomplete")
     _check_status_vs_class(obs.target_http_status, obs.error_class)
-    if route == "direct":
-        if obs.nas_reachable is not None or obs.nas_error_class is not None:
-            raise _Contradiction("contradiction")
-        raise _Contradiction("nas_not_evaluated")
     if route == "nas":
         if obs.nas_reachable is not True or obs.nas_error_class is not None or obs.error_class in NAS_FAULT_CLASSES:
             raise _Contradiction("contradiction")
@@ -302,7 +331,7 @@ def _classify_configured(obs: NasDiagObservation) -> NasDiagView:
         raise _Contradiction("contradiction")   # NAS 自身故障（驗證失敗／無法連線）卻說 NAS 可用
     nas_cause = CAUSE_OF_CLASS[nas_cls]
     if route == "fallback_direct":
-        if obs.error_class in NAS_FAULT_CLASSES:
+        if obs.nas_reachable is not False or obs.error_class in NAS_FAULT_CLASSES:
             raise _Contradiction("contradiction")  # 直連結果不可能是 NAS 自身故障
         target, cause = _target_axis(obs.error_class, obs.target_http_status)
         if target == HEALTH_OK:

@@ -4,7 +4,7 @@
 - 啟動：`streamlit run poc/nas_diag_preview/app_nas_diag_preview.py`（在 repo 根目錄執行）。
 - 頁頂固定一列「FAKE／測試資料（離線注入，未執行任何真實請求）」（屬 harness）；下拉選單（key `uvp_nas_scenario`）切換 13 個 FAKE 情境：
   ①未設定 ②已設定但尚未測試 ③NAS 成功＋目標 200 ④NAS 失敗＋直連成功（降級）⑤NAS 失敗＋直連也失敗 ⑥代理驗證失敗（407）
-  ⑦a 目標 403（NAS 可用）⑦b NAS 路徑 403 後降級直連成功 ⑧逾時 ⑨TLS／憑證 ⑩名稱解析 ⑪矛盾輸入（無法判定）⑫請求過多（429）。
+  ⑦a 目標 403（NAS 可用）⑦b NAS 出口被 403 封鎖後降級直連成功 ⑧逾時 ⑨TLS／憑證 ⑩名稱解析 ⑪矛盾輸入（無法判定）⑫請求過多（429）。
 
 ## 做了什麼
 
@@ -35,3 +35,15 @@
 - 瀏覽器守衛只在本機 Chromium 驗；真實 Streamlit Cloud 與真機未驗。selectbox 屬 harness，高度為 Streamlit 預設（40px），未達 48px 觸控下限；renderer 本身沒有任何可互動元素。
 - 斷網測試只攔 `socket.socket.connect` 與 `socket.create_connection`；讀憑證測試只攔 `os.environ.get`。措辭為「在上述攔截範圍內未偵測到」，不是「已證明不連網／不讀憑證」。
 - renderer 經 `ui_v3.shell.nav`（取斷點常數）會間接載入 `ui_v3.shell.registry`；入口檔本身不直接 import 它（靜態守衛鎖定）。
+
+## 追加揭露（QA 後補）
+
+- **瀏覽器守衛屬 slow lane**：CI 的 slow lane 標了 `continue-on-error`，紅了不會擋 merge；它是證據，不是阻擋閘門。fast lane（AST、HTML 字串、CSS 規則、輸入乘積、AppTest）才會擋。
+- **neutral 與 grey 兩個 tone token 同色**：「連線成功」「尚未測試」「無法判定」徽章底色相同，**靠文字區分**；只有降級直連（黃）、失敗與未設定（紅）有不同底色。
+- **預覽約定（不是真實診斷結論）**：`route_used=nas` 時，逾時／名稱解析／TLS 判「目標軸失敗、NAS 軸正常」；真實情況也可能是 NAS 側的問題，本預覽無從分辨。
+- **`nas_reachable` 的意義**：NAS 出口是否可用於取得目標（可達、驗證通過、出口未被目標封鎖）。因此 ⑦b（NAS 出口被目標 403 封鎖後降級直連）是 `nas_reachable=False`＋`nas_error_class=forbidden_403`，文案為「NAS 出口被目標網站封鎖」；
+  ⑦a（目標對經由 NAS 的請求回 403、沒有降級）NAS 出口仍視為可用、目標軸失敗。403／429 沒有狀態碼時以分類為準（允許，狀態碼顯示缺值）；407 允許沒有狀態碼。
+- **目標軸尚未測試（例：407）時目標卡不顯示狀態碼與延遲**：那是 proxy 回的，歸 NAS 這一段。
+- **`not_configured` 可帶直連結果**：未設定 NAS 時仍可顯示直連的目標軸結果，這與規則表 `not_configured` 的原義（「設定沒設、沒有執行取數」）有落差；若客戶認為未設定時不該顯示任何取數結果，需另行裁示。
+- **selectbox（harness，約 40px）是手機審核時唯一的操作面**；renderer 沒有任何可互動元素，也沒有連結。頁標題以 `anchor=False` 關閉錨點連結，卡片標題不用 h1～h6（Streamlit 會替它們自動加錨點連結）；瀏覽器守衛掃描整個主區（含頁標題）的連結數必須為 0。
+- `target_label` 為必填（沒有預設網站），驗證一律 fullmatch（結尾換行也拒絕）；`NasDiagView` 建構時同樣驗證標籤、狀態碼、延遲、檢查時間，renderer 所有插值再 escape 一次（縱深防禦）。

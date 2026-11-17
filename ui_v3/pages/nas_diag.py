@@ -131,12 +131,16 @@ def nas_card_html(view: vm.NasDiagView) -> str:
 
 
 def target_card_html(view: vm.NasDiagView) -> str:
-    status = escape(str(view.target_http_status)) if view.target_http_status is not None else _missing()
-    latency = f'{view.latency_ms} {_pending("unit_ms")}' if view.latency_ms is not None else _missing()
-    rows = (f'<div class="uv3-row" data-row="target-name">{_label("label_target")}{escape(view.target_label)}</div>'
-            f'<div class="uv3-row" data-row="target-health">{_sourced(W.TARGET_HEALTH_SOURCE[view.target_health])}</div>'
-            f'<div class="uv3-row" data-row="status-code">{_label("label_status_code")}{status}</div>'
-            f'<div class="uv3-row" data-row="latency">{_label("label_latency")}{latency}</div>')
+    """目標卡。目標軸「尚未測試」（例：407，沒有任何目標嘗試）時只顯示標籤與健康度：狀態碼與延遲屬於 NAS 這一段，不歸給目標。"""
+    rows = (f'<div class="uv3-row" data-row="target-name">{_label("label_target")}{escape(str(view.target_label))}</div>'
+            f'<div class="uv3-row" data-row="target-health">{_sourced(W.TARGET_HEALTH_SOURCE[view.target_health])}</div>')
+    if view.target_health in (vm.HEALTH_OK, vm.HEALTH_FAILED):
+        status = escape(str(view.target_http_status)) if view.target_http_status is not None else _missing()
+        latency = f'{escape(str(view.latency_ms))} {_pending("unit_ms")}' if view.latency_ms is not None else _missing()
+        rows += (f'<div class="uv3-row" data-row="status-code">{_label("label_status_code")}{status}</div>'
+                 f'<div class="uv3-row" data-row="latency">{_label("label_latency")}{latency}</div>')
+    else:
+        rows += f'<div class="uv3-row" data-row="no-target-result">{_missing()}</div>'
     return (f'<div class="uv3-card" data-axis="target" data-health="{escape(view.target_health)}">'
             f'{_title("label_target_card")}{rows}</div>')
 
@@ -146,7 +150,7 @@ def axes_html(view: vm.NasDiagView) -> str:
 
 
 def last_check_html(view: vm.NasDiagView) -> str:
-    when = escape(vm.checked_at_display(view.checked_at)) if view.checked_at is not None else _missing()
+    when = escape(str(vm.checked_at_display(view.checked_at))) if view.checked_at is not None else _missing()
     return (f'<div class="uv3-card" data-block="last-check"><div class="uv3-row">{_label("label_checked_at")}{when}'
             f'{_pending("separator")}{_label("label_result")}{_sourced(W.STATE_LABEL_SOURCE[view.state])}</div></div>')
 
@@ -180,5 +184,5 @@ def render(view: vm.NasDiagView) -> None:
     import streamlit as st
 
     st.markdown(CSS, unsafe_allow_html=True)
-    st.title(W.nas_diag_wording("page_title").text)
+    st.title(W.nas_diag_wording("page_title").text, anchor=False)   # 不產生標題錨點連結（頁面不得有任何連結）
     st.markdown(page_html(view), unsafe_allow_html=True)
