@@ -445,6 +445,19 @@ def test_empty_pool_is_distinguishable_from_a_pool_with_zero_matches():
     assert S.page_violations(he) == [] and S.page_violations(hn) == []
 
 
+def test_empty_pool_has_a_visual_only_marker_on_all_three_result_cards_without_new_text():
+    """空選股池 vs 有基金但零符合：以結構屬性＋CSS（虛線框、灰底）區分，不新增任何文字。"""
+    for sid, size in (("empty_pool", "0"), ("no_match", "4")):
+        sc = fake.build(sid)
+        view = L.build_filter_view(sc["pool"], (1, 2, 3), COUNT)
+        for html in (R.exp0_html(view, False), R.exp2_html(view, False), R.exp7_html(view, False)):
+            assert f'data-pool-size="{size}"' in html
+    he, hn = (re.sub(r"<[^>]+>", "", R.exp0_html(L.build_filter_view(fake.build(s)["pool"], (1, 2, 3), COUNT), False)) for s in ("empty_pool", "no_match"))
+    assert he == hn                                              # 可見文字完全相同：區分只靠視覺樣式
+    assert '.uv3-card[data-pool-size="0"]{border-style:dashed' in R.CSS
+    assert 'data-pool-size' not in R.exp0_html(None, True) and 'data-pool-size' not in R.exp2_html(None, True)   # 來源失敗不標池大小
+
+
 def test_zero_conditions_never_shows_a_pool_size_or_counts_even_for_the_empty_pool():
     html, view = _exp_html("empty_pool", ())
     assert "data-pool-size" not in html and 'data-counts-shown="no"' in html and view.trace == ()

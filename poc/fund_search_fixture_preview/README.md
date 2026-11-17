@@ -152,7 +152,9 @@ G-1 poc 直接 import `shared.ui_semantics` 的追認；G-2 W14 句子替換（�
 ### 啟發式與守衛限制（揭露，不改行為與文案）
 
 - **輸入形態判斷是啟發式**：`_CODE_SHAPE = [A-Z0-9-]{3,24}`（`fund_search_logic.py`）只看字元集與長度，`---`、`123` 這類輸入也會被判為 `no_fixture` 並顯示「輸入類型：代碼型字串（原值未改寫）」。該列只表示輸入形態，不表示真的是基金代碼；測試 `test_code_shape_is_a_heuristic_*` 明示此現況。是否收緊屬設計者裁示。
-- **空池與零符合**：使用者肉眼可辨的差別只有 EXP-7 首列的「套用前檔數」（0 vs 4）；`data-pool-size` 是給機器看的屬性，畫面上看不到。
+- **空池與零符合**：文字完全相同（文案取 `exp_counts`），本批改以**純視覺**區分、不新增任何文字：選股池為空（`data-pool-size="0"`）時 EXP-0／EXP-2／EXP-7 三張結果卡為虛線框＋灰底；有基金但零符合維持實線白底。EXP-7 首列「套用前檔數」（0 vs 4）仍在。零條件時沒有軌跡，無從得知池大小，故不標記（測試鎖定）。若設計者認為需要文字區分，**候選文案與待裁**（本批不實作）：例如在 EXP-0 加一行說明「選股池目前沒有基金」之類；須由設計者／客戶定字（PendingWording）。
+- **整檔無法判定的列**：EXP-2 內 `data-row-state="undetermined"` 的卡改為虛線框（純視覺；既有「⬜ 無法判定（資料未備）」字樣不動）。條件勾選區的垂直間距略收緊（`stCheckbox` 負 margin，觸控目標仍 ≥48px，由既有瀏覽器守衛鎖定）。
+- **G-1 現況核對**：`preview_wording` 只提供 `rules.APPROVED_WORDING` 的純文字鍵；本預覽用到的 `undetermined`／`fetch_failed` 是 `rules.ENTRIES`（含符號與色調），preview_wording 取不到，故 poc 仍須直接 import `shared.ui_semantics`；白名單維持不變（未擴大、也無法收緊），G-1 仍待裁。
 - **session_state 寫入守衛是 AST 靜態掃描**：追得到下標／增量／`|=`／方法呼叫與簡單別名，**追不到**解構賦值、海象運算子、函式參數傳遞、`getattr` 等間接寫法。
 - **origin 判斷**以 `urllib.parse.urlsplit` 解析；與瀏覽器 WHATWG 的反斜線等形可能不一致。Playwright 的 `request.url` 已是正規化後的 URL，風險低，但未逐形驗證。
 

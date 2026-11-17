@@ -63,6 +63,10 @@ h1{{font-size:{page} !important;padding:.2rem 0 !important}}
 .fs-cell{{min-width:0;line-height:1.55;overflow-wrap:anywhere}}
 .fs-stats{{display:flex;flex-wrap:wrap;gap:4px 16px}}
 .fs-note-box{{margin:{space} 0;padding:0}}
+/* 純視覺區分（不新增文字）：選股池為空（0 檔）的結果卡＝虛線框＋灰底；整檔無法判定的列＝虛線框（有基金但沒有符合者另用實線，見 data-pool-size） */
+.uv3-card[data-pool-size="0"]{{border-style:dashed;background:{grey['background']}}}
+.fs-fund[data-row-state="undetermined"]{{border-style:dashed}}
+[data-testid="stCheckbox"]{{margin-bottom:-.5rem}}
 /* 原生控制項的觸控目標 ≥48px（輸入框、查詢鈕、條件勾選）；harness 的 selectbox 不在此列 */
 [data-testid="stTextInputRootElement"]{{min-height:48px;box-sizing:border-box}}
 [data-testid="stTextInput"] input{{min-height:48px;box-sizing:border-box}}
@@ -166,6 +170,10 @@ def _failed_block(block: str, title_key: str) -> str:
             f'<div class="uv3-note">{W.pending("exp_fail_impact")}</div></div>')
 
 
+def _pool_attr(view: Optional[L.FilterView]) -> str:
+    return f' data-pool-size="{int(view.trace[0].before)}"' if view is not None and view.trace else ""
+
+
 def exp0_html(view: Optional[L.FilterView], failed: bool) -> str:
     """EXP-0：文案一律取 `exp_counts` 的結論列。來源失敗 → 失敗字樣，不展示 N／M。"""
     if failed:
@@ -180,7 +188,7 @@ def exp0_html(view: Optional[L.FilterView], failed: bool) -> str:
                  f'<div class="uv3-row" data-row="undetermined"><span class="uv3-label">{W.pending("col_undetermined")}</span>'
                  f'<span data-value="undetermined">{int(c.undetermined)}</span></div></div>')
     shown = "yes" if c.counts_shown else "no"
-    pool = f' data-pool-size="{int(view.trace[0].before)}"' if view.trace else ""   # 套用前的池大小：0＝選股池為空，≠ 有基金但零符合
+    pool = _pool_attr(view)   # 套用前的池大小：0＝選股池為空，≠ 有基金但零符合
     return (f'<div class="uv3-card" data-block="exp0" data-state="ok" data-conditions="{len(view.conditions)}" data-counts-shown="{shown}"{pool}'
             + (f' data-matched="{int(c.matched)}" data-undetermined="{int(c.undetermined)}"' if c.counts_shown else "")
             + f'>{_title("exp0_title")}<div class="uv3-row" data-row="conclusion">{escape(c.text)}</div>{stats}</div>')
@@ -202,12 +210,12 @@ def exp2_html(view: Optional[L.FilterView], failed: bool) -> str:
         raise ValueError("view 不得為 None（非失敗情境）")
     if not view.conclusion.counts_shown:
         body = f'<div class="uv3-row" data-row="empty">{escape(exp_counts.TEXT_NO_CONDITION)}</div>'
-        return f'<div class="uv3-card" data-block="exp2" data-state="no-conditions" data-rows="0">{_title("exp2_title")}{body}</div>'
+        return f'<div class="uv3-card" data-block="exp2" data-state="no-conditions" data-rows="0"{_pool_attr(view)}>{_title("exp2_title")}{body}</div>'
     n, m = int(view.conclusion.matched), int(view.conclusion.undetermined)
     exp_counts.verify_exp2_row_count(len(view.rows), n, m)
     if not view.rows:
         body = f'<div class="uv3-row" data-row="empty">{escape(exp_counts.TEXT_NO_MATCH)}</div>'
-        return f'<div class="uv3-card" data-block="exp2" data-state="empty" data-rows="0">{_title("exp2_title")}{body}</div>'
+        return f'<div class="uv3-card" data-block="exp2" data-state="empty" data-rows="0"{_pool_attr(view)}>{_title("exp2_title")}{body}</div>'
     items = []
     for r in view.rows:
         tag = ""
@@ -218,7 +226,7 @@ def exp2_html(view: Optional[L.FilterView], failed: bool) -> str:
             + (safe(r.cell(col)) if r.cell(col) is not None else W.missing_cell()) + "</div>"
             for col, label in _COL_KEYS)
         items.append(f'<div class="fs-fund" data-fund="{escape(r.code)}" data-row-state="{escape(r.state)}">{tag}<div class="fs-cells">{cells}</div></div>')
-    return (f'<div class="uv3-card" data-block="exp2" data-state="rows" data-rows="{len(view.rows)}">{_title("exp2_title")}{"".join(items)}</div>')
+    return (f'<div class="uv3-card" data-block="exp2" data-state="rows" data-rows="{len(view.rows)}"{_pool_attr(view)}>{_title("exp2_title")}{"".join(items)}</div>')
 
 
 def exp7_html(view: Optional[L.FilterView], failed: bool) -> str:
@@ -229,7 +237,7 @@ def exp7_html(view: Optional[L.FilterView], failed: bool) -> str:
         raise ValueError("view 不得為 None（非失敗情境）")
     if not view.conclusion.counts_shown:
         body = f'<div class="uv3-row" data-row="empty">{escape(exp_counts.TEXT_NO_CONDITION)}</div>'
-        return f'<div class="uv3-card" data-block="exp7" data-state="no-conditions" data-rows="0">{_title("exp7_title")}{body}</div>'
+        return f'<div class="uv3-card" data-block="exp7" data-state="no-conditions" data-rows="0"{_pool_attr(view)}>{_title("exp7_title")}{body}</div>'
     exp_counts.verify_exp7_last_row([(t.matched, t.undetermined) for t in view.trace], view.conclusion.matched, view.conclusion.undetermined)
     items = []
     for t in view.trace:
@@ -240,7 +248,7 @@ def exp7_html(view: Optional[L.FilterView], failed: bool) -> str:
             f'<div class="fs-cell" data-col="matched"><span class="uv3-label">{W.pending("col_matched")}</span>{int(t.matched)}</div>'
             f'<div class="fs-cell" data-col="undetermined"><span class="uv3-label">{W.pending("col_undetermined")}</span>{int(t.undetermined)}</div>'
             f'</div></div>')
-    return f'<div class="uv3-card" data-block="exp7" data-state="rows" data-rows="{len(view.trace)}">{_title("exp7_title")}{"".join(items)}</div>'
+    return f'<div class="uv3-card" data-block="exp7" data-state="rows" data-rows="{len(view.trace)}"{_pool_attr(view)}>{_title("exp7_title")}{"".join(items)}</div>'
 
 
 # ───────────────────────────── Streamlit 部分（widgets 與 session_state） ─────────────────────────────
