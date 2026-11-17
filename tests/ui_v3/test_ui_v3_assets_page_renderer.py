@@ -836,12 +836,48 @@ def test_leak_checker_negative_control_turns_red():
     assert leaks(a60_of("partial"), [str(1)]) == ["1"]   # 檢查器本身能抓到可見文字裡的內容
 
 
-def test_renderer_source_never_reads_problem_codes_or_failure_code():
-    def reads(source):
-        return [n.attr for n in ast.walk(ast.parse(source)) if isinstance(n, ast.Attribute) and n.attr in ("problem_codes", "failure_code")]
+_INTERNAL_NAMES = ("problem_codes", "failure_code")
 
-    assert reads(RENDERER_SRC) == []
-    assert reads("x = a60.problem_codes\n") and reads("y = a00.failure_code\n")   # 負控
+
+def internal_code_reads(source):
+    """原始碼中對內部碼欄位的任何讀取或引用：屬性、名稱、字串常數、getattr、asdict／vars／__dict__。"""
+    hits = []
+    for n in ast.walk(ast.parse(source)):
+        if isinstance(n, ast.Attribute) and (n.attr in _INTERNAL_NAMES or n.attr in ("__dict__", "asdict")):
+            hits.append(f".{n.attr}")
+        elif isinstance(n, ast.Name) and (n.id in _INTERNAL_NAMES or n.id in ("asdict", "vars")):
+            hits.append(n.id)
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in _INTERNAL_NAMES:
+            hits.append(repr(n.value))
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "getattr" and len(n.args) > 1 \
+                and isinstance(n.args[1], ast.Constant) and n.args[1].value in _INTERNAL_NAMES:
+            hits.append("getattr")
+    return hits
+
+
+def test_renderer_source_never_reads_problem_codes_or_failure_code():
+    assert internal_code_reads(RENDERER_SRC) == []
+
+
+@pytest.mark.parametrize("snippet", ["x = a60.problem_codes\n", "y = a00.failure_code\n", "z = getattr(a60, 'problem_codes')\n",
+                                     "w = d['failure_code']\n", "v = dataclasses.asdict(a60)\n", "u = vars(a60)\n", "t = a60.__dict__\n"])
+def test_negative_control_internal_code_checker_turns_red(snippet):
+    assert internal_code_reads(snippet)
+
+
+A60_STATE_DOMAIN = {"read_failed", "partial", "complete", "complete_no_rows", "not_selected", "not_read", "undetermined"}
+
+
+def test_a60_state_attribute_domain_is_closed_over_scenarios_and_count_matrix():
+    seen = set()
+    for name in ALL:
+        seen.add(re.search(r'data-a60-state="([^"]*)"', a60_of(name)).group(1))
+    states = (vm.SRC_COMPLETE, vm.SRC_PARTIAL, vm.SRC_NOT_SELECTED, vm.SRC_READ_FAILED, vm.SRC_COMPLETE_NO_ROWS, vm.SRC_UNDETERMINED, vm.SRC_NOT_READ)
+    for state in states:
+        for tabs, rows in _COUNT_COMBOS:
+            html = assets.a60_html(vm.A60Evidence(tabs, rows, (), ()), state)
+            seen.add(re.search(r'data-a60-state="([^"]*)"', html).group(1))
+    assert seen <= A60_STATE_DOMAIN and seen == A60_STATE_DOMAIN   # 值域只能是這七個，且七個都有被走到（不是空綠）
 
 
 # ── D6：新增字樣全是 PendingWording，不進規則表 ──
