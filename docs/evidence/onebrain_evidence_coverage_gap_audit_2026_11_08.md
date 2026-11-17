@@ -224,7 +224,7 @@
 
 | # | 缺口 | 關聯 |
 |---|---|---|
-| 1 | Provider 名稱與 `ccy_source` | R-NAV-4／R-NAV-6 |
+| 1 | Provider 名稱與 `ccy_source` | R-NAV-4／R-NAV-6（2026-11-17 註：R-NAV-4 已核准 `T-NAV4`〔`DEC-2026-11-17-06`〕，**Provider 名稱部分不因 T-NAV4 關閉**——`source_tier` 不是供應者名稱；R-NAV-6 仍 Pending） |
 | 2 | Evidence 根層資料時點／產生時間 | 無對應 D2 列，屬 Digest 層（D2／D3） |
 | 3 | `stale_after` 門檻 | D3(b)；連帶 R-NAV-3 |
 | 4 | 狀態字彙對照表 | D3 |
@@ -237,13 +237,13 @@
 
 | 批 | 列 | 備註 |
 |---|---|---|
-| A | R-NAV-4、R-NAV-6 | Provider 與 `ccy_source` |
+| A | R-NAV-4、R-NAV-6 | Provider 與 `ccy_source`（2026-11-17 註：R-NAV-4 的 `source_tier` 契約文字已核准〔`DEC-2026-11-17-06`〕，Provider 名稱仍未關閉；R-NAV-6 仍待準備） |
 | B | R-PERF-1、R-PERF-3、R-PERF-6 | 與已核准列重複，仍須各自審 |
 | C | R-ID-2、R-ID-3 | 擋在 identity Stop Gate S7（`full_key`／後綴） |
 | D | R-PERF-7、R-PERF-8、R-NAV-3 | |
 | E | R-PERF-2、R-PERF-4、R-PERF-5 | 1Y 含息，綁 BL-0427 |
 
-下一批可先**準備** R-NAV-4、R-NAV-6 的文件候選，**不代表核准**。
+下一批可先**準備** R-NAV-4、R-NAV-6 的文件候選，**不代表核准**。（2026-11-17 註：R-NAV-4 已另經 `DEC-2026-11-17-06` 核准 `T-NAV4`〔僅 `source_tier`〕；本句保留為歷史推進建議，現僅 R-NAV-6 仍待準備。）
 
 ### 5　AI 洞察／反證位置
 

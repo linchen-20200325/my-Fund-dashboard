@@ -1005,18 +1005,18 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 
 9. **基金專案 ChatGPT ↔ Claude Code 手動接力與每小時靜默 GitHub 巡檢（2026-11-07 客戶重申，要點轉述）**：定期巡檢必須**實際查 GitHub** 最新 main SHA、Open／Draft PR head／diff／CI／QA、規格與程式實況、未完成 BACKLOG 和唯一 HANDOFF 接手點，不能靠對話或上次巡檢複製狀態。~~ChatGPT 負責產品設計、至少三方案風險／速度／Token 比較、最小治理文件更新、獨立 GitHub 驗收及符合既有 Auto-Ship 授權的合併；**Claude Code（專案 AI）負責所有 CODE／Python／Streamlit 技術施工**。確有需要 Claude Code 工作時，由 ChatGPT **直接提供一份可複製的完整提示語，附建議 Model／Mode／Minimum Sufficient Effort、明確範圍／Stop Gate／驗收條件**；**客戶手動轉貼**，待 Claude 回報由客戶貼回，ChatGPT 重新獨立查 GitHub 再判斷。不得聲稱自動替客戶派遣 Claude。~~（→ **2026-11-08 分工指標，有意識的政策變更，不是漏刪；決策者：客戶，`DEC-2026-11-07-04`**：Merge PR 與 QA 稽核改由專案 AI（Claude Code）負責——施工、測試、組織並執行非作者獨立 QA、PR 修復、最新 head CI 查核、符合既有 Auto-Ship Gate 後的 merge、post-merge 驗證與 SSOT／HANDOFF 更新；作者不可自任獨立稽核者。ChatGPT 負責產品與架構、UI／UX、金融語意、資料契約、需求規劃、提示語與必要唯讀 GitHub 交叉核查，不再主導 QA 或 merge，除非客戶重新指派。**所有 QA／review／branch protection／change gate／Auto-Ship／frozen／Stop Gate 照舊，這是責任調整，不是降低標準或新增無條件合併授權。** 舊句的理由（外部獨立核查）仍成立，被權衡掉的是 owner。）**通知節流**：在無確切 Claude Code 施工提示語可交付、無客戶必要裁示／真 Stop Gate、無迫切對話交接風險時保持靜默；巡檢中發現可合法進行的文書／治理事項先在既有授權內執行，必要階段成果與未完事項**保存到 GitHub 的既有 DECISIONS／BACKLOG／HANDOFF／PR evidence**，不為等 CI 或單純進度發訊息。這是既有第 3 節靜默、第 6／12 節保存及第 15 節交接的**執行補強**，不擴大無授權施工或合併權限；自動巡檢無法保證一般對話在離線時持續施工，正式進度仍以 GitHub 為準。
 
-## 第 16 節｜固定平行作業與工作閉環（A／B／C 三線）（2026-11-17 客戶新增永久協作規則；要點轉述）
+## 第 16 節｜固定平行作業與工作閉環（A／B／C 三線）（2026-11-17 客戶〔自稱客戶，待核〕新增永久協作規則；要點轉述）
 
 > **出處**：`docs/DECISIONS.md` `DEC-2026-11-17-05`（要點轉述；經對話提示語轉達，repo 無逐字存檔，QA 無法核對，NOT VERIFIED；是否客戶本人〔待核〕）。本節只放要點並指向該 DEC；與既有條文的牴觸點與取嚴結論以該 DEC 為準。**治理文件變更，需獨立稽核。**
 > **位階**：同第 0.1 節，受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄；本節為長期協作要求，**不取代正在執行的工作，不改變任何既有 Stop／Decision Gate**，與第 3.3／5.1 節及 `CLAUDE.md` §-2 並存、牴觸取嚴。未改動 `CLAUDE.md` 一個字，未改動本檔既有條文。
 
 1. 固定採 **A 線資料安全、B 線資料契約、C 線 UI 開發**，三線平行推進。
 2. 每條線獨立施工、獨立 QA、獨立驗收；共用檔案與分支須先做衝突檢查。
-3. 收到 ChatGPT 新提示語時，不得取消或重啟正在進行的工作，採增量整合（Gate 觸發時仍依第 4 節停下）。
+3. 收到 ChatGPT 新提示語時，不得取消或重啟正在進行的工作，採增量整合（執行組註：Gate 觸發時仍依第 4 節停下）。
 4. 每個提出的問題均須建立工作閉環：問題、答覆、授權、施工、驗收、最終結案。
 5. 已回答≠已施工；已施工≠已驗收；已合併≠正式功能完成。
-6. 尚未完成的問題必須持續追蹤（落在既有 `docs/BACKLOG.md`／`docs/HANDOFF.md`，不另立帳本），不得因新任務遺失。
-7. 某一線遇 Decision Gate 時，其他無衝突且已授權的工作照常；仍須遵守明定的全域 Stop Gate（第 4 節）。
+6. 尚未完成的問題必須持續追蹤（執行組註：落在既有 `docs/BACKLOG.md`／`docs/HANDOFF.md`，不另立帳本），不得因新任務遺失。
+7. 某一線遇 Decision Gate 時，其他無衝突且已授權的工作照常；仍須遵守明定的全域 Stop Gate（第 4 節）。**Change Gate Hard-Stop（第 5.1 節）與第 4 節 Stop Gate 都使全線停下，「其他線照常」不適用於這兩者。**
 8. 所有 UI／UX 設計由 ChatGPT 負責；正式資料契約、資安與上位規則變更仍由客戶核准。**與 `CLAUDE.md` §-1.5.4（UI 線框須客戶拍板）並存取嚴，不自行廢除。**
 9. GitHub 為唯一事實來源；每批完成後核對 QA、exact-head CI、合併及 main CI，交接未完成事項。
-10. 維持每批最多三項工作及禁止碎碎念（第 3.3 節）。
+10. 維持每批最多三項工作及禁止碎碎念（第 3.1、13.4 第 5 點〔每批最多 3 項〕及第 3.3 節〔禁止碎碎念〕）。
