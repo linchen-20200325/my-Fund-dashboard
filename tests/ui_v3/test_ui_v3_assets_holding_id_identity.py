@@ -91,13 +91,17 @@ def test_ui_v3_accepts_and_rejects_exactly_like_ui_v2(name, holdings, expected):
     assert v3 is v2, f"{name}: ui_v2={v2} ui_v3={v3}（身份鍵語意分歧）"
 
 
-def test_both_sides_raise_the_value_error_family_and_the_differential_has_both_outcomes():
-    assert v2().HoldingIdError.__mro__[1] is ValueError
+def test_ui_v3_raises_value_error_and_the_cases_have_both_outcomes():
+    """不依賴 ui_v2（無 ui_v2 時不被 skip）。"""
     assert {c[2] for c in CASES} == {True, False}   # 正控：母體同時含接受與拒絕，不是單向空綠
-    with pytest.raises(v2().HoldingIdError):
-        v2()._check_holding_ids([_h(1, holding_id="")])
     with pytest.raises(ValueError):
         build([_h(1, holding_id="")])
+
+
+def test_both_sides_raise_the_value_error_family():
+    assert v2().HoldingIdError.__mro__[1] is ValueError
+    with pytest.raises(v2().HoldingIdError):
+        v2()._check_holding_ids([_h(1, holding_id="")])
 
 
 def test_differential_has_teeth_mutating_the_real_validator_flips_expected_rejections(monkeypatch):
@@ -174,5 +178,11 @@ def test_known_scope_difference_early_return_problem_codes_do_not_inspect_rows()
     result["evidence"]["holdings"] = [_h(1, holding_id="")]
     model = adapter.build_assets_page(result)   # 不丟例外
     assert model.a50.state == vm.A50_STATUS_ONLY and model.a50.rows == ()
+
+
+def test_known_scope_difference_ui_v2_still_rejects_the_same_rows():
+    """ui_v2 對照：同一份壞身份鍵資料，ui_v2 一律先驗而拒絕（需 ui_v2）。"""
+    result = S.no_active_result()
+    result["evidence"]["holdings"] = [_h(1, holding_id="")]
     with pytest.raises(ValueError):
         v2()._check_holding_ids(result["evidence"]["holdings"])
