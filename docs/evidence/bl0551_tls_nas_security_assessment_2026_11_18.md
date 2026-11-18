@@ -1,6 +1,6 @@
 # BL-0551 TLS 驗證與 NAS 中繼站：唯讀離線安全評估（2026-11-18，第二版）
 
-> **單組作者，尚待兩組獨立稽核（資安級）。** 第一版已經兩組獨立稽核，結論均為「需修後再審」，且**無一建議停用 TLS 驗證**；本版（第二版）為修訂，**修訂後尚未再審**。本文所有結論未經非作者複驗；全稱句（「只有／沒有／全部」）皆為單組 `git grep` 與讀碼結論，**不是**窮舉。
+> **單組作者，尚待兩組獨立稽核（資安級）。** 第一版的稽核意見與結論（含「需修後再審」「無一建議停用 TLS 驗證」）為**經對話轉達的轉述，本文作者未見稽核報告原文，NOT VERIFIED**；本文只據轉達的逐項意見重新核對 repo 後修訂。本版（含其後的最終修訂）為單組修訂，**其再審結論亦為轉述，未見原文**。本文所有結論未經非作者複驗；全稱句（「只有／沒有／全部」）皆為單組 `git grep` 與讀碼結論，**不是**窮舉。
 > **不構成授權、不是客戶裁示、不改任何程式、設定、secrets、NAS 或連線策略。** 授權來源為客戶限縮授權（經對話提示語轉達，待核）：唯讀、離線；本文作者沒有發出任何網路請求，也沒有讀取任何真實 secrets。
 > 基準：main `9e714861`（本分支 `batch-a`）。符號以「檔案::符號」定位，不寫行號。量測日 2026-11-18。
 > 證據標記：**FACT**＝讀碼或讀文件可複驗（附出處）；**INFERENCE**＝由事實推得、可被推翻；**RECOMMENDATION**＝建議；**NOT VERIFIED**＝本沙箱無法驗證（多為部署事實）。
@@ -14,7 +14,7 @@
 **RECOMMENDATION**
 
 1. **正式接線不採「停用 TLS 驗證」。** 現況的停用是歷史上為了「Squid CONNECT 相容」留下的設定，這個前提本身**沒有被驗證過**，repo 內證據**雙向、尚不能區分**（E1 與文件化設定傾向「可驗證」，E3 記載過驗證失敗，見第 2.2 節）。把一個未驗證的相容性假設升格成正式資料路徑的預設，等於讓 NAV、匯率、總經序列的真實性（CLAUDE.md §1）建立在「路徑上沒有人改資料」的信任上。
-2. **先收證據、後談改碼。** 能否保留驗證，取決於一個部署事實：**NAS 上的 Squid 是單純的 CONNECT 隧道，還是會 ssl_bump／改寫的 TLS 終結代理**。這個事實本沙箱驗不到，必須由 NAS 持有人用第 8 節的唯讀方式取得（建議先做 D1～D5，不需改任何東西；D12 是零新增請求的最便宜判別）。
+2. **先收證據、後談改碼。** 能否保留驗證，取決於一個部署事實：**NAS 上的 Squid 是單純的 CONNECT 隧道，還是會 ssl_bump／改寫的 TLS 終結代理**。這個事實本沙箱驗不到，必須由 NAS 持有人用第 8 節的唯讀方式取得（建議先做 D1～D5，不需改任何東西；D12 是零新增請求的候選判別，但只有在確認全域 opener 已安裝且該來源確實經 proxy 時才算證據，否則最多是弱證據，見 D12）。
 3. **依證據分支，最小可逆的第一步是「以主機為單位、預設不變」的驗證白名單**（第 9 節 G2），優先順序：先開**帶有金鑰在網址參數的主機**（FRED、FinMind），再開 Yahoo，最後才碰被指稱不相容的 MoneyDJ。**G2 只是過渡，它沒有終態**：白名單之外仍是「不驗」。目標終態是「**proxy 模式預設驗證、例外清單逐項具名並有到期日**」，翻轉預設另設 **G3（Decision Gate）**。白名單必須是**程式常數（經 PR 審查）**，**不得**由 `st.secrets` 或環境變數即時切換。
 4. **與驗證結論無關、但因與「不改 proxy／防火牆／連線策略」相鄰，須另案向客戶請示的兩件事**（本文不授權、也不預設可直接動工）：(a) 代理腿是明文 HTTP＋Basic 帳密（文件化設定），路徑上的觀察者可取得帳密；(b) 舊版側欄與資料守衛頁的遮罩寫法對含 `@` 的密碼會漏尾段、且側欄直接顯示 NAS 的 host:port。
 
@@ -108,7 +108,7 @@
 | UI 顯示 NAS 位址 | 舊側欄在有 proxy 設定時顯示「🔒 {`@` 之後的字串}」＝NAS 的 host:port；資料守衛頁與設定診斷顯示「密碼遮蔽後的 proxy URL」 | `ui/sidebar.py`、`ui/tab5_data_guard.py`、`ui/helpers/settings_diag/fetch_diag_section.py` |
 | 新 UI 的設計意圖 | `ui_v3` 的 NAS 診斷頁設計與測試明載「不顯示 proxy 主機、帳密、完整網址、標頭、例外文字」；且禁用「關閉驗證」「verify=False」字樣 | `ui_v3/pages/nas_diag.py`、`tests/ui_v3/test_ui_v3_nas_diag_viewmodel.py` |
 | CI 使用代理帳密 | 7 個 workflow 以 `env: PROXY_URL: ${{ secrets.PROXY_URL }}` 傳入（`dividend_calendar_notify`、`fx_obs_date_probe`、`moneydj_nav_equivalence_probe`、`twse_eps_probe`、`update_macro_history`、`weekly_nav_backfill`、`weekly_switch_notify`）；另**至少 2 個**只在註解提及（`moneydj_basic_probe.yml`、`yahoo_indices_sp_probe.yml`）。量測：2026-11-18，基準 `9e714861`，指令 `git grep -nE "^\s*PROXY_URL:" -- .github`。`twse_eps_probe.yml` 檔頭已自述「能推按鈕分支、能改 workflow 的人可讀取該 secret」的風險 | `.github/workflows/*.yml` |
-| 注入但疑似未使用 | `infra.proxy` 只讀 `st.secrets`，**不讀環境變數**（`probe_*` 腳本的檔頭也這麼說）。`update_macro_history`、`dividend_calendar_notify`、`weekly_switch_notify` 三個 workflow 注入 `PROXY_URL`，但單組搜尋在 `scripts/` 中，與它們對應的 `update_macro_history.py`、`weekly_switch_notify.py` 沒有程式碼讀取 `PROXY_URL` 環境變數（只有註解）；`dividend_calendar_notify` 對應腳本未逐一追到。若屬實，這是 **least-privilege 觀察**：不需要的 job 不應持有 NAS 代理帳密。單組搜尋，**未窮舉**，且不排除經間接 import 讀取 | `.github/workflows/*.yml`、`scripts/*.py` |
+| 注入但疑似未使用 | `infra.proxy` 只讀 `st.secrets`，**不讀環境變數**（`probe_*` 腳本的檔頭也這麼說）。`update_macro_history`、`dividend_calendar_notify`、`weekly_switch_notify` 三個 workflow 注入 `PROXY_URL`，但單組搜尋在 `scripts/` 中，與它們對應的 `update_macro_history.py`、`weekly_switch_notify.py` 沒有程式碼讀取 `PROXY_URL` 環境變數（只有註解）；`dividend_calendar_notify` 對應腳本未逐一追到。`weekly_nav_backfill.yml` 同樣注入，其腳本 `weekly_nav_backfill.py` 在單組搜尋中也沒有讀取 `PROXY_URL`（只經 `infra.config.get_secret` 讀 Google 相關設定），取數經 `services/` 與 `infra.proxy`，後者只讀 `st.secrets`；間接 import 路徑未追到底，**疑似未使用**。若屬實，這是 **least-privilege 觀察**：不需要的 job 不應持有 NAS 代理帳密。單組搜尋，**未窮舉**，且不排除經間接 import 讀取 | `.github/workflows/*.yml`、`scripts/*.py` |
 | 文件化 NAS 設定 | `http_port 3128`＋`basic_ncsa_auth`＋`http_access allow CONNECT authenticated`＋`http_access allow authenticated`＋結尾 `http_access deny all`（所以未驗證者會被拒）；**缺的是**目的地與埠的限制（沒有 `Safe_ports`／`SSL_ports`，沒有禁止 localhost、私有網段的規則）；要求「路由器開通 Port 3128 TCP 對外轉發」 | `NAS_PROXY_GUIDE.md`、`NAS_PROXY_FOR_AI.md` |
 | 設定範本 | `secrets.toml.example` 為 `[proxy]` 區段（`username`／`password`／`endpoint`）；`.streamlit/secrets.toml` 在 `.gitignore`；repo 內沒有真實值（僅範本佔位） | `secrets.toml.example`、`.gitignore` |
 | 持久化／快取候選 | 記憶體快取 `@_ttl_cache`；repo 內 `cache/nav/*.json`（`sources::_src_cache_files` 讀取，`scripts/fetch_nav_cache.py` 寫入，且該腳本在有 proxy 時 `verify=False`；`moneydj_basic_probe.yml` 註解稱目前沒有 workflow 執行它）；另有 `data_cache/` parquet 與雲端快照的寫入路徑，**本組未逐一追蹤** | 見 R10 |
@@ -132,8 +132,8 @@
 | R7 | 寫死的不驗證 | 匯率備援（open.er-api、Frankfurter）與測速按鈕在**直連模式也不驗證**，與 proxy 是否存在無關（側欄按鈕只在有 proxy 時發請求）；匯率首選為經 `fetch_url` 的 Yahoo，備援被中間人改寫時才影響換算 | `fx_and_main.py`、`ui/tab5_data_guard.py` | — | **中** |
 | R8 | 可觀測性 | 全域關閉 `InsecureRequestWarning`；日誌沒有「這次請求有無驗證」欄位；診斷頁（舊）只測連通性，不區分 TLS 失敗；新 UI 診斷頁設計有 `tls` 分類但目前只是 FAKE 預覽 | 第 2.1 節；`ui_v3/viewmodels/nas_diag.py` | — | **低** |
 | R9 | 供應鏈／TLS 版本漂移 | `requests` 只有下限、`urllib3`／`certifi` 未固定、Python 由平台決定；TLS 行為（最低協定版本、驗證嚴格度、信任錨、例外歸類）可能隨一次重新部署改變，repo 內沒有任何 TLS 版本或密碼套件設定 | `requirements.txt` | 實際解析出的版本 | **低至中** |
-| R10 | 快取／持久化毒化 | 未驗證通道取得的資料進入 `@_ttl_cache`、`cache/nav/*.json`（由 `scripts/fetch_nav_cache.py` 在 proxy 模式不驗證下寫入）、可能還有 `data_cache/` 與雲端快照；一旦被中間人改過的值被寫入，**之後即使通道恢復正常，錯誤值仍存活到 TTL 或被覆寫**，且無來源完整性標記可事後分辨 | 第 4 節「持久化／快取候選」；寫入路徑未逐一追蹤 | 實際有哪些快取在 production 被使用與保存多久 | **中至高**（取決於 R1 條件與寫入路徑；本組未追完） |
-| R11 | 主動冒充（DDNS／DNS 劫持） | 代理位址是 DDNS 名稱；若該名稱或其 DNS 解析被劫持，app 會在**第一個 CONNECT 請求**就送出 `Proxy-Authorization`（INFERENCE，見 2.1），冒充者同時取得帳密並可替換未驗證的 TLS 內容。proxy 模式 `verify=False` 使「冒充 NAS 之後再冒充原站」沒有第二道檢查 | `get_proxy_config` 以 DDNS 名稱組 URL；`verify=False` | DDNS 供應商帳號保護、DNS 劫持可能性 | **中至高**（可能性未知） |
+| R10 | 快取／持久化毒化 | 未驗證通道取得的資料進入 `@_ttl_cache`、`cache/nav/*.json`（由 `scripts/fetch_nav_cache.py` 在 proxy 模式不驗證下寫入）、可能還有 `data_cache/` 與雲端快照；一旦被中間人改過的值被寫入，**之後即使通道恢復正常，錯誤值仍存活到 TTL 或被覆寫**，且無來源完整性標記可事後分辨 | 第 4 節「持久化／快取候選」；寫入路徑未逐一追蹤 | 實際有哪些快取在 production 被使用與保存多久 | **中（條件式；取決於 R1 條件與未追蹤的 `data_cache/`／雲端快照路徑，暫定）** |
+| R11 | 主動冒充（DDNS／DNS 劫持） | 代理位址是 DDNS 名稱；若該名稱或其 DNS 解析被劫持，app 會在**第一個 CONNECT 請求**就送出 `Proxy-Authorization`（INFERENCE，見 2.1），冒充者同時取得帳密並可替換未驗證的 TLS 內容。proxy 模式 `verify=False` 使「冒充 NAS 之後再冒充原站」沒有第二道檢查 | 文件化設定使用 DDNS 名稱（`NAS_PROXY_GUIDE.md`）；**實際部署是否使用 DDNS：NOT VERIFIED**。`get_proxy_config` 只是把 secrets 內的 endpoint 組進 URL；`verify=False` | DDNS 供應商帳號保護、DNS 劫持可能性 | **中至高**（可能性未知） |
 | R12 | 暴力猜測／缺速率限制 | 3128 若對公網開放，Basic 驗證的帳密可被線上猜測；文件化設定沒有任何失敗次數限制、來源 IP 限制或 `external_acl` 類機制 | 文件化設定 | 路由器／NAS 是否有外層限制；`access.log` 是否看得到大量 407 | **中**（取決於部署） |
 | R13 | 重導向逐跳 | `requests` 跟隨重導向時沿用同一個 `verify`；若未來驗證設定依起始主機決定（白名單），重導向到清單外主機時的處理需明確（INFERENCE，見 2.1）；目前 `declared_profile` 另有最終網址檢查（`_final_url_problem`）但那是資料身分檢查，不是 TLS 檢查 | `infra/proxy.py::fetch_url`、`declared_profile::_final_url_problem` | — | **低至中** |
 
@@ -163,7 +163,7 @@
 | 若 NAS … | 優先方案 | 說明 |
 |---|---|---|
 | 是 plain CONNECT（分支 P） | A，並行 D 的小緩解；E 視 D7 | 先用 A 保護帶金鑰主機；D 的目的地白名單處理濫用面 |
-| **啟用 `ssl_bump`，使用內部 CA**（分支 T） | B（次選 C） | 必須明示「驗證的是 NAS，不是原站」，並要求 NAS 對上游完整驗證（D15）。**`ssl_bump` 需為原站主機名偽造憑證，不可能由公開 CA 簽發**，所以 bump 必然是內部 CA |
+| **啟用 `ssl_bump`，使用內部 CA**（分支 T） | B（次選 C） | 必須明示「驗證的是 NAS，不是原站」，並要求 NAS 對上游完整驗證（D15）。（INFERENCE）`ssl_bump` 需對原站主機名動態簽發中繼憑證，而公開 CA 依規範不會為此用途簽發中繼 CA 憑證，所以 bump 實務上會是內部 CA |
 | **NAS 是反向代理（非 bump），使用公開 CA 簽發的憑證**（分支 T 的另一形態） | D＋F 的方向；對 NAS 憑證用方案 A 的機制即可驗證 | NAS 憑證可驗證，但原站驗證由 NAS 負責，信任模型要由客戶明示接受；同樣要求 NAS 對上游完整驗證（D15） |
 | 證據不足（分支 U） | 不施工 | 先完成第 8 節 |
 
@@ -207,7 +207,7 @@
 | D9 | NAS 能否取得公開 CA 簽發的受信憑證 | DSM 的憑證管理頁（Let's Encrypt／自有網域）是否已有涵蓋代理主機名的憑證與自動續期狀態；是否可用 DNS-01 萬用字元（避免 CT 日誌暴露主機名） | 方案 D、F 的前提 |
 | D10 | NAS 管理介面與系統更新 | 確認 DSM 管理介面未對公網開放；DSM 與 Squid 套件的更新狀態 | BL-0550 明示不得要求對外開放管理介面 |
 | D11 | 代理帳密的使用範圍與輪替 | 列出該帳密被用在哪些地方（Streamlit secrets、各 workflow、個人機器），上次輪替日，密碼是否含 `@` 等特殊字元（只回報有／無） | 回答 R3；輪替是 D 方案的前置動作 |
-| D12 | **TDCC 與其他 `urlopen` 來源是否曾在 NAS 之後成功取數** | **零新增請求**：檢視 production（Streamlit Cloud）既有 runtime log，與快取／取數結果中的來源標記（`source` 欄），看 TDCC 是否有成功紀錄；只回報「曾成功／從未成功／無法判斷」與時間範圍，不貼 log 原文 | **最便宜的判別**：若 TDCC（標準庫預設驗證）經 NAS 能成功，則 Squid 隧道與驗證相容（支持分支 P）；若一律失敗，需區分是驗證失敗還是來源問題 |
+| D12 | **TDCC 與其他 `urlopen` 來源是否曾在 NAS 之後成功取數** | **零新增請求**：檢視 production（Streamlit Cloud）既有 runtime log，與快取／取數結果中的來源標記（`source` 欄），看 TDCC 是否有成功紀錄；只回報「曾成功／從未成功／無法判斷」與時間範圍，不貼 log 原文 | **成本最低的候選判別，但證據力有條件**：只有在**確認全域 opener 已安裝且該來源確實經 proxy** 時，TDCC（標準庫預設驗證）成功才算支持分支 P 的證據；否則最多是弱證據。原因：全域 opener 在 secrets 較晚可用時不補裝（負向快取，見 2.1），而快取／取數結果的 `source` 欄只記來源名稱、**不記錄實際走了哪條路徑**，所以「成功」可能是直連成功。若一律失敗，需區分是驗證失敗還是來源問題 |
 | D13 | Streamlit app 是公開還是私有、log 的檢視範圍 | 平台設定頁：app 可見性（公開／限特定帳號）、可看 log 的人員清單（只回報數量與是否包含非預期對象） | 回答 R3(a)、R5 |
 | D14 | GitHub secrets 作用域與可被分支觸發讀取的 workflow | 儲存庫設定：`PROXY_URL` 是 repository secret 還是 environment secret；哪些 workflow 可被推送分支或手動按鈕觸發並讀到該 secret（只回報 workflow 檔名清單與觸發型態） | 回答 R3(c)；least-privilege 觀察（第 4 節） |
 | D15 | NAS 側對上游的驗證設定 | 若有 `ssl_bump`：Squid 的 `sslproxy_flags`、`sslproxy_cert_error`、`tls_outgoing_options` 是否設為驗證上游；若 NAS 另有反向代理：上游驗證設定（如 nginx 的 `proxy_ssl_verify`，預設為關）。**只回報「驗證／不驗證／未設定」** | 方案 B、F 的前提：否則「不驗」只是被搬到 NAS |
@@ -218,7 +218,7 @@
 
 **RECOMMENDATION**
 
-**G0　證據關卡（不改碼）**：完成 D1～D5（必要），並視需要 D6、D8、D11～D15。D12 成本最低，建議最先做。輸出一頁結論：分支 P／T／U，與 R2／R4／R11／R12 是否成立。分支 U 則停在這裡。
+**G0　證據關卡（不改碼）**：完成 D1～D5（必要），並視需要 D6、D8、D11～D15。D12 成本最低，建議最先做（但證據力有條件，見 D12）。**D4 屬持有人自行操作**（會經 NAS 對外部主機發出連線並使用代理帳密），須提醒客戶知悉並同意後再做，本文不代為授權。輸出一頁結論：分支 P／T／U，與 R2／R4／R11／R12 是否成立。分支 U 則停在這裡。
 
 **G1　客戶裁示（Decision Gate）**：依 CLAUDE.md §-1.5 檔頭的 v1.0 Stop／Decision Gate 清單（總管讀法，可被客戶推翻），本評估的各方案對應如下：
 - 方案 E、F：**改變 production 資料來源路徑** → 屬「新／替換 production data source」類，須客戶裁示。
@@ -246,12 +246,14 @@
   6. **預設不變**：清單為空時，既有契約測試（`test_ssl_verify_false_when_proxy_enabled`，以及 `test_proxy_infra.py` 內 `fetch_url` 的 429／407／`ProxyError`／逾時／403 行為測試）不變。**但這些既有測試並不斷言 `fetch_url` 傳出的 `verify` 值（見 2.1），所以「清單為空時行為與現況相同」目前沒有現成測試保證，證據不足**，需新增斷言傳出 `verify` 值的測試。
   7. **日誌**：驗證失敗的訊息不含代理帳密、金鑰、完整網址查詢字串（沿用 `_exc_log` 並新增斷言）。
   8. **可觀測**：至少新增一行不含祕密的日誌，標示「此主機本次請求驗證開／關」，使 R8 的盲點縮小。
-  9. **不退化**：全套既有測試與 CI 綠；本單元不改任何資料語意、公式、門檻。負控使用測試時產生的隨機識別值，**不寫進文件或程式碼的固定字串**（CLAUDE.md §-2.A 第 8 款）。
+  9. **重導向測試（走 proxy 分支）**：清單內主機重導向到清單外主機、以及清單外主機重導向到清單內主機，兩個方向各一個測試，斷言每一跳實際使用的 `verify` 值符合預期，或明確記錄並測試「沿用起始主機設定」的行為（INFERENCE，見 2.1）。
+  10. **守衛斷言**：白名單常數的定義與讀取路徑**不讀 `st.secrets`、不讀環境變數**（以 AST 或匯入檢查守衛，不以字面 grep）。
+  11. **不退化**：全套既有測試與 CI 綠；本單元不改任何資料語意、公式、門檻。負控使用測試時產生的隨機識別值，**不寫進文件或程式碼的固定字串**（CLAUDE.md §-2.A 第 8 款）。
 - **回滾**：以 revert 該 PR（或把常數清單退回上一版）為準，無資料遷移、無快取格式變更。**不以「執行期移除某主機」作為常規處置**（見營運規則）。
 
 **G3　翻轉預設（Decision Gate；終態）**
 
-- **目標終態**：proxy 模式**預設驗證**；不驗證只存在於**例外清單**，且每個例外都**具名**（主機）、**附理由與證據編號**、**有到期日**，到期未續期即自動失效（回到驗證）。
+- **目標終態**：proxy 模式**預設驗證**；不驗證只存在於**例外清單**，且每個例外都**具名**（主機）、**附理由與證據編號**、**有到期日**，到期未續期即自動失效（回到驗證）。這些例外是**現況已存在、待處置的未驗證路徑**，**不是新增許可**；每個例外須有第 8 節的 D 證據顯示原站或 NAS 確實發生相容性失敗，並由**客戶逐項裁示**。**BL-0551 不得以 G2 結案**（G2 之後白名單之外仍是不驗）。
 - **前提**：G2 取得的相容性證據；14 處 `_ssl_verify()`、`fundclear_offshore::_post_json`、`fx_and_main` 的寫死 `verify=False` 已有處置計畫；例外清單的審查流程已定；客戶明示同意，並由客戶決定例外到期日的長度。
 - **驗收條件**：延用 G2 的全部負控，並新增：例外清單之外的任何主機一律驗證；例外到期後行為轉為驗證的測試；掃描整個 repo 不得再出現未列入例外清單的 `verify=False`（以 AST 守衛為宜，字面 grep 在別名與包裝下會漏，見第 1 節）。
 - **回滾**：revert 該 PR 回到 G2 狀態。
