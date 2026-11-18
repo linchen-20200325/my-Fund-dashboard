@@ -482,7 +482,7 @@ def test_empty_pool_has_a_visual_marker_and_a_symbol_text_marker_and_nothing_els
 
 def test_pool_empty_marker_is_pending_symbol_plus_text_and_never_hints_at_failure_or_missing_source():
     item = W.FUND_SEARCH_PENDING["pool_empty_marker"]
-    assert item.status == "pending" and item.source == W.SOURCE_DEC03 and "待定字" in item.source and "DEC-2026-11-17-03" in item.source
+    assert item.status == "pending" and item.source == W.SOURCE_DEC03 and "執行組暫擬" in item.source and "未指定字句" in item.source and "待 ChatGPT／客戶確認定字" in item.source and "DEC-2026-11-17-03" in item.source
     assert item.text[0] == "○" and len(item.text) > 2                                      # 符號＋短語；不是只有符號
     assert not any(w in item.text for w in ("失敗", "缺", "來源", "不存在", "查無", "無法判定", "資料未備"))   # 空池≠失敗≠來源缺失≠無法判定
     assert not any(c in item.text for c in "◆◇⬜⛔◷")                                       # 不借用規則表狀態符號

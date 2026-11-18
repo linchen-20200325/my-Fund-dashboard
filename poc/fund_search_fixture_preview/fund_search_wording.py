@@ -20,8 +20,9 @@ from shared.ui_semantics import rules
 from ui_v3.viewmodels.preview_wording import PendingWording
 
 SOURCE = "ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行"
-# DEC-2026-11-17-03 視覺對比要求（空選股池需非顏色輔助）新增的字樣專用出處；仍是 PendingWording，未進規則表
-SOURCE_DEC03 = "ChatGPT UI 設計方向／DEC-2026-11-17-03；暫行，待定字"
+# DEC-2026-11-17-03 視覺對比要求（空選股池需非顏色輔助）新增的字樣專用出處；仍是 PendingWording，未進規則表。
+# 誠實表述：字句是執行組暫擬，DEC-03 只授權『以符號或文字輔助』，並未指定字句，也不是 ChatGPT 設計給的句子。
+SOURCE_DEC03 = "執行組暫擬；DEC-2026-11-17-03 授權以符號或文字輔助標示空池，但未指定字句；待 ChatGPT／客戶確認定字"
 
 
 def _w(key: str, text: str) -> PendingWording:

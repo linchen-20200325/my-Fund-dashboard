@@ -37,6 +37,11 @@ def _card_texts(page):
     return page.evaluate("() => Object.fromEntries([...document.querySelectorAll('[data-block=\"exp0\"], [data-block=\"exp2\"], [data-block=\"exp7\"]')].map(e => [e.dataset.block, e.innerText]))")
 
 
+def marker_violations(cards):
+    """空池三張卡（exp0／exp2／exp7）各自必須含 `pool_empty_marker`；回傳缺標記（或缺整張卡）的區塊。測試與變異驗證共用這一個判定。"""
+    return [block for block in ("exp0", "exp2", "exp7") if MARKER not in cards.get(block, "")]
+
+
 def _undet_row_texts(page):
     return page.evaluate("() => [...document.querySelectorAll('.fs-fund[data-row-state=\"undetermined\"]')].map(e => e.innerText)")
 
@@ -93,6 +98,13 @@ def test_checker_flags_a_border_below_3_to_1_and_text_below_4_5_to_1_and_missing
     assert lib.text_violations({"texts": [dict(t["texts"][0], fg=[0, 0, 0], opacity=0.6)]}, "t")
 
 
+def test_marker_checker_flags_missing_marker_missing_card_and_passes_when_all_present():
+    ok = {b: f"x {MARKER} y" for b in ("exp0", "exp2", "exp7")}
+    assert marker_violations(ok) == []
+    assert marker_violations(dict(ok, exp2="x")) == ["exp2"]
+    assert marker_violations({"exp0": ok["exp0"]}) == ["exp2", "exp7"]                       # 少一張卡也報紅，不空轉
+
+
 # ───────────────────────── 空選股池 ─────────────────────────
 
 @pytest.mark.parametrize("width", WIDTHS)
@@ -112,13 +124,15 @@ def test_empty_pool_text_has_at_least_4_5_to_1_against_its_background(measured, 
 @pytest.mark.parametrize("width", WIDTHS)
 def test_empty_pool_state_is_also_carried_by_a_symbol_plus_text_marker_on_all_three_cards(measured, width):
     cards = measured[(width, "empty_pool")]["cards"]
-    for block in ("exp0", "exp2", "exp7"):
-        assert MARKER in cards[block], (block, cards[block])
+    assert marker_violations(cards) == [], cards
     assert "○" in MARKER and "失敗" not in MARKER and "缺" not in MARKER and "來源" not in MARKER   # 空池≠取數失敗≠來源缺失
     # 有基金但零符合：實線、不帶空池標記（兩種『0 符合』不再只靠灰底／虛線分辨）
     none = measured[(width, "no_match")]
+    assert set(none["cards"]) == {"exp0", "exp2", "exp7"}                                   # 三張卡都有找到（避免空迭代空轉通過）
     assert all(MARKER not in none["cards"][b] for b in none["cards"])
-    assert all(r["all_want_style"] is False for card in EMPTY_CARDS for r in lib.border_rows(none["c"], card, want_style="dashed"))
+    rows = [r for card in EMPTY_CARDS for r in lib.border_rows(none["c"], card, want_style="dashed")]
+    assert len(rows) == len(EMPTY_CARDS), rows                                              # 每張卡恰一個元素，非空
+    assert all(r["all_want_style"] is False for r in rows)
 
 
 @pytest.mark.parametrize("width", WIDTHS)
@@ -159,6 +173,11 @@ def test_exp7_cells_wrap_on_a_phone_and_are_not_forced_into_four_columns(measure
         row = cells[i:i + 4]
         assert len({x["top"] for x in row}) >= 2, row                 # 390：四格不在同一橫列（已換行）
         assert all(x["right"] <= c["vw"] + 0.5 for x in row)
+    for width in (768, 1280):                                         # 768／1280：每條件的四格同一橫列（top 相同），且至少有一列可驗
+        cells = measured[(width, "trace")]["cells"]
+        assert cells and len(cells) % 4 == 0, width
+        for i in range(0, len(cells), 4):
+            assert len({x["top"] for x in cells[i:i + 4]}) == 1, (width, cells[i:i + 4])
     for width in WIDTHS:                                              # 任何寬度都不得溢出視窗
         assert all(x["right"] <= measured[(width, "trace")]["vw"] + 0.5 for x in measured[(width, "trace")]["cells"])
 
@@ -199,8 +218,8 @@ def test_mutation_removing_the_marker_turns_the_marker_check_red(server_and_brow
     try:
         _scenario(o.page, "empty_pool")
         _set_conditions(o.page, {1, 2, 3})
-        assert all(MARKER in t for t in _card_texts(o.page).values())
+        assert marker_violations(_card_texts(o.page)) == []
         o.page.evaluate("() => document.querySelectorAll('[data-marker=\"pool-empty\"]').forEach(e => e.remove())")
-        assert not all(MARKER in t for t in _card_texts(o.page).values())
+        assert marker_violations(_card_texts(o.page)) == ["exp0", "exp2", "exp7"]          # 真的呼叫共用判定：三張卡都轉紅
     finally:
         o.close()

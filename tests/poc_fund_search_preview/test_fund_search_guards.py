@@ -210,7 +210,7 @@ def test_every_new_wording_is_a_pending_wording_with_the_required_source_and_nev
     for key, item in W.FUND_SEARCH_PENDING.items():
         assert isinstance(item, PendingWording) and item.status == "pending" and item.key == key
         if key == "pool_empty_marker":      # DEC-2026-11-17-03 新增字樣：出處固定為 SOURCE_DEC03（精確相等，不是前綴）
-            assert item.source == W.SOURCE_DEC03 == "ChatGPT UI 設計方向／DEC-2026-11-17-03；暫行，待定字"
+            assert item.source == W.SOURCE_DEC03 == "執行組暫擬；DEC-2026-11-17-03 授權以符號或文字輔助標示空池，但未指定字句；待 ChatGPT／客戶確認定字"
         else:
             assert item.source.startswith("ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行")
         assert key not in rules.APPROVED_WORDING and key not in rules.ENTRIES
