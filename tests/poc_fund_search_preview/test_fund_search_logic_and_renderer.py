@@ -417,7 +417,11 @@ _TYPE_LABEL, _TYPE_VALUE = "輸入類型", "代碼型字串（原值未改寫）
 
 @pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-LOW1", "FAKE-ERR1", "ABC123", "  fake-ok01  ", "", "???"])
 def test_input_type_and_identity_rows_are_gone_and_the_input_code_is_kept_verbatim(raw):
-    """DEC-2026-11-18-01：『輸入類型』『基金身份』不在五欄內，已移除；輸入代碼仍顯示原值（不改寫）。"""
+    """DEC-2026-11-18-01：『輸入類型』『基金身份』不在五欄內，已移除；輸入代碼仍顯示原值（不改寫）。
+    舊版同位置的『輸入類型列只在代碼型輸入出現、空白／不像代碼／<script> 輸入不出現』案例已由下列測試涵蓋，故不另留：
+    `<script>` 與各種危險輸入的 escape ＝ `test_user_input_is_escaped_in_the_result_card`（NASTY_INPUTS）；
+    空白輸入的缺列／缺值字樣 ＝ `test_blank_input_row_shows_the_missing_wording_not_zero`；
+    以上輸入對五欄白名單 ＝ `test_lookup_card_has_no_field_beyond_the_five_for_every_outcome`（含 ""、"???"、`<script>`）。"""
     html = R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
     assert 'data-row="input-type"' not in html and 'data-row="identity"' not in html
     assert _TYPE_LABEL not in html and _TYPE_VALUE not in html and "基金身份" not in S.text_of(html).replace("不是對基金身份的判斷", "")
@@ -620,3 +624,34 @@ def test_mutation_failed_card_that_claims_the_fund_does_not_exist_turns_the_word
         monkeypatch.setattr(W, "FUND_SEARCH_PENDING", mutated)
         assert S.forbidden_word_violations(_card("FAKE-ERR1")), claim
         monkeypatch.undo()
+
+
+# ───────────────────────── 2026-11-18 C 線小修：可見文字節點白名單、FAKE 標籤同卡 ─────────────────────────
+
+@pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-OK02", "FAKE-LOW1", "FAKE-ERR1", "", "   ", "???", "ABC123", "<script>x</script>", "cost $5 \\ x"])
+def test_every_visible_text_node_of_the_result_card_is_a_known_wording_or_the_input(raw):
+    html = _card(raw, fake.LOOKUP_DIVIDEND_MODE.get(raw.strip().upper()))
+    assert S.lookup_text_violations(html, raw, fake.FAKE_FOUND_NAME) == []
+    assert S.lookup_text_violations(R.lookup_idle_html(), "", fake.FAKE_FOUND_NAME) == []
+
+
+def test_mutation_unknown_text_node_in_the_card_turns_the_text_whitelist_red(monkeypatch):
+    """未知新文字（不是標籤、不在黑名單）也要被抓到：對 production renderer 變異，狀態列多印一句沒登記的文字。"""
+    assert S.lookup_text_violations(_card("FAKE-OK01", "distributing"), "FAKE-OK01", fake.FAKE_FOUND_NAME) == []
+    orig = R.W.pending
+    monkeypatch.setattr(R.W, "pending", lambda key, **f: orig(key, **f) + ("<span>客服專線 0800</span>" if key == "result_found" else ""))
+    bad = S.lookup_text_violations(_card("FAKE-OK01", "distributing"), "FAKE-OK01", fake.FAKE_FOUND_NAME)
+    assert ("未知文字節點", "客服專線 0800") in bad
+
+
+@pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-OK02", "FAKE-LOW1", "FAKE-ERR1", "", "???", "ABC123"])
+def test_fake_tag_is_in_every_result_card_before_any_value_so_the_candidate_dividend_modes_never_appear_without_it(raw):
+    """『配息型』『累積型』沒有 FAKE 前綴：鎖定它們只會出現在同一張帶 `FAKE 模擬` 標籤的卡內，且標籤在 DOM 順序上先於任何欄位列。"""
+    html = _card(raw, fake.LOOKUP_DIVIDEND_MODE.get(raw.strip().upper()))
+    assert html.count('data-tag="fake"') == 1 and html.index('data-tag="fake"') < html.index('data-row="')
+    for mode in (W.text("div_mode_distributing"), W.text("div_mode_accumulating")):
+        if mode in S.text_of(html):
+            assert 'data-tag="fake"' in html and html.index('data-tag="fake"') < html.index(mode) and raw.strip().upper().startswith("FAKE-")
+    # 候選值的字樣只能由 renderer 的 found 分支產出：整頁其他函式（idle／ISIN／收合區／EXP 區）不含它們
+    others = R.lookup_idle_html() + R.isin_result_html() + R.basic_info_details_html() + R.exp1_head_html() + R.divider_html()
+    assert W.text("div_mode_distributing") not in others and W.text("div_mode_accumulating") not in others

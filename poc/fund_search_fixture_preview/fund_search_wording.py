@@ -8,7 +8,9 @@
 - 「無法判定」（`undetermined`，規則表；整檔無法判定列沿用 44 客戶逐字的結構『⬜ 無法判定（資料未備）』，括號句為 `row_undetermined_suffix`）
   與「資料缺值格」（`missing_demo`，暫行）是兩個語意，各用各的函式與 DOM 標記，不共用格式化函式。
 - EXP-0 的結論文案（含「尚未設定條件」）取 `ui_v3.viewmodels.exp_counts`，本檔不重造。
-- 其餘新字樣全是 `PendingWording`（status 恆為 pending），出處一律標 `SOURCE`；畫面上以 `data-pending-wording` 與虛線底線標記。
+- 其餘新字樣全是 `PendingWording`（status 恆為 pending），畫面上以 `data-pending-wording` 與虛線底線標記。出處依字樣而定：
+  多數標 `SOURCE`（ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行）；DEC-2026-11-18-01（客戶本批指示轉述，待核）涉及的字樣
+  （`pool_empty_marker`、`row_inception`、`not_queried`、`div_mode_distributing`、`div_mode_accumulating`）標 `SOURCE_DEC1118`（`SOURCE_DEC03` 是它的歷史名稱別名）。
 """
 from __future__ import annotations
 

@@ -577,6 +577,6 @@ def test_mutation_injected_field_rows_in_the_real_dom_turn_the_whitelist_red(ser
             o.page.evaluate(js, [label, value])
             assert S.lookup_field_violations(_dom_html(o.page, '[data-block="lookup-result"]')), label
             o.page.evaluate("() => document.querySelector('[data-row=\"extra\"]').remove()")
-        o.page.evaluate("() => document.querySelector('[data-block=\"lookup-idle\"]')")
+        assert o.page.evaluate("() => document.querySelector('[data-block=\"lookup-idle\"]')") is None   # 查過之後『尚未查詢』卡不在
     finally:
         o.close()

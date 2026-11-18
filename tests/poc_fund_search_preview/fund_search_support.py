@@ -131,6 +131,19 @@ def lookup_field_violations(card_html: str):
     return bad
 
 
+def lookup_text_violations(card_html: str, raw: str, found_name: str):
+    """卡內『可見文字行集合』白名單：把卡片依標籤切成文字節點，每一個非空節點都必須是已知字樣——
+    PendingWording 的字樣、規則表既有字樣（狀態列／資料不足）、FAKE 名稱，或這次輸入的原值。
+    補足 `lookup_field_violations`（標籤＋data-row 白名單、字樣黑名單）看不到『未知新文字節點』的缺口。"""
+    import html as _html
+    import fund_search_wording as W
+    from shared.ui_semantics import rules
+    allowed = {w.text for w in W.FUND_SEARCH_PENDING.values()} | {found_name, raw.strip()}
+    allowed |= {e.wording for e in rules.ENTRIES.values() if e.wording} | {a.text for a in rules.APPROVED_WORDING.values()}
+    nodes = [_html.unescape(t).strip() for t in re.split(r"<[^>]+>", card_html)]
+    return [("未知文字節點", n) for n in nodes if n and n not in allowed]
+
+
 def details_field_violations(details_html: str):
     """預設收合區：不得有任何欄位列（標籤／data-row）；除『來源』（標題與限制句合法使用，不是欄位）外不得含未核准欄位字樣。"""
     bad = [("收合區出現欄位標籤", x) for x in _LABEL_RE.findall(details_html)]

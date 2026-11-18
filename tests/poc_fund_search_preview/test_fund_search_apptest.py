@@ -344,3 +344,10 @@ def test_dividend_mode_candidates_are_shown_only_for_the_fake_found_codes():
         card = _block(_query(_run(), raw), "lookup-result")
         shown[raw] = ("配息型" in card, "累積型" in card)
     assert shown == {"FAKE-OK01": (True, False), "FAKE-OK02": (False, True), "FAKE-LOW1": (False, False), "ABC123": (False, False)}
+
+
+@pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-OK02", "FAKE-LOW1", "FAKE-ERR1", "???", "ABC123"])
+def test_real_app_result_card_text_nodes_are_known_wordings_and_the_fake_tag_comes_first(raw):
+    card = _block(_query(_run(), raw), "lookup-result")
+    assert S.lookup_text_violations(card, raw, fake.FAKE_FOUND_NAME) == []
+    assert card.index('data-tag="fake"') < card.index('data-row="')          # 候選值（配息型／累積型）無 FAKE 前綴，靠同卡的 FAKE 標籤
