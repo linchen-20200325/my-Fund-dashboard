@@ -98,7 +98,7 @@
 | `full_key` 的語意 | 內部取數鍵，不顯示；不寫入任何持久層 | 避免它被誤當成已核准的身分 |
 | 後綴碼（`ACDD01-EQTAL005` 形） | 入口**不額外攔截**，視為不透明字串、不剝除後綴、不宣稱「同一檔」；多半會得到「頁面無法確認」（NOT VERIFIED：MoneyDJ 對後綴碼的實際回應未探測） | S7（`full_key` 可否帶後綴）仍未裁，路徑 B 不替它下結論；攔截會把可能合法的輸入擋掉。替代方案見 8.3 Q3 |
 | 輸入原值 | view model 保留使用者輸入**原值**（不去空白、不轉大小寫）；但 ISIN 形、網址形、含非可印刷 ASCII 字元、或超過長度上限者**結構上不保留**（見第 4 節） | 對照 poc 預覽既有行為（ISIN 形不回顯輸入） |
-| 不冒稱身分 | 畫面不得出現「基金身份：已確認」類字樣；`DEC-2026-11-13-06` 的 R-ID-1 射程不含使用者輸入代碼 | F3 |
+| 不冒稱身分 | 畫面不得出現「基金身份：已確認」類字樣；`T-ID1` 只限 Sheet「基金代號」欄，未涵蓋使用者輸入框（**INFERENCE**；`DEC-2026-11-13-06` (2)(4) 另明文排除 EXP 選股池代碼）；故路徑 B 不得宣稱 R-ID-1 適用 | F3 |
 
 ---
 
@@ -116,7 +116,7 @@
 | 6 | 各來源可交出的 status 白名單 `_L1_STATUSES` 三套各不相同（MoneyDJ：`ok`／`not_listed`／`unrecognized_page`／`not_found`／`failed`；TDCC：`ok`／`not_listed`／`code_unmapped`／`failed`；FundClear：`ok`／`not_listed`／`failed`），表外一律當 L1 回傳型別不符、判 `failed` | `exp_profile.py`::`_L1_STATUSES`、`_call` |
 | 7 | 列層 `table_wide_failed`＝「有取數的每一檔，三來源都 failed」；只用三來源綜合判斷 | `exp_profile.py`::`build_profiles` |
 | 8 | **欄位值的依賴**：名稱、成立日期、配息方式三格只讀 `results["MoneyDJ"]`（`_fund_name_cell(mdj)`、`_inception_cell(mdj, today)`、`_dividend_cell(mdj)`）；只有 `ccy` 格用三來源 | `exp_profile.py`::`build_profiles`、`_ccy_cell` |
-| 9 | 三來源**各自**有成功快取（`TTL_1HOUR`）與失敗記憶（`FAILURE_MEMORY_SEC＝TTL_5MIN`，期間不重打）；快取與失敗記憶為**行程內共用**，鍵為（函式名，代碼），不分使用者。三支成功快取皆為 `_ttl_cache(ttl_sec=TTL_1HOUR, maxsize=256)`（TTL＋LRU，每支最多 256 筆；`TTL_1HOUR`＝3600 秒）；`FAILURE_MEMORY_SEC`＝300 秒（`TTL_5MIN`，2026-11-18 於 `9e714861` 實讀常數），失敗記憶是**無上限的 dict**（`_FAILURE_MEMORY`，單組讀 `declared_profile.py` 未見容量上限或主動清除，僅在同鍵再次被查且已過期時移除；INFERENCE，未實測） | `repositories/fund/declared_profile.py`::`_public`、`FAILURE_MEMORY_SEC` |
+| 9 | 三來源**各自**有成功快取（`TTL_1HOUR`）與失敗記憶（`FAILURE_MEMORY_SEC＝TTL_5MIN`，期間不重打）；快取與失敗記憶為**行程內共用**，鍵為（函式名，代碼），不分使用者。三支成功快取皆為 `_ttl_cache(ttl_sec=TTL_1HOUR, maxsize=256)`（每支最多 256 筆；`TTL_1HOUR`＝3600 秒；淘汰策略：`infra/cache.py::_ttl_cache` 的 docstring 稱 TTL＋LRU，但讀碼所見為超過 `maxsize` 時以 `min(寫入時間)` 砍最舊者、命中不更新時間，即依寫入先後而非存取先後——INFERENCE，**淘汰行為 NOT VERIFIED**，未實測）；`FAILURE_MEMORY_SEC`＝300 秒（`TTL_5MIN`，2026-11-18 於 `9e714861` 實讀常數），失敗記憶是**無上限的 dict**（`_FAILURE_MEMORY`，**有手動清除**：`clear_failure_memory()` 與各函式的 `cache_clear()`，且已 `register_cache`（`clear_all_caches()` 會清到）；**無容量上限、無週期性清除**，自動移除只發生在同鍵再次被查且已過期時；單組讀碼，INFERENCE，未實測） | `repositories/fund/declared_profile.py`::`_public`、`FAILURE_MEMORY_SEC` |
 | 10 | 目前 `ui_v3` 與 `poc` 沒有任何檔案引用 `exp_profile`／`fund_keys`／`declared_profile`；`build_profiles` 的呼叫端在舊樹 `ui_v2/exp/` 與測試 | `git grep`（`9e714861`，字面搜尋，非窮舉） |
 
 ### 3.2　結論與揭露字句（RECOMMENDATION）
@@ -167,17 +167,18 @@
 | 序 | 規則 | 原因碼（固定類別碼，非畫面字樣） | 是否保留輸入原值 |
 |---|---|---|---|
 | 0 | 輸入不是字串 → 程式錯誤，raise 契約錯誤（不轉成狀態） | — | — |
-| 1 | **原始輸入字串（未經任何 strip）** 為空字串，或全由 ASCII 空格（0x20）組成 → 攔截 | `blank` | 保留（僅含空格，無控制字元） |
+| 1a | **原始輸入字串（未經任何 strip）的總長度** > `INPUT_ECHO_MAX`（建議 64；合法代碼上限為 51＝30＋1＋20，故只留餘裕）→ 攔截，**不呼叫 loader、不發請求**。此閘門在所有 strip 之前，使「合格代碼前後塞大量空格」與超大輸入都無法進入後續處理 | `code_format` | **不保留**（`input_code` 為 None） |
+| 1 | 原始輸入字串為空字串，或全由 ASCII 空格（0x20）組成（長度已通過 1a）→ 攔截。tab、換行等其他空白**不屬 blank**，歸規則 2 | `blank` | 保留（僅含空格，無控制字元） |
 | 2 | **原始輸入字串（未經任何 strip）** 含任何 **0x20–0x7e 以外**的字元 → 攔截。判定採**正向白名單**（可印刷 ASCII），不用「控制字元」一詞，以免漏掉零寬、全形、DEL（0x7f）、C1 與各種空白。**本批不設例外**（含前後的 tab／換行：fail-closed，寧可請使用者重貼） | `control_or_non_ascii`（沿用此名，涵蓋白名單以外的所有字元） | **不保留**（結構上不帶，避免回顯不可見字元或隱寫內容） |
 | 3 | **網址形**：含任一字元 `:` `/` `\` `?` `&` `=` `#` `%` `@`，或（不分大小寫）含子字串 `http`、`www.`、`moneydj` → 攔截 | `url_shape` | **不保留**（網址可能夾帶 token 或個資） |
-| 4 | **ISIN 形**：僅為判斷而暫時把 ASCII 空格與 `-` 全部移除並轉大寫，再 `fullmatch` `[A-Z]{2}[A-Z0-9]{9}[0-9]`（移除後共 12 字元，結構判斷，**不檢查 ISIN 檢查碼**）→ 攔截。移除只用於判斷，**不改變**傳給 loader 的字串（放行者仍是原樣） | `isin_shape` | **不保留**（延續 poc 預覽既有行為：ISIN 形不回顯） |
-| 5 | 以 `strip(' ')`（**只去 ASCII 空格**，不用不帶參數的 `strip()`）並轉大寫後，**以 `fullmatch`（整段完全符合）**比對 `PURE_CODE_PATTERN`，不符（含內部空白、其他標點、長度不合）→ 攔截 | `code_format` | 保留，**但長度 ≤ `INPUT_ECHO_MAX`（建議 64，大於合法代碼上限 51＝30＋1＋20）**；超過者 `input_code` 為 None |
-| 6 | 以上皆未命中 → 放行；以 `raw.strip(' ')`（**保留大小寫**）呼叫 loader（`resolve_full_keys` 自行大寫化） | — | 保留（長度同規則 5 上限；放行者必 ≤ 51，自然滿足） |
+| 4 | **ISIN 形**：僅為判斷而暫時把**所有非英數字元**（空格、`-`、`.`、`_`、`,` 等，規則 2 之後必為可印刷 ASCII）全部移除並轉大寫，再 `fullmatch` `[A-Z]{2}[A-Z0-9]{9}[0-9]`（移除後共 12 字元，結構判斷，**不檢查 ISIN 檢查碼**）→ 攔截。移除只用於判斷，**不改變**傳給 loader 的字串（放行者仍是原樣） | `isin_shape` | **不保留**（延續 poc 預覽既有行為：ISIN 形不回顯） |
+| 5 | 以 `strip(' ')`（**只去 ASCII 空格**，不用不帶參數的 `strip()`）並轉大寫後，**以 `fullmatch`（整段完全符合）**比對 `PURE_CODE_PATTERN`，不符（含內部空白、其他標點、長度不合）→ 攔截 | `code_format` | 保留（原始長度已由規則 1a 保證 ≤ `INPUT_ECHO_MAX`） |
+| 6 | 以上皆未命中 → 放行；以 `raw.strip(' ')`（**保留大小寫**）呼叫 loader（`resolve_full_keys` 自行大寫化） | — | 保留（原始長度已由規則 1a 保證 ≤ `INPUT_ECHO_MAX`，故 `input_code` 必保留；strip 後 ≤ 51 由規則 5 的 `PURE_CODE_PATTERN` 保證。**更正前一版**：「放行者必 ≤ 51」只對 strip 後成立，對原始字串不成立，故需要 1a） |
 
 說明：
 - **次序理由**：網址形與 ISIN 形的字串也能通過 `PURE_CODE_PATTERN`（4.1），所以必須排在格式檢查之前，否則會被放行。ISIN 形判斷在轉大寫之後做，才能涵蓋小寫輸入。
 - **為何規則 2 作用於未 strip 的原始字串（S3，FACT）**：Python `str.strip()` 預設會吃掉 `\x1c`–`\x1f`、`\x0b`、`\x0c`、`\n`、`\t`，以及 `\x85`、`\xa0`（2026-11-18 本機 Python 實測；`\x00`、`\x7f` 不會被吃）。若先 strip 再檢查，這些字元出現在頭尾時會**無聲消失**。實測 `resolve_full_keys` 對 `\x1cACTI71\n` 回 `ok=True`、`full_key＝ACTI71`（`mapping={}`，離線）——L2 本身就會吃掉頭尾控制字元。因此 adapter 必須在 strip 之前用白名單檢查，且 `input_code` 絕不存入白名單以外的字元（A8 的「原值保留」只適用於通過規則 2 的字串）。
-- **ISIN 形的覆蓋範圍與限制（S4，RECOMMENDATION＋待客戶／設計者確認）**：若只對緊密 12 碼判斷，`US 0378331005`、`US-0378331005` 會落入 `code_format` 並被回顯，`US0378331005X`（13 碼）亦同。**推薦**：規則 4 先移除空格與 `-` 再判斷（已寫入上表），涵蓋前兩種；**理由**：這兩種是使用者貼 ISIN 時最常見的分隔寫法，回顯它們等於回顯 ISIN。**仍存在的限制，據實揭露**：多一個字元的變體（如 13 碼）不是 ISIN 形，仍走 `code_format` 並在長度上限內回顯；poc 預覽的 `classify_lookup`（`poc/fund_search_fixture_preview/fund_search_logic.py`）只判緊密 12 碼，同樣有此限制，且該 poc 不剝除分隔符。移除分隔符的代價：極少數合法的「帶後綴碼」若移除 `-` 後恰為 ISIN 形會被誤攔（偏保守側；併入 U9）。是否採用列入 Q6。
+- **ISIN 形的覆蓋範圍與限制（S4，RECOMMENDATION＋待客戶／設計者確認）**：若只對緊密 12 碼判斷，`US 0378331005`、`US-0378331005`、`US.0378331005`、`US_0378331005`、`US,0378331005` 會落入 `code_format` 並被回顯，`US0378331005X`（13 碼）亦同。**推薦**：規則 4 先移除**所有非英數字元**再判斷（已寫入上表），涵蓋前面各種分隔寫法；**理由**：分隔符可以是任何標點，只列空格與 `-` 會留下漏洞，回顯它們等於回顯 ISIN。**仍存在的限制，據實揭露**：多一個字元的變體（如 13 碼）不是 ISIN 形，仍走 `code_format` 並在長度上限內回顯；poc 預覽的 `classify_lookup`（`poc/fund_search_fixture_preview/fund_search_logic.py`）只判緊密 12 碼，同樣有此限制，且該 poc 不剝除分隔符。**誤攔面評估（INFERENCE，未實測）**：`PURE_CODE_PATTERN` 本來就只允許字母、數字與一個 `-`，所以除 `-` 以外的分隔符號本來就會被規則 5 以 `code_format` 攔下——改為移除所有非英數字元，對它們只改變**原因碼與是否回顯**，不新增被擋的輸入。真正新增誤攔的只有「帶 `-` 後綴、移除 `-` 後恰為 2 字母開頭＋9 英數＋末碼數字」的合法後綴碼（例如主碼 6 碼＋`-`＋後綴 6 碼，且前 2 碼為字母、末碼為數字）；是否存在未驗。偏保守側，併入 U9。是否採用列入 Q6。
 - **`http` 子字串的誤攔面（Nit）**：規則 3 的子字串判斷會攔下含 `HTTP`（不分大小寫）的合法 MoneyDJ 代碼；機率極低（repo 內 8 個真實代碼樣本長度皆 5–7 字元，無一含此子字串），偏保守側。
 - **不檢查 ISIN 檢查碼的理由**：檢查碼錯誤的「像 ISIN 的字串」同樣不該被當 MoneyDJ 代碼送出；檢查碼是結構之外的額外判斷，也不應讓「錯誤的 ISIN」意外通過。
 - **誤傷風險（INFERENCE，NOT VERIFIED）**：真實 MoneyDJ 代碼若恰為「前 2 碼字母、共 12 碼、末碼數字」會被誤攔。repo 內 8 個真實 MoneyDJ 代碼樣本（`tests/fixtures/moneydj_basic/`）長度皆為 5–7 字元，**未見 12 字元者**；但這不證明不存在。誤攔的代價是使用者看到「ISIN 目前未啟用」類訊息而無法查該檔（偏保守側）。
@@ -185,7 +186,7 @@
 
 ### 4.4　輸入原值如何保留
 
-- adapter 對外函式簽章同時收「使用者原始輸入」；view model 的 `input_code` 欄存**原值**（不去空白、不轉大小寫），**但僅限通過規則 2 白名單、未命中規則 3／4、且長度 ≤ `INPUT_ECHO_MAX`（建議 64）者**；其餘一律為 None（結構上不帶，**不是交給 renderer 決定**，S5）。單純超長者以 `code_format` 攔截，`input_code` 為 None。
+- adapter 對外函式簽章同時收「使用者原始輸入」；view model 的 `input_code` 欄存**原值**（不去空白、不轉大小寫），**但僅限通過規則 2 白名單、未命中規則 3／4、且原始長度 ≤ `INPUT_ECHO_MAX`（建議 64）者**——長度閘門（規則 1a）作用於**未 strip 的原始字串**並在呼叫 loader 之前，所以不會出現「state＝RESULT 而 `input_code`＝None」（合格代碼加大量前後空格會被 1a 以 `code_format` 攔截，不發請求）；其餘一律為 None（結構上不帶，**不是交給 renderer 決定**，S5）。
 - 傳給 loader 的是**另一個**以 `strip(' ')` 去頭尾 ASCII 空格的字串，並以同一字串作為 `build_profiles` 的 `cells` 鍵；adapter 以該字串反查 `cells`，不靠大寫化後的代碼。
 - 轉義是 renderer 的責任（poc 預覽已有 HTML escape 前例）；view model 不存已轉義字串，避免二次轉義。
 - 對照 `T-ID1`「原值保留（僅去前後空白）」：該契約不適用於使用者輸入，但路徑 B 採更保守的「連空白都保留」，並在需要時才由 renderer 決定如何顯示。
@@ -202,13 +203,13 @@
 |---|---|---|---|---|
 | S0 | **尚未查詢** | 頁面剛載入或使用者尚未送出；adapter 未被呼叫 | 提示輸入 MoneyDJ 基金代碼；常駐「ISIN 尚未啟用」說明（延續 poc 暫行句，待 G-4 定字） | 任何基金資料、「查無」、「0 筆」 |
 | S1 | **入口攔截**（原因碼 6 種） | 第 4.3 節規則 1～5 命中，或 loader 回傳顯示 L2 拒絕該鍵（`source_status[代碼]` 為空，即 `ok` 非真；原因碼 `key_rejected`） | `blank`：請輸入代碼；`isin_shape`：ISIN 目前未啟用；`url_shape`／`code_format`／`control_or_non_ascii`：輸入不是可用的代碼格式；`key_rejected`：這個輸入無法對應到查詢用代碼。**皆為格式或功能範圍的說明** | 基金不存在、代碼錯誤（格式不符不等於代碼錯誤）、ISIN 無效、已轉換為某基金、回顯網址或 ISIN |
-| S2 | **來源失敗** | MoneyDJ 來源狀態為 `failed`（取不到：網路、403／407／429、5xx、主機冷卻、200 空內文、L1 非預期例外）；或失敗記憶冷卻中（`cooling`）；或注入的 loader 拋 OSError 家族例外（`loader_io_error`；其餘例外型別是程式或契約錯誤，往外拋） | 這次取數失敗，不是對基金身份的判斷（G-2 暫行句）；冷卻中可說「稍後再試」類 | 基金不存在、查無基金、代碼有誤、已停售；錯誤原文、網址、例外訊息 |
+| S2 | **來源失敗** | MoneyDJ 來源狀態為 `failed`（取不到：網路、403／407／429、5xx、主機冷卻、200 空內文、L1 非預期例外）；或失敗記憶冷卻中（`cooling`）；或注入的 loader 拋明確的取數例外（`LookupSourceError`、內建 `ConnectionError`／`TimeoutError`；原因碼 `loader_io_error`；其餘例外型別是程式或契約錯誤，往外拋） | 這次取數失敗，不是對基金身份的判斷（G-2 暫行句）；冷卻中可說「稍後再試」類 | 基金不存在、查無基金、代碼有誤、已停售；錯誤原文、網址、例外訊息 |
 | S3 | **頁面無法確認**（原因碼 4 種） | MoneyDJ 來源狀態為 `unrecognized_page`（回來了但不符身分判準）、`not_found`（兩種頁型兩個主機全 404）、`not_listed`（L2 白名單內但現行 L1 不會交出）；或來源 `ok` 但名稱格不是有值（名稱是身分綁定的證據，沒有它就不展示其他欄） | 來源頁面無法確認是這一檔／沒有找到對應頁面；**這不是對基金存在與否的結論** | 基金不存在、查無此基金、代碼錯誤、顯示部分欄位當作這一檔的資料 |
 | S4 | **有結果** | MoneyDJ 通過身分判準且名稱有值 | 逐欄顯示：名稱原字面；配息方式（`accum`／`dist` 對應的暫行字樣）；成立日；費率欄 | 基金身份已確認、幣別、淨值、報酬、績效、取得時間、來源名、推薦／排名；欄位缺值寫成 0、「無」、「不配息」、「無費用」 |
 | S4-a | ├ 欄位級**有值** | 該格 `status＝ok` | 顯示值 | 加工過的值 |
 | S4-b | ├ 欄位級**缺值** | 該格 `not_ready`（含標籤缺、表外寫法、成立日不採用、費率恆缺） | 缺值符號（`◇` 或 `⬜` 待定，見 Q5）；費率欄可帶「契約上目前無來源」的結構標記 | 把缺值說成「不存在」「無」或 0 |
 | S4-c | └ 欄位級**分歧** | 該格 `status＝inconsistent`（L2 目前只對 `ccy` 使用此值；若出現在四格即映為分歧） | 該欄各來源不一致，不採用任何一個 | 挑一個顯示 |
-| S5 | **未知**（契約不符，fail-closed） | loader 回傳缺鍵、型別不符、未知的 status 字面、cells 鍵不符、費率格非缺值、配息方式不在 `accum`／`dist`、成立日不是 ISO 日期等 | adapter **raise 契約錯誤**；頁面層日後只能顯示一句固定的「目前無法顯示」並標固定類別碼，不回顯收到的內容 | 任何資料、猜測的狀態、把未知併入 S2 或 S3 |
+| S5 | **未知**（契約不符，fail-closed） | loader 回傳缺鍵、型別不符、未知的 status 字面、cells 鍵不符、費率格非缺值、配息方式不在 `accum`／`dist`、成立日不是 ISO 日期等 | adapter **raise 契約錯誤**；由**頁面層單一邊界**攔截（見 5.2 第 7 點），只顯示一句固定的「目前無法顯示」並標固定類別碼，不回顯收到的內容；log 只記型別名 | 任何資料、猜測的狀態、把未知併入 S2 或 S3 |
 
 ### 5.2　設計要點（RECOMMENDATION）
 
@@ -216,8 +217,9 @@
 2. **S3 的 `not_found`（全 404）不是「基金不存在」**：404 可能來自代理、頁型錯誤或來源不收該代碼。該原因碼的名稱用 `no_page`，不用任何含「不存在」意味的詞。
 3. **S4-c 在現行 L2 下無法被觸發**（見 0 結論第 6 點）：MoneyDJ 頁面上同一標籤出現兩個不同值時，L2 輸出 `not_ready`＋自由文字，adapter 無法也不應解析文字，因此該情形在 view model 內會落在 S4-b。這是**已知的語意損失**（缺值與分歧不可區分），不是設計目標；若要區分，需 L2 輸出機器可讀的原因碼（屬新契約，列入 9 未決）。
 4. **TDCC／FundClear 的失敗與 `ccy` 格的 `inconsistent`／`fetch_failed` 必須不影響路徑 B 的狀態**（O1 下它們仍會發生）。測試計畫第 7 節 T-B6 專門鎖這一點。
-5. **未知狀態用例外而非 view 狀態**：沿用 `exp_pool` 切片的做法（契約不符 raise、訊息只含欄位名與型別名）；只有「loader 本身拋例外」才轉為 S2。
+5. **未知狀態用例外而非 view 狀態**：沿用 `exp_pool` 切片的做法（契約不符 raise、訊息只含欄位名與型別名）。**S2 只接受明確的取數例外**（見 6.3：`LookupSourceError`、內建 `ConnectionError`／`TimeoutError`）；其餘非契約例外（`TypeError`、`ValueError`、`KeyError` 等）不轉任何狀態，往外拋，由**頁面層邊界**處理（下一點）。
 6. 欄位級狀態只在 S4 內存在；S1／S2／S3 不帶任何欄位值（結構上不可能洩漏部分資料）。
+7. **頁面層對非契約例外的邊界（RECOMMENDATION）**：`LookupContractError` 與所有往外拋的非契約例外，都必須在**日後頁面／獨立入口的單一呼叫邊界**被攔截（不在 adapter、不在 view model；Streamlit 預設會把未攔截例外連同訊息畫給使用者，故必須有人攔）。邊界行為：①畫面只顯示**一句固定句**（`PendingWording`，待核；語意為「目前無法顯示」，不暗示基金不存在、不鼓勵重試）；②**不回顯**例外文字、不顯示 traceback、不顯示輸入；③log **只記例外型別名與固定類別碼**（不記訊息、不記 traceback 的參數值、不記使用者輸入）；④不把它歸類成 S2／S3，也不寫入失敗記憶；⑤測試：頁面層（日後）須有「注入會拋 `TypeError`／`ValueError`／`LookupContractError` 的 loader，斷言畫面只含固定句、log 無訊息」的案例。本批無頁面，故僅登記邊界歸屬，不設計頁面。
 
 ---
 
@@ -248,6 +250,7 @@ FundLookupView     : (state: LookupState,
                       SOURCE_FAILED  ∈ {source_failed, source_cooling, loader_io_error}
                       PAGE_UNMATCHED ∈ {unrecognized_page, no_page, source_not_listed, name_unconfirmed}
 LookupContractError: 繼承 ValueError；訊息只含欄位名與型別名，不回顯收到的值
+LookupSourceError  : 繼承 Exception；組裝端 loader 包裝層用來表示「取數本身失敗」；訊息不被讀取、不進 view、不進 log
 ```
 
 `__post_init__` 不變式（比照 `PoolSourceView`）：
@@ -274,7 +277,7 @@ adapt_profile_result(input_code: str, query_text: str, raw_result: object) -> Fu
 lookup_fund(loader: Callable[[str], object], raw_input: object) -> FundLookupView
     loader 無預設值（本模組不知道、也不 import 真實 L1／L2）；
     先 screen_input；命中即回 BLOCKED（不呼叫 loader）；
-    放行後 loader(query_text)；loader 拋 **OSError 家族**（含 ConnectionError、TimeoutError；`requests`／`urllib` 的連線例外皆為其子類）→ SOURCE_FAILED(loader_io_error)（例外字串丟棄，log 只記例外型別名）；**其餘例外（TypeError、ValueError、KeyError、AssertionError 等）一律往外拋，不轉狀態**；
+    放行後 loader(query_text)；loader 拋 `LookupSourceError`（viewmodel 層定義；由組裝端 loader 包裝層在**自己的**網路呼叫失敗時轉出）或內建 `ConnectionError`／`TimeoutError` → SOURCE_FAILED(loader_io_error)（例外字串丟棄，log 只記例外型別名）；**其餘例外（TypeError、ValueError、KeyError、AssertionError 等）一律往外拋，不轉狀態**；
     回傳形狀不符 → LookupContractError 照樣往外拋（不吞、不轉成 SOURCE_FAILED）。
 
 not_queried() -> FundLookupView
@@ -308,12 +311,13 @@ not_queried() -> FundLookupView
 | 檔位置 | `ui_v3/viewmodels/` ＋ `ui_v3/adapters/` | 相同 |
 | loader | 注入、無預設 | 相同 |
 | 契約不符 | `PoolContractError`（訊息只含欄位名與型別名）fail-closed | 相同（`LookupContractError`） |
-| 取數函式拋例外 | 注入的取數函式拋**任何 `Exception`** → `FAILED`（`loader_raised`），例外字串丟棄、log 只記型別名（`ui_v3/adapters/exp_pool.py::load_pool_view` 現況：`except Exception`） | **刻意不同（S6）**：只轉 OSError 家族（`loader_io_error`），其餘往外拋。**理由**：路徑 B 的 loader 內層是 `build_profiles`，它的 `_call` 已把 L1 的任何 `Exception` 轉成 `failed` 結果；真正跑到 adapter 的例外多半是程式或契約錯誤（例如非字串輸入、`fetchers` 鍵不對、`PARTIAL_FAILURE_POLICY` 非法的 `TypeError`／`ValueError`），一律轉成「來源失敗」會把程式錯誤偽裝成暫時性故障，使用者會一直重試。`exp_pool` 的 loader 是 `load_pool_codes`（Sheet 讀取），例外面較寬，故其做法不直接適用 |
+| 取數函式拋例外 | 注入的取數函式拋**任何 `Exception`** → `FAILED`（`loader_raised`），例外字串丟棄、log 只記型別名（`ui_v3/adapters/exp_pool.py::load_pool_view` 現況：`except Exception`） | **刻意不同（S6）**：只轉明確列舉的取數例外（`LookupSourceError`、內建 `ConnectionError`／`TimeoutError` → `loader_io_error`），其餘往外拋。**不用廣義 `OSError`**：它含 `FileNotFoundError`／`PermissionError` 等多半是設定或程式問題的子類，會把它們偽裝成暫時性故障；`requests.exceptions.RequestException` 雖繼承 `OSError`，但 `requests` 的 `ConnectionError`／`Timeout` **不是**內建的 `ConnectionError`／`TimeoutError`（本機以 `issubclass` 實測為否），adapter 也不得 import `requests`——所以翻譯責任在組裝端 loader 包裝層（把自己的網路例外轉成 `LookupSourceError`）。**理由**：路徑 B 的 loader 內層是 `build_profiles`，它的 `_call` 已把 L1 的任何 `Exception` 轉成 `failed` 結果；真正跑到 adapter 的例外多半是程式或契約錯誤（例如非字串輸入、`fetchers` 鍵不對、`PARTIAL_FAILURE_POLICY` 非法的 `TypeError`／`ValueError`），一律轉成「來源失敗」會把程式錯誤偽裝成暫時性故障，使用者會一直重試。`exp_pool` 的 loader 是 `load_pool_codes`（Sheet 讀取），例外面較寬，故其做法不直接適用 |
 | 原因碼 | 固定類別碼，不上畫面 | 相同 |
 | 洩漏面 | 無 backend 名稱、無原始訊息 | 相同，另加：無 `ccy`／`fetched_at`／來源名 |
 | L2 字面 | adapter 另存一份，測試對照原始碼鎖死 | 相同 |
 | 時間欄 | 有 `read_at`（選股池讀取時間） | **刻意沒有**：路徑 B 不得顯示 `fetched_at`（R-NAV-3 暫緩，卡片第 2 節） |
 | 不可用狀態 | `UNAVAILABLE`（`pool_not_cloud`） | 無對應（路徑 B 不讀 Sheet） |
+| 頁面層對非契約例外 | 本批 `exp_pool` 切片無頁面，未定義 | **本設計補定義邊界歸屬**（5.2 第 7 點）：頁面層單一邊界攔截 `LookupContractError` 與往外拋的非契約例外，固定句、不回顯、log 只記型別名；adapter 與 view model 不攔截 |
 
 ---
 
@@ -325,8 +329,8 @@ not_queried() -> FundLookupView
 
 | 群 | 案例 | 目的 |
 |---|---|---|
-| **T-A 入口攔截**（loader 為「被呼叫即失敗」的哨兵，並計次） | A1 空白／純空白／tab；A2 非字串輸入（None、數字、bytes）→ 契約錯誤而非狀態；A3 ISIN 形：大寫、小寫、前後空白、檢查碼對與錯、不同國碼前綴、含空格或 `-` 分隔（`US 0378331005`、`US-0378331005`）；A3b 13 碼變體（限制內案例，斷言走 `code_format` 且僅在長度上限內回顯）；A4 邊界：11 字元、13 字元、12 字元末碼為字母（不是 ISIN 形，應放行）、12 字元含連字號；A5 網址形：`http`／`https`／大寫 `HTTP`（並含一個合法形狀但內含此子字串的代碼，斷言被攔並記為已知誤攔面）、無 scheme 的 `www.moneydj.com/…`、只含 `?a=`、含 `%`／`#`／`@`、`//host`；A6 白名單以外字元：全形英數、零寬字元、DEL（0x7f）、C1、`\x1c`–`\x1f`、`\x0b`、`\x0c`、`\xa0`，且分別置於**頭、中、尾**（尤其頭尾——strip 會吃掉的位置）、換行、tab；A6b 以上任一命中時 `input_code` 為 None 且 view 內不含該字元；A7 格式：2 字元、含空白、31 以上字元、`-` 開頭／結尾、過長後綴；A7b 長度剛好等於、剛好超過 `INPUT_ECHO_MAX`（超過者 `input_code` 為 None）；A7c 帶尾端換行的合法代碼（`fullmatch` 與 `match` 行為差異，應攔截）；A8 `input_code` 原值保留（空白、大小寫、HTML 特殊字元原樣）與「規則 2／3／4 命中時為 None」；A9 規則次序（ISIN 形字串同時符合格式 → 應報 `isin_shape`；網址形含 12 字元尾碼 → 應報 `url_shape`）；A10 每個攔截案例 loader 呼叫次數為 0 | 證明攔截在 loader 之前、原因碼互斥、不回顯 |
-| **T-B 狀態轉換**（假 loader 回 `build_profiles` 形狀） | B1 全欄有值；B2 各格逐一缺值組合（含費率恆缺）；B3 MoneyDJ `failed`（含 `cooling` 真／假）；B4 `unrecognized_page`／`not_found`／`not_listed` 各自 → `PAGE_UNMATCHED` 對應原因碼；B5 來源 `ok` 但名稱格 `not_ready` → `name_unconfirmed`，且不帶其他欄位；B6 **TDCC／FundClear 失敗、`ccy` 格 `inconsistent`／`fetch_failed`、`table_wide_failed` 為真，而 MoneyDJ 為 `ok` ⇒ 仍為 RESULT，且 view 看不出任何異常**；B7 `source_status[code]` 為空 → `key_rejected`；B8 同一字串重複、大小寫不同字串（`cells` 鍵必須用 adapter 傳給 loader 的那一個）；B9 loader 拋 OSError 家族例外（含帶密鑰字樣的例外訊息）→ `loader_io_error`，view／log 皆不含該字串；B10 loader 拋 TypeError／ValueError／KeyError → 原樣往外拋，不轉成任何狀態 | 狀態互斥且不混淆 |
+| **T-A 入口攔截**（loader 為「被呼叫即失敗」的哨兵，並計次） | A1 空字串、純 ASCII 空格（`blank`）；tab、換行**不屬 blank**，歸規則 2，案例見 A6；A2 非字串輸入（None、數字、bytes）→ 契約錯誤而非狀態；A3 ISIN 形：大寫、小寫、前後空白、檢查碼對與錯、不同國碼前綴、含各種分隔符（`US 0378331005`、`US-0378331005`、`US.0378331005`、`US_0378331005`、`US,0378331005`；斷言皆為 `isin_shape` 且 `input_code` 為 None）；A3b 13 碼變體（限制內案例，斷言走 `code_format` 且僅在長度上限內回顯）；A4 邊界：11 字元、13 字元、12 字元末碼為字母（不是 ISIN 形，應放行）、12 字元含連字號；A5 網址形：`http`／`https`／大寫 `HTTP`（並含一個合法形狀但內含此子字串的代碼，斷言被攔並記為已知誤攔面）、無 scheme 的 `www.moneydj.com/…`、只含 `?a=`、含 `%`／`#`／`@`、`//host`；A6 白名單以外字元：全形英數、零寬字元、DEL（0x7f）、C1、`\x1c`–`\x1f`、`\x0b`、`\x0c`、`\xa0`，且分別置於**頭、中、尾**（尤其頭尾——strip 會吃掉的位置）、換行、tab；A6b 以上任一命中時 `input_code` 為 None 且 view 內不含該字元；A7 格式：2 字元、含空白、31 以上字元、`-` 開頭／結尾、過長後綴；A7b **原始字串總長度**剛好等於、剛好超過 `INPUT_ECHO_MAX`，含「合格代碼＋前後大量空格」使原始長度超限（應以 `code_format` 攔截、`input_code` 為 None、loader 計次為 0），以及長度恰為上限的合格輸入（應放行且 `input_code` 保留）；A7c 帶尾端換行的合法代碼：由規則 2 先攔下（`control_or_non_ascii`），**不會觸及規則 5**——故 `fullmatch` 改 `match` 的突變在規則 2 之後是等價突變，無法由公開行為分辨，須列入「已記載存活」（見 7.2 末）；A8 `input_code` 原值保留（ASCII 空格、大小寫、HTML 特殊字元原樣）與「規則 1a／2／3／4 命中（即原始長度超限、白名單以外字元、網址形、ISIN 形）時為 None」；A9 規則次序（ISIN 形字串同時符合格式 → 應報 `isin_shape`；網址形含 12 字元尾碼 → 應報 `url_shape`）；A10 每個攔截案例 loader 呼叫次數為 0 | 證明攔截在 loader 之前、原因碼互斥、不回顯 |
+| **T-B 狀態轉換**（假 loader 回 `build_profiles` 形狀） | B1 全欄有值；B2 各格逐一缺值組合（含費率恆缺）；B3 MoneyDJ `failed`（含 `cooling` 真／假）；B4 `unrecognized_page`／`not_found`／`not_listed` 各自 → `PAGE_UNMATCHED` 對應原因碼；B5 來源 `ok` 但名稱格 `not_ready` → `name_unconfirmed`，且不帶其他欄位；B6 **TDCC／FundClear 失敗、`ccy` 格 `inconsistent`／`fetch_failed`、`table_wide_failed` 為真，而 MoneyDJ 為 `ok` ⇒ 仍為 RESULT，且 view 看不出任何異常**；B7 `source_status[code]` 為空 → `key_rejected`；B8 同一字串重複、大小寫不同字串（`cells` 鍵必須用 adapter 傳給 loader 的那一個）；B9 loader 拋 `LookupSourceError`／內建 `ConnectionError`／`TimeoutError`（含帶密鑰字樣的例外訊息）→ `loader_io_error`，view／log 皆不含該字串；B10 loader 拋 TypeError／ValueError／KeyError／FileNotFoundError／PermissionError → 原樣往外拋，不轉成任何狀態 | 狀態互斥且不混淆 |
 | **T-C fail-closed** | C1 回傳非 dict／缺 `cells`／缺 `source_status`；C2 `cells` 缺某欄或多出別的代碼；C3 未知 cell status 字面；C4 未知 MoneyDJ 來源 status；C5 費率格有值或 `ok`；C6 `dividend_policy` 值不在 `accum`／`dist`；C7 `inception_on` 非 ISO、日期不存在；C8 `status＝ok` 但 value 為 None，或非 `ok` 但 value 非 None；C9 `fetch_failed` 出現在 MoneyDJ 來源 `ok` 之下；C10 契約錯誤訊息不含收到的值（含 URL、密鑰字樣） | 未知一律 raise，不降級成缺值或失敗 |
 | **T-D 不洩漏** | D1 以 `dataclasses.fields` 鎖死 view model 欄位集合（無 `ccy`／`fetched_at`／來源名等）；D2 將 L2 的 `reason`／`raw`／`error` 填入含網址與密鑰形字串，確認 view 與 log 皆不含；D3 `FundLookupView` 的 `repr`／`str` 不含上述字串 | 結構上不帶 |
 | **T-E 禁語意** | E1 原因碼集合為封閉集合，且集合內沒有表達「不存在」「查無」「無效」的碼；E2 `PAGE_UNMATCHED` 與 `SOURCE_FAILED` 的原因碼集合互不相交；E3 每個 MoneyDJ 來源 status 字面都有恰一個去處（窮舉表測試，新增字面時紅燈） | 防止日後把「無對應頁面」改成「不存在」 |
@@ -343,10 +347,6 @@ not_queried() -> FundLookupView
 | M3 | 移除網址形攔截 | A5 |
 | M4 | 把攔截挪到 loader 呼叫之後 | A10（loader 計次） |
 | M5 | 把 `input_code` 的規則 2／3／4 不保留改為保留 | A8、D3 |
-| M19 | 規則 2 改成先 `strip()` 再檢查白名單 | A6（頭尾位置案例） |
-| M20 | 移除長度上限 | A7b |
-| M21 | 規則 4 不先移除空格與 `-` | A3（分隔寫法案例） |
-| M22 | loader 例外改回「任何 Exception 皆轉狀態」 | B10 |
 | M6 | 把 `unrecognized_page` 併入 `SOURCE_FAILED` | B4、E2 |
 | M7 | 把 `not_found` 改成會觸發「不存在」類原因碼 | E1 |
 | M8 | 接受費率格的非缺值 | C5 |
@@ -360,8 +360,13 @@ not_queried() -> FundLookupView
 | M16 | 把 `cooling` 判斷反向 | B3 |
 | M17 | `inconsistent` 映為 VALUE | B2／C 群 |
 | M18 | 對輸入做 `strip()`／`upper()` 後存入 `input_code` | A8 |
+| M19 | 規則 2 改成先 `strip()` 再檢查白名單 | A6（頭尾位置案例） |
+| M20 | 移除原始字串總長度閘門（規則 1a） | A7b |
+| M21 | 規則 4 不先移除非英數字元（只移除空格與 `-`，或完全不移除） | A3（`.`、`_`、`,`、空格、`-` 分隔案例） |
+| M22 | loader 例外改回「任何 Exception 皆轉狀態」，或擴大為廣義 `OSError` | B10 |
+| M23 | 規則 2 之後的 `fullmatch` 改為 `match` | **等價突變，預期存活**（見下） |
 
-存活的突變只能列在「已記載存活」清單並附理由（比照 `test_ui_v3_exp_pool_mutations.py`）。
+存活的突變只能列在「已記載存活」清單並附理由（比照 `test_ui_v3_exp_pool_mutations.py`）。**預期的已記載存活：M23**——規則 2 已攔下所有換行，`$` 吃尾端換行的差異在規則 2 之後不可觀察；以靜態檢查（原始碼須使用 `fullmatch`）補強。
 
 ### 7.3　CI 不得靜默跳過
 
@@ -386,7 +391,7 @@ not_queried() -> FundLookupView
 
 | 欄 | 型別 | 值域／格式 | 缺值語意 | 狀態 | 來源追溯（契約層；**不進 view model、不上畫面**） |
 |---|---|---|---|---|---|
-| **輸入代碼** `input_code` | 字串或 None | 使用者輸入原值；僅在輸入為 ISIN 形、網址形、含可印刷 ASCII 以外字元、或長度超過 `INPUT_ECHO_MAX` 時為 None | 不適用 | 隨 `LookupState`；**不代表基金身分**（R-ID-1 射程不含） | 使用者輸入框；無資料源 |
+| **輸入代碼** `input_code` | 字串或 None | 使用者輸入原值；僅在輸入為 ISIN 形、網址形、含可印刷 ASCII 以外字元、或長度超過 `INPUT_ECHO_MAX` 時為 None | 不適用 | 隨 `LookupState`；**不代表基金身分**（`T-ID1` 只限 Sheet「基金代號」欄，未涵蓋使用者輸入框，INFERENCE） | 使用者輸入框；無資料源 |
 | **基金名稱** `fund_name` | 字串或缺值 | MoneyDJ「基金名稱」原字面；非空白、非佔位字（共用 `declared_profile.name_is_blank`） | 缺值＝標籤缺／空白／佔位；`RESULT` 狀態下必有值（名稱是身分綁定證據） | `VALUE`｜`MISSING`（僅在非 `RESULT` 時以狀態表達） | MoneyDJ「基金名稱」→ `declared_profile.fetch_moneydj_basic_fields` → `exp_profile._fund_name_cell` |
 | **配息方式** `dividend_policy` | 列舉或缺值 | `accum`｜`dist`｜缺值 | 缺值＝標籤缺／表外寫法／空白／「—」／「不定期」；**缺值不等於不配息** | `VALUE`｜`MISSING` | MoneyDJ「配息頻率」→ `exp_profile.DIVIDEND_FREQ_TO_POLICY`（`docs/v2/49` §6.1，客戶 2026-09-26 定案） |
 | **成立日期** `inception_on` | ISO 日期字串或缺值 | `YYYY-MM-DD`；無時區；年份 ≥ 1900 且不晚於台灣今天 | 缺值＝標籤缺／字樣認不出／日期不存在／過早／未來（皆不採用，原因不另外區分） | `VALUE`｜`MISSING` | MoneyDJ「成立日期」→ `exp_profile._check_inception`、`taiwan_today` |
@@ -400,12 +405,12 @@ not_queried() -> FundLookupView
 
 | 題 | 問題 | 推薦 | 理由 |
 |---|---|---|---|
-| **Q0** | **前置依賴**：路徑 B 的任何真實取數，是否確認須等 **A 線安全 Gate（BL-0551）通過**與客戶正式核准後才開始？「A 線安全 Gate 通過」的具體條件是什麼？ | 確認「須等」；並請客戶定義通過條件（repo 查無定義） | 路徑 B 一定會走 `infra.proxy.fetch_url`（MoneyDJ、FundClear 在 proxy 模式 `verify=False`），TDCC 走 urllib；BL-0551 對路徑 B 是實際生效的風險。**請求放大面（S8，併入 BL-0551 暴露面；單組讀碼，未實測）**：①每個不同的合格輸入，最多觸發 MoneyDJ **4 個網址**（2 頁型 `yp011000`／`yp011001` × 2 主機 `tcbbankfund.moneydj.com`／`www.moneydj.com`；每個網址以 `retries=1` 呼叫，單網址實際請求數未驗）＋FundClear 1 支＋TDCC（整份清單，行程內快取後僅本地比對）；②快取：三支成功快取各 `maxsize=256`、TTL 3600 秒（LRU），超過 256 個不同代碼會逐出舊項；失敗記憶 300 秒、無容量上限的 dict；③使用者可任意輸入合格形狀的代碼，**現行設計沒有速率限制**，`ui_v3` 與 adapter 草案皆未含；④快取與失敗記憶行程內共用，一位使用者的大量不同輸入會擠掉他人的快取、並使他人在 5 分鐘內對同代碼看到冷卻中的失敗。是否要在 A 線安全 Gate 內要求入口速率限制或單次查詢上限，屬客戶裁示 |
+| **Q0** | **前置依賴**：路徑 B 的任何真實取數，是否確認須等 **A 線安全 Gate（BL-0551）通過**與客戶正式核准後才開始？「A 線安全 Gate 通過」的具體條件是什麼？ | 確認「須等」；並請客戶定義通過條件（repo 查無定義） | 路徑 B 一定會走 `infra.proxy.fetch_url`（MoneyDJ、FundClear 在 proxy 模式 `verify=False`），TDCC 走 urllib；BL-0551 對路徑 B 是實際生效的風險。**請求放大面（S8，併入 BL-0551 暴露面；單組讀碼，未實測）**：①每個不同的合格輸入，最多觸發 MoneyDJ **4 個網址**（2 頁型 `yp011000`／`yp011001` × 2 主機 `tcbbankfund.moneydj.com`／`www.moneydj.com`；每個網址以 `retries=1` 呼叫，單網址實際請求數未驗）＋FundClear 1 支＋TDCC（整份清單，行程內快取後僅本地比對）；②快取：三支成功快取各 `maxsize=256`、TTL 3600 秒，超過 256 個不同代碼會逐出舊項（淘汰依據見 F9 第 9 項：讀碼為依寫入時間，非存取；NOT VERIFIED）；失敗記憶 300 秒、無容量上限的 dict；③使用者可任意輸入合格形狀的代碼，**現行設計沒有速率限制**，`ui_v3` 與 adapter 草案皆未含；④快取與失敗記憶行程內共用，一位使用者的大量不同輸入會擠掉他人的快取、並可能使他人在 5 分鐘內對同代碼看到冷卻中的失敗（INFERENCE：由失敗記憶行程內共用、鍵為函式名＋代碼推得，未實測）。是否要在 A 線安全 Gate 內要求入口速率限制或單次查詢上限，屬客戶裁示 |
 | Q1 | 是否核准 8.1 的路徑 B 五欄契約文字（或指示修改）？ | 核准（可修改）後才進入接線；僅核准契約文字、不連帶核准 R-ID-2／3 | 目前五欄皆無已核准契約（第 0 結論 1）；沒有契約的接線是無依據的資料語意 |
 | Q2 | 路徑 B 的最小內部鍵語意：同意「內部取數鍵＝使用者輸入以 `strip(' ')` 後的大寫形；`ok`＝格式通過；兩者皆不顯示、不代表基金存在、不寫入持久層」？**本題的核准範圍是路徑 B 專屬，不升格 R-ID-2／R-ID-3**（兩者全域身分語意維持 Pending，不得被引用為已核准） | 同意（路徑 B 專屬；不升格 R-ID-2／R-ID-3） | 第 2.2 節；不動用 ISIN resolver，不冒稱 R-ID-1；與 P-B 共通規則 5、Q1 一致，消除「核准內部鍵語意」與「不核准 R-ID-2／3」的字面矛盾 |
 | Q3 | 別名表與後綴碼：①是否同意路徑 B **關閉別名表**（`mapping={}`）？②後綴碼是否入口放行（視為不透明字串）？ | ①同意；②放行（若客戶偏好保守，可改為入口攔截並待 S7 裁示後再開） | ①避免「輸入 A 顯示 B」；②不替未裁的 S7 下結論，且攔截會擋掉可能合法的輸入 |
 | Q4 | 來源範圍：O1（沿用三來源，不改 L2）還是 O2（新增 L2 單來源建構函式，需新 DEC 與獨立稽核）？ | 長期 O2；若要最快驗證且接受三來源揭露（第 3.2 節兩句）與 BL-0551 暴露面，先 O1；不採 O3 | O2 暴露面最小；O1 零 L2 改動；O3 需捏造來源狀態 |
-| Q5 | 缺值符號與字樣：路徑 B 獨立入口接真實值，屬正式模式（`◇ 資料未備`）還是示範模式（`⬜ 資料未備`）？配息方式 `accum`／`dist` 的畫面用語、費率欄「契約上目前無來源」的字樣如何定？**緊張關係須先明列**：`DEC-2026-11-13-06` (6) 要求依證據分 `◇`（確實屬資料未提供或未建立來源）／`⛔`（上游取得失敗）／`⬜`（無法確認），並明文「**不得把所有空結果一律轉為 `◇`**」；而 view model 的 `MISSING` 底下混有多種原因（標籤缺、表外寫法、「不定期」、成立日過早或未來、頁面標籤矛盾——見 U3／U4），目前 L2 只給自由文字、無機器可讀原因碼，adapter 不得解析文字，故**目前無法細分子原因** | **兩段式推薦**：①客戶本批 C 線指示已指定缺值字樣為「`◇ 資料未備`」（經對話提示語轉達，待核；repo 內查無逐字存檔，NOT VERIFIED），第一切片可照此顯示；②但因 `MISSING` 子原因混雜，**不得單方宣稱這與 (6) 無牴觸**：細分（哪些該 `◇`、哪些該 `⬜`）待 L2 輸出機器可讀原因碼（新契約）後再由客戶裁示；在那之前費率欄（設計上無來源）與一般缺值**要能區分** | (6) 是已核准的方向裁示，不能被「一律 `◇`」悄悄架空；`DEC-2026-11-17-03` G-3 只裁了離線 FAKE Preview 用 `⬜`，正式模式沿用已核准 `◇` 字樣，但字樣核准不等於細分規則核准 |
+| Q5 | 缺值符號與字樣：路徑 B 獨立入口接真實值，缺值格如何呈現？配息方式 `accum`／`dist` 的畫面用語、費率欄「契約上目前無來源」的字樣如何定？**緊張關係須先明列**：`DEC-2026-11-13-06` (6) 要求依證據分 `◇`（確實屬資料未提供或未建立來源）／`⛔`（上游取得失敗）／`⬜`（無法確認），並明文「**不得把所有空結果一律轉為 `◇`**」；而 view model 的 `MISSING` 底下混有多種原因（標籤缺、表外寫法、「不定期」、成立日過早或未來、頁面標籤矛盾——見 U3／U4），目前 L2 只給自由文字、無機器可讀原因碼，adapter 不得解析文字，故**目前無法細分子原因**。<br>**① 現有客戶指示**：缺值字樣「`◇ 資料未備`」已登記於 **`DEC-2026-11-18-01` C(5)（待合併；本工作樹的 `docs/DECISIONS.md` 查無此編號，NOT VERIFIED；經對話提示語轉達自稱客戶，待核）**——這是客戶指示，不是執行組創作。<br>**Q5-alt（稽核提出的保守替代，供客戶選擇）**：僅費率欄（設計上無來源）用 `◇ 資料未備`，其餘 `MISSING` 在第一切片用 `⬜ 無法判定`，待 L2 輸出機器可讀原因碼後再細分。代價：把「缺值」併入「無法判定」，與 poc 預覽把兩者分開呈現（G-3）不同。 | **不由作者選定**：請客戶裁示 ① 或 Q5-alt。兩者並陳——①：遵循已登記的客戶指示、畫面一致，但在 L2 有原因碼之前，所有缺值子原因都顯示 `◇`，與 (6)「不得一律 `◇`」有未解的緊張，不得單方宣稱無牴觸；Q5-alt：不與 (6) 牴觸，但偏離已登記的字樣指示。無論選哪個，費率欄與一般缺值**要能區分** | (6) 是已核准的方向裁示，不能被「一律 `◇`」悄悄架空；客戶指示（①）同樣不能被執行組單方改寫；兩者衝突的取捨權在客戶。`DEC-2026-11-17-03` G-3 只裁了離線 FAKE Preview 用 `⬜`；字樣核准不等於細分規則核准 |
 | Q6 | 入口規則：同意第 4.3 節的攔截（含網址形一律攔、ISIN 形用結構判斷不驗檢查碼）？是否允許「貼上 MoneyDJ 網址」作為便利輸入？ | 同意攔截；**不允許貼網址** | 網址可夾帶 token，且 `fund_keys` 會丟棄 host／path 只留 `a=`，使用者看不出系統用了什麼；ISIN 結構判斷避免「錯誤 ISIN」意外通過；另請設計者／客戶確認規則 4 是否先移除空格與 `-`（推薦：是，見 4.3 說明）與 `INPUT_ECHO_MAX` 數值 |
 | Q7 | frozen 44 `EXP-6` 的「查無此 fund_code」字面與 `DEC-2026-11-13-06` (6) 的「不顯示查無／不存在」並存且尚未處置：路徑 B 是否明確為**獨立功能、不是 `EXP-6`**，`EXP-6` 維持〔待定〕？ | 是；`EXP-6` 維持待定 | 避免在路徑 B 中悄悄採用被裁示禁止的字面；是否需要 amendment 另案處理 |
 | Q8 | 資料新舊：畫面不顯示取得時間（R-NAV-3 暫緩），但資料可能來自行程內 1 小時快取；是否接受第一個切片不顯示時間，並在契約限制聲明揭露？ | 接受（第一切片）；日後 R-NAV-3 核准後再顯示 | 名稱、成立日變動極少；配息方式風險較高，故須揭露 |
@@ -437,7 +442,7 @@ not_queried() -> FundLookupView
 | U6 | 缺值符號（`◇`／`⬜`）與全部新字樣未核准 | 字樣一律 `PendingWording` |
 | U7 | 配息頻率對照表左欄寫法為推測、未以真實樣本全面驗證 | 配息方式可能大量落在「表外」缺值 |
 | U8 | `INPUT_ECHO_MAX` 的數值（建議 64）與 renderer 顯示時是否再截斷 | view model 的上限已定為結構性設計（S5）；數值待設計者確認 |
-| U9 | 12 字元且前 2 碼字母、末碼數字的真實 MoneyDJ 代碼是否存在；以及帶 `-` 後綴、移除 `-` 與空格後恰為 ISIN 形的真實代碼是否存在（規則 4 的誤攔面）；含 `http` 子字串的合法代碼（規則 3） | 見 4.3 |
+| U9 | 12 字元且前 2 碼字母、末碼數字的真實 MoneyDJ 代碼是否存在；以及帶 `-` 後綴、移除所有非英數字元後恰為 ISIN 形的真實代碼是否存在（規則 4 的誤攔面，見 4.3）；含 `http` 子字串的合法代碼（規則 3） | 見 4.3 |
 | U10 | 「A 線安全 Gate 通過」的定義 | 見 Q0 |
 
 ### 9.2　NOT VERIFIED
