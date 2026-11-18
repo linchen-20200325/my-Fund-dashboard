@@ -20,6 +20,8 @@ from shared.ui_semantics import rules
 from ui_v3.viewmodels.preview_wording import PendingWording
 
 SOURCE = "ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行"
+# DEC-2026-11-17-03 視覺對比要求（空選股池需非顏色輔助）新增的字樣專用出處；仍是 PendingWording，未進規則表
+SOURCE_DEC03 = "ChatGPT UI 設計方向／DEC-2026-11-17-03；暫行，待定字"
 
 
 def _w(key: str, text: str) -> PendingWording:
@@ -78,6 +80,8 @@ _LIST = (
     _w("col_cond", "條件"),
     _w("col_before", "套用前檔數"),
     _w("row_undetermined_suffix", "（資料未備）"),
+    # DEC-2026-11-17-03：空選股池的非顏色輔助標記（符號＋短語）；只陳述『池是空的』，不暗示取數失敗或來源缺失（空池≠失敗）
+    PendingWording("pool_empty_marker", "○ 選股池目前是空的", SOURCE_DEC03),
 )
 
 

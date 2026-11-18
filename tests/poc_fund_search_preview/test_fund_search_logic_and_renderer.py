@@ -445,26 +445,56 @@ def test_empty_pool_is_distinguishable_from_a_pool_with_zero_matches():
     assert S.page_violations(he) == [] and S.page_violations(hn) == []
 
 
-def test_empty_pool_has_a_visual_only_marker_on_all_three_result_cards_without_new_text():
-    """空選股池 vs 有基金但零符合：以結構屬性＋CSS（虛線框、灰底）區分，不新增任何文字。"""
+_POOL_MARKER_RE = re.compile(r'<div class="uv3-row" data-marker="pool-empty">.*?</span></div>')
+
+
+def _without_pool_marker(html):
+    return _POOL_MARKER_RE.sub("", html)
+
+
+def test_empty_pool_has_a_visual_marker_and_a_symbol_text_marker_and_nothing_else_differs_in_text():
+    """空選股池 vs 有基金但零符合：結構屬性＋CSS（虛線框、灰底）＋ DEC-2026-11-17-03 的符號＋文字標記（`pool_empty_marker`）。
+    原守衛『不新增任何文字』已被 DEC-2026-11-17-03 取代；改鎖『拿掉那一個標記後，可見文字與零符合完全相同』＝標記是唯一新增的文字。"""
     for sid, size in (("empty_pool", "0"), ("no_match", "4")):
         sc = fake.build(sid)
         view = L.build_filter_view(sc["pool"], (1, 2, 3), COUNT)
         for html in (R.exp0_html(view, False), R.exp2_html(view, False), R.exp7_html(view, False)):
             assert f'data-pool-size="{size}"' in html
+            assert (W.text("pool_empty_marker") in html) is (size == "0")                  # 只有空池帶標記
+            assert (html.count('data-marker="pool-empty"') == 1) is (size == "0")
     views = {s: L.build_filter_view(fake.build(s)["pool"], (1, 2, 3), COUNT) for s in ("empty_pool", "no_match")}
-    for render in (R.exp0_html, R.exp2_html):                    # EXP-0／EXP-2：可見文字完全相同，區分只靠視覺樣式
-        assert [re.sub(r"<[^>]+>", "", render(views[s], False)) for s in ("empty_pool", "no_match")][0] == \
+    for render in (R.exp0_html, R.exp2_html):                    # EXP-0／EXP-2：拿掉標記後，可見文字與零符合完全相同
+        assert re.sub(r"<[^>]+>", "", _without_pool_marker(render(views["empty_pool"], False))) == \
                re.sub(r"<[^>]+>", "", render(views["no_match"], False))
-    # EXP-7：各列的檔數是真實數字（0 vs 4 等），本來就會不同；把所有數字遮掉後，可見文字（欄位名稱、字樣）必須相同＝沒有新增文字
-    t7 = [re.sub(r"\d+", "#", re.sub(r"<[^>]+>", "|", R.exp7_html(views[s], False))) for s in ("empty_pool", "no_match")]
+    # EXP-7：各列的檔數是真實數字（0 vs 4 等），本來就會不同；把所有數字遮掉、拿掉標記後，可見文字（欄位名稱、字樣）必須相同
+    t7 = [re.sub(r"\d+", "#", re.sub(r"<[^>]+>", "|", _without_pool_marker(R.exp7_html(views[s], False)))) for s in ("empty_pool", "no_match")]
     assert t7[0] == t7[1]
     css = re.sub(r"\s+", "", R.CSS)
     assert '.uv3-card[data-pool-size="0"]{border-style:dashed;background:' in css          # 空池：虛線框＋灰底
     grey_bg = R.theme.m("color.tone.grey")["background"]
     assert f'.uv3-card[data-pool-size="0"]{{border-style:dashed;background:{grey_bg}}}'.replace(" ", "") in css
+    text2 = R.theme.v("color.text.secondary")                                               # DEC-03：邊框色改用既有 token（不新增色票）
+    assert f'.uv3-card[data-pool-size="0"]{{border-color:{text2}}}' in css
     assert '.fs-fund[data-row-state="undetermined"]{border-style:dashed}' in css           # 整檔無法判定列：虛線框
     assert 'data-pool-size' not in R.exp0_html(None, True) and 'data-pool-size' not in R.exp2_html(None, True)   # 來源失敗不標池大小
+    assert 'data-marker' not in R.exp0_html(None, True) and 'data-marker' not in R.exp7_html(None, True)         # 來源失敗≠空池：不標記
+
+
+def test_pool_empty_marker_is_pending_symbol_plus_text_and_never_hints_at_failure_or_missing_source():
+    item = W.FUND_SEARCH_PENDING["pool_empty_marker"]
+    assert item.status == "pending" and item.source == W.SOURCE_DEC03 and "待定字" in item.source and "DEC-2026-11-17-03" in item.source
+    assert item.text[0] == "○" and len(item.text) > 2                                      # 符號＋短語；不是只有符號
+    assert not any(w in item.text for w in ("失敗", "缺", "來源", "不存在", "查無", "無法判定", "資料未備"))   # 空池≠失敗≠來源缺失≠無法判定
+    assert not any(c in item.text for c in "◆◇⬜⛔◷")                                       # 不借用規則表狀態符號
+    assert 'data-pending-wording="pool_empty_marker"' in W.pending("pool_empty_marker")
+
+
+def test_pool_marker_only_appears_when_the_pool_is_known_to_be_empty():
+    for conds, expect in (((1, 2, 3), True), ((1,), True), ((), False)):          # 零條件沒有軌跡、無從得知池大小 → 不標
+        html, view = _exp_html("empty_pool", conds)
+        assert ('data-marker="pool-empty"' in html) is expect, conds
+    html, view = _exp_html("no_match", (1, 2, 3))
+    assert 'data-marker' not in html
 
 
 def test_zero_conditions_never_shows_a_pool_size_or_counts_even_for_the_empty_pool():
@@ -491,3 +521,10 @@ def test_code_shape_is_a_heuristic_so_dash_or_digit_only_input_gets_the_code_typ
     r = L.classify_lookup(raw, fake.LOOKUP_FIXTURES)
     assert r.outcome == L.OUT_NO_FIXTURE
     assert 'data-row="input-type"' in R.lookup_card_html(r, fake.FAKE_FOUND_NAME)
+
+
+def test_exp7_cells_grid_is_auto_fit_and_never_forced_to_four_columns_g5():
+    """G-5：手機可換行、不強制四欄橫排——格線是 auto-fit＋minmax，不得寫死 repeat(4, …)／固定欄數；瀏覽器守衛另量 390 實際換行。"""
+    css = re.sub(r"\s+", "", R.CSS)
+    assert ".fs-cells{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))" in css
+    assert not re.search(r"grid-template-columns:repeat\(\d", css) and "flex-wrap:nowrap" not in css
