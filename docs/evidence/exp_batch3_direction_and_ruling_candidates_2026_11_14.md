@@ -1,5 +1,7 @@
 # 🔍 找基金 Batch 3：EXP-1／EXP-4 方向裁示核對、Q2～Q4／C9／C10／C17 裁示候選、Q6 分段與 Q5 依賴
 
+> **2026-11-18 狀態註記（最小加註，原文未改）**：本文寫成時 D2 R-NAV-4 為 Pending；其後 R-NAV-4 已由 `DEC-2026-11-17-06` 核准契約文字 `T-NAV4`（僅 nav 表 `source_tier`；經對話提示語轉達自稱客戶，待核），R-NAV-6 仍 Pending。下文涉 R-NAV-4 之『Pending／候選』敘述為歷史，以 `docs/DECISIONS.md` 為準。
+
 > **基準**：main `8e2fe6725ba903cba0c0f3bcd0ca9aedd112951b`（#1238 merge）。本檔 2026-11-14 製。
 > **性質**：docs-only 的單組作者整理；**非客戶裁示、非核准**（第一部分引用的客戶方向裁示已另落盤為 `DEC-2026-11-14-01`，要點轉述）。**不授權任何 `ui_v2` 或 New UI2 程式施工**，不改 frozen 44（`docs/v2/44_fund_ui_ssot.md`），不新增 BL；BL-0545 仍是唯一全域 NEXT（BLOCKED 維持）。
 > **品質狀態**：單組作者草稿，尚待**非作者**獨立 QA（涉 data semantics／UI 行為邊界，依 `DEC-2026-10-16-05` 至少 1 組真正獨立稽核）。`ui_v2` 為 maintenance-only，本檔不處置其內容。

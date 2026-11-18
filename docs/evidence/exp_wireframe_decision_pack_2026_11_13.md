@@ -1,5 +1,7 @@
 # 🔍 找基金 New UI2 線框決策包（Q1～Q9／C1～C17／W1～W17）
 
+> **2026-11-18 狀態註記（最小加註，原文未改）**：本文寫成時 D2 R-NAV-4 為 Pending；其後 R-NAV-4 已由 `DEC-2026-11-17-06` 核准契約文字 `T-NAV4`（僅 nav 表 `source_tier`；經對話提示語轉達自稱客戶，待核），R-NAV-6 仍 Pending。下文涉 R-NAV-4 之『Pending／候選』敘述為歷史，以 `docs/DECISIONS.md` 為準。
+
 > **本檔是「決策包」：非客戶裁示、非核准、非授權施工。** 不核准任何 D2 欄位（正式核准欄位數仍為 0）；不啟用 ISIN 對照來源、`full_key` 通路後綴、「查無」顯示；BL-0545 維持 BLOCKED；不授權任何正式 UI、資料庫、Schema、provider、金融公式、cutover 施工。
 > **單組作者（專案 AI 研究作者）；尚待非作者獨立 QA。** 依 `DEC-2026-10-16-05`，本包涉及 data semantics／identity／formula 邊界，送客戶前至少 1 組真正獨立稽核。
 > **基準**：main `6dcb51f8dee3af7536211b3deda4676c3439ed56`（#1226 merge）。素材是 `docs/evidence/exp_new_ui2_wireframe_draft_2026_11_12.md`（該檔已含非作者 QA 回修 `cee0ffff`，下稱「原草稿」）。`d82a711d..6dcb51f8` 只動 docs（`BACKLOG`／`DECISIONS`／`HANDOFF` 與三份 evidence），程式事實未變；本包對關鍵程式事實另在 `6dcb51f8` 重驗（附錄 A）。程式位置一律寫「檔案::符號」，不寫行號。

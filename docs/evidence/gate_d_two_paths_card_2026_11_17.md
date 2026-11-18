@@ -2,6 +2,7 @@
 
 > **單組作者整理，未經獨立 QA；全稱句（「只有／沒有／全部／均否」）皆為單組讀碼／grep 結論，未經第二組驗證。**
 > **不構成授權、不是客戶裁示、不改任何程式或測試。** 基準 main `4dec2788`（2026-11-17 `git fetch` 實查；使用前須重查 GitHub）。
+> **快照聲明（2026-11-18 補）**：本卡內「`DEC-2026-11-17-03`～`-06` 只在未合併分支 `afab8e2c`／`origin/ccr-c565878d-9vggvn`」「R-NAV-4 在 main 仍 Pending」等敘述，皆為 `4dec2788` 快照；**本 PR（#1270）合併後，DEC-03～06 即在 main，R-NAV-4 已核准（`DEC-2026-11-17-06`，僅 nav 表 `source_tier` 契約文字 `T-NAV4`；經對話提示語轉達自稱客戶，待核）**，R-NAV-6 仍 Pending。合併後請以 main 實況為準，不要依賴這些快照句。
 > 證據符號：【碼】讀現行程式；【DEC】對照 `docs/DECISIONS.md`；【文】依既有 evidence／BACKLOG（本組未重驗）；【實跑】本組實際執行；【未驗】本組沒查。不寫行號，以「檔案::符號」定位。
 > 本卡**不重寫** `docs/evidence/fund_search_mount_gate_card_2026_11_17.md`（Gate-M 掛載卡），只引用其第 8 節的 Gate-D 盤點；本卡把 Gate-D 拆成兩條路徑，並補上依賴矩陣。
 
@@ -40,7 +41,7 @@
 | 依賴項 | 路徑 A（選股池清單） | 路徑 B（單檔查詢） | 說明（含前提） |
 |---|---|---|---|
 | ISIN 對照來源 | 否 | 否，**但入口須自行擋 ISIN 形字串** | 目前**沒有已核准的 ISIN 對照來源**（`DEC-2026-11-01-02` G-E1【DEC】）；`fund_keys` 不擋 ISIN 形（第 1 節【實跑】），B 若不在入口擋，會把 ISIN 形字串拿去打 MoneyDJ 並得到「查不到」，易被誤讀成「基金不存在」。擋的位置（adapter 或 view model）屬設計選擇，本卡不定。 |
-| Provider 名稱（R-NAV-4） | 否 | 否 | 兩者皆不顯示來源名。R-NAV-4 在 main 的狀態仍為 Pending；`DEC-2026-11-17-06`（核准 NAV 域 `source_tier` 契約文字 T-NAV4）目前**只登記在未合併分支 `origin/ccr-c565878d-9vggvn`（`afab8e2c`）**，不在 main `4dec2788`。【DEC】【未驗】 |
+| Provider 名稱（R-NAV-4） | 否 | 否 | 兩者皆不顯示來源名。R-NAV-4 在 main 的狀態仍為 Pending；`DEC-2026-11-17-06`（核准 NAV 域 `source_tier` 契約文字 T-NAV4）目前**只登記在未合併分支 `origin/ccr-c565878d-9vggvn`（`afab8e2c`）**，不在 main `4dec2788`。【DEC】【未驗】（此為 `4dec2788` 快照；本 PR 合併後 DEC-03～06 即在 main，R-NAV-4 已核准〔`DEC-2026-11-17-06`〕，R-NAV-6 仍 Pending。） |
 | NAV 來源時間（R-NAV-3） | 否 | 否，**前提：不顯示 `fetched_at`** | R-NAV-3 暫緩（`DEC-2026-11-14-07`）。`build_profiles` 的列層帶 `fetched_at`，B 的畫面**不得**顯示它；TDCC 的 `fetched_at` 恆 None、改記 `observed_at`（不可考）。 |
 | `ccy_source`（R-NAV-6） | 否 | 否，**前提：不顯示 ccy 與其來源** | R-NAV-6 仍 Pending。`ccy` 由三來源合成（`PARTIAL_FAILURE_POLICY="accept"`，2026-10-14 客戶裁示）；B 若要顯示 ccy，需先裁 R-NAV-6，故本卡切片**不顯示 ccy**。 |
 | 歸一化公式 | 否 | 否 | 兩者皆不算報酬／歸一化。 |
@@ -60,7 +61,7 @@
 | 6a 只核欄位**位置**；U7「所有資料值維持占位，不接線」 | 【文】`docs/evidence/exp_wireframe_approval_draft_and_slice_request_2026_11_14.md` U7／U8 | B 的真實值接線**不在既有授權內**，需新 Gate（第 4 節）。 |
 | B 與 44 `EXP-6` 內容部分重疊 | 【碼】`docs/v2/44_fund_ui_ssot.md` 塊 EXP-6（基金全名、`fund_code`、`ccy`、成立日、配息方式、費率；整檔查無→`來源缺`「查無此 `fund_code`」） | EXP-6 的「查無此 `fund_code`」文案與本卡「不顯示『查無基金』『不存在』」衝突點**需設計者／客戶確認**；`DEC-2026-11-17-02` 不授權 EXP-3／4／5／6。 |
 | `DEC-2026-11-14-08` 暫緩 S2-T0；不掛 🔍、不接 Google Sheet | 【DEC】main | 路徑 A 被擋於此；B 不讀 Sheet，但「不掛 🔍 頁」仍適用，故 B 的方案不含掛 🔍 頁。 |
-| `DEC-2026-11-17-02`／`-04` 的授權範圍不含真實資料 | 【DEC】`-02` 在 main；`-04`（內部唯讀 adapter 切片，只允許明確注入的測試輸入、禁真實網路／Sheet）**僅登記在未合併分支 `afab8e2c`** | 兩者都不授權 B 的真實取數。 |
+| `DEC-2026-11-17-02`／`-04` 的授權範圍不含真實資料 | 【DEC】`-02` 在 main；`-04`（內部唯讀 adapter 切片，只允許明確注入的測試輸入、禁真實網路／Sheet）**僅登記在未合併分支 `afab8e2c`**（`4dec2788` 快照；本 PR 合併後即在 main） | 兩者都不授權 B 的真實取數。 |
 | 舊樹 `ui_v2` 已有 B 同型實作 | 【碼】`ui_v2/exp/source.py::_load_funds` | 說明 L2 資料層可用；`ui_v3` 與舊樹不得互 import，需新 adapter。 |
 
 ## 4　裁示卡（只問一題）
@@ -68,7 +69,7 @@
 > **問**：是否同意為「**使用者輸入一個 MoneyDJ 基金代碼**」這一功能，先做「**接真實資料、獨立入口、不入導覽**」的切片？
 > （本問題只涉路徑 B；路徑 A 維持暫緩，不在本卡問。）
 
-### 4-A　方案表（方案編號為本卡自訂，避免與路徑 A／B 混淆；括號內為派工單原稱）
+### 4-A　方案表（方案編號為本卡自訂，避免與路徑 A／B 混淆；括號內為前稿曾用的方案名稱）
 
 | 方案 | 內容 | 優點 | 缺點 | 風險 | AI 推薦 |
 |---|---|---|---|---|---|
@@ -84,6 +85,20 @@
 | 不改 | `ui_v3/shell/registry.py`、`ui_v3/app_preview.py`、`services/**`、`repositories/**`、Schema、frozen 44、公式、FX、Old UI／`ui_v2`。 |
 | 畫面**不顯示** | `ccy`（幣別）、`fetched_at`（取得時間）、來源名（MoneyDJ／TDCC／FundClear 或 `source_tier`）、淨值、報酬、績效；不出現「查無基金」「不存在」等字樣（取數失敗不得推論為基金不存在，延續 `DEC-2026-11-17-03` G-2 的方向〔該 DEC 在未合併分支〕）。 |
 | 畫面**可顯示（候選）** | 基金名稱、配息方式（`dist`／`accum`）、成立日、經理費率欄（恆缺值）；以及「輸入代碼」原值。是否顯示、怎麼措辭，皆屬 `PendingWording`，客戶未核准。 |
+
+### 4-B2　路徑 B 要顯示的四欄：各自的契約狀態（2026-11-18 補；單組字面查 `docs/`，非窮舉，全稱句未驗）
+
+> 依據：`docs/v2/44_fund_ui_ssot.md` §4.6 表 `fund_profile`（客戶 2026-09-21 裁示納入）、塊 EXP-6；`docs/v2/49_data_integration_plan.md`（含 §6.1 配息頻率對照表）；D2 候選表 `docs/evidence/d2_contract_candidates_returns_identity_holdings_2026_11_08.md`。**「契約狀態」不等於「資料值可接線」：6a 只核欄位位置，真實值接線仍需新 Gate（第 4 節）。**
+
+| 欄 | 對應欄位 | frozen 44 的欄位定義 | D2 契約候選（R-／K-）現況 | 其他已知狀態 |
+|---|---|---|---|---|
+| 名稱 | `fund_name` | `fund_profile` 表欄「基金全名」（型別字串；表中標「可空：否」）；EXP-6 顯示欄之一 | D2 K15「基金名稱」：**Pending**（歸 profile 契約，不屬現行取數鍵）；17 列 R-* 待審表中**查無對應列**（字面搜尋） | 取自 MoneyDJ 基本資料頁，需通過身分判準（頁不符 → `unrecognized_page`／`not_found`）【碼】 |
+| 配息方式 | `dividend_policy` | `fund_profile` 表欄，值 `accum`／`dist`（表中標「可空：否」） | D2 候選表查無專屬列（字面搜尋，**未驗**） | `docs/v2/49` §6.1 配息頻率對照表標「客戶 2026-09-26 定案」；表外寫法不寫入；畫面用語**未核准** |
+| 成立日 | `inception_on` | `fund_profile` 表欄「成立日」（日期；表中標「可空：否」）；EXP-6 顯示欄之一 | D2 候選表查無專屬列（字面搜尋，**未驗**） | 年份 < 1900 或晚於台灣今天不採用【碼】；44 另有 2026-10-13 就地登記「缺欄照列」與「可空：否」相撞，正式模式以客戶裁示為準（見 44 §4.6 該註） |
+| 費率 | `mgmt_fee_rate_pct` | `fund_profile` 表欄，**可空：是**（「經理費率；未知為空」）；EXP-6 費率欄 | D2 候選表查無專屬列（字面搜尋，**未驗**） | 現行 `declared_profile` **恆為空**（不以「最高經理費」冒充）【碼】；畫面缺值顯示以 44 `⬜` 規則為準，符號選擇見 4-D |
+| （不顯示）幣別 | `ccy` | `fund_profile` 表欄 | R-NAV-5（`ccy`，契約文字已核 `DEC-2026-11-14-07`）與 R-NAV-6（`ccy_source`，Pending）；本卡切片**不顯示** | 見第 2 節 R-NAV-6 列 |
+
+**讀法（執行組讀法，可被客戶推翻）**：四欄在 frozen 44 的 `fund_profile` 表內皆有欄位定義；但 D2「已核准契約文字」清單（R-ID-1、R-NAV-1、R-NAV-2、R-NAV-4、R-NAV-5）**不含**這四欄任何一欄，故它們的「D2 契約文字」狀態是**未核准或查無**，不是已核准。是否需先核准 D2 契約文字才能接線，屬 Gate 範圍，本卡不自行定。
 
 ### 4-C　不授權清單（本卡即使被採納也不授權）
 
@@ -141,7 +156,7 @@
 | 路徑 B 的 view model 純函式（輸入：注入的假 `build_profiles` 結果；含 ISIN 形字串擋門測試） | 路徑 B 內部測試切片 | **目前沒有任何 DEC 授權**（`-04` 只涵蓋選股池 adapter 的措辭）；若要做，需客戶明示或併入方案 1。不視為「不需新 Gate」。 |
 | 其餘 | — | 本組查無其他不需新 Gate 且有使用者可見成果的工作。（單組結論，全稱句未驗） |
 
-## 6　抽查核對紀錄（對現行程式／DEC 的 9 項，與派工單不符處已修正）
+## 6　抽查核對紀錄（對現行程式／DEC 的 10 項，與交辦文字不符處已修正）
 
 | # | 核對項 | 結果 |
 |---|---|---|
@@ -150,9 +165,9 @@
 | 3 | `build_profiles` 固定同呼叫三來源、無只用 MoneyDJ 入口 | 相符【碼】：`_check_fetchers` 要求恰三鍵 |
 | 4 | `fetch_moneydj_basic_fields` 只讀四欄；`mgmt_fee_rate_pct` 恆 None；成立日 1900～今日 | 相符【碼】 |
 | 5 | `dividend_policy` 依 `docs/v2/49` §6.1 | 相符【碼】；補：值為 `dist`／`accum`／None |
-| 6 | `PURE_CODE_PATTERN` 會把 12 字元 ISIN 形字串收為代碼 | 相符【實跑】（`US0378331005`、`LU0123456789` 皆 `ok=True`）。**補充派工單未提**：`resolve_full_keys` 也接受 MoneyDJ 網址並抽出 `a=` 代碼。 |
-| 7 | **派工單原稱「MoneyDJ／FundClear／TDCC 外部請求走 NAS proxy，停用 TLS 驗證」** | **部分不符，已修正**：MoneyDJ、FundClear 經 `fetch_url_with_retry`→`infra.proxy.fetch_url`，proxy 模式 `verify=False`（相符）；**TDCC 走 `sources._tdcc_get` 的 `urllib.request.urlopen`**，proxy 由全域 opener 套用，程式碼未顯式關閉驗證。第 2 節 BL-0551 列已據此分列。 |
-| 8 | **派工單原稱 `DEC-2026-11-17-06` 已核 `source_tier` 文字〔若已落盤〕；`-04` 授權 S2-T0 內部 adapter** | **在 main 查無**：`DEC-2026-11-17-03`～`-06` 只存在於未合併分支 `origin/ccr-c565878d-9vggvn`（`afab8e2c`，一個 commit，登記 DEC＋PROJECT_RULES 第 16 節）。本卡引用處皆已標註「未合併分支」，R-NAV-4 在 main 仍 Pending。 |
+| 6 | `PURE_CODE_PATTERN` 會把 12 字元 ISIN 形字串收為代碼 | 相符【實跑】（`US0378331005`、`LU0123456789` 皆 `ok=True`）。**補充：交辦文字未提**：`resolve_full_keys` 也接受 MoneyDJ 網址並抽出 `a=` 代碼。 |
+| 7 | **交辦文字原稱「MoneyDJ／FundClear／TDCC 外部請求走 NAS proxy，停用 TLS 驗證」** | **部分不符，已修正**：MoneyDJ、FundClear 經 `fetch_url_with_retry`→`infra.proxy.fetch_url`，proxy 模式 `verify=False`（相符）；**TDCC 走 `sources._tdcc_get` 的 `urllib.request.urlopen`**，proxy 由全域 opener 套用，程式碼未顯式關閉驗證。第 2 節 BL-0551 列已據此分列。 |
+| 8 | **交辦文字原稱 `DEC-2026-11-17-06` 已核 `source_tier` 文字〔若已落盤〕；`-04` 授權 S2-T0 內部 adapter** | **在 main 查無**：`DEC-2026-11-17-03`～`-06` 只存在於未合併分支 `origin/ccr-c565878d-9vggvn`（`afab8e2c`，一個 commit，登記 DEC＋PROJECT_RULES 第 16 節）。本卡引用處皆已標註「未合併分支」，R-NAV-4 在 main 仍 Pending。（`4dec2788` 快照；本 PR 合併後 DEC-03～06 即在 main，R-NAV-4 已核准〔`DEC-2026-11-17-06`〕。） |
 | 9 | 6a／U7「所有資料值維持占位，不接線」；`DEC-2026-11-14-08`、`-17-02` 範圍 | 相符【DEC】【文】 |
 | 10 | 路徑更正：`exp_universe`／`exp_profile`／`exp_nav`／`fund_keys` 在 `services/v2_tables/`，不在 `services/v2_domain/` | 相符【碼】（`v2_domain` 只有 `rule_filter` 等純計算；`ui_v3` adapters 守衛的 `LOWER_LAYER_PREFIXES` 同時開放兩者） |
 
@@ -161,7 +176,7 @@
 1. 本卡全部內容為單組作者整理，**未經獨立 QA**；全稱句（「不依賴」「均否」「沒有其他」）未經第二組驗證。
 2. 第 2 節「均否」係就「畫面不顯示該欄位」的前提成立；若日後顯示 ccy／`fetched_at`／來源名，對應 R-NAV-6／R-NAV-3／R-NAV-4 立即變「是」。
 3. 未執行任何對外請求；未探查 secrets；MoneyDJ／FundClear／TDCC 可達性、NAS proxy 狀態、TLS 實際行為皆未驗。
-4. `DEC-2026-11-17-03`～`-06` 在未合併分支，其內容與後續合併狀態未驗；使用前須重查。
+4. `DEC-2026-11-17-03`～`-06` 在未合併分支，其內容與後續合併狀態未驗；使用前須重查。（`4dec2788` 快照；本 PR 〔#1270〕合併後 DEC-03～06 即在 main，R-NAV-4 已核准〔`DEC-2026-11-17-06`〕。）
 5. 單組 grep／讀碼，非窮舉；動態組出的呼叫、未列檔案可能漏看。
 6. Cloud／真機／瀏覽器像素未驗；CI 結果未查。
 7. 本卡所有「推薦」為作者建議，**非授權、非客戶裁示**；登記不構成動工授權。

@@ -1,5 +1,7 @@
 # 🔍 找基金 一頁式裁示卡（客戶可在一則回覆內完成）
 
+> **2026-11-18 狀態註記（最小加註，原文未改）**：本文寫成時 D2 R-NAV-4 為 Pending；其後 R-NAV-4 已由 `DEC-2026-11-17-06` 核准契約文字 `T-NAV4`（僅 nav 表 `source_tier`；經對話提示語轉達自稱客戶，待核），R-NAV-6 仍 Pending。下文涉 R-NAV-4 之『Pending／候選』敘述為歷史，以 `docs/DECISIONS.md` 為準。
+
 > **基準**：main `704d146708302995ca8cbeeb66bc34e9fa96dc86`（#1239 merge）。本檔 2026-11-14 製。
 > **性質**：docs-only；把 `exp_batch3_direction_and_ruling_candidates_2026_11_14.md`（下稱「Batch 3」）、`exp_batch2_gate_convergence_2026_11_13.md`（「Batch 2」）、`exp_wireframe_decision_pack_2026_11_13.md`（「包」）、`exp_wireframe_skeleton_new_ui2_2026_11_13.md`（「骨架」）、`DEC-2026-11-13-06`、`DEC-2026-11-14-01` 的剩餘決策壓成一頁。**全部是候選，不是客戶裁示、不是核准，不新增 DEC、不新增 BL**；客戶尚未對本卡任何一題說過話。**不授權任何施工**（`ui_v2` 維持 maintenance-only；不改 frozen 44）。BL-0545 仍是唯一全域 NEXT（BLOCKED 維持）。
 > **標記**：〔事〕＝文件或程式原文有證據；〔推〕＝作者推論，可被推翻；〔待核〕＝需客戶或總管裁定；NOT VERIFIED＝本組沒驗。引用 44 一律寫「塊名／小節名」，不寫行號（行號會漂移）。
