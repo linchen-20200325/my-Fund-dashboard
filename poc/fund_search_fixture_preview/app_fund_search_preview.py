@@ -35,7 +35,7 @@ def main() -> None:
         f'font-size:{theme.v("type.caption")}">{FAKE_BANNER}<br>{fake.HARNESS_CODES_HINT}</div>',
         unsafe_allow_html=True)
     R.render_css()
-    R.render_lookup(fake.LOOKUP_FIXTURES, fake.FAKE_FOUND_NAME)
+    R.render_lookup(fake.LOOKUP_FIXTURES, fake.FAKE_FOUND_NAME, fake.LOOKUP_DIVIDEND_MODE)
     st.markdown(R.divider_html(), unsafe_allow_html=True)
     ids = list(fake.SCENARIOS)
     st.selectbox(SCENARIO_LABEL, ids, key=KEY_SCENARIO, index=ids.index(fake.DEFAULT_SCENARIO),

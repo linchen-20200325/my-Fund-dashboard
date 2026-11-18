@@ -21,8 +21,6 @@ KEY_QUERY = "fs_last_query"
 KEY_FORM = "fs_lookup_form"
 KEY_COND = "fs_cond_{n}"
 MAX_INPUT_CHARS = 100
-# 輸入像代碼（格式通過、非 ISIN 形）的查詢結果種類；空白／不像代碼（unrecognized）與 ISIN 形不標『輸入類型：代碼型字串』
-CODE_TYPED_OUTCOMES = (L.OUT_FOUND, L.OUT_INSUFFICIENT, L.OUT_FAILED, L.OUT_NO_FIXTURE)
 
 
 def safe(value: object) -> str:
@@ -101,10 +99,23 @@ def isin_result_html() -> str:
             f'<div class="uv3-note">{W.pending("isin_inactive_detail")}</div></div>')
 
 
-def lookup_card_html(result: L.LookupResult, found_name: str) -> str:
-    """單檔查詢結果卡。`found_name` 是 fixture 給的 FAKE 名稱（只有 `found` 才會顯示）。"""
+# 配息方式候選值 → 字樣鍵（DEC-2026-11-18-01）。其他值一律視為錯誤，不猜。
+DIVIDEND_MODE_KEYS = {"distributing": "div_mode_distributing", "accumulating": "div_mode_accumulating"}
+
+
+def lookup_idle_html() -> str:
+    """查詢前（尚未送出）：只顯示『尚未查詢』，沒有任何欄位列。"""
+    return f'<div class="uv3-card" data-block="lookup-idle"><div class="uv3-row" data-row="idle">{W.pending("not_queried")}</div></div>'
+
+
+def lookup_card_html(result: L.LookupResult, found_name: str, dividend_mode: Optional[str] = None) -> str:
+    """單檔查詢結果卡。`found_name` 是 fixture 給的 FAKE 名稱（只有 `found` 才會顯示）。
+    結果欄位只有五個（DEC-2026-11-18-01）：輸入代碼、基金名稱、配息方式、成立日期、經理費率；其他欄位一律不畫。
+    `dividend_mode`：None（缺值）或 `DIVIDEND_MODE_KEYS` 的鍵（配息型／累積型候選）；只有 `found` 才使用，其他結果一律缺值。"""
     if not isinstance(result, L.LookupResult):
         raise TypeError("result must be a LookupResult")
+    if dividend_mode is not None and dividend_mode not in DIVIDEND_MODE_KEYS:
+        raise ValueError(f"未知的配息方式候選值 {dividend_mode!r}")
     out = result.outcome
     if out == L.OUT_ISIN:
         raise ValueError("ISIN 形的輸入不出結果卡；請用 isin_result_html()")
@@ -122,34 +133,29 @@ def lookup_card_html(result: L.LookupResult, found_name: str) -> str:
     else:
         raise ValueError(f"未知的查詢結果種類 {out!r}")
     shown_input = safe(result.raw) if result.raw.strip() else W.missing_cell()
+    # 狀態訊息列不是欄位（沒有標籤）；它只陳述這次查詢的結果種類
     rows = [
-        _row("row_result", status, "result"),
+        f'<div class="uv3-row" data-row="result">{status}</div>',
         _row("row_input_code", f'<span data-value="input-code">{shown_input}</span>', "input-code"),
     ]
-    if out in CODE_TYPED_OUTCOMES:   # 只有『像代碼』的輸入才標輸入類型；不暗示已解析成正式 MoneyDJ 身份
-        rows.append(_row("row_input_type", W.pending("input_type_code"), "input-type"))
-    rows += [
-        _row("row_identity", W.pending("identity_unconfirmed"), "identity"),
-        f'<div class="uv3-note" data-note="single">{W.pending("single_note")}</div>',
-    ]
     if out in (L.OUT_FOUND, L.OUT_INSUFFICIENT):
-        name_html = safe(found_name) if out == L.OUT_FOUND else W.missing_cell()
+        found = out == L.OUT_FOUND
+        name_html = safe(found_name) if found else W.missing_cell()
+        mode_html = W.pending(DIVIDEND_MODE_KEYS[dividend_mode]) if found and dividend_mode is not None else W.missing_cell()
         rows += [
             _row("row_name", name_html, "name"),
+            _row("row_dividend_mode", mode_html, "dividend-mode"),
             _row("row_inception", W.missing_cell(), "inception"),
-            _row("row_dividend_mode", W.missing_cell(), "dividend-mode"),
             _row("row_mgmt_fee", W.missing_cell(), "mgmt-fee"),
         ]
+    rows.append(f'<div class="uv3-note" data-note="single">{W.pending("single_note")}</div>')
     return (f'<div class="uv3-card" data-block="lookup-result" data-outcome="{escape(out)}">'
             f'<span class="fs-tag" data-tag="fake">{W.pending("fake_tag")}</span>{"".join(rows)}</div>')
 
 
 def basic_info_details_html() -> str:
-    """預設收合、不巢狀的單一 `<details>`：基本資料｜尚未取得｜來源與限制。"""
-    body = (_row("row_source", W.missing_cell(), "source") + _row("row_fallback", W.missing_cell(), "fallback")
-            + _row("row_asof", W.missing_cell(), "asof")
-            + f'<div class="uv3-note" data-note="not-obtained">{W.pending("not_obtained_note")}</div>'
-            + f'<div class="uv3-note" data-note="limits">{W.pending("limits_note")}</div>')
+    """預設收合、不巢狀的單一 `<details>`：只放限制說明；不含任何欄位列（來源／備援來源／資料日已於 DEC-2026-11-18-01 移除）。"""
+    body = f'<div class="uv3-note" data-note="limits">{W.pending("limits_note")}</div>'
     return (f'<details class="fs-details" data-block="basic-info"><summary data-summary="basic-info">'
             f'{W.pending("details_title")}</summary>{body}</details>')
 
@@ -268,8 +274,8 @@ def render_css() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
 
 
-def render_lookup(fixtures: dict, found_name: str) -> None:
-    """上區：標題 → 單一輸入框 → 常駐 ISIN 說明 → 查詢鈕（st.form，Enter 與點擊等效）→ 結果卡 → 預設收合的基本資料。"""
+def render_lookup(fixtures: dict, found_name: str, dividend_modes: Optional[dict] = None) -> None:
+    """上區：標題 → 單一輸入框 → 常駐 ISIN 說明 → 查詢鈕（st.form，Enter 與點擊等效）→ 結果卡（查詢前只顯示『尚未查詢』）→ 預設收合的限制說明。"""
     import streamlit as st
 
     st.title(W.text("page_title"), anchor=False)
@@ -280,10 +286,13 @@ def render_lookup(fixtures: dict, found_name: str) -> None:
     if submitted:
         st.session_state[KEY_QUERY] = raw
     query = st.session_state.get(KEY_QUERY)
-    if query is not None:
+    if query is None:
+        html = lookup_idle_html()
+    else:
         result = L.classify_lookup(query, fixtures)
-        html = isin_result_html() if result.outcome == L.OUT_ISIN else lookup_card_html(result, found_name)
-        st.markdown(html, unsafe_allow_html=True)
+        mode = (dividend_modes or {}).get(query.strip().upper()) if result.outcome == L.OUT_FOUND else None
+        html = isin_result_html() if result.outcome == L.OUT_ISIN else lookup_card_html(result, found_name, mode)
+    st.markdown(html, unsafe_allow_html=True)
     st.markdown(basic_info_details_html(), unsafe_allow_html=True)
 
 

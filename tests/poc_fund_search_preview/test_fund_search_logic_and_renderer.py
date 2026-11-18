@@ -69,19 +69,92 @@ def test_lookup_card_never_claims_identity_or_nonexistence_and_has_fake_tag(raw)
     assert S.page_violations(html) == []   # 單看結果卡 HTML：沒有 EXP 區塊，頁面層級判定函式必須整個為空
     assert S.forbidden_word_violations(html) == [] and S.raw_script_violations(html) == []
     assert 'data-tag="fake"' in html and "FAKE 模擬" in html
-    assert "◇ 尚未確認" in html and "已確認" not in html            # 身份永遠是待確認
+    assert "已確認" not in html and 'data-row="identity"' not in html and "◇ 尚未確認" not in html   # 沒有『基金身份』欄（DEC-2026-11-18-01：結果欄位只有五個），更不會宣稱已確認
 
 
-def test_lookup_card_profile_fields_are_missing_not_zero_and_found_has_only_a_fake_name():
-    found = R.lookup_card_html(L.classify_lookup("FAKE-OK01", fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
+def _card(raw, mode=None):
+    return R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME, mode)
+
+
+def _row_html(html, name):
+    return re.search(rf'data-row="{name}">(.*?)</div>', html).group(1)
+
+
+def test_lookup_card_profile_fields_are_missing_not_zero_and_found_has_a_fake_name_and_a_candidate_dividend_mode():
+    found = _card("FAKE-OK01", fake.LOOKUP_DIVIDEND_MODE["FAKE-OK01"])
     assert fake.FAKE_FOUND_NAME in found
-    for row in ("inception", "dividend-mode", "mgmt-fee"):
-        m = re.search(rf'data-row="{row}">(.*?)</div>', found)
-        assert m and "⬜ 資料未備" in m.group(1) and not re.search(r">\s*0\s*<", m.group(1))
-    low = R.lookup_card_html(L.classify_lookup("FAKE-LOW1", fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
-    assert fake.FAKE_FOUND_NAME not in low and "資料不足" in low
+    assert W.text("div_mode_distributing") == "配息型" and "配息型" in _row_html(found, "dividend-mode")
+    for row in ("inception", "mgmt-fee"):
+        assert "⬜ 資料未備" in _row_html(found, row) and not re.search(r">\s*0\s*<", _row_html(found, row))
+    other = _card("FAKE-OK02", fake.LOOKUP_DIVIDEND_MODE["FAKE-OK02"])
+    assert W.text("div_mode_accumulating") == "累積型" and "累積型" in _row_html(other, "dividend-mode") and "配息型" not in other
+    no_mode = _card("FAKE-OK01")                                          # 沒給候選值 → 缺值字樣，不猜
+    assert "⬜ 資料未備" in _row_html(no_mode, "dividend-mode") and "配息型" not in no_mode and "累積型" not in no_mode
+    low = _card("FAKE-LOW1", "distributing")                              # 只有 found 才顯示候選值；資料不足一律缺值
+    assert fake.FAKE_FOUND_NAME not in low and "資料不足" in low and "配息型" not in low
     for row in ("name", "inception", "dividend-mode", "mgmt-fee"):
-        assert "⬜ 資料未備" in re.search(rf'data-row="{row}">(.*?)</div>', low).group(1)
+        assert "⬜ 資料未備" in _row_html(low, row)
+    with pytest.raises(ValueError):
+        _card("FAKE-OK01", "半年配")                                       # 未知候選值 fail loud，不顯示
+
+
+def test_lookup_card_has_exactly_the_five_approved_fields_in_the_clients_order():
+    found = _card("FAKE-OK01", "distributing")
+    assert [x for x in S._LABEL_RE.findall(found)] == list(S.FIVE_LABELS)
+    assert re.findall(r'data-row="([^"]+)"', found) == ["result", "input-code", "name", "dividend-mode", "inception", "mgmt-fee"]
+    assert W.text("row_inception") == "成立日期"
+
+
+@pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-OK02", "FAKE-LOW1", "FAKE-ERR1", "", "???", "ABC123", "<script>x</script>"])
+def test_lookup_card_has_no_field_beyond_the_five_for_every_outcome(raw):
+    """DEC-2026-11-18-01 第 7 點：不顯示未核准幣別／NAV／報酬／績效／fetched_at／供應者欄位，也不留舊的查詢結果／輸入類型／基金身份欄。"""
+    assert S.lookup_field_violations(_card(raw, fake.LOOKUP_DIVIDEND_MODE.get(raw.upper()))) == []
+
+
+def test_details_area_holds_no_field_rows_source_fallback_asof_are_removed():
+    html = R.basic_info_details_html()
+    assert S.details_field_violations(html) == []
+    for key in ("row_source", "row_fallback", "row_asof", "not_obtained_note", "row_result", "row_input_type", "input_type_code", "row_identity", "identity_unconfirmed"):
+        assert key not in W.FUND_SEARCH_PENDING, key
+
+
+def test_mutation_extra_field_rows_in_the_production_renderer_turn_the_whitelist_red(monkeypatch):
+    """對 production renderer 變異：結果卡多畫一列『幣別』／收合區把『來源』欄位列放回去，白名單必須報紅（未變異時為空）。"""
+    assert S.lookup_field_violations(_card("FAKE-OK01", "distributing")) == [] and S.details_field_violations(R.basic_info_details_html()) == []
+    orig_row = R._row
+
+    def with_currency(label_key, value_html, name):
+        extra = '<div class="uv3-row" data-row="ccy"><span class="uv3-label">幣別</span>X</div>' if name == "mgmt-fee" else ""
+        return orig_row(label_key, value_html, name) + extra
+    monkeypatch.setattr(R, "_row", with_currency)
+    bad = S.lookup_field_violations(_card("FAKE-OK01", "distributing"))
+    assert ("非五欄標籤", "幣別") in bad and ("非白名單 data-row", "ccy") in bad and ("未核准欄位字樣", "幣別") in bad
+    monkeypatch.undo()
+    orig_details = R.basic_info_details_html
+    monkeypatch.setattr(R, "basic_info_details_html",
+                        lambda: orig_details().replace("</details>", '<div class="uv3-row" data-row="source"><span class="uv3-label">來源</span>x</div></details>'))
+    assert S.details_field_violations(R.basic_info_details_html())
+    # 其他未核准欄位字樣各自都抓得到（對判定函式變異：在已知乾淨的結果卡尾端塞入該字樣）
+    clean = _card("FAKE-OK01", "distributing")
+    for token in ("NAV", "淨值", "報酬", "績效", "fetched_at", "供應者", "備援來源", "資料日", "幣別"):
+        head, _, tail = clean.rpartition("</div>")
+        assert [v for v in S.lookup_field_violations(head + token + "</div>" + tail) if v[0] == "未核准欄位字樣"], token
+
+
+def test_idle_card_says_only_not_queried_and_the_mutations_turn_red(monkeypatch):
+    html = R.lookup_idle_html()
+    assert S.idle_violations(html) == [] and W.text("not_queried") == "尚未查詢" and 'data-pending-wording="not_queried"' in html
+    assert 'data-block="lookup-result"' not in html and S.forbidden_word_violations(html) == []
+    # 變異一：idle 卡多畫一列欄位 → 報紅
+    monkeypatch.setattr(R, "lookup_idle_html", lambda: html.replace("</div></div>", '</div><div class="uv3-row" data-row="name"><span class="uv3-label">基金名稱</span>x</div></div>'))
+    assert S.idle_violations(R.lookup_idle_html())
+    monkeypatch.undo()
+    # 變異二：改 production 字樣 → 報紅
+    from ui_v3.viewmodels.preview_wording import PendingWording
+    mutated = dict(W.FUND_SEARCH_PENDING)
+    mutated["not_queried"] = PendingWording("not_queried", "查無基金", W.SOURCE_DEC1118)
+    monkeypatch.setattr(W, "FUND_SEARCH_PENDING", mutated)
+    assert S.idle_violations(R.lookup_idle_html())
 
 
 def test_failed_lookup_uses_the_approved_failure_wording_and_never_says_not_found():
@@ -342,22 +415,16 @@ from shared.ui_semantics import rules  # noqa: E402
 _TYPE_LABEL, _TYPE_VALUE = "輸入類型", "代碼型字串（原值未改寫）"
 
 
-@pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-LOW1", "FAKE-ERR1", "ABC123", "  fake-ok01  "])
-def test_input_type_row_is_present_for_code_typed_inputs_and_does_not_claim_a_resolved_identity(raw):
+@pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-LOW1", "FAKE-ERR1", "ABC123", "  fake-ok01  ", "", "???"])
+def test_input_type_and_identity_rows_are_gone_and_the_input_code_is_kept_verbatim(raw):
+    """DEC-2026-11-18-01：『輸入類型』『基金身份』不在五欄內，已移除；輸入代碼仍顯示原值（不改寫）。"""
     html = R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
-    row = re.search(r'data-row="input-type">(.*?)</div>', html, re.S)
-    assert row and W.text("row_input_type") == _TYPE_LABEL and W.text("input_type_code") == _TYPE_VALUE
-    assert _TYPE_LABEL in row.group(1) and _TYPE_VALUE in row.group(1) and 'data-pending-wording="input_type_code"' in row.group(1)
-    assert "MoneyDJ" not in html and "已解析" not in html and "已確認" not in html and "◇ 尚未確認" in html
-    shown = re.search(r'data-value="input-code">(.*?)</span>', html, re.S).group(1)
-    assert S.text_of(shown) == raw                                  # 原值未改寫（連頭尾空白、大小寫都保留）
-    assert html.index('data-row="input-code"') < html.index('data-row="input-type"') < html.index('data-row="identity"')
-
-
-@pytest.mark.parametrize("raw", ["", "   ", "???", "<script>x</script>", "a b c"])
-def test_input_type_row_is_absent_for_blank_or_unrecognized_input(raw):
-    html = R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
-    assert 'data-row="input-type"' not in html and _TYPE_VALUE not in html
+    assert 'data-row="input-type"' not in html and 'data-row="identity"' not in html
+    assert _TYPE_LABEL not in html and _TYPE_VALUE not in html and "基金身份" not in S.text_of(html).replace("不是對基金身份的判斷", "")
+    assert "◇ 尚未確認" not in html and "已解析" not in html and "已確認" not in html
+    if raw.strip():
+        shown = re.search(r'data-value="input-code">(.*?)</span>', html, re.S).group(1)
+        assert S.text_of(shown) == raw                                  # 原值未改寫（連頭尾空白、大小寫都保留）
 
 
 def test_input_type_row_is_absent_in_the_isin_situation():
@@ -383,7 +450,7 @@ def test_undetermined_and_missing_are_different_wordings_and_different_dom_marke
 
 def test_the_formal_mode_missing_wording_never_appears_in_any_preview_html():
     formal = rules.entry("missing").wording
-    parts = [R.basic_info_details_html(), R.isin_note_html(), R.isin_result_html(), R.exp1_head_html(), R.divider_html(), R.CSS]
+    parts = [R.basic_info_details_html(), R.isin_note_html(), R.isin_result_html(), R.lookup_idle_html(), R.exp1_head_html(), R.divider_html(), R.CSS]
     for raw in ("FAKE-OK01", "FAKE-LOW1", "FAKE-ERR1", "", "???", "ABC123"):
         parts.append(R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME))
     for sid in fake.SCENARIOS:
@@ -482,7 +549,9 @@ def test_empty_pool_has_a_visual_marker_and_a_symbol_text_marker_and_nothing_els
 
 def test_pool_empty_marker_is_pending_symbol_plus_text_and_never_hints_at_failure_or_missing_source():
     item = W.FUND_SEARCH_PENDING["pool_empty_marker"]
-    assert item.status == "pending" and item.source == W.SOURCE_DEC03 and "執行組暫擬" in item.source and "未指定字句" in item.source and "待 ChatGPT／客戶確認定字" in item.source and "DEC-2026-11-17-03" in item.source
+    assert item.status == "pending" and item.source == W.SOURCE_DEC03 == W.SOURCE_DEC1118       # 2026-11-18 客戶指示定稿(待核)：出處改為 DEC-2026-11-18-01 轉述句
+    assert "DEC-2026-11-18-01" in item.source and "待核" in item.source and "仍是 PendingWording" in item.source and "不進 rules.py" in item.source
+    assert "執行組暫擬" not in item.source and "待 ChatGPT／客戶確認定字" not in item.source
     assert item.text[0] == "○" and len(item.text) > 2                                      # 符號＋短語；不是只有符號
     assert not any(w in item.text for w in ("失敗", "缺", "來源", "不存在", "查無", "無法判定", "資料未備"))   # 空池≠失敗≠來源缺失≠無法判定
     assert not any(c in item.text for c in "◆◇⬜⛔◷")                                       # 不借用規則表狀態符號
@@ -516,11 +585,12 @@ def test_exp7_columns_are_the_fake_preview_four_and_zero_conditions_say_only_the
 
 
 @pytest.mark.parametrize("raw", ["---", "123", "AAA", "-A-"])
-def test_code_shape_is_a_heuristic_so_dash_or_digit_only_input_gets_the_code_typed_row(raw):
-    """現況揭露（不改行為）：`_CODE_SHAPE` 只看字元集與長度，這類輸入也會判 no_fixture 並出現『輸入類型』列。"""
+def test_code_shape_is_a_heuristic_so_dash_or_digit_only_input_is_no_fixture(raw):
+    """現況揭露（不改行為）：`_CODE_SHAPE` 只看字元集與長度，這類輸入也會判 no_fixture（⬜ 無法判定，不是『不存在』）；『輸入類型』列已於 DEC-2026-11-18-01 移除。"""
     r = L.classify_lookup(raw, fake.LOOKUP_FIXTURES)
     assert r.outcome == L.OUT_NO_FIXTURE
-    assert 'data-row="input-type"' in R.lookup_card_html(r, fake.FAKE_FOUND_NAME)
+    html = R.lookup_card_html(r, fake.FAKE_FOUND_NAME)
+    assert 'data-status-key="undetermined"' in html and 'data-row="input-type"' not in html
 
 
 def test_exp7_cells_grid_is_auto_fit_and_never_forced_to_four_columns_g5():
@@ -528,3 +598,25 @@ def test_exp7_cells_grid_is_auto_fit_and_never_forced_to_four_columns_g5():
     css = re.sub(r"\s+", "", R.CSS)
     assert ".fs-cells{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))" in css
     assert not re.search(r"grid-template-columns:repeat\(\d", css) and "flex-wrap:nowrap" not in css
+
+
+# ───────────────────────── 2026-11-18 C 線：取數失敗不得說基金不存在（DEC-2026-11-18-01 第 6 點） ─────────────────────────
+
+def test_failed_lookup_says_only_the_fetch_failed_sentences_and_draws_no_profile_rows():
+    html = _card("FAKE-ERR1")
+    assert W.text("fail_not_identity") == "這次取數失敗，不是對基金身份的判斷" and W.text("fail_not_identity") in html
+    assert "⛔ 取數失敗" in html and W.text("fail_impact") in html
+    assert S.forbidden_word_violations(html) == [] and S.lookup_field_violations(html) == []
+    assert re.findall(r'data-row="([^"]+)"', html) == ["result", "input-code"]          # 失敗：只有狀態訊息與輸入代碼，不畫基金名稱等欄位
+
+
+def test_mutation_failed_card_that_claims_the_fund_does_not_exist_turns_the_wording_guard_red(monkeypatch):
+    """對 production 字樣變異：把失敗句換成『基金不存在』類說法，禁用字樣守衛必須報紅（未變異時為空）。"""
+    from ui_v3.viewmodels.preview_wording import PendingWording
+    assert S.forbidden_word_violations(_card("FAKE-ERR1")) == []
+    for claim in ("這檔基金不存在", "查無基金", "查無此代碼"):
+        mutated = dict(W.FUND_SEARCH_PENDING)
+        mutated["fail_not_identity"] = PendingWording("fail_not_identity", claim, W.SOURCE)
+        monkeypatch.setattr(W, "FUND_SEARCH_PENDING", mutated)
+        assert S.forbidden_word_violations(_card("FAKE-ERR1")), claim
+        monkeypatch.undo()

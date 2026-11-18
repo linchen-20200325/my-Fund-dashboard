@@ -16,11 +16,15 @@ COLUMNS = ("code", "name", "ccy", "nav_date", "nav", "div")
 # 單檔查詢的 FAKE 代碼表（輸入去頭尾空白、轉大寫後比對）：結果由本表決定，不是由格式推導。
 LOOKUP_FIXTURES = {
     "FAKE-OK01": "found",
+    "FAKE-OK02": "found",
     "FAKE-LOW1": "insufficient",
     "FAKE-ERR1": "failed",
 }
 FAKE_FOUND_NAME = "FAKE 模擬基金（非正式名稱）"
-HARNESS_CODES_HINT = "FAKE 代碼：FAKE-OK01（找到）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）"
+# 配息方式的候選值（DEC-2026-11-18-01：配息型／累積型）。僅 FAKE 示範碼才有值；其餘一律缺值，不顯示未經契約核准的真實值。
+DIV_DISTRIBUTING, DIV_ACCUMULATING = "distributing", "accumulating"
+LOOKUP_DIVIDEND_MODE = {"FAKE-OK01": DIV_DISTRIBUTING, "FAKE-OK02": DIV_ACCUMULATING}
+HARNESS_CODES_HINT = "FAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）"
 
 
 def _fund(n, name, states, missing=()):

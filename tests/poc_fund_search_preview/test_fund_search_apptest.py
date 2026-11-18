@@ -75,6 +75,7 @@ def test_initial_page_has_no_result_card_the_harness_banner_first_and_zero_condi
     assert [t.value for t in at.title] == ["找一檔基金"]
     assert at.text_input(key=S.KEY_INPUT).label == "MoneyDJ 基金代碼或 ISIN" and at.text_input(key=S.KEY_INPUT).value == ""
     assert _outcome(at) is None and 'data-block="isin-note"' in _md(at)
+    assert S.idle_violations(_block(at, "lookup-idle")) == []          # 查詢前只顯示『尚未查詢』，沒有任何欄位列
     assert at.selectbox(key=S.KEY_SCENARIO).value == fake.DEFAULT_SCENARIO
     assert 'data-counts-shown="no"' in _block(at, "exp0") and "尚未設定條件" in _block(at, "exp0")
     assert not any(at.checkbox(key=S.KEY_COND.format(n=n)).value for n in range(1, COUNT + 1))   # 首次進入沒有任何已套用條件
@@ -84,7 +85,7 @@ def test_initial_page_has_no_result_card_the_harness_banner_first_and_zero_condi
 def test_renderer_blocks_come_in_the_specified_order():
     at = _run()
     md = _md(at)
-    order = [md.index(f'data-block="{b}"') for b in ("isin-note", "basic-info", "exp-divider", "exp0", "exp1", "exp2", "exp7")]
+    order = [md.index(f'data-block="{b}"') for b in ("isin-note", "lookup-idle", "basic-info", "exp-divider", "exp0", "exp1", "exp2", "exp7")]
     assert order == sorted(order)
 
 
@@ -317,3 +318,29 @@ def test_subprocess_scan_positive_control_flags_an_importing_app(module):
     src = "import " + module + chr(10) + "import streamlit as st" + chr(10) + "st.write(1)"
     bad, _ = _scan_subprocess(f"AppTest.from_string({src!r})", "")
     assert module in bad, bad
+
+
+# ───────────────────────── 2026-11-18 C 線：查詢前、五欄白名單、配息方式候選 ─────────────────────────
+
+def test_idle_card_disappears_after_the_first_query_and_never_comes_back_with_the_result():
+    at = _run()
+    assert 'data-block="lookup-idle"' in _md(at)
+    at = _query(at, "FAKE-OK01")
+    assert 'data-block="lookup-idle"' not in _md(at) and _outcome(at) == "found"
+    at = _query(_run(), "US0378331005")
+    assert 'data-block="lookup-idle"' not in _md(at) and 'data-block="isin-notice"' in _md(at)
+
+
+@pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-OK02", "FAKE-LOW1", "FAKE-ERR1", "", "???", "ABC123"])
+def test_result_card_in_the_real_app_has_only_the_five_fields_and_the_collapsed_area_has_none(raw):
+    at = _query(_run(), raw)
+    assert S.lookup_field_violations(_block(at, "lookup-result")) == []
+    assert S.details_field_violations(_block(at, "basic-info")) == []
+
+
+def test_dividend_mode_candidates_are_shown_only_for_the_fake_found_codes():
+    shown = {}
+    for raw in ("FAKE-OK01", "FAKE-OK02", "FAKE-LOW1", "ABC123"):
+        card = _block(_query(_run(), raw), "lookup-result")
+        shown[raw] = ("配息型" in card, "累積型" in card)
+    assert shown == {"FAKE-OK01": (True, False), "FAKE-OK02": (False, True), "FAKE-LOW1": (False, False), "ABC123": (False, False)}

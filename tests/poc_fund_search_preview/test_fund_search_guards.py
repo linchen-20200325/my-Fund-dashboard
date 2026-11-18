@@ -197,6 +197,11 @@ def test_negative_control_session_state_write_scan(src, expected):
 
 # ───────────────────────── 字樣守衛 ─────────────────────────
 
+# DEC-2026-11-18-01（客戶本批指示轉述，待核）：pool_empty_marker 定稿＋C 線新增／改字的字樣。仍是 PendingWording、不進 rules.py。
+DEC1118_SOURCE = "客戶本批指示轉述(DEC-2026-11-18-01)，待核；仍是 PendingWording、不進 rules.py"
+DEC1118_KEYS = {"pool_empty_marker", "row_inception", "not_queried", "div_mode_distributing", "div_mode_accumulating"}
+
+
 def _approved_strings():
     out = {a.text for a in rules.APPROVED_WORDING.values()} | {a.ruling_text for a in rules.APPROVED_WORDING.values()}
     out |= {e.wording for e in rules.ENTRIES.values() if e.wording and e.wording != rules.PENDING_WORDING}
@@ -209,12 +214,27 @@ def test_every_new_wording_is_a_pending_wording_with_the_required_source_and_nev
     assert W.FUND_SEARCH_PENDING
     for key, item in W.FUND_SEARCH_PENDING.items():
         assert isinstance(item, PendingWording) and item.status == "pending" and item.key == key
-        if key == "pool_empty_marker":      # DEC-2026-11-17-03 新增字樣：出處固定為 SOURCE_DEC03（精確相等，不是前綴）
-            assert item.source == W.SOURCE_DEC03 == "執行組暫擬；DEC-2026-11-17-03 授權以符號或文字輔助標示空池，但未指定字句；待 ChatGPT／客戶確認定字"
+        if key in DEC1118_KEYS:      # DEC-2026-11-18-01 的字樣：出處固定為 SOURCE_DEC1118（精確相等，不是前綴）
+            assert item.source == W.SOURCE_DEC1118 == DEC1118_SOURCE
         else:
             assert item.source.startswith("ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行")
         assert key not in rules.APPROVED_WORDING and key not in rules.ENTRIES
         assert item.text not in approved and item.text.strip() not in approved   # 不得重複定義已核准字樣
+
+
+def test_source_dec03_label_is_exactly_the_clients_dec_2026_11_18_01_line_and_the_marker_is_finalized_but_still_pending():
+    assert W.SOURCE_DEC03 == DEC1118_SOURCE == W.SOURCE_DEC1118
+    marker = W.FUND_SEARCH_PENDING["pool_empty_marker"]
+    assert marker.text == "○ 選股池目前是空的" and marker.status == "pending" and marker.source == DEC1118_SOURCE
+    assert "pool_empty_marker" not in rules.APPROVED_WORDING and "pool_empty_marker" not in rules.ENTRIES
+    # 舊出處（執行組暫擬、待 ChatGPT／客戶確認）不得殘留在任何字樣上
+    assert not [k for k, w in W.FUND_SEARCH_PENDING.items() if "執行組暫擬" in w.source]
+
+
+def test_dividend_mode_fixtures_are_fake_codes_found_in_the_lookup_table_and_use_only_the_two_candidates():
+    assert set(fake.LOOKUP_DIVIDEND_MODE.values()) == {fake.DIV_DISTRIBUTING, fake.DIV_ACCUMULATING}
+    for code in fake.LOOKUP_DIVIDEND_MODE:
+        assert code.startswith("FAKE-") and fake.LOOKUP_FIXTURES[code] == "found"
 
 
 def test_no_string_literal_in_the_poc_files_duplicates_an_approved_wording():
@@ -372,7 +392,8 @@ def test_no_streamlit_pages_or_config_files_were_added_for_the_preview():
 def test_readme_states_fake_non_formal_not_verified_pending_words_and_the_authorization():
     text = (POC / "README.md").read_text(encoding="utf-8")
     for needle in ("streamlit run poc/fund_search_fixture_preview/app_fund_search_preview.py", "FAKE", "NOT VERIFIED", "DEC-2026-11-17-02",
-                   "PendingWording", "僅供畫面與計數演示，不得搬入 production", "S2-T0"):
+                   "PendingWording", "僅供畫面與計數演示，不得搬入 production", "S2-T0",
+                   "DEC-2026-11-18-01", "EXP-6 前置切片", "非替代 EXP-6 正式契約", "已定稿(待核)", "◇ 資料未備", "FAKE Preview 是否改用 ◇"):
         assert needle in text, needle
     assert "待定字" in text
 
