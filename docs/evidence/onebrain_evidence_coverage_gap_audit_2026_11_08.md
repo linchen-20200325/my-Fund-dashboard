@@ -201,10 +201,11 @@
 |---|---|---|
 | 【已核准契約文字】 | R-ID-1、R-NAV-1 | `DEC-2026-11-13-06` |
 | 【已核准契約文字】 | R-NAV-2（採 C，核准 T-NAV2＋附註）、R-NAV-5（採 A 附嚴格限制，核准 T-NAV5） | `DEC-2026-11-14-07` |
+| 【已核准契約文字】 | R-NAV-4（採候選方案 A，核准 T-NAV4，僅 nav 表 `source_tier`；2026-11-17 追加；經對話提示語轉達自稱客戶，待核） | `DEC-2026-11-17-06` |
 | 【暫緩】 | R-NAV-3（採 B） | `DEC-2026-11-14-07`；維持 Pending |
-| 【Pending】共 13 列 | R-ID-2、R-ID-3、R-NAV-3、R-NAV-4、R-NAV-6、R-PERF-1～R-PERF-8 | `docs/evidence/d2_contract_approval_prep_2026_11_12.md`、`docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md` |
+| 【Pending】~~共 13 列~~ → 共 12 列（2026-11-17，R-NAV-4 移出） | ~~R-ID-2、R-ID-3、R-NAV-3、R-NAV-4、R-NAV-6、R-PERF-1～R-PERF-8~~ → R-ID-2、R-ID-3、R-NAV-3、R-NAV-6、R-PERF-1～R-PERF-8 | `docs/evidence/d2_contract_approval_prep_2026_11_12.md`、`docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md` |
 
-注意：R-NAV-3 計入 13 列【Pending】，不是第 14 列。R-PERF-1／3／6 分別與已核准的 R-ID-1／R-NAV-5／R-NAV-2 重複，但 `DEC-2026-11-13-06` 明文**不自動升格**，仍列【Pending】。「已核准」只指契約**文字**，不等於程式已實作或 Schema 已生效。
+注意：R-NAV-3 計入 ~~13~~ 12 列【Pending】（2026-11-17 起；原 13 列含 R-NAV-4），不是第 ~~14~~ 13 列。R-PERF-1／3／6 分別與已核准的 R-ID-1／R-NAV-5／R-NAV-2 重複，但 `DEC-2026-11-13-06` 明文**不自動升格**，仍列【Pending】。「已核准」只指契約**文字**，不等於程式已實作或 Schema 已生效。
 
 ### 2　Evidence 保留度（`services/v2_domain/allocation_evidence.py`，`SCHEMA_VERSION` 為 CANDIDATE，非已核准契約）
 
@@ -223,7 +224,7 @@
 
 | # | 缺口 | 關聯 |
 |---|---|---|
-| 1 | Provider 名稱與 `ccy_source` | R-NAV-4／R-NAV-6 |
+| 1 | Provider 名稱與 `ccy_source` | R-NAV-4／R-NAV-6（2026-11-17 註：R-NAV-4 已核准 `T-NAV4`〔`DEC-2026-11-17-06`；經對話提示語轉達自稱客戶，待核〕，**Provider 名稱部分不因 T-NAV4 關閉**——`source_tier` 不是供應者名稱；R-NAV-6 仍 Pending） |
 | 2 | Evidence 根層資料時點／產生時間 | 無對應 D2 列，屬 Digest 層（D2／D3） |
 | 3 | `stale_after` 門檻 | D3(b)；連帶 R-NAV-3 |
 | 4 | 狀態字彙對照表 | D3 |
@@ -236,13 +237,13 @@
 
 | 批 | 列 | 備註 |
 |---|---|---|
-| A | R-NAV-4、R-NAV-6 | Provider 與 `ccy_source` |
+| A | R-NAV-4、R-NAV-6 | Provider 與 `ccy_source`（2026-11-17 註：R-NAV-4 的 `source_tier` 契約文字已核准〔`DEC-2026-11-17-06`；經對話提示語轉達自稱客戶，待核〕，Provider 名稱仍未關閉；R-NAV-6 仍待準備） |
 | B | R-PERF-1、R-PERF-3、R-PERF-6 | 與已核准列重複，仍須各自審 |
 | C | R-ID-2、R-ID-3 | 擋在 identity Stop Gate S7（`full_key`／後綴） |
 | D | R-PERF-7、R-PERF-8、R-NAV-3 | |
 | E | R-PERF-2、R-PERF-4、R-PERF-5 | 1Y 含息，綁 BL-0427 |
 
-下一批可先**準備** R-NAV-4、R-NAV-6 的文件候選，**不代表核准**。
+下一批可先**準備** R-NAV-4、R-NAV-6 的文件候選，**不代表核准**。（2026-11-17 註：R-NAV-4 已另經 `DEC-2026-11-17-06`（經對話提示語轉達自稱客戶，待核）核准 `T-NAV4`〔僅 `source_tier`〕；本句保留為歷史推進建議，現僅 R-NAV-6 仍待準備。）
 
 ### 5　AI 洞察／反證位置
 

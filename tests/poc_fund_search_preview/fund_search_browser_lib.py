@@ -159,3 +159,111 @@ def external_request_violations(urls, base):
             return _origin(u[len("blob:"):]) != own
         return _origin(u) != own
     return [u for u in urls if foreign(u)]
+
+
+# ───────────────────────── 對比量測（DEC-2026-11-17-03 視覺對比要求；WCAG 2.x 相對亮度） ─────────────────────────
+
+MIN_NONTEXT_CONTRAST = 3.0     # 重要狀態的邊框（非文字）對比下限
+MIN_TEXT_CONTRAST = 4.5        # 文字對比下限（一律用一般字級門檻，不用大字 3:1 的寬鬆門檻）
+
+# 在瀏覽器內取 computed style：邊框四邊的 style／寬／色、元素自身的有效底色（逐層疊 alpha 到不透明）、外層（父元素）有效底色；
+# 以及指定區塊內每個有直接文字的元素的 computed color、有效底色與累計 opacity。只回傳原始 rgb，比值由 Python 端的 `contrast_ratio` 算。
+CONTRAST_JS = r"""
+(spec) => {
+  const P = c => { const m = c.match(/rgba?\(([^)]+)\)/); const p = m[1].split(',').map(s => parseFloat(s)); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; };
+  const eff = el => { const layers = [];
+    for (let e = el; e; e = e.parentElement) { const c = P(getComputedStyle(e).backgroundColor); if (c[3] > 0) { layers.push(c); if (c[3] >= 1) break; } }
+    let base = [255, 255, 255];
+    for (let i = layers.length - 1; i >= 0; i--) { const [r, g, b, a] = layers[i]; base = [r * a + base[0] * (1 - a), g * a + base[1] * (1 - a), b * a + base[2] * (1 - a)]; }
+    return base.map(x => Math.round(x * 100) / 100); };
+  const over = (fg, bg) => { const a = fg[3]; return [fg[0] * a + bg[0] * (1 - a), fg[1] * a + bg[1] * (1 - a), fg[2] * a + bg[2] * (1 - a)].map(x => Math.round(x * 100) / 100); };
+  const opacityOf = el => { let o = 1; for (let e = el; e; e = e.parentElement) o *= parseFloat(getComputedStyle(e).opacity); return o; };
+  const shown = e => { const b = e.getBoundingClientRect(); const s = getComputedStyle(e); return e.getClientRects().length > 0 && b.width > 0 && b.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+  const sides = ['Top', 'Right', 'Bottom', 'Left'];
+  const borders = [];
+  for (const sel of spec.borders) {
+    [...document.querySelectorAll(sel)].filter(shown).forEach((e, i) => { const s = getComputedStyle(e);
+      borders.push({sel, i, styles: sides.map(k => s['border' + k + 'Style']), widths: sides.map(k => parseFloat(s['border' + k + 'Width'])),
+                    colors: sides.map(k => P(s['border' + k + 'Color'])), own: eff(e), outer: e.parentElement ? eff(e.parentElement) : null,
+                    text: e.innerText.trim().slice(0, 60)}); });
+  }
+  const texts = [];
+  for (const sel of spec.texts) {
+    [...document.querySelectorAll(sel)].filter(shown).forEach((root, ri) => {
+      const els = [root, ...root.querySelectorAll('*')];
+      els.forEach(e => { const own = [...e.childNodes].filter(n => n.nodeType === 3 && n.textContent.trim()).map(n => n.textContent.trim()).join(' ');
+        if (!own || !shown(e)) return;
+        const s = getComputedStyle(e); const bg = eff(e); const fg = P(s.color);
+        texts.push({sel, ri, text: own.slice(0, 40), fg: over(fg, bg), bg, opacity: opacityOf(e), fontSize: parseFloat(s.fontSize)}); }); });
+  }
+  const cells = [...document.querySelectorAll(spec.cells || '__none__')].filter(shown).map(e => { const b = e.getBoundingClientRect(); return {top: Math.round(b.top + window.scrollY), left: Math.round(b.left), right: Math.round(b.right)}; });
+  return {borders, texts, cells, vw: document.documentElement.clientWidth};
+}
+"""
+
+
+def _lin(v):
+    c = v / 255.0
+    return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def relative_luminance(rgb):
+    r, g, b = rgb[:3]
+    return 0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(b)
+
+
+def contrast_ratio(a, b):
+    """WCAG 2.x 對比值 (L1+0.05)/(L2+0.05)，L1 為較亮者。輸入為不透明 rgb（0–255）。"""
+    la, lb = sorted((relative_luminance(a), relative_luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+def border_rows(c, selector, *, want_style="dashed"):
+    """某選擇器的每個元素：四邊 style 是否都是 want_style、四邊對『外層背景』與『自身背景』的最小對比、邊框寬度。"""
+    rows = []
+    for b in c["borders"]:
+        if b["sel"] != selector:
+            continue
+        rows.append({
+            "i": b["i"], "styles": b["styles"], "widths": b["widths"], "alphas": [col[3] for col in b["colors"]],
+            "vs_outer": min(contrast_ratio(col, b["outer"]) for col in b["colors"]),
+            "vs_own": min(contrast_ratio(col, b["own"]) for col in b["colors"]),
+            "color": b["colors"][0][:3], "own": b["own"], "outer": b["outer"],
+            "all_want_style": all(s == want_style for s in b["styles"]),
+        })
+    return rows
+
+
+def border_violations(c, selector, *, want_style="dashed"):
+    """指定選擇器必須至少出現一個元素；每個元素四邊皆為 want_style、不透明、有寬度，且邊框對外層背景與對自身背景皆 ≥3:1。"""
+    rows = border_rows(c, selector, want_style=want_style)
+    if not rows:
+        return [("找不到元素", selector)]
+    bad = []
+    for r in rows:
+        if not r["all_want_style"]:
+            bad.append(("邊框不是預期線型", selector, r["styles"]))
+        if min(r["widths"]) <= 0 or min(r["alphas"]) < 1:
+            bad.append(("邊框無寬度或半透明（量不準）", selector, r["widths"], r["alphas"]))
+        for key in ("vs_outer", "vs_own"):
+            if r[key] < MIN_NONTEXT_CONTRAST:
+                bad.append(("邊框對比低於 3:1", selector, key, round(r[key], 2), r["color"], r["own"], r["outer"]))
+    return bad
+
+
+def text_rows(c, selector):
+    return [dict(t, ratio=contrast_ratio(t["fg"], t["bg"])) for t in c["texts"] if t["sel"] == selector]
+
+
+def text_violations(c, selector):
+    """指定區塊內每一段可見文字：對其有效底色 ≥4.5:1，且累計 opacity 為 1（opacity<1 會讓實際對比低於量到的值）。"""
+    rows = text_rows(c, selector)
+    if not rows:
+        return [("找不到文字", selector)]
+    bad = []
+    for r in rows:
+        if r["ratio"] < MIN_TEXT_CONTRAST:
+            bad.append(("文字對比低於 4.5:1", selector, r["text"], round(r["ratio"], 2), r["fg"], r["bg"]))
+        if r["opacity"] < 1:
+            bad.append(("文字或祖先有 opacity<1", selector, r["text"], r["opacity"]))
+    return bad

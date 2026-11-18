@@ -1,5 +1,7 @@
 # 🔍 找基金 Batch 2：Gate 收斂（EXP-1／EXP-4、EXP-6、剩餘決策）
 
+> **2026-11-18 狀態註記（最小加註，原文未改）**：本文寫成時 D2 R-NAV-4 為 Pending；其後 R-NAV-4 已由 `DEC-2026-11-17-06` 核准契約文字 `T-NAV4`（僅 nav 表 `source_tier`；經對話提示語轉達自稱客戶，待核），R-NAV-6 仍 Pending。下文涉 R-NAV-4 之『Pending／候選』敘述為歷史，以 `docs/DECISIONS.md` 為準。
+
 > **基準**：main `e01547ca9a7f5608c6360c8f85dbe5bdcf0ef6c0`（#1237 merge）。本檔 2026-11-13 製。
 > **性質**：docs-only 的單組作者整理（三份調查稿合成）＋總管抽驗；**非客戶裁示、非核准**，**不授權任何 UI 施工**，**不改 frozen 44**（`docs/v2/44_fund_ui_ssot.md`）。
 > **品質狀態**：尚待**非作者**獨立 QA（涉 data semantics／formula 邊界，依 `DEC-2026-10-16-05` 至少 1 組真正獨立稽核）。`ui_v2` 為 maintenance-only，本檔不處置其內容。

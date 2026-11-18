@@ -3296,6 +3296,85 @@
 
 ---
 
+### DEC-2026-11-17-03｜🔍 離線 FAKE Preview 限縮裁示 G-1～G-6 與視覺對比要求——補充 DEC-2026-11-17-02，不取代、不改寫其本文；僅向前生效（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-17；經對話提示語轉達自稱客戶之選擇；UI 設計文字由 ChatGPT 規劃，非客戶逐字裁示；原文僅存對話提示語、repo 無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。要點轉述，非逐字。 |
+| 決策內容摘要（要點） | **G-1**：同意 🔍 隔離 poc 直接引用 `shared.ui_semantics` 中既有、零副作用的呈現規則，僅供符號、字樣及語意色調；限本 Preview，不放行其他 `shared` 模組，不改規則表，不放寬正式 adapter 的 import 守衛。<br>**G-2**：定稿本隔離預覽 W14 用「這次取數失敗，不是對基金身份的判斷」；禁止以取數失敗推論基金不存在；正式共用字樣及其他模式不自動變更。<br>**G-3**：本離線 FAKE Preview 缺值用「⬜ 資料未備」；正式模式沿用已核准「◇ 資料未備」；整檔無法判定與欄位缺值仍為不同狀態。<br>**G-4**：本 Preview 常駐說明「ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）」；不啟用 resolver、不猜對應基金。<br>**G-5**：本隔離預覽固定畫面順序套用條件；顯示四項資訊（條件、套用前檔數、符合、無法判定）；手機可換行、不強制四欄橫排；末列符合與無法判定分別等於 N、M；不修改正式條件順序契約。<br>**G-6**：沒有條件時只顯示「尚未設定條件」，不展示 N／M，不產生 EXP-2／EXP-7 結果列，不歸為取數失敗或來源真的缺失；僅適用本 Preview。<br>**G-7**：N＝明確符合數、M＝無法判定數、EXP-2 列數＝N＋M、EXP-7 末列符合與無法判定分別等於 N、M，依既有 `DEC-2026-11-14-02`／`-04`，不重新請示；44 原文「N 為 EXP-2 列數」尚未正式同步，保留指標；G-7 正式改文不在 P1～P4 Amendment 範圍，不得自行擴張。<br>**視覺對比**：空池及無法判定的虛線邊框，重要狀態辨識對比至少 3:1，並有符號或文字輔助，不依賴灰底、顏色或虛線單獨傳達狀態；須用實際量測，不以手算宣稱通過。 |
+| 適用範圍 | 向前生效；僅 `poc/fund_search_fixture_preview/` 與其測試的離線 FAKE Preview。授權範圍仍僅該路徑與其測試，不因本筆擴大。 |
+| 不授權範圍 | 同 `DEC-2026-11-17-02` 之不授權清單仍有效（含 `ui_v3/shell/registry.py`、`ui_v3/app_preview.py`、掛 🔍 頁、frozen 44、正式金融公式、Schema、FX、正式資料來源、Google Sheet、ISIN 解析與對照來源、Old UI、`ui_v2` production 行為、secrets、真實網路請求、EXP-3／4／5／6、Cloud／真機／像素驗收、BL-0545）。G-1 僅放行既有零副作用呈現規則，不放行其他 `shared` 模組；G-2～G-6 的字樣與規格僅適用本 Preview，不自動變更正式共用字樣、其他模式或正式條件順序契約；G-7 正式改文不得自行擴張。不追認任何過去未授權施工。 |
+| supersedes／amends | **僅補充（amends）** `DEC-2026-11-17-02`（其「待客戶確認」欄 (a)～(g) 中與 G-1～G-6 對應者獲得本筆回覆），**不取代、不改寫其本文**；G-7 引用 `DEC-2026-11-14-02`／`-04`，不重新裁定。其餘正式 DEC 不取代。 |
+| 與既有規則的關係（執行組讀法，可被客戶推翻） | G-1 的「既有、零副作用」指 `shared/ui_semantics/` 規則表現有項目；G-3 的 `⬜`／`◇` 並存僅限模式區分，不改規則表檔頭「只限正式模式」之既有規定；視覺 3:1 的量測方法與判讀由實作組在測試／README 另載，本筆不替它定義量測工具。 |
+| 待客戶確認／未裁（NOT VERIFIED） | 本筆所有要點皆為轉述，**NOT VERIFIED**（見 provenance）。新字樣定稿狀態仍為 PendingWording 身分，不因本筆自動升格進規則表；Cloud／真機驗收未裁。G-1～G-6 與視覺對比（不只 G-2～G-6）是否由客戶本人逐項裁示〔待核〕。 |
+| 影響範圍／可逆性 | 文件；後續實作僅限上列範圍。可逆。 |
+| evidence／source | `DEC-2026-11-17-02`；`DEC-2026-11-14-02`、`DEC-2026-11-14-04`；`poc/fund_search_fixture_preview/README.md`。 |
+| provenance | 要點轉述；單組作者草稿，尚待非作者獨立 QA（涉 data semantics 呈現規則，治理層級至少一組獨立稽核）。經對話提示語轉達自稱客戶之選擇；UI 設計文字由 ChatGPT 規劃，非客戶逐字裁示；原文僅存對話提示語、repo 無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。不得偽稱全文為客戶原話。（2026-11-18 補：稽核沿革以 `DEC-2026-11-17-04`／`-06` provenance 所載為準——`afab8e2c` 單組作者草稿 → 兩組非作者稽核後 `fb18ef0f` 修正 → 本 PR 三組非作者 QA〔依總管回報，未獨立查證〕；上句為登記當時狀態。） |
+
+---
+
+### DEC-2026-11-17-04｜S2-T0 內部唯讀 adapter／ViewModel 切片限縮施工授權——補充 DEC-2026-11-14-08，不取代、不解除其餘暫緩；僅向前生效（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-17；經對話提示語轉達自稱客戶之選擇；UI 設計文字由 ChatGPT 規劃，非客戶逐字裁示；原文僅存對話提示語、repo 無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。要點轉述，非逐字。 |
+| 決策內容摘要（要點） | **授權**：在 `ui_v3/adapters/`、`ui_v3/viewmodels/` 與必要測試建立 S2-T0 的內部唯讀 adapter、ViewModel 及測試；允許使用明確注入的測試輸入，驗證既有 L2 介面與 S0（`exp_counts`）計數；僅此內部切片向前生效，須先完成新 DEC 與治理查核再施工（本筆即該新 DEC，治理查核仍須另行完成）。<br>**不得**：讀真實 Google Sheet；探查、輸出或保存 secrets；發真實網路請求；修改 registry、`app_preview` 或正式導覽；修改 L1／L2 正式行為；將選股池代碼視為已確認基金身份（只作不透明字串，不冒用 R-ID-1）；修改公式、Schema、FX、frozen 44；解除完整 S2-T0 暫緩（`DEC-2026-11-14-08` 其餘限制維持）。<br>**必要驗收**：既有選股池 L2 回傳形狀與狀態適配；未設定／憑證無法使用、來源失敗、空池、有資料四種狀態可區分；未知 status 或契約不符 fail-closed；暫時條件不寫入持久層；EXP-0／2／7 一致性重用 S0；選股池代碼為不透明字串、不冒用 R-ID-1；不將測試資料宣稱為正式資料；不增加未核准金融欄位；`pool_not_cloud` 若無法區分未設定與憑證格式錯誤，不得擅自確定原因，內部維持可識別的 UNAVAILABLE，正式字樣待對應 Gate。<br>**回滾**：移除新增的 adapter／viewmodel／測試檔（無 registry／導覽／L1／L2 變更）。 |
+| 適用範圍 | 向前生效；僅 `ui_v3/adapters/`、`ui_v3/viewmodels/` 與必要測試的**新增檔案**（內部、非使用者可見的唯讀切片）。**修改既有守衛測試不在授權內；僅新增檔案；如需修改既有守衛須另行 Gate。**施工前須先通過治理查核（~~已有一組獨立稽核 Must-Fix 0；本 DEC 修正後再複核~~ → 2026-11-18：查核狀態改以本筆 provenance「稽核沿革」為準，原『一組』句與該沿革（兩組＋本 PR 三組）矛盾，予以劃除）。 |
+| 不授權範圍 | 完整 S2-T0 (0)～(7) 施工；掛 🔍 頁、修改 `ui_v3/shell/registry.py`、`ui_v3/app_preview.py`、正式導覽；接 Google Sheet 或任何真實資料來源；secrets 與真實網路；L1／L2 正式行為變更；公式、Schema、FX、frozen 44；選股池代碼命名空間與 R-ID-1 身份契約；`pool_not_cloud` 正式字樣與原因確定；BL-0545。不得宣稱 🔍 找基金頁面或選股池功能已完成。不追認任何過去未授權施工。 |
+| supersedes／amends | **僅補充（amends）** `DEC-2026-11-14-08`（S2-T0 暫緩）中「內部唯讀 adapter／ViewModel 切片」一項，**不取代、不解除其餘暫緩**；`DEC-2026-11-14-04` 的「S2 另審、S0 不自動核准 S2」不變。其餘正式 DEC 不取代。<br>**同時 amends `DEC-2026-11-14-04` 授權範圍 (c)「程式（唯一）：S0」**（2026-11-18 補註；執行組讀法，可被客戶推翻）：(c) 原只授權 S0 純函式（`ui_v3/viewmodels/exp_counts.py` 及其測試）為唯一程式；本筆於其外**另行**授權一個內部切片，對應 `docs/evidence/exp_s2_wiring_scope_and_first_visible_slice_2026_11_14.md` 請示 (0) 所列「新增檔案與接線」中的**一部分**——僅新增 `ui_v3/adapters/`、`ui_v3/viewmodels/` 檔與必要測試檔（內部、不可見、測試輸入注入）。**排除（仍屬 (0)～(7)，未授權）**：`ui_v3` 首次讀真實選股池 Google Sheet（S2 資料接線本身）、secrets 注入、`ui_v3/pages/exp.py` 與掛 🔍 頁、`registry.py`／`app_preview.py`／`shell_status.py`／`preview_wording.py` 修改、既有守衛測試修改、瀏覽器（browser）測試。 |
+| 與既有規則的關係（執行組讀法，可被客戶推翻） | 「須先完成新 DEC 與治理查核再施工」讀作：本 DEC 登記並經治理查核（非作者獨立 QA）後才能開工，登記本身不是動工授權（`CLAUDE.md` §-1）；施工須走獨立 PR、非作者 QA 與 exact-head CI；注入測試輸入不等於資料接線，不得以此宣稱 S2 已通過。<br>**2026-11-18 補註（執行組讀法，可被客戶推翻）**：本切片程式與其授權 DEC 因分支規則同批於一個 PR（#1270）提交；治理查核與非作者 QA 已於合併前完成（依總管回報，本組未獨立查證）；若客戶要求將程式與 DEC 分 PR，另行處理。 |
+| 待客戶確認／未裁（NOT VERIFIED） | 本筆所有要點皆為轉述，**NOT VERIFIED**（見 provenance）。`pool_not_cloud` 的未設定／憑證格式錯誤區分與正式字樣；四種狀態的正式使用者字樣；完整 S2-T0 暫緩是否解除；是否客戶本人逐項裁示〔待核〕。 |
+| 影響範圍／可逆性 | 文件；後續實作僅限上列範圍。可逆（回滾＝移除新增檔，無 registry／導覽／L1／L2 變更）。 |
+| evidence／source | `DEC-2026-11-14-08`、`DEC-2026-11-14-04`；`docs/evidence/exp_s2_wiring_scope_and_first_visible_slice_2026_11_14.md`。 |
+| provenance | 要點轉述；單組作者草稿，尚待非作者獨立 QA（涉 identity／data semantics 邊界，治理層級至少一組獨立稽核）。經對話提示語轉達自稱客戶之選擇；UI 設計文字由 ChatGPT 規劃，非客戶逐字裁示；原文僅存對話提示語、repo 無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。不得偽稱全文為客戶原話。**稽核沿革（2026-11-18 統一，依 commit 訊息與本 PR 實際事實；各輪稽核報告逐字未存 repo，本組未重驗其內容）**：(1) `afab8e2c`＝單組作者草稿；(2) 其後兩組非作者獨立稽核（依 `fb18ef0f` commit 訊息），意見已於 `fb18ef0f` 修正；(3) 本 PR（#1270）另經 B2／C1／治理三組非作者 QA，依總管回報無 Must-Fix（本組未獨立查證，NOT VERIFIED）。上列各欄原寫的「單組作者草稿，尚待非作者獨立 QA」「已有一組…」為登記當時（`afab8e2c`）狀態，以本沿革為準。 |
+
+---
+
+### DEC-2026-11-17-05｜客戶（自稱客戶，待核）新增永久協作規則：A 資料安全／B 資料契約／C UI 開發三線平行與工作閉環——長期協作要求，不取代進行中工作，不改變任何既有 Stop／Decision Gate（要點轉述；治理文件變更，需獨立稽核）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-17；經對話提示語轉達自稱客戶之選擇；UI 設計文字由 ChatGPT 規劃，非客戶逐字裁示；原文僅存對話提示語、repo 無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。要點轉述，非逐字；「永久」一詞為對話提示語所述，是否客戶本人〔待核〕。 |
+| 決策內容摘要（要點，逐點保留） | 1. 固定採 **A 線資料安全、B 線資料契約、C 線 UI 開發**，三線平行推進。<br>2. 每條線獨立施工、獨立 QA、獨立驗收；共用檔案與分支須先做衝突檢查。<br>3. 收到 ChatGPT 新提示語時，不得取消或重啟正在進行的工作，採增量整合。<br>4. 每個提出的問題均須建立工作閉環：問題、答覆、授權、施工、驗收、最終結案。<br>5. 已回答≠已施工；已施工≠已驗收；已合併≠正式功能完成。<br>6. 尚未完成的問題必須持續追蹤，不得因新任務遺失。<br>7. 某一線遇 Decision Gate 時，其他無衝突且已授權的工作照常；仍須遵守明定的全域 Stop Gate。<br>8. 所有 UI／UX 設計由 ChatGPT 負責；正式資料契約、資安與上位規則變更仍由客戶核准。<br>9. GitHub 為唯一事實來源；每批完成後核對 QA、exact-head CI、合併及 main CI，交接未完成事項。<br>10. 維持每批最多三項工作及禁止碎碎念（`PROJECT_RULES.md` 第 3.1 節、13.4 第 5 點〔每批最多 3 項〕及第 3.3 節〔禁止碎碎念〕）。 |
+| 適用範圍 | 長期協作要求（所有後續對話、總管與 agent）。**不取代正在執行的工作，不改變任何既有 Stop／Decision Gate**；與 `PROJECT_RULES.md` §3.3／§5.1／`CLAUDE.md` §-2 並存，**牴觸點取嚴、以更嚴者為準**，不自行廢除任何既有條文。 |
+| 不授權範圍 | 不授權任何施工、合併或範圍擴張；不放寬任何 Stop／Decision Gate、獨立稽核、frozen、Auto-Ship 條件；不授權 ChatGPT 單方核准正式資料契約、資安或上位規則；不構成客戶對任何 UI 線框的拍板。 |
+| 與既有規則的牴觸點與取嚴結論（執行組讀法，可被客戶推翻） | (a) **第 8 點 × `CLAUDE.md` §-1.5.4／v3 `03`-2 ①**：UI 線框草稿須客戶拍板才能寫 UI 程式碼——「UI／UX 設計由 ChatGPT 負責」讀作設計規劃與提示語的負責者，**不取代客戶對線框的拍板**；兩者並存取嚴。<br>(b) **第 2 點「獨立 QA」× `CLAUDE.md` §-2 規則 4／`PROJECT_RULES.md` §8 風險分級**：稽核組數仍依 `DEC-2026-10-16-05`，取較嚴者；第 2 點「獨立 QA」指各線有自己的 QA 流程，**不改變 `DEC-2026-10-16-05` 的風險分級組數，不得因取嚴而要求所有低風險文件一律多組稽核**。<br>(c) **第 3 點「不得取消或重啟」× 第 4 節 Stop／Decision Gate、第 5 節 Change Gate**：Gate 優先；「不取消」不得解讀為 Gate 觸發時仍須繼續。<br>(d) **第 1 點三線平行 × `PROCESS.md` §3 寫入端序列化（同一批檔案不得多手同時改）**：以第 2 點的衝突檢查為前提，序列化優先。<br>(e) **第 4 點閉環追蹤 × `PROJECT_RULES.md` §13.4 Anti-Bloat**：追蹤落在既有 `docs/BACKLOG.md`／`docs/HANDOFF.md`，不另立影子帳本、不因此碎片化 BL 條目。<br>(f) **第 7 點 × 第 4 節 Gate 清單**：「其他線照常」僅限無衝突且已授權者；全域 Stop Gate（如 frozen、identity、formula、資料來源）仍使全線停下；**Change Gate Hard-Stop（`PROJECT_RULES.md` §5.1）與第 4 節 Stop Gate 都使全線停下，「其他線照常」不適用於這兩者**。（2026-11-18 補，執行組讀法，可被客戶推翻）第 7 點前半（其他線照常）適用於『僅送出 Decision Gate 卡、而未觸發 Stop Gate 或 Change Gate Hard-Stop 的情形』；一旦觸發 Stop Gate 或 Hard-Stop，即不適用。<br>(g) 第 9 點與 `PROJECT_RULES.md` §1.3（HANDOFF 不得單獨作完成證明）、第 10 點與第 3.1、13.4 第 5 點（每批最多 3 項）及第 3.3 節（禁止碎碎念）同向，無牴觸。 |
+| 落盤位置 | 本筆登記客戶裁示；穩定治理要點依 `PROJECT_RULES.md` 第 15 節（2026-11-06 要點轉述）、§13.5／§13.6 之先例，最小文字落於 `PROJECT_RULES.md` 新增第 16 節（只放要點並指向本筆，不改既有條文）。`CLAUDE.md` 未修改。 |
+| 待客戶確認／未裁（NOT VERIFIED） | 本筆所有要點皆為轉述，**NOT VERIFIED**。三線的檔案／分支邊界清單與衝突檢查的具體做法未定；第 4 點「最終結案」由誰判定未定；A／B／C 線與既有 BL 編號的對映未定。 |
+| 影響範圍／可逆性 | 文件：本檔、`PROJECT_RULES.md`（新增第 16 節）。可逆。**治理文件變更，需獨立稽核**（治理規則等級，依 `DEC-2026-10-16-05` 至少一組真正獨立稽核）。 |
+| evidence／source | `PROJECT_RULES.md` §3.3／§5.1／§8／§13.4／第 15 節；`CLAUDE.md` §-2、§-1.5.4；`DEC-2026-10-16-03`～`-13`。 |
+| provenance | 要點轉述；單組作者草稿，尚待非作者獨立 QA。經對話提示語轉達自稱客戶之選擇；UI 設計文字由 ChatGPT 規劃，非客戶逐字裁示；原文僅存對話提示語、repo 無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。不得偽稱全文為客戶原話。（2026-11-18 補：稽核沿革以 `DEC-2026-11-17-04`／`-06` provenance 所載為準——`afab8e2c` 單組作者草稿 → 兩組非作者稽核後 `fb18ef0f` 修正 → 本 PR 三組非作者 QA〔依總管回報，未獨立查證〕；上句為登記當時狀態。） |
+
+---
+
+### DEC-2026-11-17-06｜D2 R-NAV-4 採候選方案 A：僅核准 NAV 域既有 `source_tier` 契約文字（T-NAV4）——僅核准契約文字（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-17；經對話提示語轉達自稱客戶之選擇；原文僅存對話提示語、repo 無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。R-NAV-6 維持 Pending 的決策來源同為提示語轉達（〔待核〕）。要點轉述，非逐字。 |
+| 決策內容摘要 | **R-NAV-4＝候選方案 A**：僅核准既有 `source_tier`（NAV 域表欄）契約文字 `T-NAV4`（逐字見〈附〉）。`source_tier` 是資料表類別標籤，不是資料供應者名稱（44 稱「來源層級」；「資料表類別標籤」為執行組讀法，可被客戶推翻）；不新增 Provider 欄，不核准旁路 `provenance[fund_code].source` 與 `chain.data_source`。以上僅限契約文字，不授權 Schema、producer、adapter、資料接線、正式計算或 UI 上線；不得連帶核准其他 D2 欄位。 |
+| 授權範圍 | 本筆授權（僅文件層）：把 `T-NAV4` 契約文字登記為 D2 已核准契約文字，範圍僅 nav 表 `source_tier`。**不授權**：Schema、Provider／供應者欄、`provenance.source`（含 `chain.data_source`）、資料來源與優先序、UI、FX、R-NAV-3／6、market_indicator、fetch_log 的 `source_tier`（dividend、fund_profile 依 44 無此欄）、R-PERF-4 績效 source（計算口徑）、R-ID-2／3、R-PERF-1～8、程式變更（含強制 `nav_row_problems` 要求等於「淨值」）。 |
+| D2 核准欄位狀態 | **核准欄位數：4 → 5（R-ID-1、R-NAV-1、R-NAV-2、R-NAV-4、R-NAV-5）**。R-NAV-4 移出 Pending。**R-NAV-6 與 R-NAV-3 維持 Pending／暫緩**。其餘仍 Pending（17 列待審表中其餘 12 列）：R-ID-2、R-ID-3、R-NAV-3（暫緩）、R-NAV-6、R-PERF-1～R-PERF-8。核准的僅是「契約文字」，不是「已實作行為」，也不是接線授權（沿用 `DEC-2026-11-13-06`／`-14-07` 同款限縮）。 |
+| 與草稿的差異（保留草稿原文於 evidence，不覆寫） | 草稿原文保留於 `docs/evidence/d2_r_nav_4_6_candidate_2026_11_17.md`（標「不具效力」）。**差異**：候選檔方案 A 措辭「恆為淨值、不辨識供應者」，核准文字改為「現行寫入端實作事實：寫列處為單一常數；`nav_row_problems` 只檢查值落在四值內，不強制等於『淨值』」——避免核准文字強於實作守衛；**若客戶要強制「恆為淨值」，需改 `nav_row_problems`，屬程式變更，另案**。另明寫「不是資料供應者名稱」（畫面以「來源」徽章顯示「淨值」，有被誤讀成供應者名的風險）。 |
+| 限制／NOT VERIFIED 揭露 | 缺欄／缺值處理在各消費端不一致：`allocation_evidence._row_get` 缺鍵回 `None`；`ui_v2/hld/logic.py::_build_hld6` 缺鍵直接 `KeyError`；`nav_row_problems` 的值域檢查對「配息」「市場指標」「其他」放行（只擋域外）；`T-NAV4` 第 3 點「不寫入」只在寫列處成立，不涵蓋上述消費端。`SOURCE_TIER_NAV` 另被 `services/v2_tables/settings_store.py` 的 `WIRED_TIERS`、`LOG_TIMED_TABLES`、`open_fetch_log` 用作 `fetch_log` 的 tier 鍵——該用途不在本筆核准內。以上為單組字面讀碼，非動態呼叫鏈驗證。 |
+| 影響範圍 | 本 commit 同步：`docs/evidence/d2_contract_candidates_returns_identity_holdings_2026_11_08.md`（R-NAV-4 列「本次狀態」欄、列數統計 NAV／合計兩格與追加註，最小註記、不改原文）；`docs/evidence/onebrain_evidence_coverage_gap_audit_2026_11_08.md`（D2 逐列狀態句，最小註記）。**後續同步（本 commit 不含；仍寫 R-NAV-4 Pending 的敘述，以實讀為準）**：`docs/evidence/fund_search_mount_gate_card_2026_11_17.md`、`docs/evidence/exp_decision_card_2026_11_14.md`、`docs/evidence/exp_wireframe_decision_pack_2026_11_13.md`、`docs/evidence/exp_batch2_gate_convergence_2026_11_13.md`、`docs/evidence/exp_batch3_direction_and_ruling_candidates_2026_11_14.md`、`docs/evidence/d2_contract_approval_prep_2026_11_12.md`、`docs/evidence/d2_r_nav_4_6_candidate_2026_11_17.md`、`docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md`、`docs/evidence/d2_min_approval_pack_r_id_1_r_nav_1_2026_11_13.md`（後兩份歷史核准包視同不具效力，不回改亦可）、`docs/BACKLOG.md`、`docs/HANDOFF.md`（BACKLOG／HANDOFF 另行整合）。**不**改程式、測試、Schema。 |
+| 是否可逆 | 可逆（客戶可推翻；純文件）。 |
+| supersedes／superseded by | **補充 `DEC-2026-11-13-06`、`DEC-2026-11-14-07`，不改寫其本文**：兩筆所稱「核准欄位數 2／4」為當時狀態；自本筆起為 5。R-NAV-3（暫緩）、R-NAV-6（Pending）不變。 |
+| evidence／source | `docs/evidence/d2_r_nav_4_6_candidate_2026_11_17.md`；`docs/evidence/d2_contract_candidates_returns_identity_holdings_2026_11_08.md`；`docs/evidence/d2_next_batch_r_nav_2_5_3_approval_pack_2026_11_14.md`。 |
+| provenance | 要點轉述；單組作者草稿，尚待非作者獨立 QA（資料語意等級，依 `DEC-2026-10-16-05`）。經對話提示語轉達自稱客戶之選擇；原文僅存對話提示語、repo 無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。**稽核沿革（2026-11-18 統一，依 commit 訊息與本 PR 實際事實；各輪稽核報告逐字未存 repo，本組未重驗其內容）**：(1) `afab8e2c`＝單組作者草稿；(2) 其後兩組非作者獨立稽核（依 `fb18ef0f` commit 訊息），意見已於 `fb18ef0f` 修正；(3) 本 PR（#1270）另經 B2／C1／治理三組非作者 QA，依總管回報無 Must-Fix（本組未獨立查證，NOT VERIFIED）。上列各欄原寫的「單組作者草稿，尚待非作者獨立 QA」「已有一組…」為登記當時（`afab8e2c`）狀態，以本沿革為準。**輔助唯讀查核（`fund-nav-data`；要點，單組字面搜尋，非動態呼叫鏈驗證；~~已有一組非作者獨立稽核，Must-Fix 已修~~ → 稽核次數以上列沿革為準）**：`source_tier` 欄定義、值域與不可空在 44 §4.2 與 `services/v2_tables/contract.py::SOURCE_TIER_VALUES`；寫列處 `nav_dividend.py::SOURCE_TIER_NAV` 為單一常數；`nav_row_problems` 只擋域外／缺值；無針對 nav 列必為「淨值」的專屬契約測試；golden 快照（`tests/test_nav_table_golden_c3a.py`、`tests/test_nav_dividend_golden_c3a.py` 對 `tests/fixtures/*golden_before_c3a.json`，650 筆〔340＋310〕`source_tier` 皆為「淨值」）附帶鎖定現行輸出；值域與 44 一致由 `tests/test_v2_tables_nav_dividend.py` 的 `test_契約_nav與44逐欄相同_source_tier值域相同` 鎖定。`T-NAV4` 條文逐字抄自對話提示語，是否一字不差由讀者比對。**（2026-11-18 補）T-NAV4 條文撰寫者來源：出自對話提示語（逐字抄錄），撰寫者以該提示語為準，未另證；不得視為客戶本人撰寫，亦未經客戶本人另行確認。** |
+
+**〈附〉`T-NAV4` 契約文字（逐字抄自對話提示語所附文字；以下為「核准的契約文字」，不是「已實作行為」）**
+
+> **T-NAV4｜NAV 域（nav 表）source_tier**
+> 1. 型別：字串，不可空。值域：淨值／配息／市場指標／其他 四個之一（依 44 §4.2）。
+> 2. 語意：這是資料表類別標籤，不是資料供應者名稱，也不是 `CLAUDE.md` §2.1 的 T1–T5 權威分級。現行寫入端實作事實：寫列處固定寫入「淨值」；契約守衛（`nav_row_problems`）只檢查落在四值內，不強制等於「淨值」。
+> 3. 缺值：該列不寫入（欄位不可空；None、空字串、非字串、不在四值內皆不寫）。不補值、不預設。
+> 4. 不新增 Provider／供應者欄位，不改 Schema、取數管道（fallback 鏈）、來源優先順序。
+> 5. 不含：旁路 provenance[fund_code].source 與 chain.data_source 的語意與值域；ccy_source（R-NAV-6）；fetched_at 與來源時間／新鮮度語意（R-NAV-3，暫緩）；各 provider 的日期語意（T-NAV2 第 6 點）；R-PERF-4 績效 source（計算口徑）；market_indicator、fetch_log 的 source_tier（dividend、fund_profile 依 44 無此欄）。
+> 6. 核准的僅是契約文字，不是已實作行為，也不是接線或 UI 授權。
+
+---
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。

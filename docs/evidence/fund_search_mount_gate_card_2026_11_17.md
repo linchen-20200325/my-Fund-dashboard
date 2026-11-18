@@ -1,5 +1,7 @@
 # 🔍 找基金｜版面掛載 Gate-M 裁示卡（與 Gate-D 資料接線分開）（2026-11-17）
 
+> **2026-11-18 狀態註記（最小加註，原文未改）**：本文寫成時 D2 R-NAV-4 為 Pending；其後 R-NAV-4 已由 `DEC-2026-11-17-06` 核准契約文字 `T-NAV4`（僅 nav 表 `source_tier`；經對話提示語轉達自稱客戶，待核），R-NAV-6 仍 Pending。下文涉 R-NAV-4 之『Pending／候選』敘述為歷史，以 `docs/DECISIONS.md` 為準。
+
 > **單組作者整理，未經獨立 QA；全稱句（「只有／沒有／全部」）皆為單組 grep／讀碼結論，未經第二組驗證。**
 > **不構成授權、不是客戶裁示、不改任何程式或測試。** 基準 main `809dbd16`（含 #1268；2026-11-17 `git fetch` 實查，使用前須重查 GitHub）。
 > 證據符號：【碼】讀現行程式；【DEC】對照 `docs/DECISIONS.md`；【文】依既有 evidence／BACKLOG（本組未重驗）；【未驗】本組沒查。不寫行號，以「檔案::符號」定位。
@@ -139,7 +141,7 @@
 | 條件三態比較（純計算） | `services/v2_domain/rule_filter.py::apply_rules_tristate`／`compare_tristate`（缺值＝無法判定；ui_v3 adapters 靜態守衛允許 import `services.v2_domain`）【碼】 | 判定一字未改自 ui_v2；條件欄位／母體契約仍屬 D2 | 引擎可用；**母體與欄位語意未定**，不能直接接 |
 | 母體（選股池代碼） | `services/v2_tables/exp_universe.py::load_pool_codes`（只讀 `code`；本機 JSON 回 `STATUS_NOT_CLOUD`）【碼】 | `pool_not_cloud` 顯示語意未裁；`DEC-2026-11-14-08` 暫緩且不得接 Google Sheet【DEC】 | **不可接** |
 | 基金基本資料 | `services/v2_tables/exp_profile.py::build_profiles`（名稱／成立日／配息政策／幣別逐欄出處）【碼】 | 屬 B 線 C2，尚未接 ui_v3；需 MoneyDJ 網路取數（本卡範圍禁網路） | 非 Gate-M；屬 Gate-D 範圍，且受 S2-T0 暫緩 |
-| 淨值／配息 | `services/v2_tables/exp_nav.py::load_nav_dividend`、`nav_dividend.build_nav_dividend_tables`【碼】 | D2：R-NAV-2（T-NAV2）、R-NAV-5（T-NAV5）已核准；**R-NAV-3 暫緩、R-NAV-4／R-NAV-6 Pending**【DEC：`DEC-2026-11-14-07`（R-NAV-3 暫緩）；`DEC-2026-11-13-06`（D2 核准欄位狀態列：R-NAV-4／R-NAV-6 仍 Pending）】 | **不可接**（含 Pending 欄位值） |
+| 淨值／配息 | `services/v2_tables/exp_nav.py::load_nav_dividend`、`nav_dividend.build_nav_dividend_tables`【碼】 | D2：R-NAV-2（T-NAV2）、R-NAV-5（T-NAV5）已核准；**R-NAV-3 暫緩、~~R-NAV-4／~~R-NAV-6 Pending**（2026-11-18：R-NAV-4 已由 `DEC-2026-11-17-06` 核准〔僅 `T-NAV4`〕，不影響『不可接』結論）【DEC：`DEC-2026-11-14-07`（R-NAV-3 暫緩）；`DEC-2026-11-13-06`（D2 核准欄位狀態列：R-NAV-4／R-NAV-6 仍 Pending）】 | **不可接**（含 Pending 欄位值） |
 | 代碼→full_key | `services/v2_tables/fund_keys.py::resolve_full_keys`（要求純代碼；非 ASCII 判失敗）【碼】 | 不處理 ISIN | 僅代碼型輸入 |
 | ISIN | 無已核准對照來源；`DEC-2026-11-01-02`（G-E1：A＋C）要求入口保留但未核准前不啟用【DEC】 | 預覽已固定顯示「ISIN 未啟用」 | **不可接** |
 | `services/fund_service.py` | 含 `calc_metrics`、`fetch_fund_by_key_enriched` 等（舊樹 L2，會取數與算指標）【碼】 | 與 🔍 New UI2 契約無對應；公式屬 frozen 範圍 | 不可接 |
