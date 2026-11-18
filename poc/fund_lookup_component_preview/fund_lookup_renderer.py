@@ -74,9 +74,9 @@ h1{{font-size:{page} !important;padding:.2rem 0 !important}}
 .fl-card[data-state="failed"]{{border-color:{red['border']}}}
 .fl-card[data-state="unmatched"],.fl-card[data-state="blocked"]{{border-style:dashed;border-color:{text2}}}
 /* 原生控制項的觸控目標 ≥48px；焦點環不靠瀏覽器預設（Streamlit 會改寫），改用 primary token 的 2px 外框 */
-[data-testid="stTextInputRootElement"]{{min-height:48px;box-sizing:border-box}}
+[data-testid="stTextInputRootElement"]{{min-height:48px;box-sizing:border-box;border:1px solid {border}}}
 [data-testid="stTextInput"] input{{min-height:48px;box-sizing:border-box}}
-[data-testid="stFormSubmitButton"] button{{min-height:48px;min-width:48px}}
+[data-testid="stFormSubmitButton"] button{{min-height:48px;min-width:48px;border:1px solid {border}}}
 [data-testid="stTextInput"] input:focus-visible,[data-testid="stFormSubmitButton"] button:focus-visible{{outline:2px solid {primary};outline-offset:2px}}
 [data-testid="stForm"]{{padding:0}}
 /* Streamlit 在表單輸入框內自帶「Press Enter to submit form」與字數計數，會蓋住長輸入；Enter 照常提交，只隱藏這行提示 */
@@ -144,8 +144,10 @@ def lookup_card_html(view: FundLookupView, *, fake: bool) -> str:
     parts = []
     if fake:
         parts.append(f'<span class="fl-tag" data-tag="fake">{W.pending("fake_tag")}</span>')
-    parts.append(f'<div class="fl-status" id="{ID_STATUS}" data-row="status" data-kind="state-line" role="{role}">{status_html}</div>')
-    parts += [f'<div class="uv3-note" data-note="extra">{x}</div>' for x in extras]
+    # 狀態列與可操作原因句放進同一個 live region 容器（role 在容器上），螢幕閱讀器一次讀完整段
+    live = [f'<div class="fl-status" id="{ID_STATUS}" data-row="status" data-kind="state-line">{status_html}</div>']
+    live += [f'<div class="uv3-note" data-note="extra">{x}</div>' for x in extras]
+    parts.append(f'<div class="fl-live" data-live="true" role="{role}">{"".join(live)}</div>')
     rows = []
     echoed = view.input_code.strip(" ") if isinstance(view.input_code, str) else ""
     if echoed:                                           # 被安全攔截者結構上沒有回顯；全空白輸入也不畫輸入代碼列

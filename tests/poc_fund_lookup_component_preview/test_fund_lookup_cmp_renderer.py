@@ -193,6 +193,37 @@ def test_css_colors_are_exactly_token_values_and_the_touch_target_floor_is_48px(
         palette |= {v.lower() for v in tokens.value(f"color.tone.{tone}").values()}
     used = {c.lower() for c in re.findall(r"#[0-9a-fA-F]{6}\b", R.CSS)}
     assert used and used <= palette, used - palette
-    assert re.search(r'\[data-testid="stFormSubmitButton"\] button\{min-height:48px;min-width:48px\}', R.CSS)
+    assert S.css_violations(R.CSS) == []
     assert re.search(r'\[data-testid="stTextInput"\] input\{min-height:48px', R.CSS)
     assert "outline:2px solid" in R.CSS and ":focus-visible" in R.CSS
+
+
+def test_fail_closed_on_unknown_state_field_status_reason_and_dividend_value():
+    ok = lookup_fund(fake.make_loader(), "FAKE-OK01")
+    bad_state = lookup_fund(fake.make_loader(), "FAKE-FAIL1")
+    object.__setattr__(bad_state, "state", "weird")
+    with pytest.raises(ValueError):
+        R.lookup_card_html(bad_state, fake=True)
+    bad_reason = lookup_fund(fake.make_loader(), "FAKE-FAIL1")
+    object.__setattr__(bad_reason, "reason_code", "zzz")
+    with pytest.raises(KeyError):
+        R.lookup_card_html(bad_reason, fake=True)
+    bad_reason2 = lookup_fund(fake.make_loader(), "US0378331005")
+    object.__setattr__(bad_reason2, "reason_code", "zzz")
+    with pytest.raises(KeyError):
+        R.lookup_card_html(bad_reason2, fake=True)
+    field = ok.fields.inception_on
+    object.__setattr__(field, "status", "weird")
+    with pytest.raises(ValueError):
+        R.lookup_card_html(ok, fake=True)
+    ok2 = lookup_fund(fake.make_loader(), "FAKE-OK01")
+    object.__setattr__(ok2.fields.dividend_policy, "value", "weird")
+    with pytest.raises(KeyError):
+        R.lookup_card_html(ok2, fake=True)
+
+
+def test_css_violations_checker_turns_red_on_hand_made_bad_css():
+    assert S.css_violations(R.CSS) == []
+    assert S.css_violations(R.CSS.replace("min-height:48px;min-width:48px", "min-height:20px;min-width:48px"))
+    assert S.css_violations(R.CSS.replace("outline:2px solid", "outline:none;x:"))
+    assert S.css_violations(R.CSS + "*{outline:none}")

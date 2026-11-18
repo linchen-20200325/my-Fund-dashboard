@@ -366,7 +366,7 @@ def test_every_demo_code_name_and_date_is_marked_fake_and_no_real_identity_or_ur
     src = FAKE_INPUTS.read_text(encoding="utf-8")
     assert "://" not in src and "@" not in src.replace("@dataclass", "") and not re.search(r":\d{3,5}\b", src.replace("::", ""))
     for label, view in S.build_views():
-        if view.fields is not None and label != "nasty-name":
+        if view.fields is not None and label not in ("nasty-name", "xss-name"):
             assert view.fields.fund_name.value.startswith("FAKE"), label
 
 
@@ -446,7 +446,7 @@ def test_readme_states_fake_non_formal_not_verified_the_authorization_and_the_op
     text = (POC / "README.md").read_text(encoding="utf-8")
     for needle in ("streamlit run poc/fund_lookup_component_preview/app_fund_lookup_component_preview.py", "FAKE", "NOT VERIFIED", "DEC-2026-11-18-04",
                    "PendingWording", "待客戶", "EXP-2", "收合區標題", "◇", "⬜", "Cloud", "真機", "螢幕閱讀器", "CONFLICT", "不可達",
-                   "不掛 registry", "390", "1280"):
+                   "不掛 registry", "390", "1280", "full_key", "別名表", "InputInstructions", "display:inline", "component_css", "fl-status"):
         assert needle in text, needle
     assert "待定字" in text
 

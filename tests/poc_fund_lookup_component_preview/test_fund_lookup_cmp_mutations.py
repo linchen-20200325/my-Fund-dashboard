@@ -64,6 +64,13 @@ RENDERER_MUTATIONS = [
      '[W.pending("failed_impact"), W.pending(f"failed_{reason}"), "基金" + "不存在"], "alert"'),
     ("non-result-draws-name", "    if view.state is LookupState.RESULT:\n        f = view.fields",
      '    rows.append(_dl_row("name", "row_name", "X", "value"))\n    if view.state is LookupState.RESULT:\n        f = view.fields'),
+    ("input-code-unescaped", '<span data-value="input-code">{safe(echoed)}</span>', '<span data-value="input-code">{echoed}</span>'),
+    ("name-unescaped", 'return (text_html if text_html is not None else safe(field.value)), "value"', 'return (text_html if text_html is not None else str(field.value)), "value"'),
+    ("extras-outside-live-region", 'live = [f\'<div class="fl-status" id="{ID_STATUS}" data-row="status" data-kind="state-line">{status_html}</div>\']\n    live += [f\'<div class="uv3-note" data-note="extra">{x}</div>\' for x in extras]\n    parts.append(f\'<div class="fl-live" data-live="true" role="{role}">{"".join(live)}</div>\')',
+     'live = [f\'<div class="fl-status" id="{ID_STATUS}" data-row="status" data-kind="state-line">{status_html}</div>\']\n    parts.append(f\'<div class="fl-live" data-live="true" role="{role}">{"".join(live)}</div>\')\n    parts += [f\'<div class="uv3-note" data-note="extra">{x}</div>\' for x in extras]'),
+    ("button-min-height-shrunk", '[data-testid="stFormSubmitButton"] button{{min-height:48px;min-width:48px', '[data-testid="stFormSubmitButton"] button{{min-height:20px;min-width:48px'),
+    ("input-min-height-shrunk", '[data-testid="stTextInput"] input{{min-height:48px', '[data-testid="stTextInput"] input{{min-height:20px'),
+    ("focus-outline-removed", 'outline:2px solid {primary};outline-offset:2px', 'outline:none'),
     ("provenance-line-added", 'parts.append(f\'<div class="uv3-note" data-note="single">{W.pending("single_note")}</div>\')',
      'parts.append(f\'<div class="uv3-note" data-note="single">{W.pending("single_note")}（Provider 來源）</div>\')'),
 ]

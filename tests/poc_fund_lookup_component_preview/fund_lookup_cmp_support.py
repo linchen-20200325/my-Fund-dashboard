@@ -108,6 +108,9 @@ def build_views(extra_nasty_name=True):
         fields = ProfileFields(FieldView(FieldStatus.VALUE, "<b>$x</b>\\y&amp;"), FieldView(FieldStatus.VALUE, "dist"),
                                FieldView(FieldStatus.VALUE, "2001-02-03"), FieldView(FieldStatus.MISSING))
         out.append(("nasty-name", FundLookupView(LookupState.RESULT, "ACTI71", None, fields)))
+        xss = ProfileFields(FieldView(FieldStatus.VALUE, "<img src=x onerror=alert(1)><script>alert(1)</script>"), FieldView(FieldStatus.MISSING),
+                            FieldView(FieldStatus.MISSING), FieldView(FieldStatus.MISSING))
+        out.append(("xss-name", FundLookupView(LookupState.RESULT, "ACTI71", None, xss)))
     return out
 
 
@@ -153,6 +156,14 @@ def battery(renderer, views=None):
                 role = "alert" if state in (LookupState.SOURCE_FAILED, LookupState.BLOCKED) else "status"
                 if f'role="{role}"' not in html:
                     bad.append((where, "狀態列角色不對", role))
+                live = re.search(r'<div class="fl-live" data-live="true" role="[a-z]+">(<div class="fl-status"[^>]*>.*?</div>(?:<div class="uv3-note" data-note="extra">.*?</div>)*)</div>', html, re.S)
+                n_extra = html.count('data-note="extra"')
+                if live is None or live.group(1).count('data-note="extra"') != n_extra or 'data-row="status"' not in live.group(1):
+                    bad.append((where, "狀態列與原因句不在同一個 live region", n_extra))
+                if names and names[0] == "input-code":
+                    shown_in = re.sub(r"</?span[^>]*>", "", _row_value_html(html, "input-code"))
+                    if special_char_violations(shown_in):
+                        bad.append((where, "輸入代碼未跳脫", shown_in))
                 m = re.search(r'role="region" aria-labelledby="([^"]+)"', html)
                 if m is None or f'id="{m.group(1)}"' not in html:
                     bad.append((where, "region／aria-labelledby 缺或指不到"))
@@ -179,10 +190,13 @@ def battery(renderer, views=None):
                         bad.append((where, "配息型對應錯"))
                     if label == "FAKE-OK02" and ("累積型" not in text_of(html) or "配息型" in text_of(html)):
                         bad.append((where, "累積型對應錯"))
+                    if label == "xss-name" and (raw_script_violations(html) or "&lt;script&gt;" not in html):
+                        bad.append((where, "XSS 名稱未跳脫"))
                     if label == "nasty-name":
                         shown = _row_value_html(html, "name")
                         if special_char_violations(shown) or "&lt;b&gt;" not in shown:
                             bad.append((where, "名稱未跳脫", shown))
+        bad += [(None, *v) for v in css_violations(renderer.CSS)]
         note = renderer.isin_note_html()
         if 'data-block="isin-note"' not in note or W.text("isin_note") not in text_of(note):
             bad.append((None, "ISIN 常駐說明缺"))
@@ -208,3 +222,17 @@ def _row_text(html: str, name: str) -> str:
 def _row_value_html(html: str, name: str) -> str:
     dd = re.search(r"<dd>(.*)</dd>", _row_inner(html, name), re.S)
     return dd.group(1) if dd else ""
+
+
+def css_violations(css: str):
+    """production CSS 的結構守衛：輸入框與查詢鈕 min-height／min-width 為 48px、焦點環用 2px outline、且不得把 outline 關掉。"""
+    bad = []
+    if not re.search(r'\[data-testid="stFormSubmitButton"\] button\{min-height:48px;min-width:48px', css):
+        bad.append(("CSS", "查詢鈕觸控目標不是 48px"))
+    if not re.search(r'\[data-testid="stTextInput"\] input\{min-height:48px', css) or not re.search(r'stTextInputRootElement"\]\{min-height:48px', css):
+        bad.append(("CSS", "輸入框觸控目標不是 48px"))
+    if not re.search(r'input:focus-visible,\[data-testid="stFormSubmitButton"\] button:focus-visible\{outline:2px solid #', css):
+        bad.append(("CSS", "焦點環不是 2px outline"))
+    if re.search(r"outline:\s*(none|0)", css):
+        bad.append(("CSS", "outline 被關掉"))
+    return bad

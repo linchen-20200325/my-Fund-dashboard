@@ -14,14 +14,23 @@ import fund_lookup_cmp_support as S  # noqa: F401
 
 pytestmark = pytest.mark.slow
 
-pytest.importorskip("streamlit", reason="本環境匯入不到 streamlit")
+try:
+    import streamlit  # noqa: F401
+except ImportError as _exc:    # CI 缺 streamlit 必須 fail，不得靜默 skip（與 AppTest 檔一致）
+    import os as _os
+    if _os.environ.get("CI", "").strip().lower() == "true":
+        pytest.fail(f"[CI] 匯入不到 streamlit：{_exc}（CI 環境必須有完整依賴；此處不得跳過）", pytrace=False)
+    pytest.skip(f"本環境匯入不到 streamlit：{_exc}", allow_module_level=True)
 
 import _ui_v2_chromium  # noqa: E402
 import fund_lookup_cmp_browser_lib as lib  # noqa: E402
 
 WIDTHS = (390, 1280)
 LABEL = "MoneyDJ 基金代碼或 ISIN"
-CONTRAST_SPEC = {"borders": [".fl-card"], "texts": [".fl-card", "[data-block=\"isin-note\"]"]}
+FORM_TEXTS = ['[data-testid="stTextInput"] label', '[data-testid="stFormSubmitButton"] button']
+FORM_BORDERS = ['[data-testid="stTextInputRootElement"]', '[data-testid="stFormSubmitButton"] button']
+CONTRAST_SPEC = {"borders": [".fl-card", *FORM_BORDERS], "texts": [".fl-card", "[data-block=\"isin-note\"]", *FORM_TEXTS],
+                 "inputs": ['[data-testid="stTextInput"] input']}
 
 _ALL_FIVE = list(S.FIVE_ROWS)
 # (輸入, 預期 state, 預期 reason, 預期欄位列, 預期欄位狀態, 卡內必須出現的字樣, 預期狀態列角色)
@@ -175,6 +184,16 @@ def test_initial_text_and_isin_note_contrast_is_at_least_4_5(initial, width):
     assert lib.border_violations(c, ".fl-card") == []
 
 
+@pytest.mark.parametrize("width", WIDTHS)
+def test_form_controls_label_input_text_button_text_and_borders_meet_contrast(initial, width):
+    _m, c, _r = initial[width]
+    for sel in FORM_TEXTS:
+        assert lib.text_violations(c, sel) == [], (sel, lib.text_violations(c, sel))
+    assert lib.input_violations(c, '[data-testid="stTextInput"] input') == []
+    for sel in FORM_BORDERS:
+        assert lib.border_violations(c, sel) == [], (sel, lib.border_violations(c, sel))
+
+
 # ───────────────────────── 每個狀態（真的操作） ─────────────────────────
 
 @pytest.mark.parametrize("width", WIDTHS)
@@ -223,6 +242,8 @@ def test_every_state_text_and_card_border_contrast_is_measured_and_passes(sweep,
         assert lib.border_violations(c, ".fl-card") == [], (raw, lib.border_violations(c, ".fl-card"))
         # 狀態的實測樣式也是依 state 套的：dashed／solid 都量得到
         assert c["borders"] and all(min(b["widths"]) >= 1 for b in c["borders"])
+        for sel in FORM_BORDERS:
+            assert lib.border_violations(c, sel) == [], (raw, sel)
 
 
 @pytest.mark.parametrize("width", WIDTHS)
@@ -230,7 +251,7 @@ def test_unmatched_and_blocked_cards_are_dashed_and_failed_is_solid_so_states_ar
     rows = sweep[width][0]
 
     def styles(raw):
-        return {s for b in rows[raw][1]["borders"] for s in b["styles"]}
+        return {s for b in rows[raw][1]["borders"] if b["sel"] == ".fl-card" for s in b["styles"]}
     assert styles("FAKE-PAGE1") == {"dashed"} and styles("US0378331005") == {"dashed"}
     assert styles("FAKE-FAIL1") == {"solid"} and styles("FAKE-OK01") == {"solid"}
 
@@ -394,16 +415,40 @@ def test_mutation_submit_button_and_input_shrunk_below_48px_are_flagged(server_a
     assert kinds >= {"button", "input"}
 
 
+def test_negative_control_external_request_checker_turns_red_on_foreign_urls():
+    base = "http://127.0.0.1:8501"
+    assert lib.external_request_violations([base + "/x", "data:text/plain,a", "blob:" + base + "/id"], base) == []
+    for url in ("https://example.invalid/a", "http://127.0.0.1:8501.evil.example/", "http://127.0.0.1:9999/", "ws://evil.example/s", "blob:null/x", "blob:https://evil.example/y"):
+        assert lib.external_request_violations([url], base) == [url], url
+
+
+def test_negative_control_order_checker_turns_red_on_a_shuffled_layout():
+    ok = {"title": 10, "input": 60, "isin": 120, "button": 150, "card": 200}
+    assert lib.order_violations({"seq": ok}) == []
+    for swap in (("input", "title"), ("isin", "button"), ("card", "input")):
+        bad = dict(ok)
+        bad[swap[0]], bad[swap[1]] = ok[swap[1]], ok[swap[0]]
+        assert lib.order_violations({"seq": bad}), swap
+    assert lib.order_violations({"seq": {**ok, "card": None}})
+    assert lib.order_violations({"seq": {**ok, "button": 60}})          # 同一高度＝順序不明
+
+
 def test_mutation_removing_role_or_label_target_or_status_text_is_flagged(server_and_browser):
     m = _mutated(server_and_browser, query=("FAKE-FAIL1", "failed", "source_failed"),
                  js="() => { const c = document.querySelector('[data-block=\"lookup-result\"]'); c.removeAttribute('role'); c.removeAttribute('aria-labelledby'); }")
     assert any("region" in v[0] for v in lib.a11y_violations(m, expect_alert=True))
     m = _mutated(server_and_browser, query=("FAKE-FAIL1", "failed", "source_failed"),
-                 js="() => { document.querySelector('[data-row=\"status\"]').setAttribute('role', 'status'); }")
+                 js="() => { document.querySelector('[data-live]').setAttribute('role', 'status'); }")
     assert any("角色" in v[0] for v in lib.a11y_violations(m, expect_alert=True))
     m = _mutated(server_and_browser, query=("FAKE-FAIL1", "failed", "source_failed"),
                  js="() => { document.querySelector('[data-row=\"status\"]').innerHTML = ''; }")
     assert any("沒有文字" in v[0] for v in lib.a11y_violations(m, expect_alert=True))
+
+
+def test_mutation_extra_reason_note_outside_the_live_region_is_flagged(server_and_browser):
+    m = _mutated(server_and_browser, query=("FAKE-FAIL1", "failed", "source_failed"),
+                 js="() => { const l = document.querySelector('[data-live]'); const n = l.querySelector('[data-note=\"extra\"]'); l.after(n); }")
+    assert any("live region" in v[0] for v in lib.a11y_violations(m, expect_alert=True))
 
 
 def test_mutation_forbidden_word_and_inserted_link_are_flagged(server_and_browser):

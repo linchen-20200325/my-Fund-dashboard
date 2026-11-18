@@ -29,6 +29,8 @@ MEASURE_JS = r"""
   const cardEls = card ? [card, ...card.querySelectorAll('*')] : [];
   const rows = card ? [...card.querySelectorAll('[data-row]')].filter(e => e.dataset.row !== 'status' && e.dataset.row !== 'idle') : [];
   const status = card ? card.querySelector('[data-row="status"], [data-row="idle"]') : null;
+  const live = card ? card.querySelector('[data-live]') : null;
+  const extras = card ? [...card.querySelectorAll('[data-note="extra"]')] : [];
   const labelledBy = card ? card.getAttribute('aria-labelledby') : null;
   const seq = {title: top('h1'), input: top('[data-testid="stTextInput"]'), isin: top('[data-block="isin-note"]'), button: top('[data-testid="stFormSubmitButton"]'),
     card: top('[data-block="lookup-result"], [data-block="lookup-idle"]')};
@@ -40,7 +42,8 @@ MEASURE_JS = r"""
     rowNames: rows.map(e => e.dataset.row), rowStatus: rows.map(e => e.dataset.fieldStatus || null),
     labels: [...(card ? card.querySelectorAll('dt') : [])].map(e => e.innerText.trim()),
     cardRole: card ? card.getAttribute('role') : null, labelledBy, labelTargetOk: !!(labelledBy && document.getElementById(labelledBy) && card.contains(document.getElementById(labelledBy))),
-    statusRole: status ? status.getAttribute('role') : null, statusText: status ? status.innerText.trim() : null,
+    statusRole: live ? live.getAttribute('role') : (status ? status.getAttribute('role') : null),
+    extrasTotal: extras.length, extrasInLive: live ? extras.filter(e => live.contains(e)).length : 0, statusInLive: !!(live && status && live.contains(status)), statusText: status ? status.innerText.trim() : null,
     dlCount: card ? card.querySelectorAll('dl').length : 0, dtCount: card ? card.querySelectorAll('dt').length : 0, ddCount: card ? card.querySelectorAll('dd').length : 0,
     fakeTags: card ? card.querySelectorAll('[data-tag="fake"]').length : 0,
     tagBeforeRows: !!(tag && (!firstRow || (tag.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING))),
@@ -111,6 +114,8 @@ def a11y_violations(m, *, expect_alert):
     want = "alert" if expect_alert else "status"
     if m["statusRole"] != want:
         bad.append(("狀態列角色不對", m["statusRole"], want))
+    if m["extrasTotal"] != m["extrasInLive"] or (m["extrasTotal"] and not m["statusInLive"]):
+        bad.append(("可操作原因句不在狀態列所在的 live region 內", m["extrasTotal"], m["extrasInLive"], m["statusInLive"]))
     if not m["statusText"]:
         bad.append(("狀態列沒有文字（狀態不得只靠顏色）",))
     if m["rowNames"] and not (m["dlCount"] == 1 and m["dtCount"] == m["ddCount"] == len(m["rowNames"])):
@@ -184,9 +189,14 @@ CONTRAST_JS = r"""
         const s = getComputedStyle(e); const bg = eff(e); const fg = P(s.color);
         texts.push({sel, ri, text: own.slice(0, 40), fg: over(fg, bg), bg, opacity: opacityOf(e), fontSize: parseFloat(s.fontSize)}); }); });
   }
+  const inputs = [];
+  for (const sel of (spec.inputs || [])) {
+    [...document.querySelectorAll(sel)].filter(shown).forEach(e => { const st = getComputedStyle(e);
+      inputs.push({sel, fg: over(P(st.color), eff(e)), bg: eff(e), opacity: opacityOf(e), fontSize: parseFloat(st.fontSize)}); });
+  }
   const focus = (() => { const e = document.activeElement; if (!e || e === document.body) return null; const s = getComputedStyle(e);
     return {tag: e.tagName, outlineStyle: s.outlineStyle, outlineWidth: parseFloat(s.outlineWidth), outlineColor: P(s.outlineColor), bg: eff(e.parentElement || e), page: eff(document.body)}; })();
-  return {borders, texts, focus};
+  return {borders, texts, inputs, focus};
 }
 """
 
@@ -223,6 +233,14 @@ def text_violations(c, selector):
         if r["opacity"] < 1:
             bad.append(("文字或祖先有 opacity<1", selector, r["text"], r["opacity"]))
     return bad
+
+
+def input_violations(c, selector):
+    """表單控制項（輸入框內的文字）對其有效底色 ≥4.5:1。"""
+    rows = [dict(i, ratio=contrast_ratio(i["fg"], i["bg"])) for i in c["inputs"] if i["sel"] == selector]
+    if not rows:
+        return [("找不到輸入元素", selector)]
+    return [("輸入文字對比低於 4.5:1", selector, round(r["ratio"], 2)) for r in rows if r["ratio"] < MIN_TEXT_CONTRAST]
 
 
 def border_violations(c, selector):

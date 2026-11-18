@@ -43,8 +43,8 @@ FAKE 示範代碼（harness 頁頂也會列出）：`FAKE-OK01`（配息型、�
 
 - 鍵盤：Tab 順序＝輸入框 → 查詢鈕；Shift+Tab 回到輸入框；Enter 與點擊等效；結果卡內沒有任何可聚焦元素。焦點環以 `color.primary` token 的 2px 外框實作，並以 computed style 實測對比。
 - 觸控目標：輸入框與查詢鈕高、寬皆 ≥48px（沿既有 fund_search／nas_diag 規格；任務要求 ≥44px）。harness 自己的 selectbox 約 40px，**屬 harness 不屬元件**，測試據實另量。
-- 語意：結果卡 `role="region"` 並以 `aria-labelledby` 指向卡內狀態列；狀態列 `role="status"`（失敗與攔截為 `role="alert"`）；五欄以 `<dl>／<dt>／<dd>` 呈現。狀態一律有文字，**不只靠顏色**（另有邊框線型差異）。
-- 對比：卡內全部文字對其有效底色 ≥4.5:1、卡片邊框對外層底色 ≥3:1，皆以瀏覽器 computed style 實測（不寫死色碼、不引用 token 表的數字）。
+- 語意：結果卡 `role="region"` 並以 `aria-labelledby` 指向卡內狀態列；狀態列與可操作原因句同在一個 live region 容器（`role="status"`，失敗與攔截為 `role="alert"`）；五欄以 `<dl>／<dt>／<dd>` 呈現。狀態一律有文字，**不只靠顏色**（另有邊框線型差異）。
+- 對比：卡內與 ISIN 說明全部文字、表單控制項（輸入框標籤、輸入文字、查詢鈕文字）對其有效底色 ≥4.5:1；卡片、輸入框、查詢鈕邊框對外層底色 ≥3:1，皆以瀏覽器 computed style 實測（不寫死色碼、不引用 token 表的數字）。Streamlit 預設的輸入框邊框實測僅約 1.06:1，故元件 CSS 以 `color.card.border` token 覆寫輸入框與查詢鈕邊框。
 - Design Token：色與尺寸一律經 `ui_v3.design.theme`（`theme.v`／`theme.m`），沒有字面色碼（守衛鎖定）；卡片、tone、間距沿 💼🌍⚙️ 既有元件同一組 token。
 
 ## 驗收範圍（已跑）與 NOT VERIFIED
@@ -55,6 +55,7 @@ FAKE 示範代碼（harness 頁頂也會列出）：`FAKE-OK01`（配息型、�
 **NOT VERIFIED（未驗）**：Streamlit Cloud 實機、真機（真實手機／平板）、**螢幕閱讀器**（NVDA／VoiceOver／TalkBack 實際朗讀 `role="alert"`／`role="status"` 與 `<dl>` 結構）、
 Chromium 以外的瀏覽器（Safari／Firefox）、Streamlit 升級後 `data-testid` 是否仍相容（瀏覽器守衛會轉紅，不會靜默）、與真實 L1／L2 的端到端行為（本元件不接）。
 `aria-describedby` 無法由 Streamlit 原生 `text_input` 設定，故 ISIN 說明與輸入框只靠相鄰關係，**未做程式化關聯**。
+`<dt>`／`<dd>` 以 `display:inline` 排成同一行，**螢幕閱讀器是否仍把它們當定義清單朗讀未驗**（CSS 改 display 在部分瀏覽器／閱讀器會丟掉 list 語意）。
 
 ## 待定字清單（全部 `PendingWording`，客戶／設計者定字後才搬進規則表）
 
@@ -111,7 +112,16 @@ Chromium 以外的瀏覽器（Safari／Firefox）、Streamlit 升級後 `data-te
 
 ## 保守處理與已知落差
 
+- **隱藏 Streamlit 的 `InputInstructions`**（「Press Enter to submit form」與字數計數）：因為它會蓋住長輸入；代價是視覺上少了「按 Enter 可送出」的提示與字數提示（Enter 仍可送出，已測）。是否保留提示屬設計取捨，待設計者確認。
+
 - 缺值字樣不使用規則表 `missing`（`◇ 資料未備`，只限正式模式），也不沿用 fund_search 的 `⬜ 資料未備`，避免複製規則表符號；詳見上方第 3 點。
 - 已核准狀態列只取規則表既有的 `fetch_failed`（⛔）與 `undetermined`（⬜）；新增的說明句全是 PendingWording，不新增規則表項目。
 - 沒有「來源與限制」收合區（與 fund_search 預覽不同）：本元件規格只要求輸入、按鈕、ISIN 說明與結果卡；限制說明併入結果卡的說明句。
 - `session_state` 以 ViewModel 為單位；Streamlit 輸入框 widget 自己的 key 會保存使用者輸入原值，無法由本元件避免。
+
+## 已登記、本輪不做（待辦，不構成動工授權）
+
+- 頁面層 CSS（`block-container`、`h1`、`app_css`）與元件 CSS 混在 `CSS` 內，日後應拆 `component_css`／`page_css`（設計債）。
+- `id="fl-status"` 為固定 id，同頁若出現多張卡會重複；目前一頁只有一張卡。
+- CONFLICT 演示模式下送出查詢，畫面不變（harness 只顯示直接建構的 ViewModel）。
+- 少數字面尺寸（48px 觸控下限、2px 焦點環、1px 邊框）寫在 CSS 內，應向 token 提案（本輪不改 `ui_v3/design`）。
