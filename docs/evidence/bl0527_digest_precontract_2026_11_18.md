@@ -1,6 +1,7 @@
 # BL-0527 Decision Digest 前置契約補強（五種缺語意、既有承載、六段／四區對應、已決／待裁示分離）
 
 > **單組作者，尚待非作者獨立稽核。** 屬 AI decision semantics 等級（`DEC-2026-10-16-05`），合併前須至少 1 組真正獨立稽核。
+> **稽核紀錄指標（後補）**：第 3 行「尚待」已過時；本檔已歷經非作者稽核回修（`f9910396`）與增量複審（`91326841`），摘要見 `docs/evidence/audit_record_2026_11_18.md`（原始報告 repo 內無存檔，仍非 GitHub review）。
 > **性質：docs-only 補充，不是客戶裁示、不是 Digest Schema、不是 prompt、不是施工授權。** 登記不構成動工授權（`CLAUDE.md` §-1）。
 > **與既有決策包的關係**：本檔**補**同目錄 `onebrain_digest_decision_pack_2026_11_18.md`（下稱「既有包」），**不重複**其內容；既有包已涵蓋的項只引用其節號。基準 `origin/main` `09ed82ba`（2026-11-18）。
 > **與 Gate 的關係（S1）**：`DEC-2026-11-11-04`（已讀原文）D2-G2＝A 明定「D2 逐域契約與 Digest schema 是兩個獨立 Gate；D2 逐域正式契約完成後才另行提 Digest schema Gate；不得因 D2 方向核准就啟動 Digest schema 研究／施工／OneBrain」，且其不授權清單含 Digest schema 研究／施工與任何正式資料契約欄位升格。BL-0527 是**缺口登記**。故本檔**只是缺口盤點與請示題整理，不是 Digest schema 預備授權**；第 1～3 節的對照與第 4.2 節的方案，皆不得被讀成「已開始 Digest schema 研究」。第 4.2 節各題是否現在就可向客戶提出，本身也受 D2-G2 順序約束（見 4.3）。

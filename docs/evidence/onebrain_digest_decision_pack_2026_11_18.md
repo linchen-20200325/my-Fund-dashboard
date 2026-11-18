@@ -1,6 +1,7 @@
 # OneBrain Decision Digest 缺口決策包（逐域 R／O／E、as_of、Freshness、Provider、Rule ID、Evidence trace）
 
 > **單組作者，尚待非作者獨立稽核。** 本檔由專案 AI 單組唯讀研究寫成，未經第二組驗證；依 `DEC-2026-10-16-05` 屬 data semantics／AI decision semantics 等級，合併前須至少 1 組真正獨立稽核。
+> **稽核紀錄指標（後補）**：第 3 行與下方「稽核狀態」並存，以後者及 `docs/evidence/audit_record_2026_11_18.md` 為準；該紀錄為摘要，稽核原始報告 repo 內無存檔。
 > **性質：docs-only 決策包，不是客戶裁示、不是核准欄位、不是 Schema、不是施工授權。** 登記不構成動工授權（`CLAUDE.md` §-1）。
 > **基準**：`origin/main` `09ed82ba`（2026-11-18，#1275 merge）。路徑一律寫「檔案::符號」或「檔案:章節」，不寫行號。
 > **授權來源說明**：本批題目方向「平行作業完成 UI + OneBrain」是經 ChatGPT 派工單轉述的客戶方向〔待核〕；本組在 `docs/DECISIONS.md`、`docs/HANDOFF.md`、`docs/BACKLOG.md` 查無含該句的 DEC，最接近的是 `PROJECT_RULES.md` 第 16 節的 A／B／C 三線平行規則（流程規則，明文「不改變任何既有 Stop／Decision Gate」）。故該方向**只當作本文件的研究題目，不當作任何 Gate 的裁示**。

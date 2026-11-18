@@ -1,6 +1,7 @@
 # BL-0528 舊版 AI 安全稽核（決策包）
 
 > **研究證據（唯讀、離線稽核）；非客戶裁示、非授權施工。** 基準：`origin/main` `09ed82ba`（#1275 merge）；產生日 2026-11-18。
+> **稽核紀錄指標（後補）**：本檔已歷經 1 輪非作者稽核回修（`59c26c5a`；唯讀 subagent，非 GitHub review），摘要見 `docs/evidence/audit_record_2026_11_18.md`；下文「非獨立 QA」敘述指實作前仍須另派獨立稽核，未改。
 > 範圍：只讀 repo 原始碼與 `docs/`；未改任何程式、prompt、`mcp_server/`、`docs/DECISIONS.md`、`docs/BACKLOG.md`、`docs/HANDOFF.md`；未做網路探測、未呼叫任何真實 API、未讀 secrets 與真實持倉。
 > 作者是 A 線執行組，不是最終決策者，也不是獨立 QA。文中「推薦」一律是**執行組讀法，可被客戶推翻**。
 > 路徑一律寫「檔案::符號」，不寫行號。標記法：**FACT**＝本組讀過原始碼／文件可直接指出；**INFERENCE**＝由事實推得；**RECOMMENDATION**＝建議。
