@@ -21,7 +21,12 @@
 
 取數例外：只有 `LookupSourceError`（view model 層定義）與內建 `ConnectionError`／`TimeoutError` 轉成 `SOURCE_FAILED`（原因碼不含例外文字，log 只記型別名）；
 **其餘例外（`TypeError`／`ValueError`／`KeyError` 等程式或契約錯誤）一律往外拋，不轉任何狀態**；不使用廣義 `OSError`／`Exception`。
-（與 `exp_pool` 切片刻意不同：路徑 B 的 loader 內層已把 L1 失敗轉成 `failed` 結果，真正跑到這裡的例外多半是程式錯誤，轉成「來源失敗」會把程式錯誤偽裝成暫時性故障。）
+（與 `exp_pool` 切片刻意不同。⚠️「程式錯誤不被偽裝成來源失敗」**僅對 adapter 層成立**；端到端**不成立**：真實 L2 `exp_profile._call` 會把 L1 的任何例外轉成 `failed` 結果，
+最終仍呈現為 `SOURCE_FAILED`。）
+⚠️ 身分揭露：真實 L2 `resolve_full_keys` 可能經別名表把輸入映為不同的 full_key；`RESULT` 欄位屬於 full_key，**不保證等於輸入代碼**，adapter 看不到 full_key。
+日後 loader 是否要傳入 `mapping_hit`／full_key 是 Decision Gate，本切片不裁決。
+⚠️ `MISSING` 涵蓋「來源沒提供」與「MoneyDJ 同標籤出現不同值」；`CONFLICT` 在現行真實 L2 對四欄不可達；要區分需 L2 結構化旗標（待客戶）。
+⚠️ Q6 待客戶確認：ISIN 形多一字元的變體與含 `-` 後綴者放行並回顯；ISIN 形判斷會誤攔帶連字號的合法 12 字元代碼；裸主機名／IPv4（形如 `example.com`）不視為網址形，走 `code_format` 並可回顯。
 契約不符一律 fail-closed：raise `LookupContractError`（訊息只含欄位名與型別名）。頁面層的單一例外邊界屬日後頁面的責任，本檔不攔截。
 
 保守處理的未決題：Q5 缺值字樣／費率欄標記（本檔只輸出 `MISSING`，不含字樣）、Q6 `INPUT_ECHO_MAX` 與 ISIN 形判斷前移除分隔符、

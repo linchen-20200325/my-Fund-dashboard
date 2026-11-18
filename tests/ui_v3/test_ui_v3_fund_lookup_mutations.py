@@ -169,6 +169,14 @@ def vm_inception_dates(M):
         assert _fields(M, inception_on=M.FieldView(V, ok)).inception_on.value == ok
 
 
+def vm_name_bounds(M):
+    V = M.FieldStatus.VALUE
+    for bad in ("N" * 201, "基金\x00甲", "基金\n甲", "基金\u200b甲", "https://x.example", "HTTP基金", "see www.x.com"):
+        assert _bad(M, lambda bad=bad: _fields(M, fund_name=M.FieldView(V, bad))), bad
+    assert _fields(M, fund_name=M.FieldView(V, "N" * 200)).fund_name.value == "N" * 200
+    assert _fields(M, fund_name=M.FieldView(V, "A&B 基金（美元）")).fund_name.value == "A&B 基金（美元）"
+
+
 def vm_no_forbidden_fields(M):
     assert [f.name for f in dataclasses.fields(M.FundLookupView)] == ["state", "input_code", "reason_code", "fields"]
     assert [f.name for f in dataclasses.fields(M.ProfileFields)] == ["fund_name", "dividend_policy", "inception_on", "mgmt_fee_rate_pct"]
@@ -189,7 +197,7 @@ def vm_errors_do_not_echo_and_have_the_agreed_bases(M):
     assert issubclass(M.LookupSourceError, Exception) and not issubclass(M.LookupSourceError, (ValueError, OSError))
 
 
-VM_CHECKS = [vm_unsafe_text_is_never_stored, vm_never_echo_reasons, vm_predicates, vm_reason_sets, vm_state_shapes, vm_post_screening_states_keep_the_input,
+VM_CHECKS = [vm_name_bounds, vm_unsafe_text_is_never_stored, vm_never_echo_reasons, vm_predicates, vm_reason_sets, vm_state_shapes, vm_post_screening_states_keep_the_input,
              vm_field_invariants, vm_inception_dates, vm_no_forbidden_fields, vm_errors_do_not_echo_and_have_the_agreed_bases]
 
 
@@ -449,16 +457,38 @@ AD_CHECKS = [ad_blocked_inputs_never_call_the_loader, ad_rule_order, ad_screen_r
              ad_adapt_revalidates_its_inputs, ad_error_messages_do_not_echo, ad_free_text_never_reaches_the_view, ad_not_queried]
 
 
+#: 崩潰型例外（名稱／屬性／語法／匯入錯誤）不算「被殺」：突變體只是壞掉，不代表有檢查咬到契約。
+CRASH_ERRORS = (NameError, AttributeError, SyntaxError, ImportError, UnboundLocalError)
+
+
 def _failures(checks, module) -> list:
     failed = []
     for fn in checks:
         try:
             fn(module)
-        except BaseException as exc:  # noqa: BLE001 - 任何失敗或崩潰都代表「突變被發現」；KeyboardInterrupt 不吞
+        except CRASH_ERRORS:
+            continue
+        except BaseException as exc:  # noqa: BLE001 - 契約／斷言失敗代表「突變被發現」；KeyboardInterrupt 不吞
             if isinstance(exc, KeyboardInterrupt):
                 raise
             failed.append(fn.__name__)
     return failed
+
+
+def test_crash_type_errors_do_not_count_as_kills():
+    def crashes(_module):
+        raise NameError("boom")
+
+    def attribute(_module):
+        raise AttributeError("boom")
+
+    def asserts(_module):
+        raise AssertionError("real kill")
+
+    assert _failures([crashes, attribute], None) == []
+    assert _failures([crashes, asserts, attribute], None) == ["asserts"]
+    mutant = _load("def f():\n    return missing_name\n", AD_MODULE)
+    assert _failures([lambda m: m.f()], mutant) == []
 
 
 # ───────────────────────── 突變清單：(id, old〔恰好一次〕, new, 它破壞什麼) ─────────────────────────
@@ -474,8 +504,10 @@ VIEWMODEL = [
     ("V06_echo_limit_raised", "INPUT_ECHO_MAX = 64\n", "INPUT_ECHO_MAX = 100000\n", "回顯長度上限放寬"),
     ("V07_fee_may_have_value", '_need(self.mgmt_fee_rate_pct.status is FieldStatus.MISSING, "mgmt_fee_rate_pct", "MISSING (no source by contract)", self.mgmt_fee_rate_pct)',
      '_need(True, "mgmt_fee_rate_pct", "MISSING (no source by contract)", self.mgmt_fee_rate_pct)', "經理費率可以有值"),
-    ("V08_name_may_be_missing_in_result", '_need(self.fund_name.status is FieldStatus.VALUE, "fund_name", "VALUE (identity-binding evidence)", self.fund_name)',
-     '_need(True, "fund_name", "VALUE (identity-binding evidence)", self.fund_name)', "RESULT 內名稱可缺值"),
+    ("V08_name_may_be_missing_in_result",
+     '        _need(self.fund_name.status is FieldStatus.VALUE, "fund_name", "VALUE (identity-binding evidence)", self.fund_name)\n'
+     '        _need(isinstance(self.fund_name.value, str) and _is_safe_name(self.fund_name.value), "fund_name", "short text without control characters or url shape", self.fund_name.value)\n',
+     "", "RESULT 內名稱可缺值（兩層檢查都移除；單移除狀態檢查時，名稱安全檢查會擋下 None，屬縱深防禦）"),
     ("V09_dividend_policy_unchecked", '_need(self.dividend_policy.value in _DIVIDEND_POLICIES, "dividend_policy", "accum or dist", self.dividend_policy.value)',
      '_need(True, "dividend_policy", "accum or dist", self.dividend_policy.value)', "配息方式可為 accum／dist 以外的值"),
     ("V10_inception_unchecked", '_need(_is_iso_date(self.inception_on.value), "inception_on", "ISO date YYYY-MM-DD", self.inception_on.value)',
@@ -509,6 +541,9 @@ VIEWMODEL = [
     ("V29_inception_existence_unchecked", "parsed = _dt.date.fromisoformat(text)", "parsed = _dt.date(2000, 1, 1)", "不存在的日期被放行"),
     ("V30_contract_error_base", "class LookupContractError(ValueError):", "class LookupContractError(Exception):", "契約錯誤型別改了基底"),
     ("V31_printable_range_widened", "0x20 <= ord(c) <= 0x7E", "0x20 <= ord(c) <= 0xFF", "可印刷 ASCII 白名單放寬到 Latin-1"),
+    ("V33_name_unbounded", "len(text) <= NAME_MAX and ", "", "基金名稱長度上限被移除"),
+    ("V34_name_allows_control", 'not any(unicodedata.category(c).startswith("C") for c in text)', "True", "基金名稱可含控制字元"),
+    ("V35_name_allows_url", '"http" not in lowered and "www." not in lowered', "True", "基金名稱可為網址形"),
     ("V32_source_error_base", "class LookupSourceError(Exception):", "class LookupSourceError(ValueError):", "取數例外型別改了基底"),
 ]
 
@@ -641,7 +676,8 @@ def test_mutation_lists_are_not_trivial_and_ids_are_unique():
 
 
 def test_mutation_themes_are_covered():
-    """主要風險主題各至少一個突變：攔截次序、loader 呼叫次數、fail-closed、禁止欄位、例外型別範圍、回顯長度上限、經理費率、失敗映射。"""
+    """（限制：只是對 `doc` 文字做關鍵字檢查的形式性測試，證明清單有涵蓋各主題，**不**證明每個主題的突變真的被對應檢查擊殺；擊殺由逐筆測試負責。）
+    主要風險主題各至少一個突變：攔截次序、loader 呼叫次數、fail-closed、禁止欄位、例外型別範圍、回顯長度上限、經理費率、失敗映射。"""
     text = " ".join(m[3] for m in VIEWMODEL + ADAPTER + [(a, b, c, d) for a, _p, b, c, d in STATIC])
     for theme in ("攔截挪到", "仍呼叫 loader", "不報契約錯誤", "新增取得時間欄位", "新增幣別", "改用廣義 OSError", "回顯長度上限", "經理費率", "來源失敗"):
         assert theme in text, theme

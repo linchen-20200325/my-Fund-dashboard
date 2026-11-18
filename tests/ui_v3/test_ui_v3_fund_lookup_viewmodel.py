@@ -183,6 +183,17 @@ def test_inception_rejects_non_iso_nonexistent_or_too_early_dates(bad):
         good_fields(inception_on=FieldView(FieldStatus.VALUE, bad))
 
 
+@pytest.mark.parametrize("bad", ["N" * (vm.NAME_MAX + 1), "基金\x00甲", "基金\n甲", "基金\u200b甲", "基金\x7f甲", "https://x.example", "HTTP基金", "see www.x.com"])
+def test_fund_name_is_bounded_and_not_url_shaped_or_control(bad):
+    with pytest.raises(LookupContractError):
+        good_fields(fund_name=FieldView(FieldStatus.VALUE, bad))
+
+
+def test_fund_name_at_the_limit_and_ordinary_punctuation_are_accepted():
+    for ok in ("N" * vm.NAME_MAX, "富達-全球 A&B 基金（美元）", "Fund (USD) Acc"):
+        assert good_fields(fund_name=FieldView(FieldStatus.VALUE, ok)).fund_name.value == ok
+
+
 # ───────────────────────── 輸入回顯：結構上不保留被攔截的內容 ─────────────────────────
 
 SAFE_BLOCKED = [("blank", ""), ("blank", "   "), ("code_format", "AB"), ("code_format", "AB CD"), ("key_rejected", "ACTI71")]
@@ -320,7 +331,7 @@ def test_exception_types_have_the_agreed_bases():
 
 # ───────────────────────── 靜態 ─────────────────────────
 
-ALLOWED_IMPORTS = {"__future__", "datetime", "re", "dataclasses", "enum", "typing"}
+ALLOWED_IMPORTS = {"__future__", "datetime", "re", "unicodedata", "dataclasses", "enum", "typing"}
 
 
 def test_viewmodel_passes_existing_ui_v3_guards_and_imports_only_the_standard_library():

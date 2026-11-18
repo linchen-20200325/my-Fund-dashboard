@@ -22,22 +22,31 @@
 
 契約不符（型別錯、不變式矛盾）一律 fail-closed：raise `LookupContractError`，訊息只含欄位名與型別名，**絕不回顯收到的值**。
 
+⚠️ 身分揭露（QA 必修）：真實 L2 `resolve_full_keys` 可能經別名表把輸入映為**不同的 full_key**；`RESULT` 欄位屬於 full_key，**不保證等於輸入代碼**。
+adapter 看不到 full_key。日後 loader 是否要傳入 `mapping_hit`／full_key 是 Decision Gate，本切片不裁決。
+⚠️ `MISSING` 同時涵蓋「來源沒提供」與「MoneyDJ 同標籤出現不同值」；`CONFLICT` 在現行真實 L2 對這四欄不可達（L2 只對幣別用 inconsistent）。
+要區分需 L2 結構化旗標（待客戶）。
+
 保守處理的未決題（記錄於此，不自行裁決）：
 - Q5 缺值字樣／符號：本檔只有 `MISSING` 狀態，不含任何字樣；契約包建議的費率欄「契約上目前無來源」結構標記**沒有實作**（未核准）。
 - Q6 `INPUT_ECHO_MAX`＝64 與 ISIN 形判斷前先移除所有非英數字元：採契約包建議值，待客戶／設計者確認。
+  待客戶確認的已知邊界：①「ISIN 形再多一個字元」的變體（形如 2 字母＋10 碼數字＋1 個字母）與含 `-` 後綴者**放行並回顯**；
+  ②ISIN 形判斷會誤攔帶連字號、移除後恰為 2 字母＋9 英數＋數字結尾的合法 12 字元代碼（只舉形狀，不舉真實代碼）；
+  ③裸主機名／IPv4（形如 `example.com`）不視為網址形，走 `code_format` 並**可回顯**。
 - 成立日期「不晚於台灣今天」需要時鐘：本檔無時鐘，只驗日期格式、存在與年份下限；未來日期的判定留在 L2（`exp_profile`），本檔不重複。
 """
 from __future__ import annotations
 
 import datetime as _dt
 import re
+import unicodedata
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
 __all__ = (
     "LookupContractError", "LookupSourceError", "LookupState", "FieldStatus", "FieldView", "ProfileFields", "FundLookupView",
-    "INPUT_ECHO_MAX", "MIN_INCEPTION_YEAR", "DIVIDEND_POLICY_ACCUM", "DIVIDEND_POLICY_DIST",
+    "INPUT_ECHO_MAX", "NAME_MAX", "MIN_INCEPTION_YEAR", "DIVIDEND_POLICY_ACCUM", "DIVIDEND_POLICY_DIST",
     "REASON_BLANK", "REASON_CONTROL_OR_NON_ASCII", "REASON_URL_SHAPE", "REASON_ISIN_SHAPE", "REASON_CODE_FORMAT", "REASON_KEY_REJECTED",
     "REASON_SOURCE_FAILED", "REASON_SOURCE_COOLING", "REASON_LOADER_IO_ERROR",
     "REASON_UNRECOGNIZED_PAGE", "REASON_NO_PAGE", "REASON_SOURCE_NOT_LISTED", "REASON_NAME_UNCONFIRMED",
@@ -47,6 +56,8 @@ __all__ = (
 
 #: 輸入回顯的字元數上限（契約包建議值；合法代碼上限為 51＝30＋1＋20，故只留餘裕）。
 INPUT_ECHO_MAX = 64
+#: 基金名稱長度上限（保守值，超過視為契約不符）；名稱不得含控制字元、不得為網址形。
+NAME_MAX = 200
 #: 成立日期年份下限（對齊 L2 `exp_profile.MIN_INCEPTION_YEAR`；測試對照原始碼鎖死）。
 MIN_INCEPTION_YEAR = 1900
 DIVIDEND_POLICY_ACCUM = "accum"
@@ -155,6 +166,12 @@ class FieldView:
             _need(self.value is None, "value", "None when status is not VALUE", self.value)
 
 
+def _is_safe_name(text: str) -> bool:
+    lowered = text.lower()
+    return (len(text) <= NAME_MAX and not any(unicodedata.category(c).startswith("C") for c in text)
+            and "http" not in lowered and "www." not in lowered)
+
+
 def _is_iso_date(text: str) -> bool:
     if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text) is None:
         return False
@@ -178,6 +195,7 @@ class ProfileFields:
         for name in ("fund_name", "dividend_policy", "inception_on", "mgmt_fee_rate_pct"):
             _need(isinstance(getattr(self, name), FieldView), name, "FieldView", getattr(self, name))
         _need(self.fund_name.status is FieldStatus.VALUE, "fund_name", "VALUE (identity-binding evidence)", self.fund_name)
+        _need(isinstance(self.fund_name.value, str) and _is_safe_name(self.fund_name.value), "fund_name", "short text without control characters or url shape", self.fund_name.value)
         _need(self.mgmt_fee_rate_pct.status is FieldStatus.MISSING, "mgmt_fee_rate_pct", "MISSING (no source by contract)", self.mgmt_fee_rate_pct)
         if self.dividend_policy.status is FieldStatus.VALUE:
             _need(self.dividend_policy.value in _DIVIDEND_POLICIES, "dividend_policy", "accum or dist", self.dividend_policy.value)

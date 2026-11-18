@@ -763,7 +763,7 @@ _FORBIDDEN_NAMES = frozenset({
 })
 _ALLOWED_IMPORTS = {
     ADAPTER_REL: {"__future__", "logging", "re", "typing", "ui_v3.viewmodels.fund_lookup"},
-    VIEWMODEL_REL: {"__future__", "datetime", "re", "dataclasses", "enum", "typing"},
+    VIEWMODEL_REL: {"__future__", "datetime", "re", "unicodedata", "dataclasses", "enum", "typing"},
 }
 _FORBIDDEN_WORDS = ("ccy", "fetched_at", "observed_at", "source_tier", "full_key", "table_wide_failed", "declared", "traceback", "raw_response")
 
