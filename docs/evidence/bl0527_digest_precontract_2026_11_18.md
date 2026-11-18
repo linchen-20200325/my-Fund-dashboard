@@ -16,7 +16,7 @@
 | 1 逐域 R／O／E 候選與證據 | 第 2.1 節九域表＋第 3 節 D1～D10 | **已涵蓋**，且證據欄完整 | 不重複；僅在第 5 節決策包引用 |
 | 2 Missing／unavailable／not evaluated／stale／conflict 五種語意差異 | 只散見（2.3 談 stale；5.4 一句 Missing 保持 Missing） | **沒有把五種放在同一張表比較**；`unavailable`、`not evaluated`、`conflict` 在規則表**沒有對應鍵** | 第 1 節 |
 | 3 as_of／Provider／Rule ID／Evidence trace 的既有承載（檔案符號） | 2.2、2.4、2.5、2.6 談語意與缺口，但**承載符號列得少** | 缺「檔案::符號」逐項清單 | 第 2 節 |
-| 4 OneBrain 六段輸出與四區版面對應待決 | **完全沒有**（既有包只提 67 8.9 一次） | 發現**三套**「六」與一套「四區」並存，且 80 第 16.4 節明寫對映待客戶確認（BL-0540） | 第 3 節 |
+| 4 OneBrain 六段輸出與四區版面對應待決 | **完全沒有**（既有包只提 67 8.9 一次） | 發現**兩套實質不同的清單**（v-a／v-b 為更名關係算一套，v-c 另一套）與一套「四區」並存，且 80 第 16.4 節明寫對映待客戶確認（BL-0540） | 第 3 節 |
 | 5 最小正式契約決策包（已決／待裁示分開） | 第 4 節 Q1～Q7 是序列，第 5 節是 OB-B 方案表 | 沒有把「已決」整理成一張附出處的清單，也沒有「五種語意」與「六段／四區」兩題的方案表 | 第 4 節 |
 
 ---
@@ -37,7 +37,7 @@
 | **Unavailable（不可得）** | 資料**應可取得但這次取不到**（取數失敗、設定沒設、來源整體不可用） | **沒有叫 `unavailable` 的鍵。** 最接近：`fetch_failed` → `⛔ 取數失敗`（紅）；`not_configured` → `⛔ 尚未設定`（紅，成因是設定沒設、沒有執行取數）；`APPROVED_WORDING["reason_no_source"]`＝「來源資料無法使用」 | `common.py::STATUS_FAILED`；`rules.py::STATUS_TO_KEY["failed"]`、`REASON_NOT_CONFIGURED`；另有 AI 面向的「AI 分析暫不可用」（75 第 12 節、80 第 7.4 節），**那是 AI runtime 不可用，不是資料不可得，是另一個物件** | 「Missing」與「Unavailable」在 Digest 是否分兩態、還是 Unavailable＝`failed`＋原因碼，**未定**；`unavailable` 一詞沒有核准畫面字樣 |
 | **Not evaluated（未評估）** | **前置條件不足，根本沒有去算**（不是算出「沒事」） | **沒有鍵、沒有核准字樣。** 原則存在（`not evaluated ≠ safe`），畫面上落在 `undetermined`（`⬜ 無法判定`，79 稱「含不適用、未設定」）或 `threshold_pending`（`⬜ 門檻待裁示`） | 內部碼已存在、**僅供內部、無畫面字**：`services/v2_domain/allocation_evidence.py` 的 `NOT_EVALUATED`、`NAV_STATE_NOT_EVALUATED`（檔內註解自陳 "no wording"、"never defines or owns"）；`scripts/bl0545_coverage_probe.py::NOT_EVALUATED_STATES`＝`("stale","conflict")`（**S5：這是 BL-0545 探針內部的計數約定——此探針尚未評估這兩項，計數寫 null 不是 0；不是 stale／conflict 的語意定義，也不表示「stale／conflict 屬於 not evaluated」**）；`ui_v3/viewmodels/action_slot.py`（`ACTION_SLOT_SOURCES_ENABLED = False`，恆無法判定） | `not evaluated` 與 `undetermined` 是否同一個 Digest 狀態未定；內部碼不得被升格為 Digest 契約（`allocation_evidence` 檔頭自稱 not approved vocabulary，見既有包 2.1） |
 | **Stale（不是最新）** | 有值、有 `as_of`，但**依正式門檻判為舊** | `stale` → `◷ 不是最新`（黃；規則表註明「只有正式門檻判為舊才用」）；`threshold_pending` → `⬜ 門檻待裁示`（灰，tone 為推論）；`FRESHNESS_TO_KEY`：`fresh` 不加標記、`stale`→`◷`、`undetermined`→門檻待裁示 | `common.py::FRESH_FRESH／FRESH_STALE／FRESH_UNDETERMINED`、`STATUS_STALE`；`rules.py::entry_for_freshness` | **`stale_after` 無任何已裁值**（既有包 V7）；三條 stale 觸發來源沒有端到端核准鏈（`data_state_vocabulary_crosswalk_d3a_2026_11_08.md` 第 4 點，單組作者判定）；`market_page.py::_meta_status` 對 `ok／missing／failed` 以外一律降為 `undetermined`（crosswalk B4，單組作者判定，本組未複驗） |
-| **Conflict（來源衝突）** | **兩個以上來源給出不一致的值**，且無法依既定優先序裁決 | **沒有鍵、沒有核准字樣。** `DEC-2026-11-08-04`（已讀原文；決策者欄：客戶裁示經總管派工單轉達，要點轉述、非逐字）Q4：缺資料沿用既有「資料未備／無法判定」，**不新增「過期／衝突」正式詞、不改門檻**；其「不授權事項」欄再次列出「不新增『過期』『衝突』正式狀態詞」 | `services/v2_tables/exp_profile.py::STATUS_INCONSISTENT = "inconsistent"`（Cell 層，兩源不一致時 `value` 為 None，測試 `tests/test_v2_tables_exp_profile.py` 鎖）；`scripts/bl0545_coverage_probe.py::NOT_EVALUATED_STATES` 含 `conflict`（未評估） | 容差、「同 as-of 不一致」的判定規則未定（既有包 2.3 缺口 3）；`inconsistent` 只存在於 Cell 層，`ui_v3` 的 `STATUSES` 五值**沒有**它（`common.py::STATUSES`＝ok／missing／failed／stale／undetermined）。（S4）依 `data_state_vocabulary_crosswalk_d3a_2026_11_08.md` 的單組作者判定（本組未複驗），`inconsistent` 目前畫面以 `⬜` 呈現，即已實質落在無法判定族，而非沒有畫面 |
+| **Conflict（來源衝突）** | **兩個以上來源給出不一致的值**，且無法依既定優先序裁決 | **沒有鍵、沒有核准字樣。** `DEC-2026-11-08-04`（已讀原文；決策者欄：客戶裁示經總管派工單轉達，要點轉述、非逐字）Q4：缺資料沿用既有「資料未備／無法判定」，**不新增「過期／衝突」正式詞、不改門檻**；其「不授權事項」欄再次列出「不新增『過期』『衝突』正式狀態詞」 | `services/v2_tables/exp_profile.py::STATUS_INCONSISTENT = "inconsistent"`（Cell 層，兩源不一致時 `value` 為 None，測試 `tests/test_v2_tables_exp_profile.py` 鎖）；BL-0545 探針另將 `conflict` 與 `stale` 計為尚未評估（僅探針內部計數約定，見 Not evaluated 列 S5，非語意定義） | 容差、「同 as-of 不一致」的判定規則未定（既有包 2.3 缺口 3）；`inconsistent` 只存在於 Cell 層，`ui_v3` 的 `STATUSES` 五值**沒有**它（`common.py::STATUSES`＝ok／missing／failed／stale／undetermined）。（S4）依 `data_state_vocabulary_crosswalk_d3a_2026_11_08.md` 的單組作者判定（本組未複驗），`inconsistent` 目前畫面以 `⬜` 呈現，即已實質落在無法判定族，而非沒有畫面 |
 
 **INFERENCE（為什麼這五種不能合併）**：五者對下游推理的含意不同——Missing／Unavailable 是「沒資料」，Stale 是「有資料但可能過時」，Not evaluated 是「沒算」，Conflict 是「有資料但互相打架」。若 Digest 把它們壓成同一個「缺」，OneBrain 就無法依 67 第 8.3 節的 Constraint Precedence 與第 5.4 節禁止項區分「該停手」與「該降級」。**這是推論，不是已核准語意。**
 
@@ -53,7 +53,7 @@
 |---|---|---|
 | **as_of（觀測日）** | `services/v2_tables/market_indicator.py`：`obs_date`、`release_date`（註解：同一觀測日的每個修正版次各寫一列，`is_revised`；`rows_from_fred_vintages`）；`services/v2_tables/nav_dividend.py`：每列帶 `fetched_at`（取 `attrs["cache_updated_at"]`），`nav_date`；`ui_v3/viewmodels/common.py` 共同欄位 `as_of`（80 第 6 節）；`services/v2_tables/exp_profile.py` Cell `observed_at` | 欄名不統一（67 5.3）；PIT 取哪一欄未定；`services/v2_domain/allocation_evidence.py` 無根層 as_of／產生時間（既有包 2.2）；國發會兩鍵 `PENDING_NDC_NO_RELEASE_DATE`（`market_indicator.py`）＝來源不提供公布日 |
 | **retrieved_at** | 各表 `fetched_at`；`market_indicator.py` 註解的 `fetched_at`；共同欄位 `retrieved_at`（80 第 6 節，來源 `fetched_at`） | 形狀不一（67 5.3） |
-| **Provider（資料供應者）** | `services/v2_tables/market_indicator.py::INDICATOR_SPECS`（各鍵 `source` 二元組，見既有包 V6）；`nav_dividend.py` 回傳 `provenance[fund_code]`（含 `ccy_source`，**不寫進 `nav` 表欄**；44 的 `nav` 只有 `source_tier`）；`exp_profile` Cell 的 `sources`／`failed_sources` | 無逐項 Provider 契約；`DEC-2026-11-17-06` 依既有包 2.4 轉述明寫 NAV 域**不新增 Provider 欄**、不核准旁路 `provenance[fund_code].source` 與 `chain.data_source`（**經對話提示語轉達〔待核〕**） |
+| **Provider（資料供應者）** | `services/v2_tables/market_indicator.py::INDICATOR_SPECS`（各鍵 `source` 二元組，見既有包 V6）；`nav_dividend.py` 回傳 `provenance[fund_code]`（含 `ccy_source`，**不寫進 `nav` 表欄**；44 的 `nav` 只有 `source_tier`）；`exp_profile` Cell 的 `sources`／`failed_sources` | 無逐項 Provider 契約；`DEC-2026-11-17-06` 已讀原文明寫 NAV 域**不新增 Provider 欄**、不核准旁路 `provenance[fund_code].source` 與 `chain.data_source`（該 DEC 自述：經對話提示語轉達自稱客戶之選擇，是否客戶本人〔待核〕，QA 無法核對 NOT VERIFIED） |
 | **Provider（AI Provider，另一件事）** | `infra/llm.py::_DEFAULT_CHAIN`＝gemini→anthropic→openai（既有包 V5） | 無 typed interface／Fake Provider（既有包 V3）；本檔不處理 |
 | **Rule ID／rule_version** | `ui_v3/viewmodels/components.py::EvidenceItem.rule_ref`（Optional，「只有正式規則存在才填；不得自造 Rule ID」，批 1 fixtures 一律不填）；`services/v2_domain/allocation_evidence.py` 的 `RuleRef(NOT_DEFINED)`（`rule_ref: RuleRef`，目前恆為 not defined） | `rule_version` 在 `.py` 只出現一處「斷言沒有」的測試（既有包 V1）；編碼格式、版本格式、門檻引用格式未定（79 UI-10 另走格式 Gate）；現存「規則結果」只有使用者門檻比較，住在呈現層 |
 | **Evidence trace（資料血緣）** | 67 第 8.7 節固定鏈 `AI sentence → Digest fields → Rule Result → Rule ID → Canonical Data → source／as_of`（文件，無程式實作）；`ui_v3/viewmodels/components.py::ProvenanceTag`（`source`、`as_of`、`fallback_used`） | 句子→依據對映格式（規格 `AI-3`）未定；「AI 不讀畫面／不回寫」兩條守衛無專門測試（67 第 6 節第 6 點，BL-0527 自述） |
@@ -90,7 +90,7 @@
 **INFERENCE 觀察**：
 1. v-b 的 6 個**內容槽**與四區的 4 個**版面區**不是同一個維度（內容 vs 版面），不是一對一對映問題；真正待決的是「每個內容槽落在哪個版面區、哪些版面區對應 Digest 的哪些欄位」。
 2. 「Maximum Falsification」與「Missing／uncertainty 清單」在 67 第 8.7 節要求「每次正式輸出至少含」，但**沒有指定落在哪一區**；v-c「風險與不確定性」可能是它的承載，**未定**。
-3. 四區方向已核准，故此題**不是**「要不要四區」，而是「v-a／v-b／v-c 三套內容怎麼收斂成一套、各落哪一區」。
+3. 四區方向已核准，故此題**不是**「要不要四區」，而是「v-a／v-b 一套與 v-c 一套，共兩套實質不同的內容清單怎麼收斂成一套、各落哪一區」。
 
 **未查證**：本組未讀 79 第 9.4 節以外的上下文與 UI-14 的完整裁示文字（只讀到 67 轉錄與 79 該列），未讀 80 第 7.4 節以外的 🤖 線框全貌；v-c 為 H 段要點轉述（80 第 16.4 節自陳客戶逐字原文本組未見）。
 
@@ -128,7 +128,7 @@
 | # | 項目 | 狀態 |
 |---|---|---|
 | U1 | `DEC-2026-11-18-03`／`-04` 的內容（含「OB-B 程式 PR 前須客戶先確認 `DEC-2026-10-31-03` fake provider Gate」） | worktree 基底 `DECISIONS.md` 查無；僅見於既有包檔頭的轉述；**未驗** |
-| U2 | `DEC-2026-10-31-03`、`DEC-2026-11-08-04` 之外的其餘引用 DEC（`-11-17-05`、`-11-18-01` 等） | 本組未讀；依既有包轉述；**未驗** |
+| U2 | `DEC-2026-10-31-03`、`-11-17-05`、`-11-18-01` 等其餘引用 DEC | 本組未讀；**未驗** |
 | U3 | A8 所涉的「Required 升格」是否同時核准 | 較嚴讀法（既有包 2.1）；客戶原意未確認 |
 
 ### 4.2 需客戶裁示（每題附方案表；推薦為執行組讀法，可被客戶推翻）
@@ -155,13 +155,13 @@
 
 **推薦（執行組讀法，可推翻）：先請客戶確認 Q4 讀法，再選 A 或 B。** 若客戶不願在此題處理 Q4 讀法，則退而求其次選 B（不碰 Q4 的零風險路徑）；A 是在讀法 1 確認後的資訊保存較佳方案。**本檔不核准任何狀態名稱。**
 
-#### N2：三套「六」與四區怎麼收斂（第 3 節）
+#### N2：兩套實質不同的「六」清單與四區怎麼收斂（第 3 節）
 
 | 方案 | 內容 | 優點 | 缺點 | 風險 |
 |---|---|---|---|---|
 | **A（推薦）：兩層模型——內容槽沿用 v-b，版面區沿用四區，v-c 併入對應區** | v-b 六內容槽為「輸出什麼」；四區為「放在哪」；v-c 六項歸入四區（系統狀態→System State；AI 投資總結／風險與不確定性→Interpretation；最強反證→Max Falsification；主要依據／Evidence trace→Evidence）；「本期行動」明定引用 System Action State（放 System State 區，Interpretation 區不另產 action） | 不推翻任何已決（v-b、四區、C-1）；一次消除 BL-0540 對映題；符合 C-1 | 需客戶確認 v-c 各項併入方式與「本期行動」位置 | 中：改變「本期行動」是 OneBrain 輸出 的字面讀法，須客戶確認不違原意 |
 | **B：以 v-c 為準，取代 v-b** | v-c 成為唯一輸出清單 | 單一清單、與四區較貼 | 取代已決的 `DEC-2026-10-29-07` 固定輸出；v-c 只是要點轉述，非逐字 | 高：以未逐字確認的轉述覆蓋已決裁示 |
-| **C：暫不收斂，等 Phase 7 出線框一併裁** | 維持現況 | 無需現在裁示 | 三套並存繼續，Digest schema 的欄位無法定（Digest 要不要含「反證」「不確定性」欄取決於此） | 中：拖延會讓 Q6（Digest schema Gate）更難提出 |
+| **C：暫不收斂，等 Phase 7 出線框一併裁** | 維持現況 | 無需現在裁示 | 兩套清單並存繼續，Digest schema 的欄位無法定（Digest 要不要含「反證」「不確定性」欄取決於此） | 中：拖延會讓 Q6（Digest schema Gate）更難提出 |
 
 **補註（S2）**：因 Risk Cap 未定義，「本期行動」現況只能輸出「⬜ 無法判定」＋缺什麼（67 第 5.4 節第 3 點、第 3.2 節），目前無實體內容可放；N2 決定的是**結構位置**，不是內容。另 v-a→v-b 是更名（67 第 6 節第 3 點），故真正要收斂的是「v-a／v-b 一套」與「v-c」兩套。
 
@@ -215,9 +215,9 @@
 ## 6. 我沒有查證的部分
 
 1. **單組作者**，未經第二組獨立驗證（`CLAUDE.md` §-2 規則 6）；全稱句（「沒有鍵」「無承載」）只代表字面搜尋，改名、動態組字串、別名不在內。
-2. 第 1 節規則表鍵讀自 `shared/ui_semantics/rules.py` 的 `ENTRIES`／`STATUS_TO_KEY`／`FRESHNESS_TO_KEY`／註解；`APPROVED_WORDING["reason_no_source"]` 等為字面讀取。**各鍵的 DEC 出處本組只讀到規則表 `source` 欄與 67／79／80 的轉述，未讀 DEC 原文。**
+2. 第 1 節規則表鍵讀自 `shared/ui_semantics/rules.py` 的 `ENTRIES`／`STATUS_TO_KEY`／`FRESHNESS_TO_KEY`／註解；`APPROVED_WORDING["reason_no_source"]` 等為字面讀取。**僅對規則表各鍵所引的 DEC 出處成立：本組只讀到規則表 `source` 欄與 67／79／80 的轉述，未讀這些 DEC 原文；第 4.1 節所列 DEC 則已讀原文（見第 8 點）。**
 3. crosswalk 的判定（B4、第 4 點等）取自 `data_state_vocabulary_crosswalk_d3a_2026_11_08.md` 的單組作者判定，本組未複驗。
-4. 第 3 節的三套「六」：v-a 與 v-b 取自 67 的轉錄；v-c 取自 80 第 16.4 節（H 段要點轉述，客戶逐字原文本組未見）。本組未讀 79 第 9.4 節全文與 UI-14 裁示全文，未通讀 BL-0540 全文。
+4. 第 3 節的「六」清單（表列三個名稱，實質兩套）：v-a 與 v-b 取自 67 的轉錄；v-c 取自 80 第 16.4 節（H 段要點轉述，客戶逐字原文本組未見）。本組未讀 79 第 9.4 節全文與 UI-14 裁示全文，未通讀 BL-0540 全文。
 5. 第 3.2 節的對應表是**AI 試排**；尤其「本期行動放 System State 區」是依 C-1 推得，與 `DEC-2026-10-29-07` 字面「OneBrain 輸出本期行動 ≤3」存在張力，**不是已核准讀法**。
 6. 第 2 節 `services/v2_tables/nav_dividend.py`、`exp_profile.py`、`market_indicator.py` 只讀命中片段（docstring 與符號），未通讀；未驗證實際回傳形狀與測試是否仍綠。
 7. 本機缺依賴，**未執行任何業務測試**；唯一跑的是文件守衛（見提交紀錄），依賴齊全環境下是否綠只能由 CI 驗。
