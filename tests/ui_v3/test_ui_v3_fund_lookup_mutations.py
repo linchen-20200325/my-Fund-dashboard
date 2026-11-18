@@ -458,6 +458,8 @@ AD_CHECKS = [ad_blocked_inputs_never_call_the_loader, ad_rule_order, ad_screen_r
 
 
 #: 崩潰型例外（名稱／屬性／語法／匯入錯誤）不算「被殺」：突變體只是壞掉，不代表有檢查咬到契約。
+#: 刻意**不**納入 TypeError：部分突變（例如拿掉非字串輸入檢查，之後 `len(None)` 拋 TypeError）正是以 TypeError 作為預期殺手；
+#: 納入會讓這類突變失效。代價是 TypeError 型的崩潰仍會被算成「被殺」，由逐筆人工審視突變清單補位。
 CRASH_ERRORS = (NameError, AttributeError, SyntaxError, ImportError, UnboundLocalError)
 
 

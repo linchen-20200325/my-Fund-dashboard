@@ -22,6 +22,10 @@
 
 契約不符（型別錯、不變式矛盾）一律 fail-closed：raise `LookupContractError`，訊息只含欄位名與型別名，**絕不回顯收到的值**。
 
+⚠️ 取捨：基金名稱不合格（過長、含控制類字元、網址形）是 **raise `LookupContractError`**，而非降級成 `name_unconfirmed`。
+單一來源的名稱異常因此會讓整頁拋契約錯誤，日後頁面層的單一例外邊界需接住；是否改映 `name_unconfirmed` 待總管／客戶。
+⚠️ 控制類字元判斷用 `unicodedata.category` 以 `C` 開頭（含未指派碼位 `Cn`），結果**相依 Python 的 unicodedata 版本**：
+新版 Unicode 才指派的字元在舊版直譯器會被判為 `Cn` 而拒絕。
 ⚠️ 身分揭露（QA 必修）：真實 L2 `resolve_full_keys` 可能經別名表把輸入映為**不同的 full_key**；`RESULT` 欄位屬於 full_key，**不保證等於輸入代碼**。
 adapter 看不到 full_key。日後 loader 是否要傳入 `mapping_hit`／full_key 是 Decision Gate，本切片不裁決。
 ⚠️ `MISSING` 同時涵蓋「來源沒提供」與「MoneyDJ 同標籤出現不同值」；`CONFLICT` 在現行真實 L2 對這四欄不可達（L2 只對幣別用 inconsistent）。

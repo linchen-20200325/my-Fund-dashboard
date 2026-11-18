@@ -194,6 +194,34 @@ def test_fund_name_at_the_limit_and_ordinary_punctuation_are_accepted():
         assert good_fields(fund_name=FieldView(FieldStatus.VALUE, ok)).fund_name.value == ok
 
 
+def _offline_sample_names() -> list:
+    """純 json＋gzip 讀檔（不 import 既有測試工具、不發請求）：取 manifest 內真實代碼頁面的「基金名稱」格。"""
+    import gzip
+    import json
+    root = lib.ROOT / "tests" / "fixtures" / "moneydj_basic"
+    if not (root / "manifest.json").exists():
+        S.unavailable("離線樣本 manifest 不存在")
+    names = []
+    for page in json.loads((root / "manifest.json").read_text(encoding="utf-8"))["pages"]:
+        if page.get("kind") != "real_code":
+            continue
+        text = gzip.open(root / page["file"]).read().decode("big5", errors="replace")
+        match = re.search(r"基金名稱</td>\s*<td[^>]*>(.*?)</td>", text, re.S)
+        if match:
+            names.append(match.group(1).strip())
+    return names
+
+
+def test_all_offline_sample_fund_names_pass_the_name_safety_check():
+    all_names = _offline_sample_names()
+    names = [n for n in all_names if n]          # 空白名稱＝頁面上沒有名稱（L2 會判為缺值），不屬於「有名稱可通過檢查」的樣本
+    assert len(names) >= 6 and len(all_names) - len(names) <= 2, all_names
+    for name in names:
+        assert vm._is_safe_name(name), name
+        assert good_fields(fund_name=FieldView(FieldStatus.VALUE, name)).fund_name.value == name
+    print(f"[offline-samples] {len(names)} sample fund names all passed _is_safe_name; max length {max(map(len, names))}")
+
+
 # ───────────────────────── 輸入回顯：結構上不保留被攔截的內容 ─────────────────────────
 
 SAFE_BLOCKED = [("blank", ""), ("blank", "   "), ("code_format", "AB"), ("code_format", "AB CD"), ("key_rejected", "ACTI71")]

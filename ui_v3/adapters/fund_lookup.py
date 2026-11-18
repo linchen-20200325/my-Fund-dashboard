@@ -23,6 +23,10 @@
 **其餘例外（`TypeError`／`ValueError`／`KeyError` 等程式或契約錯誤）一律往外拋，不轉任何狀態**；不使用廣義 `OSError`／`Exception`。
 （與 `exp_pool` 切片刻意不同。⚠️「程式錯誤不被偽裝成來源失敗」**僅對 adapter 層成立**；端到端**不成立**：真實 L2 `exp_profile._call` 會把 L1 的任何例外轉成 `failed` 結果，
 最終仍呈現為 `SOURCE_FAILED`。）
+⚠️ 取捨：基金名稱不合格（過長、含控制類字元、網址形）是 **raise `LookupContractError`**，而非降級成 `name_unconfirmed`。
+單一來源的名稱異常因此會讓整頁拋契約錯誤，日後頁面層的單一例外邊界需接住；是否改映 `name_unconfirmed` 待總管／客戶。
+⚠️ 控制類字元判斷用 `unicodedata.category` 以 `C` 開頭（含未指派碼位 `Cn`），結果**相依 Python 的 unicodedata 版本**：
+新版 Unicode 才指派的字元在舊版直譯器會被判為 `Cn` 而拒絕。
 ⚠️ 身分揭露：真實 L2 `resolve_full_keys` 可能經別名表把輸入映為不同的 full_key；`RESULT` 欄位屬於 full_key，**不保證等於輸入代碼**，adapter 看不到 full_key。
 日後 loader 是否要傳入 `mapping_hit`／full_key 是 Decision Gate，本切片不裁決。
 ⚠️ `MISSING` 涵蓋「來源沒提供」與「MoneyDJ 同標籤出現不同值」；`CONFLICT` 在現行真實 L2 對四欄不可達；要區分需 L2 結構化旗標（待客戶）。
