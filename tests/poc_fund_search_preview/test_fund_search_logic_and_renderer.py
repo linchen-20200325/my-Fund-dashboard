@@ -420,7 +420,7 @@ def test_input_type_and_identity_rows_are_gone_and_the_input_code_is_kept_verbat
     """DEC-2026-11-18-01：『輸入類型』『基金身份』不在五欄內，已移除；輸入代碼仍顯示原值（不改寫）。
     舊版同位置的『輸入類型列只在代碼型輸入出現、空白／不像代碼／<script> 輸入不出現』案例已由下列測試涵蓋，故不另留：
     `<script>` 與各種危險輸入的 escape ＝ `test_user_input_is_escaped_in_the_result_card`（NASTY_INPUTS）；
-    空白輸入的缺列／缺值字樣 ＝ `test_blank_input_row_shows_the_missing_wording_not_zero`；
+    空白輸入的『輸入代碼』列顯示缺值字樣（不是 0）＝ `test_blank_input_row_shows_the_missing_wording_not_zero`（只涵蓋這一列；空白輸入不畫其他欄位列，由五欄白名單與 data-row 順序涵蓋）；
     以上輸入對五欄白名單 ＝ `test_lookup_card_has_no_field_beyond_the_five_for_every_outcome`（含 ""、"???"、`<script>`）。"""
     html = R.lookup_card_html(L.classify_lookup(raw, fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME)
     assert 'data-row="input-type"' not in html and 'data-row="identity"' not in html
@@ -644,14 +644,46 @@ def test_mutation_unknown_text_node_in_the_card_turns_the_text_whitelist_red(mon
     assert ("未知文字節點", "客服專線 0800") in bad
 
 
+def test_mutation_registered_but_not_this_cards_wording_turns_the_text_whitelist_red(monkeypatch):
+    """允許集是『本卡實際使用』的獨立清單：注入已登記在 FUND_SEARCH_PENDING、但不屬於本卡的字樣（col_matched『符合』、col_nav『最近淨值』…）必須轉紅。"""
+    assert S.LOOKUP_CARD_TEXTS.isdisjoint({W.text(k) for k in ("col_matched", "col_undetermined", "col_nav", "col_ccy", "exp0_title", "row_undetermined_suffix")})
+    orig = R.W.pending
+    for key in ("col_matched", "col_nav", "col_ccy", "exp0_title"):
+        monkeypatch.setattr(R.W, "pending", lambda k, _key=key, **f: orig(k, **f) + (orig(_key) if k == "result_found" else ""))
+        bad = S.lookup_text_violations(_card("FAKE-OK01", "distributing"), "FAKE-OK01", fake.FAKE_FOUND_NAME)
+        assert ("未知文字節點", W.text(key)) in bad, key
+        monkeypatch.undo()
+
+
 @pytest.mark.parametrize("raw", ["FAKE-OK01", "FAKE-OK02", "FAKE-LOW1", "FAKE-ERR1", "", "???", "ABC123"])
 def test_fake_tag_is_in_every_result_card_before_any_value_so_the_candidate_dividend_modes_never_appear_without_it(raw):
     """『配息型』『累積型』沒有 FAKE 前綴：鎖定它們只會出現在同一張帶 `FAKE 模擬` 標籤的卡內，且標籤在 DOM 順序上先於任何欄位列。"""
     html = _card(raw, fake.LOOKUP_DIVIDEND_MODE.get(raw.strip().upper()))
-    assert html.count('data-tag="fake"') == 1 and html.index('data-tag="fake"') < html.index('data-row="')
-    for mode in (W.text("div_mode_distributing"), W.text("div_mode_accumulating")):
-        if mode in S.text_of(html):
-            assert 'data-tag="fake"' in html and html.index('data-tag="fake"') < html.index(mode) and raw.strip().upper().startswith("FAKE-")
+    assert S.fake_tag_order_violations(html) == []
+    modes_shown = [m for m in (W.text("div_mode_distributing"), W.text("div_mode_accumulating")) if m in S.text_of(html)]
+    if modes_shown:
+        assert raw.strip().upper() in fake.LOOKUP_DIVIDEND_MODE and html.index('data-tag="fake"') < html.index(modes_shown[0])
     # 候選值的字樣只能由 renderer 的 found 分支產出：整頁其他函式（idle／ISIN／收合區／EXP 區）不含它們
     others = R.lookup_idle_html() + R.isin_result_html() + R.basic_info_details_html() + R.exp1_head_html() + R.divider_html()
     assert W.text("div_mode_distributing") not in others and W.text("div_mode_accumulating") not in others
+
+
+def test_dividend_mode_fixture_codes_are_all_fake_prefixed():
+    assert fake.LOOKUP_DIVIDEND_MODE and all(code.startswith("FAKE-") for code in fake.LOOKUP_DIVIDEND_MODE)
+
+
+def test_mutation_fake_tag_moved_after_the_rows_in_the_production_renderer_turns_the_order_lock_red(monkeypatch):
+    """對 production renderer 變異：把 FAKE 標籤移到欄位列之後（以及重複／拿掉標籤），順序鎖必須轉紅（未變異時為空）。"""
+    assert S.fake_tag_order_violations(_card("FAKE-OK01", "distributing")) == []
+    orig = R.lookup_card_html
+    tag = re.compile(r'<span class="fs-tag" data-tag="fake">.*?</span></span>', re.S)
+
+    def moved(result, found_name, dividend_mode=None):
+        html = orig(result, found_name, dividend_mode)
+        m = tag.search(html)
+        assert m, "測試前提：能抓到標籤"
+        return html.replace(m.group(0), "")[: -len("</div>")] + m.group(0) + "</div>"
+    monkeypatch.setattr(R, "lookup_card_html", moved)
+    assert ("FAKE 標籤在欄位列之後",) in S.fake_tag_order_violations(R.lookup_card_html(L.classify_lookup("FAKE-OK01", fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME, "distributing"))
+    monkeypatch.setattr(R, "lookup_card_html", lambda r, n, m=None: orig(r, n, m).replace('data-tag="fake"', 'data-tag="x"'))
+    assert S.fake_tag_order_violations(R.lookup_card_html(L.classify_lookup("FAKE-OK01", fake.LOOKUP_FIXTURES), fake.FAKE_FOUND_NAME))

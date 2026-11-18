@@ -131,17 +131,37 @@ def lookup_field_violations(card_html: str):
     return bad
 
 
+# 單檔查詢結果卡（含查詢前的 idle 卡）實際會用到的可見文字：寫死在測試端，**獨立於 production 的字樣表**。
+# 刻意不用 `FUND_SEARCH_PENDING` 全表當允許集——全表含本卡不用的已登記字樣（如 col_matched『符合』、col_nav『最近淨值』），注入它們不會紅。
+LOOKUP_CARD_TEXTS = frozenset({
+    *FIVE_LABELS,                                                   # 五欄標籤
+    "FAKE 模擬",                                                     # FAKE 標籤
+    "找到模擬項目（FAKE）", "資料不足", "⬜ 無法判定", "（無法辨識格式）", "（離線預覽沒有這個代碼的模擬資料）",   # 狀態列
+    "⛔ 取數失敗", "無法顯示這檔基金", "這次取數失敗，不是對基金身份的判斷",                              # 失敗句
+    "尚未查詢",                                                       # idle 句
+    "單檔查詢結果（唯讀；不會加入選股池或任何清單）",                                 # 說明句
+    "配息型", "累積型",                                               # 配息方式候選值
+    "⬜ 資料未備",                                                    # FAKE Preview 的缺值字樣
+})
+
+
 def lookup_text_violations(card_html: str, raw: str, found_name: str):
-    """卡內『可見文字行集合』白名單：把卡片依標籤切成文字節點，每一個非空節點都必須是已知字樣——
-    PendingWording 的字樣、規則表既有字樣（狀態列／資料不足）、FAKE 名稱，或這次輸入的原值。
-    補足 `lookup_field_violations`（標籤＋data-row 白名單、字樣黑名單）看不到『未知新文字節點』的缺口。"""
+    """卡內『可見文字節點』白名單：把卡片依標籤切成文字節點，每個非空節點都必須在 `LOOKUP_CARD_TEXTS`（本卡實際使用的字樣，寫死、獨立於 production），
+    或是這次輸入的原值、FAKE 名稱。補足 `lookup_field_violations`（標籤＋data-row 白名單、字樣黑名單）看不到『未知／不屬於本卡的文字』的缺口。"""
     import html as _html
-    import fund_search_wording as W
-    from shared.ui_semantics import rules
-    allowed = {w.text for w in W.FUND_SEARCH_PENDING.values()} | {found_name, raw.strip()}
-    allowed |= {e.wording for e in rules.ENTRIES.values() if e.wording} | {a.text for a in rules.APPROVED_WORDING.values()}
+    allowed = set(LOOKUP_CARD_TEXTS) | {found_name, raw.strip()}
     nodes = [_html.unescape(t).strip() for t in re.split(r"<[^>]+>", card_html)]
     return [("未知文字節點", n) for n in nodes if n and n not in allowed]
+
+
+def fake_tag_order_violations(card_html: str):
+    """結果卡必須恰好一個 FAKE 標籤，且在 DOM 順序上先於任何欄位列／狀態列（候選值『配息型／累積型』沒有 FAKE 前綴，靠同卡的標籤）。"""
+    bad = []
+    if card_html.count('data-tag="fake"') != 1:
+        bad.append(("FAKE 標籤不是恰好一個", card_html.count('data-tag="fake"')))
+    elif 'data-row="' in card_html and card_html.index('data-tag="fake"') > card_html.index('data-row="'):
+        bad.append(("FAKE 標籤在欄位列之後",))
+    return bad
 
 
 def details_field_violations(details_html: str):
