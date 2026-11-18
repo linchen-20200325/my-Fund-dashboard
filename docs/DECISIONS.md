@@ -3390,6 +3390,20 @@
 | supersedes／amends | **僅補充（amends）**：`DEC-2026-11-17-05`（本批為其三線的第一次具體限縮）、就 BL-0555 **登記**的「方案 1」，本筆為**修正版且限契約研究與設計**（BL-0555 登記的推薦含「接真實資料」切片，本筆**不授權**該部分）、`DEC-2026-11-17-03` 的 `pool_empty_marker` 字樣定稿（僅限既有隔離 FAKE Preview）。**不取代、不改寫**上列各筆本文；其餘正式 DEC 不取代。登記不構成動工授權（`CLAUDE.md` §-1）。 |
 | provenance | 要點轉述；經對話提示語轉達自稱客戶之指示〔待核〕，非逐字，repo 內無逐字存檔；原文僅存對話提示語、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。單組作者草稿，尚待非作者獨立 QA（治理文件；依 `DEC-2026-10-16-05` 至少一組真正獨立稽核）。「執行組讀法」(R1)～(R5) 為執行組判讀，不是客戶裁示。不得偽稱全文為客戶原話。 |
 
+### DEC-2026-11-18-02｜B 線路徑 B 離線 adapter／ViewModel 與注入測試施工授權：限縮補充 DEC-2026-11-18-01 R1，保留 TLS、安全、正式接線等 Gate（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-18；ChatGPT 總管於 2026-11-18 派工單中轉述客戶於對話中明確回答「同意」——同意 ChatGPT 提議的「先進行離線、無真實連線的 adapter 與測試實作，讓功能開發繼續前進，同時保留 TLS、安全、正式接線等 Gate」。經派工單轉達〔待核〕，非客戶逐字，repo 內無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。不得偽稱客戶逐字批准了研究包所有技術細節。要點轉述，非逐字。 |
+| 決策內容摘要（要點） | 限縮補充（amends）`DEC-2026-11-18-01` 的 R1（R1 原讀法：B 線「施工準備」＝設計文件＋測試計畫＋契約包，本批不新增 production 程式碼）。<br>**新授權（僅離線）**：允許新增路徑 B 的內部 adapter、ViewModel 及其必要的離線注入測試；允許以假的 L2 回傳字典、注入 loader、離線 fixture 驗證。<br>**建議檔案（派工單所列，限定）**：`ui_v3/viewmodels/fund_lookup.py`、`ui_v3/adapters/fund_lookup.py`、`tests/ui_v3/` 下相應測試檔。<br>**施工依據**：`docs/evidence/gate_d_path_b_contract_package_2026_11_18.md` 第 4～7 節，含：入口攔截先於 loader；狀態集 NOT_QUERIED／BLOCKED／SOURCE_FAILED／PAGE_UNMATCHED／RESULT 與欄位級 VALUE／MISSING／CONFLICT；契約不符 raise `LookupContractError`；僅輸入代碼、基金名稱、配息方式、成立日期、經理費率五個內部測試欄位；loader 無預設真實來源；僅明確取數例外轉來源失敗；不解析自由文字 reason；不 import 真實 L1／L2、網路、secrets、Streamlit；差分測試在 CI 載入失敗不得靜默 skip；測試匯入鏈不得有實際請求；現有 L2 涉及 MoneyDJ／TDCC／FundClear 三來源，不得宣稱 MoneyDJ-only。<br>**ViewModel 禁止欄位**：ccy、NAV、報酬、績效、fetched_at、observed_at、Provider 名稱、source_tier、原始 response、URL、例外訊息、內部 full_key、secrets。上列五個欄位是「內部資料模型測試欄位，不是正式 UI 欄位契約核准」。<br>**程序**：程式走獨立於本 DEC 的 PR，且須在本 DEC 已落 main 後才開（Task A 本 DEC → Task B 程式，兩個 PR，不共用未合併的授權依據）；Task B 須至少一組非作者獨立 QA（金融資料身分語意、fail-closed、輸入攔截與安全、不洩漏、零真實請求、`ui_v3` 守衛相容），Must-Fix 清零。 |
+| 適用範圍 | 向前生效；僅路徑 B 的離線內部 adapter／ViewModel／注入測試，限上列建議檔案與 `tests/ui_v3/`。若測試設計必須突破下列「不授權範圍」，停在 Decision Gate，不自行擴張。 |
+| 不授權範圍（清單，皆不授權） | 真實 MoneyDJ／TDCC／FundClear 請求；Google Sheet、NAS、Proxy、secrets 讀取或探測；變更 `verify=False`、TLS、憑證、NAS 防火牆；新增 Streamlit 正式入口或掛載 🔍；修改 `registry.py`、`app_preview.py`、正式導覽；修改 Schema、FX、公式、frozen 44；新增 ISIN resolver 或正式基金身分對照；正式接線、寫入持久層、Cloud 上線；重做 FAKE Preview 或 G-1～G-7；解除 BL-0545、BL-0551、BL-0555 其他 Gate；不核准 Gate-D Q0～Q11、X1～X5 正式契約提案；不核准 R-ID-2／R-ID-3、K15 或正式資料值；不追認先前程序缺口（含 B2 與 DEC 同批提交）；不改 production L1／L2。 |
+| 待客戶確認／未裁（NOT VERIFIED） | 本筆所有要點皆為轉述，NOT VERIFIED。待確認：客戶是否本人逐字同意上述提議；Task B 完成後是否核准任何正式接線 Gate；Gate-D 提案包 Q0～Q11、X1～X5 仍待客戶裁示。 |
+| 影響範圍／可逆性 | 僅本檔（單一 owner）。可逆（純文件）。登記不構成動工授權（`CLAUDE.md` §-1）；Task B 程式須待本 DEC 落 main 後另開 PR。 |
+| evidence／source | `DEC-2026-11-18-01`（R1）；`docs/evidence/gate_d_path_b_contract_package_2026_11_18.md` 第 4～7 節；`DEC-2026-11-17-04`／`-05`；`DEC-2026-10-16-05`（稽核分級）；BL-0551、BL-0555。 |
+| supersedes／amends | 限縮補充 `DEC-2026-11-18-01` R1；不取代、不改寫其餘。 |
+| provenance | 要點轉述；經 ChatGPT 總管派工單轉述客戶「同意」〔待核〕，非逐字，repo 內無逐字存檔，QA 無法核對（NOT VERIFIED）。單組作者草稿，尚待非作者獨立 QA（治理文件；依 `DEC-2026-10-16-05` 至少一組真正獨立稽核）。不得偽稱全文為客戶原話。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
