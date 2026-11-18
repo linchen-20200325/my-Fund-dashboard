@@ -10,7 +10,9 @@
 from __future__ import annotations
 
 import dataclasses
+import os
 import random
+import sys
 
 import pytest
 
@@ -32,6 +34,11 @@ from ui_v3.viewmodels.exp_pool import (
 )
 
 M_, N_, U_ = "match", "no_match", "undetermined"
+
+
+def _ci_is_true() -> bool:
+    """環境變數 CI 非空且不是 0／false（大小寫不分）→ 視為 CI。"""
+    return os.environ.get("CI", "").strip().lower() not in ("", "0", "false")
 
 
 def ok_view(*codes: str) -> PoolSourceView:
@@ -340,7 +347,14 @@ def test_random_cases_match_an_independent_oracle():
 
 def test_random_cases_agree_with_the_real_l2_apply_rules_tristate_steps():
     """差分：同一組三態餵給真正的 L2 `apply_rules_tristate`（純計算），步驟與列出的檔必須相同。"""
-    rule_filter = pytest.importorskip("services.v2_domain.rule_filter")
+    try:
+        from services.v2_domain import rule_filter
+    except ImportError as exc:
+        reason = "無法 import L2 services.v2_domain.rule_filter（本機缺依賴？）：" + type(exc).__name__ + ": " + str(exc)[:160]
+        if _ci_is_true():
+            pytest.fail("[CI] " + reason + "（CI 環境必須有完整依賴；此處不得跳過）")
+        print("[SKIP-LOCAL] " + reason, file=sys.stderr)
+        pytest.skip(reason)
     rng = random.Random(7)
     for _ in range(200):
         codes, ids, tri = _random_case(rng)

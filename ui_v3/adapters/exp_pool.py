@@ -10,14 +10,24 @@
   不解析、不正規化、不當基金身份、不冒用 R-ID-1。
 
 契約不符（缺鍵、型別不符、未知 status、status 與其他欄位矛盾）一律 **fail-closed**：raise `PoolContractError`，
-訊息只含欄位名與型別名，不回顯收到的值。只有「取數函式本身拋例外」才轉成 `FAILED`（例外字串一律丟棄，只留例外型別名到 log）。
+訊息只含欄位名與型別名，不回顯收到的值（範圍：本檔 adapter 輸入驗證與 `PoolSourceView`；`Exp2Row`／`Exp7Row`／`conditions_count`
+的計數驗證沿用 S0 `require_count`，拋 `ValueError`、僅涉及內部算出的整數，見 view model 模組 docstring）。
+只有「取數函式本身拋例外」才轉成 `FAILED`（例外字串一律丟棄，只留例外型別名到 log）。
 
-`pool_not_cloud` 一律映成 `UNAVAILABLE`：它同時涵蓋「從沒設定」與「憑證已設但無法使用」，L2 分不出，本層不擅自確定原因。
+`pool_not_cloud` 一律映成 `UNAVAILABLE`，且本層不解析 L2 的訊息、不擅自確定原因。依 L1／L2 原始碼
+（`pool_repository._sa_present`／`get_pool_store`、`exp_universe.load_pool_codes`）核對，`pool_not_cloud` 只代表「L1 選到本機 store」：
+Service Account secret 缺失、缺 `client_email`、或為字串但 JSON 無法解析；或 `POOL_SHEET_ID` 缺／空白（且未注入使用者 OAuth client）。
+⚠️ 它**不是**「所有憑證問題」：憑證可解析且含 `client_email` 但實際無效（金鑰錯、權限不足）時，L1 仍選 Google Sheets 後端，
+`list_pool` 在讀取時拋例外 → L2 回 `failed` → 本層映成 `FAILED`。DEC 的「未設定／憑證無法使用」因此分散在 `UNAVAILABLE` 與 `FAILED` 兩態；
+消費端不得把 `UNAVAILABLE` 讀成「憑證壞了」，也不得假設 `FAILED` 排除憑證成因。
+
+執行組讀法（非已裁示，可被客戶推翻）：來源為 `FAILED`／`UNAVAILABLE`／`EMPTY` 時，下游 `build_exp_counts` 即使零條件也不回「尚未設定條件」、
+不產生 N／M；`DEC-2026-11-17-03` G-6 僅適用離線 FAKE Preview。
 """
 from __future__ import annotations
 
 import logging
-from typing import Callable, Iterable
+from typing import Callable, List, Tuple, Union
 
 from ui_v3.viewmodels.exp_pool import (
     REASON_LOADER_RAISED,
@@ -96,7 +106,7 @@ def adapt_pool_result(raw: object) -> PoolSourceView:
     return PoolSourceView(PoolState.FAILED, (), REASON_SOURCE_COOLING if cooling else REASON_SOURCE_FAILED, None)
 
 
-def load_pool_view(loader: Callable[..., object], secret_values: Iterable[str]) -> PoolSourceView:
+def load_pool_view(loader: Callable[..., object], secret_values: Union[List[str], Tuple[str, ...]]) -> PoolSourceView:
     """呼叫**呼叫端注入**的取數函式（簽章對齊 L2 `load_pool_codes(secret_values)`）並適配成 `PoolSourceView`。
 
     - `loader` 沒有預設值：本檔不知道、也不 import 真實的 L1／L2。

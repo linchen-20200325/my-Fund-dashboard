@@ -13,15 +13,26 @@
 - `OK`：來源成功且有代碼；
 - `EMPTY`：來源成功但沒有任何代碼（選股池是空的——**不併入**「沒有符合的基金」）；
 - `FAILED`：來源失敗（含 L2 回報的冷卻中，以及呼叫端注入的取數函式拋出例外）；
-- `UNAVAILABLE`：L2 回報 `pool_not_cloud`。**涵蓋「未設定」與「憑證無法使用」兩種成因，L2 分不出來，
-  本層也不擅自區分或確定原因**（正式字樣待對應 Gate）。
+- `UNAVAILABLE`：L2 回報 `pool_not_cloud`（L1 選到本機 store：Service Account 設定缺失／缺 `client_email`／JSON 字串無法解析，
+  或 `POOL_SHEET_ID` 缺／空白）。**L2 分不出這些成因，本層也不擅自區分或確定原因**（正式字樣待對應 Gate）。
+  ⚠️ `UNAVAILABLE` **不等於**「所有憑證問題」：憑證可解析（含 `client_email`）但實際無效（金鑰錯、權限不足）時，
+  L1 仍選 Google Sheets 後端，讀取時拋例外 → L2 `failed` → `FAILED`。DEC 的「未設定／憑證無法使用」因此分散在 `UNAVAILABLE` 與 `FAILED` 兩態。
 
 洩漏面（結構上不帶）：view model 只有 `state`／`codes`／固定類別碼 `reason_code`／`read_at`（ISO 字串或 None）。
-**沒有** backend 名稱、**沒有**原始訊息、沒有例外字串；驗證失敗的例外訊息只含欄位名與型別名，不回顯任何收到的值。
+**沒有** backend 名稱、**沒有**原始訊息、沒有例外字串。
+
+驗證失敗訊息的範圍（據實限縮）：`PoolSourceView` 與 `build_exp_counts` 的輸入驗證、以及 adapter 的輸入驗證，
+一律 raise `PoolContractError`，訊息只含欄位名與型別名，不回顯任何收到的值。
+**不在此範圍**：`Exp7Row` 的 `before`／`matched`／`undetermined` 與 `ExpCountsView.conditions_count` 的計數驗證沿用 S0
+`exp_counts.require_count`，違規時拋 `ValueError`（**不是** `PoolContractError`），訊息含 `{value!r}`；這些值是呼叫端／本層
+內部算出的整數計數，不是來自外部來源或秘密，本層不另行包裝。
 
 `build_exp_counts` 的三態組合規則（任一不符合→不符合；否則任一無法判定→無法判定；否則符合）**只用來驗證
 EXP-0／2／7 彼此一致**，輸入的三態是呼叫端的測試輸入，**不是正式篩選判準**；
 ⛔ 不得把這個組合函式搬進 production 當篩選實作（正式實作是 L2 `apply_rules_tristate`，本檔不 import 它）。
+
+⚠️ 執行組讀法（非已裁示，可被客戶推翻）：來源為 `FAILED`／`UNAVAILABLE`／`EMPTY` 時，**即使零條件也不回「尚未設定條件」、不產生 N／M**，
+只回可識別的來源狀態。`DEC-2026-11-17-03` G-6 的「尚未設定條件」只適用離線 FAKE Preview，未裁示來源不可用時的零條件行為。
 """
 from __future__ import annotations
 
@@ -49,7 +60,9 @@ __all__ = (
 
 
 class PoolContractError(ValueError):
-    """選股池契約不符（fail-closed）。訊息只含欄位名與型別名，**絕不回顯收到的值**（值可能是秘密、網址或例外字串）。"""
+    """選股池契約不符（fail-closed）。`PoolSourceView`、`build_exp_counts` 與 adapter 的輸入驗證所拋；
+    訊息只含欄位名與型別名，**絕不回顯收到的值**（值可能是秘密、網址或例外字串）。
+    ⚠️ 不含 `Exp7Row`／`ExpCountsView.conditions_count` 的計數驗證：那些沿用 S0 `require_count`，拋 `ValueError`（訊息含內部計數的 repr）。"""
 
 
 class PoolState(Enum):
@@ -236,6 +249,8 @@ def build_exp_counts(pool_view: PoolSourceView, tristate_by_code: object, condit
     - 組合規則（僅供一致性驗證，⛔ 不得搬入 production）：任一不符合→不符合；否則任一無法判定→無法判定；否則符合。
     - `pool_view` 為 `UNAVAILABLE`／`FAILED`／`EMPTY`：**不產生 N／M**（不偽稱 0；空池也不併入「沒有符合」），
       `status` 可識別；零條件（且來源 OK）：只有「尚未設定條件」，不展示 N／M、不產生列。
+    - ⚠️ 執行組讀法（非已裁示，可被客戶推翻）：`FAILED`／`UNAVAILABLE`／`EMPTY` 時**即使零條件**也不回「尚未設定條件」、不產生 N／M。
+      `DEC-2026-11-17-03` G-6 僅適用離線 FAKE Preview，並未裁示來源不可用時的零條件顯示。
     """
     _need(isinstance(pool_view, PoolSourceView), "pool_view", "PoolSourceView", pool_view)
     ids = _condition_ids(conditions)

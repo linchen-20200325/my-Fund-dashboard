@@ -14,6 +14,7 @@ import ast
 import inspect
 import json
 import logging
+import os
 import pathlib
 import re
 import subprocess
@@ -40,6 +41,32 @@ L2_PATH = lib.ROOT / "services" / "v2_tables" / "exp_universe.py"
 READ_AT = "2026-11-17T10:00:00+00:00"
 POISONS = ("secret-token-abc123", "https://sheets.example/spreadsheets/d/SHEET?key=SECRET", "KeyError: 'private_key'",
            "gspread.exceptions.APIError: 403 permission", "backend-sa-credentials")
+
+
+# ───────────────────────── CI 嚴格度：CI 內「環境不足」不得變成靜默跳過 ─────────────────────────
+
+def _ci_is_true() -> bool:
+    """環境變數 CI 非空且不是 0／false（大小寫不分）→ 視為 CI。"""
+    return os.environ.get("CI", "").strip().lower() not in ("", "0", "false")
+
+
+def _unavailable(reason: str) -> None:
+    """差分測試所需的依賴載不起來：CI 內 **fail**（不得靜默跳過）；非 CI 本機 skip 並印出明確原因。"""
+    if _ci_is_true():
+        pytest.fail("[CI] " + reason + "（CI 環境必須有完整依賴；此處不得跳過）")
+    print("[SKIP-LOCAL] " + reason, file=sys.stderr)
+    pytest.skip(reason)
+
+
+# 子程序環境：只放行執行所需的非秘密變數（不整份繼承 os.environ，避免帶入 secrets；也不過度精簡到 CI 內載不起來）。
+_SAFE_ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "SYSTEMROOT", "PYTHONIOENCODING", "VIRTUAL_ENV")
+
+
+def _subprocess_env() -> dict:
+    env = {k: os.environ[k] for k in _SAFE_ENV_KEYS if k in os.environ}
+    env.setdefault("PATH", "/usr/bin:/bin")
+    env["PYTHONPATH"] = str(lib.ROOT)
+    return env
 
 
 # ───────────────────────── 以 L2 實際形狀做 fixture ─────────────────────────
@@ -97,7 +124,7 @@ def test_required_keys_equal_the_union_every_l2_return_path_carries():
 
 
 def test_real_l2_shapes_are_adapted_without_calling_load_pool_codes():
-    """獨立子程序內取 L2 純函式 `_empty`／`_codes_of` 產出真形狀（含 streamlit 等重依賴；缺依賴則跳過，CI 會跑）。"""
+    """獨立子程序內取 L2 純函式 `_empty`／`_codes_of` 產出真形狀（含 streamlit 等重依賴；缺依賴時：CI 內 fail、非 CI 本機 skip 並印原因）。"""
     code = (
         "import json\n"
         "from types import SimpleNamespace as NS\n"
@@ -110,9 +137,10 @@ def test_real_l2_shapes_are_adapted_without_calling_load_pool_codes():
         "  'cooling': E._empty(E.STATUS_FAILED, 'google-sheets', 'x', cooling=True),\n"
         "  'not_cloud': E._empty(E.STATUS_NOT_CLOUD, 'local-json', E.TEXT_NOT_CLOUD)}))\n")
     proc = subprocess.run([sys.executable, "-s", "-c", code], capture_output=True, text=True, cwd=str(lib.ROOT),
-                          env={"PYTHONPATH": str(lib.ROOT), "PATH": "/usr/bin:/bin"}, timeout=120)
+                          env=_subprocess_env(), timeout=120)
     if proc.returncode != 0:
-        pytest.skip("本機缺 L2 的依賴（streamlit／gspread 等），無法在子程序載入 exp_universe；CI 有完整依賴")
+        tail = (proc.stderr.strip().splitlines() or ["(no stderr)"])[-1][:200]
+        _unavailable("無法在子程序載入 L2 exp_universe（本機缺依賴 streamlit／gspread 等，或子程序環境不足）：" + tail)
     shapes = json.loads(proc.stdout.strip().splitlines()[-1])
     assert adapt_pool_result(shapes["ok"]) == PoolSourceView(PoolState.OK, ("ab1", "AB1"), None, READ_AT)   # 去重、大小寫原樣
     assert adapt_pool_result(shapes["empty_ok"]).state is PoolState.EMPTY
@@ -470,7 +498,7 @@ def test_importing_the_new_modules_loads_no_l1_l2_ui_or_network_modules():
             "{'streamlit','services','repositories','infra','shared','ui','ui_v2','gspread','requests','pandas','numpy','yfinance'})))\n"
             "print('ui_v3.viewmodels.exp_counts' in sys.modules)\n")
     proc = subprocess.run([sys.executable, "-s", "-c", code], capture_output=True, text=True, cwd=str(lib.ROOT),
-                          env={"PYTHONPATH": str(lib.ROOT), "PATH": "/usr/bin:/bin"}, timeout=120)
+                          env=_subprocess_env(), timeout=120)
     assert proc.returncode == 0, proc.stderr
     lines = proc.stdout.strip().splitlines()
     # `ui_v3.viewmodels` 套件本身（既有 `__init__`）會載入 `shared.ui_semantics`（批 2b 唯一開放的呈現規則表）；除此之外不得有任何舊樹／重依賴。

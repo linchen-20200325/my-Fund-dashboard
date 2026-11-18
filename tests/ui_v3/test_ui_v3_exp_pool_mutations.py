@@ -219,8 +219,8 @@ def ad_unknown_and_malformed_fail_closed(A):
 
 def ad_type_and_contradiction_failures(A):
     for over in (dict(codes=None), dict(codes="A1"), dict(codes=("A1",)), dict(codes=[None]), dict(codes=[""]), dict(codes=["A1", "A1"]),
-                 dict(dropped_blank=True), dict(dropped_blank=-1), dict(duplicates=1.0), dict(backend=None), dict(ttl_sec=0), dict(ttl_sec=True),
-                 dict(cooling=1), dict(cooling=True), dict(message="boom"), dict(read_at="garbage")):
+                 dict(dropped_blank=True), dict(dropped_blank=-1), dict(duplicates=1.0), dict(backend=None), dict(backend=1), dict(ttl_sec=0), dict(ttl_sec=-1),
+                 dict(ttl_sec=True), dict(ttl_sec="3600"), dict(cooling=1), dict(cooling=True), dict(message="boom"), dict(read_at="garbage")):
         assert _fails_closed(A, AT.l2_ok(("A1",), **over)), over
     for status in ("failed", "pool_not_cloud"):
         for over in (dict(codes=["A1"]), dict(message=None), dict(message=5), dict(read_at=AT.READ_AT), dict(dropped_blank=1), dict(duplicates=1),
@@ -379,8 +379,8 @@ ADAPTER = [
      '_need(True, "codes", "empty list when status is not ok", raw["codes"])', "failed 卻帶代碼仍放行"),
     ("A13_bool_counts_accepted", "isinstance(value, int) and not isinstance(value, bool) and value >= 0", "isinstance(value, int)", "bool／負數當統計值放行"),
     ("A14_secrets_not_forwarded", "raw = loader(secret_values)", "raw = loader([])", "遮蔽用的 secret_values 沒有轉交給取數函式"),
-    ("A15_loader_has_default", "def load_pool_view(loader: Callable[..., object], secret_values: Iterable[str])",
-     "def load_pool_view(loader: Callable[..., object] = None, secret_values: Iterable[str] = ())", "取數函式有預設值（不再必須由呼叫端注入）"),
+    ("A15_loader_has_default", "def load_pool_view(loader: Callable[..., object], secret_values: Union[List[str], Tuple[str, ...]])",
+     "def load_pool_view(loader: Callable[..., object] = None, secret_values: Union[List[str], Tuple[str, ...]] = ())", "取數函式有預設值（不再必須由呼叫端注入）"),
     ("A16_failed_may_carry_read_at", '_need(read_at is None, "read_at", "None when status is not ok", read_at)', '_need(True, "read_at", "None when status is not ok", read_at)',
      "failed 卻帶讀取時間仍放行"),
     ("A17_failed_message_unchecked", '_need(isinstance(message, str), "message", "str when status is not ok", message)', '_need(True, "message", "str when status is not ok", message)',
@@ -390,6 +390,16 @@ ADAPTER = [
     ("A19_loader_callable_unchecked", '_need(callable(loader), "loader", "callable", loader)', '_need(True, "loader", "callable", loader)',
      "取數函式不是 callable 被當成取數失敗"),
     ("A20_status_type_unchecked", '_need(isinstance(status, str), "status", "str", status)', '_need(True, "status", "str", status)', "status 型別不驗"),
+    ("A22_backend_type_unchecked", '_need(isinstance(raw["backend"], str), "backend", "str", raw["backend"])', '_need(True, "backend", "str", raw["backend"])',
+     "backend 型別不驗"),
+    ("A23_ttl_non_positive_allowed", 'isinstance(ttl, (int, float)) and not isinstance(ttl, bool) and ttl > 0', 'isinstance(ttl, (int, float)) and not isinstance(ttl, bool)',
+     "ttl_sec 為 0／負數仍放行"),
+    ("A24_ttl_bool_allowed", 'isinstance(ttl, (int, float)) and not isinstance(ttl, bool) and ttl > 0', 'isinstance(ttl, (int, float)) and ttl > 0',
+     "ttl_sec 為 bool 仍放行"),
+    ("A25_ttl_type_unchecked", '_need(isinstance(ttl, (int, float)) and not isinstance(ttl, bool) and ttl > 0, "ttl_sec", "positive number", ttl)',
+     '_need(True, "ttl_sec", "positive number", ttl)', "ttl_sec 型別／範圍都不驗"),
+    ("A26_cooling_type_unchecked", '_need(isinstance(raw["cooling"], bool), "cooling", "bool", raw["cooling"])', '_need(True, "cooling", "bool", raw["cooling"])',
+     "cooling 型別不驗"),
     ("A21_cloud_cooling_allowed", '_need(not cooling, "cooling", "False when status is pool_not_cloud", cooling)', '_need(True, "cooling", "False when status is pool_not_cloud", cooling)',
      "pool_not_cloud 可以同時冷卻中"),
 ]
@@ -442,7 +452,7 @@ def test_static_mutation_is_killed(mutation):
 def test_no_surviving_mutants_are_hiding_and_lists_are_not_trivial():
     ids = [m[0] for m in VIEWMODEL + ADAPTER] + [m[0] for m in STATIC]
     assert len(ids) == len(set(ids)) and not SURVIVORS_DOCUMENTED
-    assert len(VIEWMODEL) >= 20 and len(ADAPTER) >= 18 and len(STATIC) >= 8
+    assert len(VIEWMODEL) >= 20 and len(ADAPTER) >= 22 and len(STATIC) >= 8
 
 
 def test_mutants_do_not_replace_or_pollute_sys_modules():
