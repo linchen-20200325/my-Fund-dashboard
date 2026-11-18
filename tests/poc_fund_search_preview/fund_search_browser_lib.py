@@ -28,7 +28,7 @@ MEASURE_JS = r"""
   const details = [...main.querySelectorAll('details')];
   const rendererEls = [...main.querySelectorAll('[data-block], [data-block] *')].filter(shown);
   const interactive = [...main.querySelectorAll('button, a, input, select, textarea, summary, details, [tabindex], [onclick], [href]')].filter(e => shown(e));
-  const seq = {title: top('h1'), input: top('[data-testid="stTextInput"]'), isin: top('[data-block="isin-note"]'), button: top('[data-testid="stFormSubmitButton"]'),
+  const seq = {idle: top('[data-block="lookup-idle"]'), title: top('h1'), input: top('[data-testid="stTextInput"]'), isin: top('[data-block="isin-note"]'), button: top('[data-testid="stFormSubmitButton"]'),
     result: top('[data-block="lookup-result"], [data-block="isin-notice"]'), basic: top('[data-block="basic-info"]'), divider: top('[data-block="exp-divider"]'),
     exp0: top('[data-block="exp0"]'), exp1: top('[data-block="exp1"]'), cond1: top('[data-testid="stCheckbox"]'), exp2: top('[data-block="exp2"]'), exp7: top('[data-block="exp7"]')};
   const card = main.querySelector('[data-block="lookup-result"]');
@@ -88,9 +88,9 @@ def details_violations(m):
 
 
 def order_violations(m, with_result):
-    """首屏順序：標題 → 輸入框 → ISIN 說明 → 查詢鈕 →（結果）→ 基本資料 → 分隔 → EXP-0 → EXP-1 → EXP-2 → EXP-7。"""
+    """首屏順序：標題 → 輸入框 → ISIN 說明 → 查詢鈕 →（結果卡；查詢前＝『尚未查詢』卡）→ 基本資料 → 分隔 → EXP-0 → EXP-1 → EXP-2 → EXP-7。"""
     s = m["seq"]
-    names = ["title", "input", "isin", "button"] + (["result"] if with_result else []) + ["basic", "divider", "exp0", "exp1", "cond1", "exp2", "exp7"]
+    names = ["title", "input", "isin", "button"] + (["result"] if with_result else ["idle"]) + ["basic", "divider", "exp0", "exp1", "cond1", "exp2", "exp7"]
     missing = [n for n in names if s[n] is None]
     if missing:
         return [("找不到區塊", missing)]

@@ -8,7 +8,9 @@
 - 「無法判定」（`undetermined`，規則表；整檔無法判定列沿用 44 客戶逐字的結構『⬜ 無法判定（資料未備）』，括號句為 `row_undetermined_suffix`）
   與「資料缺值格」（`missing_demo`，暫行）是兩個語意，各用各的函式與 DOM 標記，不共用格式化函式。
 - EXP-0 的結論文案（含「尚未設定條件」）取 `ui_v3.viewmodels.exp_counts`，本檔不重造。
-- 其餘新字樣全是 `PendingWording`（status 恆為 pending），出處一律標 `SOURCE`；畫面上以 `data-pending-wording` 與虛線底線標記。
+- 其餘新字樣全是 `PendingWording`（status 恆為 pending），畫面上以 `data-pending-wording` 與虛線底線標記。出處依字樣而定：
+  多數標 `SOURCE`（ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行）；DEC-2026-11-18-01（客戶本批指示轉述，待核）涉及的字樣
+  （`pool_empty_marker`、`row_inception`、`not_queried`、`div_mode_distributing`、`div_mode_accumulating`）標 `SOURCE_DEC1118`（`SOURCE_DEC03` 是它的歷史名稱別名）。
 """
 from __future__ import annotations
 
@@ -20,9 +22,10 @@ from shared.ui_semantics import rules
 from ui_v3.viewmodels.preview_wording import PendingWording
 
 SOURCE = "ChatGPT UI 設計方向 2026-11-17＋DEC-2026-11-17-02；暫行"
-# DEC-2026-11-17-03 視覺對比要求（空選股池需非顏色輔助）新增的字樣專用出處；仍是 PendingWording，未進規則表。
-# 誠實表述：字句是執行組暫擬，DEC-03 只授權『以符號或文字輔助』，並未指定字句，也不是 ChatGPT 設計給的句子。
-SOURCE_DEC03 = "執行組暫擬；DEC-2026-11-17-03 授權以符號或文字輔助標示空池，但未指定字句；待 ChatGPT／客戶確認定字"
+# DEC-2026-11-18-01（客戶本批指示轉述，待核）：C 線 UI 定稿所涉字樣的出處。仍是 PendingWording，不進 rules.py。
+# `SOURCE_DEC03` 是歷史名稱（原為 DEC-2026-11-17-03 時期執行組暫擬的出處）；`pool_empty_marker` 於本批依客戶指示定稿，出處改為同一句。
+SOURCE_DEC1118 = "客戶本批指示轉述(DEC-2026-11-18-01)，待核；仍是 PendingWording、不進 rules.py"
+SOURCE_DEC03 = SOURCE_DEC1118
 
 
 def _w(key: str, text: str) -> PendingWording:
@@ -38,7 +41,6 @@ _LIST = (
     _w("isin_inactive_result", "ISIN 目前未啟用"),
     _w("isin_inactive_detail", "未用 ISIN 取數、未猜測任何代碼"),
     _w("fake_tag", "FAKE 模擬"),
-    _w("row_result", "查詢結果"),
     _w("result_found", "找到模擬項目（FAKE）"),
     _w("suffix_unrecognized", "（無法辨識格式）"),
     _w("suffix_no_fixture", "（離線預覽沒有這個代碼的模擬資料）"),
@@ -46,20 +48,16 @@ _LIST = (
     _w("fail_not_identity", "這次取數失敗，不是對基金身份的判斷"),
     _w("missing_demo", "⬜ 資料未備"),
     _w("row_input_code", "輸入代碼"),
-    _w("row_input_type", "輸入類型"),
-    _w("input_type_code", "代碼型字串（原值未改寫）"),
-    _w("row_identity", "基金身份"),
-    _w("identity_unconfirmed", "◇ 尚未確認"),
+    # DEC-2026-11-18-01：查詢前只顯示此句；配息方式候選值（FAKE 示範碼才會顯示，未經契約核准的真實值一律不顯示）
+    PendingWording("not_queried", "尚未查詢", SOURCE_DEC1118),
+    PendingWording("div_mode_distributing", "配息型", SOURCE_DEC1118),
+    PendingWording("div_mode_accumulating", "累積型", SOURCE_DEC1118),
     _w("single_note", "單檔查詢結果（唯讀；不會加入選股池或任何清單）"),
     _w("row_name", "基金名稱"),
-    _w("row_inception", "成立日"),
+    PendingWording("row_inception", "成立日期", SOURCE_DEC1118),
     _w("row_dividend_mode", "配息方式"),
     _w("row_mgmt_fee", "經理費率"),
     _w("details_title", "基本資料｜尚未取得｜來源與限制"),
-    _w("row_source", "來源"),
-    _w("row_fallback", "備援來源"),
-    _w("row_asof", "資料日"),
-    _w("not_obtained_note", "尚未取得：來源、備援來源、資料日的值尚未接線"),
     _w("limits_note", "本畫面為離線 FAKE 模擬，不是 MoneyDJ 或任何正式來源的資料；沒有發出任何請求"),
     # 下區：依條件篩選
     _w("section_exp_title", "依條件篩選"),
@@ -82,7 +80,7 @@ _LIST = (
     _w("col_before", "套用前檔數"),
     _w("row_undetermined_suffix", "（資料未備）"),
     # DEC-2026-11-17-03：空選股池的非顏色輔助標記（符號＋短語）；只陳述『池是空的』，不暗示取數失敗或來源缺失（空池≠失敗）
-    PendingWording("pool_empty_marker", "○ 選股池目前是空的", SOURCE_DEC03),
+    PendingWording("pool_empty_marker", "○ 選股池目前是空的", SOURCE_DEC03),   # 客戶指示定稿（待核）；仍是 PendingWording
 )
 
 

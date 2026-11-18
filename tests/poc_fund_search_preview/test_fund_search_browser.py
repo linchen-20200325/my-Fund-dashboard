@@ -139,6 +139,7 @@ def test_initial_page_has_no_overflow_collapsed_details_48px_targets_and_the_rig
     assert lib.static_violations(m) == [] and lib.count_violations(m) == []
     assert m["exp0"]["matched"] is None and "尚未設定條件" in m["exp0"]["text"]
     assert m["outcome"] is None and m["fundRows"] == 0
+    assert "尚未查詢" in m["text"]                           # 查詢前只顯示『尚未查詢』（卡片內容的白名單由 DOM 級守衛另驗）
 
 
 @pytest.mark.parametrize("width", WIDTHS)
@@ -173,20 +174,23 @@ def test_each_lookup_outcome_renders_without_overflow_and_with_the_right_content
     base, browser = server_and_browser
     o = _open(browser, base, width)
     try:
-        typed = ["輸入類型", "代碼型字串（原值未改寫）"]
-        cases = [("FAKE-OK01", "found", ["FAKE 模擬", fake.FAKE_FOUND_NAME, "◇ 尚未確認", "⬜ 資料未備"] + typed, True),
-                 ("FAKE-LOW1", "insufficient", ["資料不足", "⬜ 資料未備"] + typed, True),
-                 ("FAKE-ERR1", "failed", ["⛔ 取數失敗", "無法顯示這檔基金", "這次取數失敗，不是對基金身份的判斷"] + typed, True),
+        cases = [("FAKE-OK01", "found", ["FAKE 模擬", fake.FAKE_FOUND_NAME, "配息型", "⬜ 資料未備"], True),
+                 ("FAKE-OK02", "found", ["FAKE 模擬", fake.FAKE_FOUND_NAME, "累積型", "⬜ 資料未備"], True),
+                 ("FAKE-LOW1", "insufficient", ["資料不足", "⬜ 資料未備"], True),
+                 ("FAKE-ERR1", "failed", ["⛔ 取數失敗", "無法顯示這檔基金", "這次取數失敗，不是對基金身份的判斷"], False),
                  ("???", "unrecognized", ["⬜ 無法判定", "（無法辨識格式）"], False),
-                 ("ABC123", "no_fixture", ["⬜ 無法判定"] + typed, True)]
-        for raw, outcome, needles, has_type in cases:
+                 ("ABC123", "no_fixture", ["⬜ 無法判定"], False)]
+        for raw, outcome, needles, has_profile in cases:
             _query_by_enter(o.page, raw, outcome)
             m = o.measure()
             assert lib.structure_violations(m, with_result=True) == [], (raw, lib.structure_violations(m, with_result=True))
             assert all(n in m["cardText"] for n in needles), (raw, m["cardText"])
-            assert ("輸入類型" in m["cardText"]) is has_type, (raw, m["cardText"])
-            assert "已確認" not in m["cardText"] and "◇ 尚未確認" in m["cardText"]
+            assert ("基金名稱" in m["cardText"]) is has_profile, (raw, m["cardText"])
+            assert "已確認" not in m["cardText"] and "◇ 尚未確認" not in m["text"] and "尚未查詢" not in m["text"], raw   # 查過之後『尚未查詢』卡消失；沒有基金身份欄
             assert "◇ 資料未備" not in m["text"], raw             # 正式模式缺值字樣不出現在 FAKE 預覽
+            labels = o.page.evaluate("() => [...document.querySelectorAll('[data-block=\"lookup-result\"] .uv3-label')].map(e => e.innerText.trim())")
+            assert labels == (list(S.FIVE_LABELS) if has_profile else [S.FIVE_LABELS[0]]), (raw, labels)   # 欄位只有客戶指定的五個，且依序
+            assert not [w for w in S.LOOKUP_UNAPPROVED_TOKENS if w in m["cardText"]], (raw, m["cardText"])
             if outcome in ("unrecognized", "no_fixture"):
                 assert "資料未備" not in m["cardText"].split("輸入代碼")[0], (raw, m["cardText"])   # 無法判定的狀態列不夾帶缺值字樣
         assert lib.external_request_violations(o.requests, base) == []
@@ -533,5 +537,46 @@ def test_a_real_external_request_would_be_caught_by_the_request_listener(server_
         o.page.evaluate("() => { fetch('https://example.invalid/ping').catch(() => {}); }")
         o.page.wait_for_timeout(500)
         assert lib.external_request_violations(o.requests, base) == ["https://example.invalid/ping"]
+    finally:
+        o.close()
+
+
+# ───────────────────────── 2026-11-18 C 線：DOM 級欄位白名單與變異 ─────────────────────────
+
+def _dom_html(page, selector):
+    return page.evaluate("s => { const e = document.querySelector(s); return e ? e.outerHTML : null; }", selector)
+
+
+@pytest.mark.parametrize("width", WIDTHS)
+def test_idle_card_collapsed_area_and_result_card_have_only_the_approved_fields_in_the_real_dom(server_and_browser, width):
+    base, browser = server_and_browser
+    o = _open(browser, base, width)
+    try:
+        assert S.idle_violations(_dom_html(o.page, '[data-block="lookup-idle"]')) == []
+        o.page.locator('[data-summary="basic-info"]').click()                 # 展開收合區再檢查（展開與否都不得有欄位列）
+        assert S.details_field_violations(_dom_html(o.page, '[data-block="basic-info"]')) == []
+        for raw, outcome in (("FAKE-OK01", "found"), ("FAKE-OK02", "found"), ("FAKE-LOW1", "insufficient"), ("FAKE-ERR1", "failed")):
+            _query_by_enter(o.page, raw, outcome)
+            assert S.lookup_field_violations(_dom_html(o.page, '[data-block="lookup-result"]')) == [], raw
+        assert o.page.evaluate("() => document.querySelector('[data-block=\"lookup-idle\"]')") is None
+    finally:
+        o.close()
+
+
+def test_mutation_injected_field_rows_in_the_real_dom_turn_the_whitelist_red(server_and_browser):
+    def setup(page):
+        _query_by_enter(page, "FAKE-OK01", "found")
+    base, browser = server_and_browser
+    o = _open(browser, base, 390)
+    try:
+        setup(o.page)
+        assert S.lookup_field_violations(_dom_html(o.page, '[data-block="lookup-result"]')) == []       # 未變異：綠
+        for label, value in (("幣別", "TWD"), ("最近淨值", "1.23"), ("資料日", "2026-11-17"), ("備援來源", "x"), ("基金身份", "◇ 尚未確認")):
+            js = ("([l, v]) => { document.querySelector('[data-block=\"lookup-result\"]').insertAdjacentHTML('beforeend', "
+                  "'<div class=\"uv3-row\" data-row=\"extra\"><span class=\"uv3-label\">' + l + '</span>' + v + '</div>'); }")
+            o.page.evaluate(js, [label, value])
+            assert S.lookup_field_violations(_dom_html(o.page, '[data-block="lookup-result"]')), label
+            o.page.evaluate("() => document.querySelector('[data-row=\"extra\"]').remove()")
+        assert o.page.evaluate("() => document.querySelector('[data-block=\"lookup-idle\"]')") is None   # 查過之後『尚未查詢』卡不在
     finally:
         o.close()
