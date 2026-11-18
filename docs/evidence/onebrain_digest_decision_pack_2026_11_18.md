@@ -4,6 +4,8 @@
 > **性質：docs-only 決策包，不是客戶裁示、不是核准欄位、不是 Schema、不是施工授權。** 登記不構成動工授權（`CLAUDE.md` §-1）。
 > **基準**：`origin/main` `09ed82ba`（2026-11-18，#1275 merge）。路徑一律寫「檔案::符號」或「檔案:章節」，不寫行號。
 > **授權來源說明**：本批題目方向「平行作業完成 UI + OneBrain」是經 ChatGPT 派工單轉述的客戶方向〔待核〕；本組在 `docs/DECISIONS.md`、`docs/HANDOFF.md`、`docs/BACKLOG.md` 查無含該句的 DEC，最接近的是 `PROJECT_RULES.md` 第 16 節的 A／B／C 三線平行規則（流程規則，明文「不改變任何既有 Stop／Decision Gate」）。故該方向**只當作本文件的研究題目，不當作任何 Gate 的裁示**。
+> **現況補註（後補，不改本文基準）**：`DEC-2026-11-18-03`／`-04` 已登記（待合併 PR #1276）；`-03` 明定 OB-B 程式 PR 前須客戶先確認 `DEC-2026-10-31-03` 的 fake provider Gate。本文 V8「查無對應 DEC」在基底 `09ed82ba` 屬實，現已有 `-03`；本組未讀 `-03`／`-04` 全文（NOT VERIFIED），第 5 節仍以基底為準。
+> **稽核狀態**：已有 1 組非作者治理稽核（總管回報：可合併，Must-Fix 0；稽核報告本組未見）；仍屬單組作者原稿加小修。
 > 分段：**FACT**＝可由 repo 指令或文件重現；**INFERENCE**＝由事實推得；**RECOMMENDATION**＝AI 推薦，可被客戶推翻。缺值寫「⬜ 無法判定」或 NOT VERIFIED，不補值。
 
 ---
@@ -27,7 +29,7 @@
 
 ## 1. 基準、方法與 FACT 驗證
 
-指令於 worktree（HEAD＝`09ed82ba`）執行，pathspec 皆為 `'*.py'` 或指定檔；被掃的是程式或 DEC，本檔本身不在掃描範圍。
+指令執行基準一律為 `09ed82ba`（worktree HEAD 與該 SHA 相同；表內指令省略 SHA 者亦以其為準）；pathspec 皆為 `'*.py'` 或指定檔，被掃的是程式或 DEC，本檔本身不在掃描範圍。
 
 | # | 宣稱 | 指令（摘要） | 結果 |
 |---|---|---|---|
@@ -166,7 +168,7 @@
 | 序 | 要裁的題 | 誰 | 解除什麼 | 先決條件 | 推薦答案與理由 |
 |---|---|---|---|---|---|
 | **Q1** | OB-B（離線 typed interface＋Fake Provider）是否獲得單獨、限縮的授權，及範圍文字（第 5 節方案 B） | 客戶 | OB-B 本身；同時回答 `DEC-2026-10-31-03`「每階段另行裁示」 | 無 | 推薦給（限縮版）。理由：最小、可逆、不碰 Digest 內容、符合 75 第 18.2 節指定的下一步 |
-| **Q2** | 明確聲明「BL-0528 與 BL-0527 不是 OB-B（限縮版）的 blocker，只擋 OB-02／OB-09」，並重申 OB-B 不改 `infra/llm.py` chain、不碰舊線 AI | 客戶（或在 Q1 同一句裁示中順帶） | 消除 75 第 16 與 18.2 兩節的歧義 | Q1 | 推薦併入 Q1 一次問。理由：不併入，OB-B 做完仍會被 18.2 節的字面擋下 |
+| **Q2** | 明確聲明「BL-0528 與 BL-0527 不是 OB-B（限縮版）的 blocker，只擋 OB-02／OB-09」，並重申 OB-B 不改 `infra/llm.py` chain、不碰舊線 AI | 客戶（或在 Q1 同一句裁示中順帶） | 消除 75 第 16 與 18.2 兩節的歧義 | Q1 | 注意：此聲明等同改變 `docs/v2/75` §18.2 的讀法，客戶裁示後須同步記入 `DECISIONS.md`。推薦併入 Q1 一次問。理由：不併入，OB-B 做完仍會被 18.2 節的字面擋下 |
 | **Q3** | D4-3：Rule ID／`rule_version`／門檻引用格式 | 客戶 | BL-0527 第 4 項；2.5；後續 trace | 無 | 推薦先問（純格式）。**這是解除 BL-0527 對 OB-02 阻擋的第一步，不是 OB-B 的必要條件** |
 | **Q4** | D3(b)＋D7 合併：stale／conflict／NAV 10 日 | 客戶 | BL-0527 第 3 項；R-NAV-3；2.2 第二段、2.3 | 專案 AI 先附各來源發布延遲事實 | 推薦按來源逐一定（evidence 檔提案）。**依賴最重，建議排在 Q3 之後** |
 | **Q5** | D2 首批剩餘列逐列：R-ID-2／3、R-NAV-6、（R-NAV-3 隨 Q4）、R-PERF 系列 | 客戶 | 首批三域的 R／O／E 完整 | Q4（R-NAV-3）；績效綁正式公式 Gate | 推薦只推身份／NAV 剩餘列；績效暫緩（見 2.1） |
@@ -204,11 +206,11 @@
 | 方案 | 內容 | 優點 | 缺點 | 風險 |
 |---|---|---|---|---|
 | **A. 視為落在限制外，直接做** | 不另請示，把離線 interface＋Fake 當作 75 第 18.2 節指定工作 | 最快；與 75 字面指定的下一步一致 | 與 `DEC-2026-10-31-03`「fake provider 須另行裁示」字面衝突；等於由專案 AI 單方解讀客戶 DEC | **高**：違反 Stop／Decision Gate 精神；若客戶原意不同，需回退；依 `PROJECT_RULES.md` 第 4 節屬客戶層級事項，不應自決 |
-| **B. 請客戶一句話裁示限縮範圍（推薦）** | 客戶明文授權「離線 typed interface＋Fake Provider（只回傳降級狀態、不含 prompt／Digest 內容／UI 接線／真實連線／SDK／金鑰）」，並同句聲明 BL-0527／0528 不是此範圍的 blocker | 解決兩筆 DEC 的字面歧義與 75 第 16／18.2 的歧義；範圍小、可逆、純文件＋離線測試；不碰 Digest | 需要客戶一次表態；OB-B 產出短期無使用者可見成果 | **低**：Fake Provider 若被誤接到 UI 會變成「假的 AI 輸出」——故授權文字須明寫「不得被任何頁面渲染」 |
+| **B. 請客戶一句話裁示限縮範圍（推薦）** | 客戶明文授權「離線 typed interface＋Fake Provider（只回傳降級狀態、不含 prompt／Digest 內容／UI 接線／真實連線／SDK／金鑰）」，並同句聲明 BL-0527／0528 不是此範圍的 blocker | 解決兩筆 DEC 的字面歧義與 75 第 16／18.2 的歧義；範圍小、可逆、純文件＋離線測試；不碰 Digest | 需要客戶一次表態；OB-B 產出短期無使用者可見成果 | **低（推論；成立前提是客戶授權文字夠窄）**：Fake Provider 若被誤接到 UI 會變成「假的 AI 輸出」——故授權文字須明寫「不得被任何頁面渲染」 |
 | **C. 暫不做 OB-B，先走 Q3～Q6 至 Digest schema Gate** | OB-B 排在 OB-02 之後；對應讀法 2 | 完全避開 Stop Gate 1 與 Fake 的疑慮；Digest 契約先定可讓 interface 的 request 型別一次到位 | 最慢；OneBrain 線在 D2 完成前無可做的工作；與 `PROJECT_RULES.md` 第 16 節三線平行的精神相悖（B 線資料契約已在走，OneBrain 線卻閒置） | 低；但有「契約拖很久，interface 一直等」的進度風險，且 interface 日後可能因 Digest 定案而重做 |
 | **D. 把 OB-B 與 Digest adapter contract（OB-02）合併做** | 一次做 interface＋Digest 輸入契約 | 看似減少往返 | 觸 67 第 5.7 節 Stop Gate 1（Digest 契約定義前不寫 prompt／LLM glue）與 D2-G2（Digest schema 為獨立 Gate）；一次問太多題 | **高**：易被視為提前啟動 Digest schema 研究／施工，這是 `DEC-2026-11-11-04` 明寫不授權的 |
 
-**RECOMMENDATION：方案 B。** 理由：(1) 兩筆 DEC 的字面都沒有明確放行或明確禁止「離線 interface」，只有客戶能消歧；(2) B 是唯一能同時避開「專案 AI 自行解讀客戶 DEC」與「OneBrain 線整段閒置」兩種壞結果的方案；(3) 範圍可寫得夠小，使其不需要任何 Digest 內容，因此不與 BL-0527／0528 產生實質競爭；(4) 與 75 第 15 節的 OB-B 定義（typed interface、fake provider、provider-neutral request／response／error、configuration policy、不接正式 Claude）逐項一致。**建議客戶授權文字至少包含的邊界**（供客戶改寫，不是已核准文字）：不接任何真實 provider、不安裝 SDK、不讀任何金鑰、不寫 prompt、不放 Digest 內容、Fake 只回降級狀態且不得被任何頁面渲染成分析結果、不改 `infra/llm.py` 現行 chain、不動舊線 AI（BL-0528）、不改 UI。
+**RECOMMENDATION：方案 B。** 理由：(1) 兩筆 DEC 的字面都沒有明確放行或明確禁止「離線 interface」，只有客戶能消歧；(2) B 是唯一能同時避開「專案 AI 自行解讀客戶 DEC」與「OneBrain 線整段閒置」兩種壞結果的方案；(3) 範圍可寫得夠小，使其不需要任何 Digest 內容，因此不與 BL-0527／0528 產生實質競爭；(4) 與 75 第 15 節的 OB-B 定義（typed interface、fake provider、provider-neutral request／response／error、configuration policy、不接正式 Claude）逐項一致。**建議客戶授權文字至少包含的邊界**（供客戶改寫，不是已核准文字）：不接任何真實 provider、不安裝 SDK、不讀任何金鑰、不寫 prompt、不放 Digest 內容、Fake 只回降級／不可用狀態，不得輸出任何看似分析、判斷或信心的內容，且不得被任何頁面渲染成分析結果、不改 `infra/llm.py` 現行 chain、不動舊線 AI（BL-0528）、不改 UI。
 
 **INFERENCE（一個必須先講的反面）**：即使客戶選 B，也**不解決** Q3～Q6；OB-B 完成後，下一個 OneBrain 工作（OB-C 起）仍受 Digest 缺口與 Risk Cap 未定義限制，Claude shadow 之前仍須另行裁示。
 
