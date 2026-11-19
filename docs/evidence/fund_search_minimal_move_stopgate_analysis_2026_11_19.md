@@ -81,7 +81,7 @@ poc 內部以**平面模組名**互 import（`import fund_search_logic as L`，�
 
 ## 4. 最小解法（供客戶 Decision Gate；皆為候選，非裁示）
 
-- **G-A（執行組推薦）：現在不搬。** 理由：無第二個使用者；搬動需改既有守衛（授權禁止）；`combine`／`classify_lookup` 與 DEC 條文衝突；搬了反而要在 poc 與 ui_v3 各留一份邏輯。待真正有 🔍 頁掛載 Gate（M-2 P1 逐頁 Gate）與 S2-T0 解凍後，與掛載一併設計，才有「第二使用者」。
+- **G-A（執行組推薦）：現在不搬。** 理由：無第二個使用者；搬動需改既有守衛（授權禁止）；`combine`／`classify_lookup` 與 DEC 條文衝突；搬了反而要在 poc 與 ui_v3 各留一份邏輯。待真正有 🔍 頁掛載 Gate（M-2 P1 逐頁 Gate）時，與掛載一併設計，才有「第二使用者」。〔2026-11-19 更新（轉述〔待核〕，非逐字，細節待客戶確認；見 `DEC-2026-11-19-04`）：逐頁 Gate-M 不等待 S2-T0；正式資料接線仍須 Gate-D／BL-0551。原措辭『與 S2-T0 解凍後』已被取代。客戶已轉達選 G-A。〕
 - **G-B（若客戶堅持推進）：僅 wording，需客戶就兩件事表態**：(i) **明文准許**對 `tests/poc_fund_search_preview/test_fund_search_guards.py` 的 `ALLOWED_PREFIX` 加唯一一條 `"ui_v3.viewmodels.exp_filter_wording"`（純加法，不放寬其他）——此為准許項；(ii) 回答問題：『僅適用本 Preview 的 PendingWording 可否進 `ui_v3/viewmodels/`』——此為待客戶回答的問題，**非准許項**。（候選搬移內容，不授權：新增 `ui_v3/viewmodels/exp_filter_wording.py`，搬 `FUND_SEARCH_PENDING` 資料與純格式化函式；不含 `combine`、`classify_lookup`、renderer。）
   - 搬移方式：資料與「接收 table 參數」的純函式搬出（例 `text_from(table, key, **f)`）；poc `fund_search_wording.py` 留薄層：`FUND_SEARCH_PENDING = moved.FUND_SEARCH_PENDING`，並以 poc 內的 wrapper（`def text(key, **f): return moved.text_from(FUND_SEARCH_PENDING, key, **f)` 等）保留 monkeypatch 縫，使既有 4 個變異測試案例不需修改；`_index`／`SOURCE*`／`RULE_*_KEYS` 同步 re-export（測試會取用）。
   - 測試：既有 poc 測試一字不動；新增 `tests/ui_v3/test_ui_v3_exp_filter_wording.py`（不改既有守衛）：鎖 `status=pending`、出處固定、鍵不在規則表、文字不複寫已核准字樣、無環境變數形字串、與 poc 薄層取字一致（防分叉：比對 poc 表 `is` 搬出表）。

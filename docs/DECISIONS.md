@@ -3487,11 +3487,26 @@
 | 不授權範圍（清單，皆不授權） | 本筆**不授權任何程式碼或測試變更**（含上列候選清單，需另行 DEC）；新增 `ui_v3/pages/exp.py` 或任何 `ui_v3/pages/*`；修改任何既有守衛（含 `ALLOWED_PREFIX`，除非客戶對 G-B 明文准許）；`ui_v3/shell/registry.py`、`ui_v3/app_preview.py`、導覽／PageSlot；掛載任何 FAKE 頁；放寬隔離規則；Schema；L1／L2；Provider；ISIN resolver 與正式基金身分對照；frozen 44；公式；FX；真實取數與探測；secrets；把三態組合規則搬入 production；Gate-M／Gate-D 其餘限制全部維持；BL-0545 真實覆蓋率輸入、BL-0551 與 D2 其他 Pending 項維持；`DEC-2026-11-17-02`／`-03`／`-04`、`DEC-2026-11-18-04`、`DEC-2026-11-19-01`／`-02` 不授權範圍原狀維持。不追認過去未授權事項。 |
 | 區分欄 3｜**尚未核准文字**（不得記為已核准） | 所有 `FUND_SEARCH_PENDING` 字樣（含 `missing_demo`＝`⬜ 資料未備`、`isin_note`、W14 替代句、`pool_empty_marker`）維持 PendingWording，不因搬移升格 `APPROVED_WORDING`、不進 `rules.py`。 |
 | 區分欄 4｜**未驗證事實／NOT VERIFIED** | (a) 『聽你的建議』指涉內容與涵蓋範圍（無 repo 紀錄）。(b) 「搬後」整套 `tests/ui_v3` 與 poc 全測（含 browser／AppTest）未實跑；ui_v3 側守衛結果為 in-memory 模擬與讀碼。(c) `tests/test_services_purity_contract.py` 與本搬移無涉為單組讀碼判斷，未讀全文。(d) 「只有 S1／S4 兩類既有測試會轉紅」非窮舉。(e) S3 的「不宜搬入 production」為執行組推論（出自 docstring 自述與 DEC 語意對照），DEC 字面非明文禁令。(f) `DEC-2026-11-18-04` E1（單檔元件字樣／renderer 放 poc、不新增 viewmodels 檔）為執行組讀法，與 `nas_diag_wording.py`／`assets_preview_wording.py` 先例方向不同，未經客戶裁示。(g) 分析（evidence 檔）已有一組非作者稽核（subagent，非 GitHub review）：Stop 結論成立、Must-Fix 0；本 DEC 條文本身待 PR 階段的治理稽核與 CI；全稱句未驗。 |
-| 待客戶確認／未裁（中性列出，不預寫結論） | (a) 是否本人表示『聽你的建議』及其對象；(b) G-A（不搬）或 G-B（僅 wording，含守衛加一行）擇一，或其他；(c) 若 G-B：`ALLOWED_PREFIX` 純加法是否算「修改既有守衛」而需明文准許；(d) 若 G-B：僅適用本 Preview 的 PendingWording 可否進 `ui_v3/viewmodels/`；(e) 三態組合規則與 `classify_lookup` 是否永遠留 poc。（備註，非待確認項：日後 renderer 進 `ui_v3/pages/` 須另一 Gate，承 `DEC-2026-11-18-04` E1。） |
+| 待客戶確認／未裁（中性列出，不預寫結論） | (a) 是否本人表示『聽你的建議』及其對象；(b) G-A（不搬）或 G-B（僅 wording，含守衛加一行）擇一，或其他（**已由 `DEC-2026-11-19-04` 裁 G-A**，轉述〔待核〕；G-B 不採）；(c) 若 G-B：`ALLOWED_PREFIX` 純加法是否算「修改既有守衛」而需明文准許；(d) 若 G-B：僅適用本 Preview 的 PendingWording 可否進 `ui_v3/viewmodels/`；(e) 三態組合規則與 `classify_lookup` 是否永遠留 poc。（備註，非待確認項：日後 renderer 進 `ui_v3/pages/` 須另一 Gate，承 `DEC-2026-11-18-04` E1。） |
 | 影響範圍／可逆性 | 純文件、可逆。BACKLOG／HANDOFF 由單一治理 owner 統一整合，本筆不改。 |
 | evidence／source | `docs/evidence/fund_search_minimal_move_stopgate_analysis_2026_11_19.md`（可行性分析；§0 結論、§2 逐模組、§4 最小解法）；`poc/fund_search_fixture_preview/*.py`、`ui_v3/viewmodels/fund_lookup.py`；`tests/ui_v3/ui_v3_guard_lib.py`（`LAYER_DEPS`、`population`）、`tests/poc_fund_search_preview/test_fund_search_guards.py`（`import_violations`）、`tests/poc_fund_search_preview/test_fund_search_logic_and_renderer.py`；`DEC-2026-11-17-02`、`-03`、`-04`、`DEC-2026-11-14-08`、`DEC-2026-11-18-04`、`DEC-2026-11-19-01`；`DEC-2026-10-16-05`；`PROJECT_RULES.md` 第 4 節 Stop／Decision Gate。 |
 | supersedes／amends | 不 supersede 任何既有 DEC；不修改任何既有 DEC 本文。僅登記：`DEC-2026-11-17-02` 授權範圍外之「搬出 poc」需新授權，且目前判定 Stop。 |
 | provenance | 要點轉述；經 ChatGPT 專案總管對話轉達客戶『聽你的建議』〔待核〕，非逐字，repo 內無逐字存檔，QA 無法核對（NOT VERIFIED）。區分欄 1 之授權範圍出自 ChatGPT 派工單轉述與其規劃的限縮範圍，**不是客戶逐字核准**；客戶僅轉達的部分只有『聽你的建議』，所指內容待核（比照 `DEC-2026-11-18-04` 寫法）；決策內容摘要與區分欄 2 為執行組判讀，**不是客戶裁示**；區分欄 4 列未驗證事項。分析（evidence 檔）已有一組非作者稽核（subagent，非 GitHub review）：Stop 結論成立、Must-Fix 0；本 DEC 條文本身待 PR 階段的治理稽核與 CI（涉守衛邊界與 data semantics，依 `DEC-2026-10-16-05` 至少一組真正獨立稽核）。不得偽稱全文為客戶原話。 |
+
+### DEC-2026-11-19-04｜🔍 最小離線模組搬移（C 線）：選 G-A（目前不搬移、不改守衛、不重複實作、不新增正式頁面），並登記 Gate-M 與 S2-T0 分離——不授權任何施工（轉述；來源待核）（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-19；客戶經 ChatGPT 專案總管對話轉達裁示選 G-A〔待核〕，**非逐字**，repo 內無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。要點轉述；**不得虛構原話**。 |
+| 區分欄 1｜**轉達所載裁示方向**（轉述；來源待核；僅方向；條號為本筆整理，條數以轉達為準，與客戶原意不符以客戶更正為準） | (1) 🔍 目前**不搬移模組、不修改守衛、不建立重複實作、不新增正式頁面**（G-A）。(2) `#1283` 繼續依文件 PR／QA／CI／合併 Gate 收尾；Stop Gate 如實記錄 G-A 裁示，**不把候選誤記為施工授權**。(3) B 線 G1／G4／Q4／Q5 契約收斂繼續，不受影響。(4) **Gate-M 與 S2-T0 必須分開**：未來純離線 FAKE UI 的逐頁 Gate-M 不必等待 S2-T0 真實資料 Gate 解凍；正式資料接線仍須通過 Gate-D、BL-0551 等限制。(5) 不為無實際收益的模組搬移反覆新增 PR；待真正需要 🔍 掛入 New UI2 時，再提最小、可回滾的逐頁施工方案。(6) 本次不授權新程式施工、掛載、正式取數；完成既有批次後停止。 |
+| 第 4 點與既有 DEC 的關係（執行組讀法，可被客戶推翻；**此分離為轉述，細節待客戶確認**） | `DEC-2026-11-14-08`（S2-T0 暫緩、不掛 🔍 頁、不接 Sheet）**原樣有效，未被本筆取消或改寫**：本筆第 4 點只說明「逐頁 Gate-M（純離線 FAKE UI）的**啟動**不以 S2-T0 解凍為前提」，**不是**說 S2-T0 已解凍，也不是授權任何一頁掛載或任何真實資料動作。`DEC-2026-11-19-01` 的 P1 逐頁獨立 Gate（預設 `registered=False`、各頁須另行裁示）**維持**；本筆**不核准任何一頁進入或通過 Gate-M**。**不得**擴大為任何掛載授權。 |
+| 適用範圍 | 向前生效；僅登記 G-A 裁示與 Gate-M／S2-T0 分離之轉述方向。登記不構成動工授權（`CLAUDE.md` §-1）。 |
+| 不授權範圍（清單，皆不授權） | 任何程式碼或測試變更；任何模組搬移（含 G-B 候選：`ui_v3/viewmodels/exp_filter_wording.py`）；修改任何既有守衛（含 `ALLOWED_PREFIX`）；新增 `ui_v3/pages/exp.py` 或任何 `ui_v3/pages/*`；`ui_v3/shell/registry.py`、`ui_v3/app_preview.py`、導覽／PageSlot；掛載任何 FAKE 頁；S2-T0 解凍；Gate-M 逐頁掛載；正式資料接線、真實取數與探測；Schema；L1／L2；Provider；ISIN resolver；frozen 44；公式；FX；BL-0545 真實覆蓋率輸入、BL-0551 與 D2 其他 Pending 項維持；Gate-D 其餘限制全部維持。不追認過去未授權事項。 |
+| 待客戶確認／未裁（NOT VERIFIED，中性列出） | (a) 客戶是否本人選 G-A 及轉達涵蓋範圍；(b) 第 4 點 Gate-M 與 S2-T0 分離的細節（例如：逐頁 Gate-M 與 `DEC-2026-11-14-08` 暫緩狀態如何並存、哪些 FAKE 輸入可在 Gate-M 內使用）；(c) 日後 🔍 掛入 New UI2 時的最小逐頁施工方案何時提出。 |
+| 影響範圍／可逆性 | 純文件、可逆。BACKLOG／HANDOFF 由單一治理 owner 統一整合。 |
+| evidence／source | `DEC-2026-11-19-03`；`docs/evidence/fund_search_minimal_move_stopgate_analysis_2026_11_19.md`；`DEC-2026-11-14-08`；`DEC-2026-11-19-01`；`DEC-2026-11-18-04`；`DEC-2026-10-16-05`；`PROJECT_RULES.md` 第 4 節 Stop／Decision Gate。 |
+| supersedes／amends | 不 supersede 任何既有 DEC。**解決** `DEC-2026-11-19-03` 待客戶確認 (b) 的 G-A／G-B 選擇：選 G-A，**G-B 不採**；`DEC-2026-11-19-03` 既有條文語意不改，僅在其待確認欄 (b) 加括註。不取代 `DEC-2026-11-14-08`、`DEC-2026-11-19-01`。 |
+| provenance | 要點轉述；經 ChatGPT 專案總管對話轉達客戶裁示〔待核〕，非逐字，repo 內無逐字存檔，QA 無法核對（NOT VERIFIED）。「第 4 點關係」欄為執行組讀法，不是客戶裁示。單組作者草稿，尚待治理稽核與 CI（治理文件；依 `DEC-2026-10-16-05` 至少一組真正獨立稽核）。不得偽稱全文為客戶原話。 |
 
 ---
 
