@@ -2,7 +2,7 @@
 
 > **稽核狀態（落檔時補）**：兩組獨立資安級稽核（內容安全、治理邊界；增量複審皆可合併）；皆 subagent，非 GitHub review；原文不在 repo，來源：總管轉述。**本檔為候選決策準備，非客戶裁示、非授權，不授權任何 NAS／Proxy 變更、探測、TLS 或 Secrets 動作。**
 
-> 單組執行組草稿（A 線，文件，唯讀）。**預定落地：`docs/evidence/bl0551_min_decision_conditions_2026_11_19.md`**；已有兩組獨立資安稽核（內容安全、治理邊界；subagent，非 GitHub review；結論『需修後再審』，本稿為修訂版，來源為總管轉述，稽核原文不在 repo），組數依 `DEC-2026-10-16-05`。**量測基準：`origin/main` `96771a58`，量測日 2026-11-19**（本地 HEAD `b3a2fd1d` 與其內容 diff 為空；§2 的 grep 與 workflow 清單於此基準重跑）。**不是客戶裁示、不構成授權、不改任何程式／設定／secrets／NAS／TLS；沒有任何網路、NAS、Proxy、憑證、MoneyDJ、Streamlit Cloud 探測，沒有讀 secrets。** 沿用 `docs/evidence/bl0551_tls_nas_security_assessment_2026_11_18.md`（下稱「評估」）的 D1~D15 與 R1~R13，不另做研究。全稱句皆為單組讀檔／grep，未經第二組驗證，非窮舉。部署事實一律 NOT VERIFIED。
+> 單組執行組草稿（A 線，文件，唯讀）。**已落地：`docs/evidence/bl0551_min_decision_conditions_2026_11_19.md`**；已有兩組獨立資安稽核（內容安全、治理邊界；subagent，非 GitHub review；結論『需修後再審』，本稿為修訂版，來源為總管轉述，稽核原文不在 repo），組數依 `DEC-2026-10-16-05`。**量測基準：`origin/main` `96771a58`，量測日 2026-11-19**（本地 HEAD `b3a2fd1d` 與其內容 diff 為空；§2 的 grep 與 workflow 清單於此基準重跑）。**不是客戶裁示、不構成授權、不改任何程式／設定／secrets／NAS／TLS；沒有任何網路、NAS、Proxy、憑證、MoneyDJ、Streamlit Cloud 探測，沒有讀 secrets。** 沿用 `docs/evidence/bl0551_tls_nas_security_assessment_2026_11_18.md`（下稱「評估」）的 D1~D15 與 R1~R13，不另做研究。全稱句皆為單組讀檔／grep，未經第二組驗證，非窮舉。部署事實一律 NOT VERIFIED。
 > 標記：FACT＝讀 repo 可複驗；INFERENCE＝推得可被推翻；RECOMMENDATION＝建議，非授權；NOT VERIFIED＝未驗。
 > 結論先講：評估已完整，**無新增研究缺口**；本檔只補評估缺的三樣「決策用的接合件」（見 §0 的 N1~N6），其餘直接指向評估節次。
 
@@ -27,7 +27,7 @@
 |---|---|---|
 | G0-a | D1、D2、D3、D5 已由持有人以**摘要格式**回報（有／無、計數、版本字串），且註明**收集日期**。 | 評估 §8 |
 | G0-b | D4 已對**下列主機**完成（FRED、FinMind、Yahoo 各主機，**沿用評估建議、僅為證據收集範圍，不構成 G2 白名單選定**），回報葉憑證 issuer、序號、指紋、鏈長（直連一組、經 NAS 一組）。D4 屬持有人自行操作，須先有客戶另行授權的書面記錄（評估 §9 G0）。 | 評估 §8 D4、§9 |
-| G0-c | D8 對**D4 所涵蓋的主機**完成：issuer、到期日、是否缺中繼憑證、系統 CA 與 `certifi` 各驗一次、**hostname 驗證結果**，並回報驗證所用 `certifi`／Python／`requests` 版本字串；最好由持有人以 `requests` 經 NAS 代理、`verify=True` 實測一次，**只對根路徑或無金鑰的網址發請求，不得使用帶 FRED／FinMind 金鑰的查詢字串**。**D8 與 D4 同為持有人自行對外連線，須客戶知情／授權**（同 G0-b）。 | N2（建議修訂評估 D8）；評估 §8 D8 |
+| G0-c | D8 對**D4 所涵蓋的主機**完成：issuer、到期日、是否缺中繼憑證、系統 CA 與 `certifi` 各驗一次、**hostname 驗證結果**，並回報驗證所用 `certifi`／Python／`requests` 版本字串；最好由持有人以 `requests` 經 NAS 代理、`verify=True` 實測一次，**只對根路徑或無金鑰的網址發請求，不得使用帶 FRED／FinMind 金鑰的查詢字串**。**D8 與 D4 同為持有人自行對外連線，須客戶知情／授權**（同 G0-b）。**D8 會用到代理帳密，客戶需知情。** | N2（建議修訂評估 D8）；評估 §8 D8 |
 | G0-d | 回報遵守評估 §8 的防外洩規則（無帳密／金鑰／指令列／`access.log` 原始行／未遮蔽截圖）。 | 評估 §8 |
 | G0-e | 一頁結論只含：分支（P／T／U）、R2／R4／R11／R12 各「成立／不成立／未知」。 | 評估 §9 G0 |
 | 加分（不計入完整） | D12（不計入判定，見 §2）、D6、D11、D13、D14、D15、D9、D10、D7。 | 評估 §8 |
