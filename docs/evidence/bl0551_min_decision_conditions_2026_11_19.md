@@ -1,0 +1,119 @@
+# BL-0551 最小安全決策準備（G0 判斷表／repo 內唯讀證據／G1 最小選項）
+
+> **稽核狀態（落檔時補）**：兩組獨立資安級稽核（內容安全、治理邊界；增量複審皆可合併）；皆 subagent，非 GitHub review；原文不在 repo，來源：總管轉述。**本檔為候選決策準備，非客戶裁示、非授權，不授權任何 NAS／Proxy 變更、探測、TLS 或 Secrets 動作。**
+
+> 單組執行組草稿（A 線，文件，唯讀）。**預定落地：`docs/evidence/bl0551_min_decision_conditions_2026_11_19.md`**；已有兩組獨立資安稽核（內容安全、治理邊界；subagent，非 GitHub review；結論『需修後再審』，本稿為修訂版，來源為總管轉述，稽核原文不在 repo），組數依 `DEC-2026-10-16-05`。**量測基準：`origin/main` `96771a58`，量測日 2026-11-19**（本地 HEAD `b3a2fd1d` 與其內容 diff 為空；§2 的 grep 與 workflow 清單於此基準重跑）。**不是客戶裁示、不構成授權、不改任何程式／設定／secrets／NAS／TLS；沒有任何網路、NAS、Proxy、憑證、MoneyDJ、Streamlit Cloud 探測，沒有讀 secrets。** 沿用 `docs/evidence/bl0551_tls_nas_security_assessment_2026_11_18.md`（下稱「評估」）的 D1~D15 與 R1~R13，不另做研究。全稱句皆為單組讀檔／grep，未經第二組驗證，非窮舉。部署事實一律 NOT VERIFIED。
+> 標記：FACT＝讀 repo 可複驗；INFERENCE＝推得可被推翻；RECOMMENDATION＝建議，非授權；NOT VERIFIED＝未驗。
+> 結論先講：評估已完整，**無新增研究缺口**；本檔只補評估缺的三樣「決策用的接合件」（見 §0 的 N1~N6），其餘直接指向評估節次。
+
+## 0　相對於評估與收斂文件 §7（C1~C8／D1~D5）的新增與更正
+
+| # | 新增／更正 | 標記 |
+|---|---|---|
+| N1 | 評估 §8 寫了 D 項要收什麼、§9 寫了 P/T/U 三分支，但**沒有寫「哪些 D 項齊了、結果長怎樣才能判哪一支」**。本檔 §1 補成可檢查條件表。 | RECOMMENDATION |
+| N2 | **建議修訂評估 §9 G0 的 D8「視需要」**（非本稿單方定義，須客戶／評估作者接受）：G2 驗收是「用 `certifi` 驗證通過」，D4（NAS 與直連憑證一致）**不等於** `certifi` 能驗過；故 D8 對**D4 所涵蓋的主機**升為必要。 | INFERENCE＋RECOMMENDATION |
+| N3 | 評估 §9 稱 `DEC-2026-11-18-01` 在其基準 main `9e714861` 查無編號（NOT VERIFIED）。**現況更正**：`96771a58` 基準 `docs/DECISIONS.md` 已有該筆（標題含 A 線 BL-0551 唯讀離線評估；其「不授權範圍」明列真實取數、live 探測、停用 TLS 驗證、修改 `verify`／proxy／secrets／NAS 防火牆）。該筆本身仍自述為對話轉達、待核、非逐字。 | FACT（`docs/DECISIONS.md` 該 DEC 列） |
+| N4 | repo 內可取得的唯讀證據只能回答 D6、D14 的一部分與 D12 的弱證據，**且已存的探測報告完全不含 TLS 欄位**（見 §2）。因此「從 repo 補 D2~D4」不可能，G0 仍須持有人。 | FACT（單組 grep） |
+| N5 | C8（評估尚待兩組資安級獨立稽核）：`docs/BACKLOG.md` BL-0551 列現已寫「經 A 線資安 2 組 subagent 增量複審〔非 GitHub review〕」，但稽核報告原文不在 repo。**狀態仍是 NOT VERIFIED（轉述）**。另 G2 的施工 PR 本身還要資安 2 組（不是同一件事）。 | FACT（BACKLOG 該列文字）＋NOT VERIFIED |
+| N6 | 部署持有人（實際能進 NAS／路由器／Streamlit Cloud／GitHub secrets 設定的人）在 repo 內沒有具名；第 3 節列出「誰持有什麼」與不得索取 secrets 的請求格式。 | FACT（單組 grep 未見具名） |
+
+---
+
+## 1　G0 證據完整度與 P／T／U 判斷條件（引用評估節次）
+
+### 1.1　G0「證據完整」的定義（全部成立才算完整）
+
+| # | 條件 | 依據 |
+|---|---|---|
+| G0-a | D1、D2、D3、D5 已由持有人以**摘要格式**回報（有／無、計數、版本字串），且註明**收集日期**。 | 評估 §8 |
+| G0-b | D4 已對**下列主機**完成（FRED、FinMind、Yahoo 各主機，**沿用評估建議、僅為證據收集範圍，不構成 G2 白名單選定**），回報葉憑證 issuer、序號、指紋、鏈長（直連一組、經 NAS 一組）。D4 屬持有人自行操作，須先有客戶另行授權的書面記錄（評估 §9 G0）。 | 評估 §8 D4、§9 |
+| G0-c | D8 對**D4 所涵蓋的主機**完成：issuer、到期日、是否缺中繼憑證、系統 CA 與 `certifi` 各驗一次、**hostname 驗證結果**，並回報驗證所用 `certifi`／Python／`requests` 版本字串；最好由持有人以 `requests` 經 NAS 代理、`verify=True` 實測一次，**只對根路徑或無金鑰的網址發請求，不得使用帶 FRED／FinMind 金鑰的查詢字串**。**D8 與 D4 同為持有人自行對外連線，須客戶知情／授權**（同 G0-b）。 | N2（建議修訂評估 D8）；評估 §8 D8 |
+| G0-d | 回報遵守評估 §8 的防外洩規則（無帳密／金鑰／指令列／`access.log` 原始行／未遮蔽截圖）。 | 評估 §8 |
+| G0-e | 一頁結論只含：分支（P／T／U）、R2／R4／R11／R12 各「成立／不成立／未知」。 | 評估 §9 G0 |
+| 加分（不計入完整） | D12（不計入判定，見 §2）、D6、D11、D13、D14、D15、D9、D10、D7。 | 評估 §8 |
+
+> G0 完整**不等於**可施工：仍須 G1 客戶裁示、G2／G3 各為獨立 Decision Gate。
+
+### 1.2　分支判斷條件表（可逐列勾選）
+
+> **統一規則（RECOMMENDATION，可被客戶推翻）**：D3／D4 的經驗事實優先於 D2 的自述；**D4 經 NAS 的 issuer／指紋與直連不一致即判 T（不論 D2 說什麼）**。**P 只對已通過 D4＋D8 的逐主機成立，不得外推整個 NAS；T 在任一主機發生（含 D2 全域指令）即成立。**
+
+| 分支 | 條件 | 說明 |
+|---|---|---|
+| **P（逐主機）** | 該主機同時滿足：(1) **D2**：**生效設定（含 include 檔）**無 `ssl_bump`、`http_port … ssl-bump`、`sslcrtd_program`、`url_rewrite_program`、`tls_outgoing_options`、`cache_peer … tls` 等指令（`https_port` 另記）。 (2) **D3**：log 視窗內**至少一筆確定發生過的該目標主機 CONNECT，且為隧道類結果**，看不到 HTTPS 完整路徑。 (3) **D4**：直連與經 NAS 的葉憑證 issuer＋指紋完全相同。 (4) **D8**：`certifi` 與 hostname 驗證通過、鏈完整。 | 只對通過 D4＋D8 的主機成立；其他主機不因此為 P。D1（版本／編譯選項）僅輔助（INFERENCE：無 SSL 編譯選項則無法 bump，仍以 D3／D4 為準）。 |
+| **T** | **任一主機**出現下列任一：D2 有上列 bump／改寫／TLS 外送指令（全域指令即全域 T）；D3 看得到完整路徑或非隧道類；**D4 不一致（不論 D2）**。 | **CDN 憑證輪替可能造成 D4 暫時不一致**：須重複取樣，並比對 SAN 與鏈後再判；不確定時**偏向 T（安全方向）**。T 後記錄 issuer 型態（內部 CA／公開 CA）與 D15，對應評估 §6 方案 B／D＋F；**G2 不適用**。 |
+| **U** | **證據缺漏或無法判定**：D2／D3／D4／D8 缺任一項；回報不是摘要格式；D3 視窗不涵蓋目標主機（無確定的 CONNECT 筆）；D4 僅部分主機（其餘主機為 U）。 | **停在 G0，不施工**（評估 §6、§9）。 |
+
+### 1.3　證據保鮮與例外（INFERENCE／RECOMMENDATION）
+
+- D3／D4 是單一時間點；NAS 設定若在 G0 之後變動（Squid 設定、DSM 更新、反向代理新增），分支結論作廢，G2 施工 PR 合併前須重確認。
+- **D12 不計入判定**（不論結果）：全域 opener 可能未安裝（`infra/proxy.py::install_global_urllib_proxy` 負向快取，評估 §2.1），`source` 欄不記實際走哪條路。它只作背景資料，不改變 §1.2 的判定。
+- R2／R4／R11／R12 的「成立」只取決於 D2、D5、D11（DDNS 用法）、D5 的 407 計數，**與 P／T／U 無關**；P 支也可能 R2 成立（明文代理腿）。
+
+---
+
+## 2　可從 repo 唯讀取得的證據（已實查）與其證據力
+
+| 項目（對應評估 D 項） | repo 內位置與內容事實（FACT，單組讀檔，基準 `96771a58`，2026-11-19 重跑） | 證據力與限制 |
+|---|---|---|
+| **D6 部分**（版本與環境） | `requirements.txt`：`streamlit>=1.59.1,<1.60.0`、`requests>=2.31.0`（僅下限）；`urllib3`、`certifi` 無任何條目；無 `pyproject.toml`、`.python-version`、`runtime.txt`、`packages.txt`；`.streamlit/config.toml` 只含 `[theme]`／`[server]`／`[browser]`，無任何 TLS／proxy 設定。 | 只能證明「repo 沒有固定版本」。**實際解析出的版本、Python 版本、環境變數：NOT VERIFIED，仍需持有人看平台 log（D6）。** |
+| **D14 部分**（secrets 作用域與觸發） | **7 個** workflow 以 `${{ secrets.PROXY_URL }}`（`env:` 行）注入，檔名：`dividend_calendar_notify`、`fx_obs_date_probe`、`moneydj_nav_equivalence_probe`、`twse_eps_probe`、`update_macro_history`、`weekly_nav_backfill`、`weekly_switch_notify`（指令 `git grep -nE "^\s*PROXY_URL:" -- .github`）。`yahoo_indices_sp_probe.yml`、`moneydj_basic_probe.yml` 只在註解提及，**不算**。全 `.github` 搜尋**無 `environment:` 鍵**，故沒有 GitHub Environment 層級的保護規則可引用。`fx_obs_date_probe`、`moneydj_nav_equivalence_probe`、`twse_eps_probe` 的 `on:` 含 `push`，各限定單一 `probe/*-trigger` 分支。 | 對 least-privilege 觀察與 R3(c) 有補強。**secret 是 repository 還是 organization 層級、誰能推分支、分支保護：NOT VERIFIED（GitHub 設定頁），仍需持有人（D14）。** |
+| **D12 弱證據候選** | (a) `docs/v2/70_dg2_canonical_identity_proposal.md` §16.1 轉錄的探測報告（run `40822928361`，2026-10-29）：GitHub runner 的直連與 `nas_proxy` 兩路徑各 36 次請求、19 次成功、0 次 blocked、HTTP 狀態序列相同——**證明當時 NAS 路徑可轉發 MoneyDJ**；原始報告存於 GitHub 分支 `probe/moneydj-nav-results`，**未進 main**。(b) `STATE.md` 2026-07-22 段：run #557 log 顯示 TDCC 3-2 取得 5251 筆；同段另稱使用者於 App（含 NAS 代理）確認淨值日期為最近。 | **都不能當 TLS 相容性證據**：(a) `scripts/probe_moneydj_nav_equivalence.py` 內 `s.verify = False`（腳本註解「Squid CONNECT 相容」），是在**不驗證**下成功；(b) run #557 是 CI（GitHub runner），`infra/proxy` 只讀 `st.secrets` 不讀環境變數，故該 TDCC 請求極可能是直連（INFERENCE，未驗）；App 端那句為使用者口述轉錄。 |
+| **E1（既有）** | `docs/evidence/probe_moneydj_basic/` 報告：GitHub runner 直連、`verify=True`、MoneyDJ 兩主機完成 TLS（評估 E1）。 | 證明 `certifi` 當時能驗 MoneyDJ 憑證；**不是 NAS 路徑**。 |
+| **已存探測報告有無 TLS 欄位** | 對 `docs/evidence/probe_twse_eps/`、`probe_fx_obs_date/`（3 份）、`probe_moneydj_basic/` 共 5 份已存 `.json.gz` 以 `zcat \| grep -oiE` 搜 `cert／ssl／tls／issuer／verify` 為鍵名 → 0 命中；搜 `SSLError`／`CERTIFICATE_VERIFY` → 0 命中。 | **已存報告沒有任何 issuer／指紋／TLS 失敗分類，無法取代 D3／D4。**（「0 命中」為字面 grep，非窮舉。） |
+| **NAS 設定敘述** | `NAS_PROXY_GUIDE.md`、`NAS_PROXY_FOR_AI.md`：只有 `http_port 3128`＋Basic 驗證＋CONNECT 允許＋結尾 `http_access deny all`，無 `ssl_bump`、無 `https_port`；`NAS_PROXY_GUIDE.md` Q3 記載過 `CERTIFICATE_VERIFY_FAILED`，無主機／發行者。 | **設計意圖，非部署事實**（評估 E3、§10）。 |
+
+> 以上「repo 內唯讀」是否還有遺漏（例如 `docs/v2/*` 其他處、`HANDOFF`／`STATE` 其他段落）：**未窮舉**。
+
+---
+
+## 3　缺少的「部署持有人證據」（單獨列出）
+
+### 3.1　誰持有什麼（repo 內查無具名；以下為角色，不是人名）
+
+| 持有角色 | 持有的證據 | 對應 D 項 |
+|---|---|---|
+| **NAS 管理者**（能登入 DSM／Squid 的人） | Squid 版本與編譯選項、生效中的設定、`access.log`、DSM／套件更新狀態、帳密輪替與使用範圍 | D1、D2、D3、D9、D10、D11、D15 |
+| **網路／路由器管理者**（可能與上同一人） | 3128 轉發規則與來源限制、DDNS 設定、407／`TCP_DENIED` 統計 | D5、(D11 DDNS) |
+| **能對外做 `openssl s_client`／`requests` 的持有人**（需知道代理帳密但不應告知他人） | 直連 vs 經 NAS 的葉憑證 issuer／序號／指紋／鏈長；`certifi` 與系統 CA、hostname 驗證結果與版本字串 | D4、D8 |
+| **Streamlit Cloud app owner** | 平台 build／runtime log 的版本、secrets 形態（只回形態）、app 可見性與 log 檢視名單、既有 runtime log 中 TDCC 是否成功 | D6、D12、D13 |
+| **GitHub repo／org admin** | `PROXY_URL` 是 repo 還是 org secret、分支保護、誰能推分支／手動觸發 | D14 |
+| **客戶** | 書面授權 D4（及 D7，若要）；指定持有人 | G0 前置 |
+
+### 3.2　請求格式（不得索取 secrets 本體）
+
+- **請求內容只寫「請回報：有／無、計數、版本字串、issuer、序號、指紋、鏈長、到期日、收集日期」**；每一項附對應 D 編號。
+- **明確不要**：`PROXY_URL` 或帳號密碼（含部分字元）、Gemini／FRED／FinMind 金鑰、`squid.conf` 全文、`access.log` 原始行、指令列本身（內含 NAS 位址）、未遮蔽截圖（公網 IP、DDNS 主機名、內網位址、帳號名）。這延用評估 §8 防外洩規則，不另立。
+- D4 的帳密只在持有人本機以互動輸入、環境變數或 stdin 提供（評估 §8 D4），不經對話傳遞。
+- 回覆放在對話或 PR 描述時，只貼摘要表；若持有人要附檔，先自行遮蔽並由總管確認無祕密後再入 repo（RECOMMENDATION）。
+- **執行組不代為執行**任何 D4／D7 或任何 live 動作（`DEC-2026-11-18-01` 不授權範圍；本檔亦無授權）。
+
+---
+
+## 4　G1：可供使用者核准的最小選項（不提前選定 G2 白名單或 G3）
+
+> G1＝評估 §9 的客戶逐案 Decision Gate。以下只談「現在要不要、批准到哪」；**G2 白名單內容與 G3 翻轉預設各需另一個 Decision Gate**，不在本表任何選項內。
+
+| 選項 | 內容 | 優點 | 缺點 | 風險 |
+|---|---|---|---|---|
+| **G1-0　不授權後續，維持 BLOCKED** | 評估入庫即止；BL-0551 與路徑 B 真實取數維持阻塞 | 零成本；不增加任何暴露 | 無法縮小 R1 等風險；路徑 B 真實取數（C7）無法開始；`DEC-2026-11-18-01` 已明示「不接受停用 TLS 驗證作正式接線預設」，故正式接線仍無安全前提可談 | **G0 期間現行 proxy 模式仍為 `verify=False`，FRED／FinMind 金鑰與 Basic 帳密持續暴露（評估 R1／R2）**；無新資訊；工作卡住 |
+| **G1-1　僅授權 G0 最小證據包**（RECOMMENDATION：選此） | **此選項授權的是「持有人自行操作的主動憑證探測」（D4、D8），執行組不代為；G1-1 即 G0-b 要求的客戶另行授權，而 `DEC-2026-11-18-01` 不涵蓋 D4。D4／D8 會透過 NAS 向外部主機發連線並使用代理帳密，客戶須知情。** 客戶指定持有人，授權其**自行**做 D1、D2、D3、D5，及 D4＋D8（主機範圍見 G0-b，僅為證據收集範圍）；D12 若零成本可順帶（不計入判定）；全程摘要格式、遵守防外洩；結論限 §1.2 的 P/T/U 與 R2／R4／R11／R12。執行組不碰 NAS 與網路。 | 最小；執行組全程唯讀，探測由持有人操作；不改任何程式或設定；產出直接決定後續（P→可談 G2；T→方案 B／D＋F；U→停）；D4 只需少數主機 | 要持有人時間；D4／D8 會經 NAS 對外部主機連線並使用代理帳密（客戶須知情同意）；只是單一時間點 | 持有人操作失誤洩露帳密（以防外洩規則與格式降低）；證據過期（§1.3） |
+| **G1-2　G1-1＋擴大證據包**（D6、D9~D11、D13~D15，必要時 D7） | 一次收齊 R2／R3／R4／R11／R12 的成立條件與方案 B／D／E／F 所需證據 | 一輪取得完整畫面，避免二次打擾持有人 | 工作量大；D7 需另行單次低頻 GET 授權（評估 §8 D7、BL-0550 條件）；D9／D15 只在分支 T 或方案 D／F 才有用，可能白做 | 範圍膨脹；D7 若授權不清可能變成 live 探測 |
+| **G1-3　G1-1＋同時啟動代理帳密暴露面另案**（輪替、限制來源、NAS 端目的地限制等措施） | 不依賴 TLS 結論地處理 R2／R3／R4／R11／R12 | 這些風險與驗證結論**獨立**（評估 §0 第 4 點），且可能比 TLS 驗證更急 | 屬「改 proxy／防火牆／連線策略」，與現行限縮授權相鄰，**需另案明示授權**；NAS 端變更可能影響現有取數 | 誤改造成取數中斷；本表不代授權 |
+
+**不在 G1 內、需另走 Gate 的事（僅列名）**：G2 白名單的主機集合與施工（需 §1.2 判 P、資安 2 組獨立稽核、專用分支與 PR）；G3 翻轉預設與例外到期日長度；方案 E／F（改 production 資料來源路徑）；方案 B／D（改信任模型或 NAS 端）；Q0（「A 線安全 Gate 通過」的定義）、Q10（部署前置事實由誰確認）、C6（速率限制）。
+
+**執行組推薦（RECOMMENDATION，可被客戶推翻）**：G1-1。理由：成本最低、純唯讀、全部由持有人控制；其產出是 G2／方案 B／停止的**必要輸入**。G1-3 建議客戶另行獨立考慮，不與 G1-1 綁定。**G2、G3 不在本推薦範圍**，且 G2 的獨立稽核維持資安 2 組（`DEC-2026-10-16-05`、`DEC-2026-11-18-01` R4）。
+
+---
+
+## 5　未查證項
+
+1. **所有部署事實**（Squid 設定與版本、bump 與否、3128 開放、DDNS、帳密範圍、Streamlit Cloud 版本與環境變數、app 可見性、secret 作用域）：NOT VERIFIED。
+2. §1.2 的 P/T/U 條件、N2 的 D8 升格為執行組判斷（含 INFERENCE），未經第二組驗證；「看得到完整路徑＝有 bump」等判讀沿用評估 §8 D3，未獨立驗證。
+3. §2 的 grep 與 zcat 結果為單組字面搜尋，非窮舉；`probe_moneydj_nav_equivalence.py` 的 `verify=False` 只讀到 grep 命中行，未逐行確認每一路徑各用哪個 session。
+4. `STATE.md` run #557 為直連的推論、`docs/v2/70` §16.1 的數字為轉錄（原始報告在 GitHub 分支，未進 main，未重讀）。
+5. 評估本身的稽核：BACKLOG 稱經 A 線資安 2 組 subagent 增量複審，報告原文不在 repo，NOT VERIFIED；本檔未新增稽核。
+6. `DEC-2026-11-18-01` 為對話轉達、待核；`DEC-2026-11-19-02` 等其餘 DEC 本檔僅作背景，未逐筆重讀。
+7. 沒有讀 `PROJECT_RULES.md` 全文逐條比對（僅確認第 4 節為 Stop／Decision Gate 並與 `CLAUDE.md` §-1.5 指標一致）。
+8. 未跑任何測試；撰寫時未改任何 repo 檔案；本檔已落地於 `docs/evidence/bl0551_min_decision_conditions_2026_11_19.md`。
