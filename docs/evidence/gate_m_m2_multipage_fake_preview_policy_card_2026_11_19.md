@@ -35,26 +35,29 @@
 - 掛載與導覽：`tests/ui_v3/test_ui_v3_page_registry_guard.py::test_only_market_page_is_registered_so_no_empty_shell`；`tests/ui_v3/test_ui_v3_navigation_shell.py::test_nav_items_are_the_five_pages_in_ia_order_and_only_registered_are_available`；`tests/ui_v3/test_ui_v3_assets_source_import_isolation.py::test_registry_has_no_new_page_and_preview_renderers_are_unchanged`。**掛任一頁都會使上列轉紅，須改守衛**（既有卡 1-B 的跨頁化）。
 - 資料隔離：`tests/ui_v3/test_ui_v3_fixtures_are_fake_guard.py::test_no_production_module_imports_fixtures`（`ui_v3.fixtures` 不得被 `app_preview`／`pages` import）、`::test_every_fixture_module_declares_fake_marker_at_module_level`；`tests/ui_v3/test_ui_v3_preview_not_formal_guard.py::test_preview_module_has_no_module_level_streamlit_or_fixtures`、`::test_preview_main_fails_loud_when_registered_page_has_no_renderer`。
 - poc 端反向鎖（掛載會使其改寫）：`tests/poc_fund_search_preview/test_fund_search_guards.py::test_registry_does_not_register_the_exp_page_and_navigation_is_untouched`；`tests/poc_nas_diag_preview/test_nas_diag_preview_apptest.py::test_formal_page_registry_is_untouched_by_the_preview`；`tests/poc_fund_lookup_component_preview/test_fund_lookup_cmp_guards.py::test_registry_app_preview_pages_and_shell_do_not_mention_the_preview_and_ui_v3_never_mentions_poc`；💼 端以 `tests/poc_assets_preview/test_assets_preview_apptest.py` 的 `_FORBIDDEN_ENTRY`（含 `ui_v3.app_preview`、`ui_v3.shell.registry`）鎖入口。
+- 【F】harness 的 `FAKE_BANNER` 目前是各 `app_*_preview.py` 內的**裸字串常數**，不是 `PendingWording`。故 Q2 的「定性為 `PendingWording`」實際意味著**新增 `PendingWording` 項（key＋text＋source 來源標示）**，並受下列字樣守衛約束，不是改個說法。
 - 字樣：`tests/ui_v3/test_ui_v3_preview_wording_guard.py::test_pending_wording_is_nonempty_unique_and_all_pending`、`::test_no_pending_text_equals_or_embeds_an_approved_registry_wording`；🔍 端 `test_fund_search_guards.py::test_every_new_wording_is_a_pending_wording_with_the_required_source_and_never_a_rules_key_or_text`。
 - 無網路／secrets：`test_nas_diag_preview_apptest.py::test_all_scenarios_work_with_the_network_blocked`、`::test_no_credential_secret_or_proxy_environment_access_in_a_run`；🔍 端 `test_no_network_environment_secret_or_file_call_by_ast`。
-- 導覽版面約束【F，取自 HANDOFF 快照，未重測】：手機 ≤768px 五格同列、無橫滑、≥48px（`DEC-2026-11-06-01`、`DEC-2026-11-07-02` 客戶逐字存檔）；導覽項加「FAKE」標記不得破壞此約束。
+- 導覽版面約束：`DEC-2026-11-07-02`（客戶「可以」二字，題目範圍為 ChatGPT 整理）核准手機頁首一列五格、全部可見、不橫向滑動，**沿用正式短標「市場／資產／找基金／AI／設定」，取唯一 `APPROVED_WORDING`**；≤768px、≥48px 觸控區為保留約束（實測狀態取自 HANDOFF 快照，未重測）。**因此在導覽項加「FAKE」會動到已核准短標，不是純加註**：只能經新授權處理（Q2），不得自行縮短或改字。
 
 ## 5　建議先行頁面（【R】執行組讀法，可被客戶推翻）
 
 建議 **🔍 先行，⚙️ 次之，💼 最後**。理由：(a) 誤讀風險：🔍 的 FAKE 基金代碼（如 `FAKE-OK01`）一眼可辨；⚙️ 的假「連線成功」可能被誤當真實診斷；💼 的假持倉掛在「我的資產」下，最易被誤當個人資料（`CLAUDE.md` §1：錯誤數字比沒有數字危險）；(b) 🔍 整頁線框基準最完整，且既有卡已備好範圍與回滾。代價：🔍 檔案面最廣（尚需搬四檔），💼／⚙️ 技術上較省；本推薦把誤讀風險置於工程成本之前。【未驗】三頁誤讀風險高低為判讀，非實測。
 
-## 6　真正需客戶裁示、既有 DEC 尚未回答的最少問題
+## 6　真正需客戶裁示、既有 DEC 尚未回答的最少問題（Q1、Q2 兩題）
 
 **已被正式 DEC 回答、不重提（provenance 等級依實讀原文）**
 
 | DEC | 已回答 | provenance |
 |---|---|---|
 | `DEC-2026-10-27-12` | 不做空殼、不放「規劃中」 | 客戶逐字（表內有原話） |
-| `DEC-2026-10-29-07` | 🤖 Phase 7 前不掛導覽 | 客戶，原文存 evidence 檔 |
-| `DEC-2026-11-06-01`／`11-07-02` | 手機五頁籤全部可見 | 客戶，前者逐字存 evidence 檔，後者「可以」二字 |
+| `DEC-2026-10-29-07` | 🤖 Phase 7 前不得 registered（`PageSlot` 建構即擋） | 客戶，原文存 evidence 檔 |
+| `DEC-2026-11-06-01` | 手機導覽採 B 上方橫向五頁籤（僅此） | 客戶，逐字存 evidence 檔 |
+| `DEC-2026-11-07-02` | 頁首一列五格、全部可見、不橫滑、沿用正式短標；🤖 與其餘未註冊頁**可見但不可進** | 客戶「可以」二字，題目範圍為 ChatGPT 整理 |
 | `DEC-2026-11-07-01` | 🌍 Preview-only 有條件施工 | 客戶「同意 B」，其餘為射程整理 |
 | `DEC-2026-11-16-01`／`11-17-01`／`11-17-02`／`11-17-03`／`11-18-04` | 各 FAKE 預覽僅限 `poc`／隔離路徑；明列不授權 registry、`app_preview`、掛載 | 要點轉述，來源待核（`-04` 為 ChatGPT 派工單轉述） |
-| `DEC-2026-11-18-01`／`-02` | Gate-M 維持 M-0，不掛 FAKE | 對話提示語轉達〔待核〕，非逐字 |
+| `DEC-2026-11-18-01` | Gate-M 維持 M-0，不掛 FAKE（不授權清單） | 經對話提示語轉達自稱客戶之指示〔待核〕，非逐字 |
+| `DEC-2026-11-18-02` | 不授權範圍維持含 Gate-M、registry、`app_preview`、掛載 🔍 | ChatGPT 派工單轉述客戶回答「同意」〔待核〕，非逐字；僅限路徑 B 離線 adapter 範圍 |
 | `DEC-2026-11-14-08` | S2-T0 暫緩；Gate-D 不動 | 來源待核，要點轉述 |
 
 **Q1　Preview 導覽是否允許出現離線 FAKE 頁？**（`app_preview` 現行文字：preview 不得顯示 fake 資料）
@@ -67,25 +70,17 @@
 
 【R】P1；若客戶無意在 Shell 看 FAKE，P0 亦合理。
 
-**Q2　FAKE 標示的字樣與位置由誰定？**（【F】現無核准字樣）
+**Q2　FAKE 標示的字樣與位置由誰定？**（【F】現無核准字樣；導覽項標記另牽動 `DEC-2026-11-07-02` 已核准短標）
 
 | 方案 | 優點 | 缺點 | 風險 |
 |---|---|---|---|
-| S-a 沿用 harness 現有字串，定性為 `PendingWording` | 不創新文案；最快 | 💼 與其餘字串不一致；字樣仍未核 | 暫行字樣固化 |
-| S-b 請客戶／設計者核定字樣後進規則表 | 字樣正式 | 需先走字樣 Gate | 延遲 |
-| S-c 僅導覽項標記、頁頂不加 | 版面最簡 | 頁內無警示，深連結進入會漏 | 誤讀（高） |
+| S-a 沿用 harness 現有字串，**新增** `PendingWording` 項（含來源標示）；僅頁頂橫幅，不動導覽短標 | 不創新文案；最快 | 💼 與其餘字串不一致；字樣仍未核 | 暫行字樣固化 |
+| S-b 請客戶／設計者核定字樣後進規則表；若含導覽項標記，須同時裁示是否修改已核准短標 | 字樣正式 | 需先走字樣 Gate | 延遲 |
+| S-c 僅導覽項標記、頁頂不加（會動到已核准短標） | 版面最簡 | 頁內無警示，深連結進入會漏 | 誤讀（高） |
 
 【R】S-a 作暫行，並登記 S-b 為後續；不建議 S-c。
 
-**Q3　若 P1，先掛哪一頁？**（見第 5 節理由）
-
-| 方案 | 優點 | 缺點 | 風險 |
-|---|---|---|---|
-| 🔍 先行 | 誤讀風險低；線框與範圍最完整 | 須搬四檔，工程最大 | 中（工程面） |
-| ⚙️ 先行 | 渲染層已在 `ui_v3` | 線框／BL-0550 多項未裁；假狀態易誤讀 | 中高 |
-| 💼 先行 | 渲染層已在 `ui_v3`，改動最少 | 假持倉在「我的資產」下 | 高 |
-
-【R】🔍 先行。
+**附屬於 Q1 的執行組排序建議（非獨立客戶題）**：若客戶選 P1，建議 🔍 → ⚙️ → 💼 逐頁各走 Gate（理由見第 5 節；工程量 🔍 最大、💼 最小；誤讀風險 💼 最高）。此排序不要求客戶另行作答，客戶可在回覆 Q1 時一併推翻。
 
 ## 7　NOT VERIFIED／未查證
 
