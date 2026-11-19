@@ -3508,6 +3508,24 @@
 | supersedes／amends | 不 supersede 任何既有 DEC。**解決** `DEC-2026-11-19-03` 待客戶確認 (b) 的 G-A／G-B 選擇：選 G-A，**G-B 不採**；`DEC-2026-11-19-03` 既有條文語意不改，僅在其待確認欄 (b) 加括註。不取代 `DEC-2026-11-14-08`、`DEC-2026-11-19-01`。`DEC-2026-11-19-03` 區分欄 2 的 S2-T0 措辭亦以本筆為準。 |
 | provenance | 要點轉述；經 ChatGPT 專案總管對話轉達客戶裁示〔待核〕，非逐字，repo 內無逐字存檔，QA 無法核對（NOT VERIFIED）。「第 4 點關係」欄為執行組讀法，不是客戶裁示。單組作者草稿，尚待治理稽核與 CI（治理文件；依 `DEC-2026-10-16-05` 至少一組真正獨立稽核）。不得偽稱全文為客戶原話。 |
 
+### DEC-2026-11-19-05｜Gate-D G1／G4／Q4／Q5 方向登記（B 線，路徑 B 單檔查詢）：G1 選 A、G4 選 A 契約語意、Q4 選 A、Q5 選 D——方向核准（轉述；來源待核），不核准任何逐字文字，不授權任何施工或取數（要點轉述）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-19；客戶經 ChatGPT 專案總管對話轉達同意下列四題方向〔待核〕，**非逐字**，repo 內無逐字存檔、QA 無法核對（NOT VERIFIED）；是否客戶本人〔待核〕。要點轉述；**不得虛構原話**。 |
+| 決策內容摘要（要點） | 見下方「區分欄」，分列使用者核准方向／尚未核准文字／執行組推薦／未驗證事實，避免混讀。 |
+| 區分欄 1｜**使用者核准方向**（轉述；來源待核；僅方向，非逐字；條號為本筆整理，與客戶原意不符以客戶更正為準） | **【G1】選 A**：維持 `LookupContractError` fail-closed 現況；頁面層例外處理**仍待正式施工 Gate**。（『佔位字檢查由 L2 負責』**不在此列**：evidence §2 中為執行組 RECOMMENDATION，轉達是否含此句 NOT VERIFIED，見區分欄 3。）<br>**【G4】選 A 的契約語意**：經理費率在路徑 B 現有鏈恆缺值；不得替換成 0、最高經理費或推估值；固定標記**尚未實作**。**G4-A 原案（evidence §3）含「固定標記＋`◇ 資料未備`」；本筆不登記字樣部分，轉達是否含字樣 NOT VERIFIED。**<br>**【Q4】選 A**：區分「欄位採信 MoneyDJ」與「現有 L2 實際涉及 MoneyDJ／TDCC／FundClear 三來源」；O1／O2 留待正式接線 Gate。<br>**【Q5】選 D**：保留狀態層可辨識的失敗（`SOURCE_FAILED`）與無法確認（`PAGE_UNMATCHED`）；欄位層 `MISSING` 子原因不能機械細分；欄位字樣衝突 `◇` vs `⬜` **保持 Pending**，不由執行組選 A 或 B。 |
+| 區分欄 2｜**尚未核准文字**（不得記為已核准） | (1) **Q1 五欄正式契約的逐字核准**（含契約包 §8.1 全部逐字文字、校文後文字）——仍須客戶正式逐字核准，不由本筆代為完成。(2) Q5 欄位層缺值字樣（`◇ 資料未備` vs `⬜ 無法判定`）。(3) G1 頁面例外處理（接住 `LookupContractError` 的位置與呈現）。(4) G4 固定標記名稱與字樣（含「契約上目前無來源」）。(5) Q4 O1／O2 取捨。(6) Q2 `strip` 定義差異是否需文字區分。(7) Q0、Q3、Q7～Q11、X1～X5 維持原狀；Q6 輸入回顯規則單列 Pending（未裁）。候選逐字見 `docs/evidence/gate_d_path_b_min_contract_scope_2026_11_19.md`（**落檔前不得引用為已存在依據**）；組合後五欄正式契約依 `DEC-2026-11-19-02` 區分欄 3(3) 仍須再經最小 Decision Gate，候選條款未涵蓋配息值域、輸入回顯（Q6）、型別與限制聲明。 |
+| 區分欄 3｜**執行組推薦**（RECOMMENDATION；非客戶裁示，可被推翻；編號語意：區分欄序號僅本筆內部用） | **佔位字檢查由 L2 負責、ViewModel 不重複**（evidence §2 推薦；轉達是否含此句 NOT VERIFIED）；以 A1～A8 候選條款一次徵詢客戶逐條回覆；B 欄 Pending 項各開獨立 Gate，不與 A 欄混批；若 Q5 日後選細分，前置為 L2 機器可讀原因碼（新 Gate）。 |
+| 區分欄 4｜**未驗證事實／程式現況對照**（FACT 僅限單組讀檔） | (F1) `ui_v3/viewmodels/fund_lookup.py`：名稱不合格（`NAME_MAX`=200、控制類字元、含 `http`／`www.`，與入口 `looks_like_url` 不同）raise `LookupContractError`；`mgmt_fee_rate_pct` 必 `MISSING`；未檢查佔位字；`FieldStatus` 含 `CONFLICT`。(F2) `ui_v3/adapters/fund_lookup.py`：費率格非 `not_ready` 一律 raise；傳 loader 為 `raw.strip(' ')`；名稱格非 `ok` 回 `PAGE_UNMATCHED`。(F3) `services/v2_tables/exp_profile.py::build_profiles`：費率格寫死 `_cell(reason=TEXT_MGMT_FEE)`；`STATUS_INCONSISTENT` 定義於同檔（evidence 稱僅幣別使用，本組僅核對定義存在）。(F4) `docs/evidence/gate_d_g1_g4_q4_q5_convergence_and_q1_draft_2026_11_19.md` E7「`reason_code` 於 L2 三檔字面 0 命中」為單組搜尋，非窮舉。(F5) Q4 三來源事實依 evidence E11／契約包 §3，本組未重跑 L2。 |
+| 適用範圍 | 向前生效；僅 Gate-D 路徑 B 單檔查詢 G1／G4／Q4／Q5 的**方向**登記。登記不構成動工授權（`CLAUDE.md` §-1）。**核准契約方向或文字 ≠ 核准 Schema／Provider／L1／L2／真實資料接線。** |
+| 不授權範圍（清單，皆不授權） | Q1 逐字核准；任何程式碼或測試變更（含頁面例外處理、降級、固定標記實作）；Schema；Provider；L1／L2 任何修改；真實取數與探測（MoneyDJ／TDCC／FundClear）；NAS／Proxy／TLS／Secrets 讀取或探測；公式；FX；ISIN resolver、別名表、後綴碼語意；R-ID-2／R-ID-3 升格；frozen 44；Gate-D 正式接線；Gate-M 掛載；OB-B (b)(c)；BL-0545 真實覆蓋率輸入、BL-0551、BL-0555 真實取數；BL-0528 G1～G6；BL-0527 N1～N5；D2 其他 Pending 項。`DEC-2026-11-19-02` 不授權範圍原狀維持。不追認過去未授權事項。 |
+| 待客戶確認／未裁（NOT VERIFIED，中性列出） | (a) 客戶是否本人表示同意及其逐題涵蓋範圍；(b) Q1 逐字核准何時、以何形式；(c) Q5 欄位字樣 `◇` vs `⬜`；(d) G1 頁面例外處理何時送施工 Gate；(e) G4 標記名稱與字樣；(f) Q4 O1／O2；(g) Q2 strip 定義差異；(h) 佔位字檢查歸屬（上列推薦）是否採納；(i) 費率欄字樣 `◇`（G4-A 所含）與 Q5 欄位字樣的關係。 |
+| 影響範圍／可逆性 | 純文件、可逆。BACKLOG／HANDOFF 由單一治理 owner 統一整合，本筆不改。 |
+| evidence／source | `docs/evidence/gate_d_g1_g4_q4_q5_convergence_and_q1_draft_2026_11_19.md`（§2～§5、§8）；`docs/evidence/gate_d_q1_q2_contract_diff_card_2026_11_19.md`；`docs/evidence/gate_d_path_b_contract_package_2026_11_18.md` §3、§8.1、§8.2；`ui_v3/viewmodels/fund_lookup.py`、`ui_v3/adapters/fund_lookup.py`、`services/v2_tables/exp_profile.py`；`DEC-2026-11-19-02`；`DEC-2026-11-18-01`（格式與 provenance）；`DEC-2026-11-13-06` (6)；`DEC-2026-10-16-05`。 |
+| supersedes／amends | 僅**補充**（amends）`DEC-2026-11-19-02`：只就其待客戶確認欄中 G1／G4／Q4／Q5 登記**方向**，逐項為『**部分解決：僅方向**』——(b) G1：僅『維持 raise』方向，頁面處理與佔位字歸屬**未解**；(c) G4／Q5：僅 G4 契約語意與 Q5 狀態層方向，`◇`／`⬜` 字樣緊張**未解**；(d) Q4：僅方向，O1／O2**未解**；**不 supersede 任何 DEC**；`DEC-2026-11-19-02` 既有條文語意不改，不解決其待確認欄 (a)(e)(f) 及其餘項；不改寫 `DEC-2026-11-18-01`／`-02`／`-04`、`DEC-2026-11-13-06`。方向 ≠ 文字：`DEC-2026-11-18-01` 對逐字契約文字的不授權維持。 |
+| provenance | 要點轉述；客戶經 ChatGPT 轉達〔待核〕，非逐字，repo 內無逐字存檔，QA 無法核對（NOT VERIFIED）。四題「選項字母」與方向劃分出自總管轉達，執行組未見原話。區分欄 3（推薦）與區分欄 4（FACT）為 B 線執行組判讀，不是客戶裁示；FACT 為單組讀檔，全稱句非窮舉、未經第二組驗證。稿件已有一組非作者稽核（含增量複審，Must-Fix 0；subagent，非 GitHub review；原文不在 repo，來源：總管轉述）；本 DEC 條文本身待 PR 階段治理稽核與 CI（涉 identity 邊界與 data semantics，依 `DEC-2026-10-16-05` 至少一組真正獨立稽核）。不得偽稱全文為客戶原話。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
