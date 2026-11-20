@@ -11,7 +11,7 @@
 
 ## 0　結論
 
-【F】**A10 假「成本」不需改 viewmodel／adapter／renderer／fixture 內容即可消除**：改固定既有情境 **③「市值基準未開放」**（`evidence=None`）。我在暫存副本用真實 `build_assets_page`＋`page_html`（純函式，~~與 runtime 同碼~~（2026-11-20 **有意識的更正，不是漏刪**：原句「與 runtime 同碼」在 `eb08c5fc` 當時成立；被推翻的是它的前提——渲染做於 `eb08c5fc` 暫存副本，其後 #1299 改了 `assets.py`〔`st.title` 加 `anchor=False`、A10 由 `h4` 改為 `div role=heading aria-level=4`〕，`72b64531` 上**未重跑，NV（未驗）**。兩邊理由：舊句讓讀者知道渲染用的是真實函式而非手寫示意，此意圖仍成立；但「同碼」在 `72b64531` 上已無依據。故下列渲染結果降為【I】，僅對 `eb08c5fc` 成立。））渲染：③ 頁面文字為「來源 ⬜ 無法判定｜資產配置 ◇ 資料未備｜**基準 ◇ 資料未備**｜四格 ◇ 資料未備｜完整持倉 ⬜ 無法判定｜A60：略過分頁數／列數 ◇ 資料未備、⬜ 無法判定」。無基金名、無持倉列、無「成本」、無任何設定值；首屏標記 5 個、`<details>` 只有 A60 一個（A50 為純文字 status-only）。
+【F】**A10 假「成本」不需改 viewmodel／adapter／renderer／fixture 內容即可消除**：改固定既有情境 **③「市值基準未開放」**（`evidence=None`）。我在暫存副本用真實 `build_assets_page`＋`page_html`（純函式，~~與 runtime 同碼~~（2026-11-20 **有意識的更正，不是漏刪**：原句「與 runtime 同碼」在 `eb08c5fc` 當時成立；被推翻的是它的前提——渲染做於 `eb08c5fc` 暫存副本，其後 #1299 改了 `assets.py`〔`st.title` 加 `anchor=False`、A10 由 `h4` 改為 `div role=heading aria-level=4`〕，`72b64531` 上**未重跑，NV（未驗）**。兩邊理由：舊句讓讀者知道渲染用的是真實函式而非手寫示意，此意圖仍成立；但「同碼」在 `72b64531` 上已無依據。故下列渲染結果降為【I】，僅對 `eb08c5fc` 成立。））【I】渲染（僅對 `eb08c5fc` 暫存副本成立；`72b64531` 上 NV）：③ 頁面文字為「來源 ⬜ 無法判定｜資產配置 ◇ 資料未備｜**基準 ◇ 資料未備**｜四格 ◇ 資料未備｜完整持倉 ⬜ 無法判定｜A60：略過分頁數／列數 ◇ 資料未備、⬜ 無法判定」。無基金名、無持倉列、無「成本」、無任何設定值；首屏標記 5 個、`<details>` 只有 A60 一個（A50 為純文字 status-only）。
 【R】**採 ③，條件 (1) 可滿足且屬「優先用既有元件」**（2026-11-20 呼應稽核 M2：11 個既有情境中**實質只有 ③ 可滿足條件 (1)**〔其餘走 `fake_evidence` 預設「成本」〕，故「採 ③」是唯一不需改程式的可行解，不是從等價選項中挑選；且 ③ 下 A50／A60 版面在 Preview 看不到內容，見 §i M2）。導覽／頁頂標記需新增少量 Shell 程式（§b），評估後仍屬可控；若 §b 的 Chromium 五格量測不過，依條件 (8) 落 **A0**。
 
 ## a　A10 假成本處置（可判定方案；條件編號為作者自編）
@@ -23,7 +23,7 @@
 | X3 改 renderer／VM 隱藏基準列 | 動 `ui_v3/pages/assets.py` 或 adapter | VM／renderer＋既有 renderer／adapter 測試 | — | **不滿足「優先既有」，且~~動已驗收程式~~（2026-11-20 更正：`assets.py` 已於 #1299 `adb760e2` 改過〔`st.title(..., anchor=False)`、A10 `h4`→`div role=heading`〕，故「已驗收、未動」之說不實（**有意識的更正，不是漏刪**；兩邊理由：舊句「動已驗收程式」在 `eb08c5fc` 當時為真，且「不輕動已驗收碼」的謹慎仍成立；被推翻的是「已驗收、未動」這個前提）；仍不採的理由改為「不滿足優先既有」＋改它會牽動已被 #1299 重新量測過的版面證據）；不採** |
 | X4 維持⑤（顯示「成本」） | — | — | FAKE 個人設定值 | **違反條件 (1)，禁止** |
 
-【F】已知舊落差照舊（`blocked_basis_state_without_value`：③ 的基準狀態是 set 但無值，顯示 `◇ 資料未備`）——poc README 已登記，本版不處置。【I】③ 的 A10 原因句「配置比較的計算口徑尚未核准，故不提供結果」為既有 PendingWording，非核准字樣。
+【F】已知舊落差照舊（`blocked_basis_state_without_value`：③ 的基準狀態是 set 但無值）；【I】其渲染顯示 `◇ 資料未備`（2026-11-20 **有意識的更正，不是漏刪**：渲染文字取自 `eb08c5fc` 暫存副本，`72b64531` 上未重跑，NV；舊標【F】的意圖〔該落差為既有、已登記〕仍成立，被權衡掉的是把渲染文字標為【F】）——poc README 已登記，本版不處置。【I】③ 的 A10 原因句「配置比較的計算口徑尚未核准，故不提供結果」為既有 PendingWording，非核准字樣。
 【F】③ 是否等同「production 載入端現況」：BACKLOG／gap supplement 記載載入端在市值基準下一律 blocked、不讀持倉（本組未重驗）。~~【I】故③頁面是誠實的「現況空狀態」，不是假資料頁；~~（2026-11-20 有意識的更正，不是漏刪：此為建立在未重驗載入端記載上的推論，不應寫成結論；見 §i M3。舊句理由——③ 確無任何假值——仍成立，被權衡掉的是「等於現況」這半句。）代價＝**可見進展僅限「💼 在 Preview 可進入、版面與缺值語意可審」，沒有任何資料。**
 
 ## b　導覽標記與頁頂標記機制（作者自編條件 (2)(3)(4)）
@@ -83,7 +83,7 @@
 
 ## e　驗收清單（作者自編條件 (6)；全部需 exact-head CI 四 lane success＋獨立 QA）
 
-1. **作者自編條件 (1) 的機械鎖**（新測試）：渲染 `_render_ast` 的頁面文字不含「成本」、不含任何基金名稱／代碼／幣別／單位數；`a10.basis_value is None`；封包 `evidence is None`；無 `data-a50="rows"`、`<details>` 恰 1 個（A60）；首屏標記恰 5。封包 drift 測試：`blocked_envelope() == tests/ui_v3/assets_page_support.market_blocked_result()`（【F】該函式存在；實跑兩份 poc／adapters 封包相等為 True）。
+1. **作者自編條件 (1) 的機械鎖**（新測試）：渲染 `_render_ast` 的頁面文字不含「成本」、不含任何基金名稱／代碼／幣別／單位數；`a10.basis_value is None`；封包 `evidence is None`；無 `data-a50="rows"`、`<details>` 恰 1 個（A60）；首屏標記恰 5。封包 drift 測試：`blocked_envelope() == tests/ui_v3/assets_page_support.market_blocked_result()`（【F】該函式存在；【I】「實跑兩份 poc／adapters 封包相等為 True」為 `eb08c5fc` 上之結果，`72b64531` 上 NV）。
 2. **AppTest**：`AppTest.from_function` 直接跑 `_render_ast`（【I】`AppTest` 對 `st.navigation` 頁切換的支援依 Streamlit 版本，未驗，不以它切頁）；socket 攔截下無網路、不讀憑證環境變數（沿用 poc 既有手法）；橫幅在 `st.title` 之前；頁面無 engineering leak。
 3. **導覽 AppTest**：`render_navigation` 下 `ast` 的 page_link 存在、短標「資產」「我的資產」未變；標記元素有 `data-nav-demo`、**無 `aria-disabled`、無 `uv3-nav-soon`／`uv3-tn-soon`**；`exp`／`ai`／`set` 仍是 soon 且 aria-disabled。
 4. **Chromium（slow lane；沿用 `test_ui_v3_top_nav_browser.py` 的 `base_and_browser`、`_MEASURE`；〔2026-11-20 補〕現有 `_MEASURE` 量不到標記，量測必須涵蓋標記元素本身：標記寬高、不被裁、不遮蓋或擠壓連結可點區、連結仍 ≥48px，另在手機五格與側欄兩種版面都量）**：在 374／375／390／768 驗五格全可見、等寬（±1px）、每格 ≥48px、文字不被裁、整頁與頁首無橫向溢出；190% 字放大五格仍可見（含 demo 標記不被裁）；≥769／1280 側欄在、頁首隱藏、側欄 💼 項可點且旁有標記；進入 `/ast`（url_path）在 **390 與 1280** 量測：橫幅在頁頂、無橫向溢出、A60 `<details>` 高度 48px 可開合且不產生 websocket client→server 訊息、首屏標記 5。
