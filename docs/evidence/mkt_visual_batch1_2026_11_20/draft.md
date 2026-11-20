@@ -46,3 +46,6 @@
 5. 標籤內嵌在 390 剛好一行；字樣若變長會折行（仍可用，少省高度）。
 6. 單組產出，無獨立複驗；`:has()` 規則需 Chromium 105+／Safari 15.4+／Firefox 121+，不支援者靠 `data-focus-visible` 備援（該屬性為 Streamlit 內部，升版可能消失，已有守衛）。
 7. 測試原文證據與 head SHA 見 `test_runs.md`；QA 紀錄與處置狀態見 `qa_record_2026_11_20.md`。CI 結果 NOT VERIFIED。
+
+## 截圖尺寸註記（2026-11-20）
+- `*_fold_*.png` 為 deviceScaleFactor 2 原圖；`*_full_*.png` 中超過或接近 pre-commit `check-added-large-files`（500 KB）上限者（768／1280 全頁及 tw_missing 390／768／1280 的部分全頁圖）已縮為 1x（寬高各 ½）後存入，僅供目視，**不作像素量測依據**；量測以 `measure_before.json`／`measure_after.json` 為準。
