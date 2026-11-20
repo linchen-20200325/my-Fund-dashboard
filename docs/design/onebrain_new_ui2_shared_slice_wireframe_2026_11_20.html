@@ -1,0 +1,1248 @@
+<!doctype html><html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OneBrain × New UI2 跨頁共用分析線框草稿</title>
+<meta name="description" content="五頁（🌍💼🔍🤖⚙️）在 390 與 1280 下的 OneBrain 本頁解釋位置與資料流示意（docs-only；未啟用；未經客戶核准）。">
+<style>
+:root{
+  color-scheme:light;
+  --page:#f5f7fb;--surface:#ffffff;--text:#172033;--text2:#4a5670;--primary:#1a5fd0;--border:#7f8ca6;
+  --sb:#101a33;--sb2:#18254a;--sb-text:#e6edf3;--sb-text2:#aab6cf;--sb-accent:#5fd3d0;--sb-border:#34466e;
+  --grey-bg:#e6eaf3;--yellow-bg:#fbf0d6;--yellow-bd:#b7791f;--yellow-tx:#6b4a0a;
+  --red-bg:#fbe6e2;--red-bd:#c0392b;--red-tx:#8a1f12;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--page);color:var(--text);
+  font:15px/1.55 "Noto Sans TC","PingFang TC","Microsoft JhengHei","WenQuanYi Zen Hei",system-ui,sans-serif;overflow-wrap:anywhere}
+h1{font-size:1.7rem;line-height:1.3;margin:0 0 8px}
+h2{font-size:1.2rem;line-height:1.35;margin:0 0 8px}
+h3{font-size:15px;line-height:1.4;margin:0 0 4px}
+p{margin:0 0 8px}
+ul,ol{margin:0 0 8px;padding-left:24px}
+li{margin:2px 0}
+code{font-family:"DejaVu Sans Mono",ui-monospace,monospace;font-size:13px;background:var(--grey-bg);padding:0 4px;border-radius:4px}
+.wrap{max-width:1280px;margin:0 auto;padding:16px}
+.s{font-size:13px;color:var(--text2)}
+.pend{border-bottom:1px dashed var(--border)}
+.sec{margin:0 0 32px}
+.doc-tags{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px;padding:0;list-style:none}
+.doc-tags li{border:1px solid var(--primary);color:var(--primary);background:var(--surface);border-radius:12px;padding:1px 10px;font-size:14px;font-weight:700;margin:0}
+.callout{background:var(--surface);border:1px dashed var(--primary);border-radius:8px;padding:10px 12px;margin:0 0 12px}
+.callout.warn{border-style:solid;border-left:8px solid var(--yellow-bd);background:var(--yellow-bg);color:var(--yellow-tx)}
+.note{background:var(--surface);border:1px dashed var(--primary);border-radius:8px;padding:8px 12px;margin:8px 0 12px;font-size:14px}
+.note h3{font-size:14px;margin:0 0 4px;color:var(--primary)}
+.note ul{margin:0;padding-left:20px}
+
+/* ── 資料流 ── */
+.chain{list-style:none;margin:0 0 12px;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:22px}
+.chain > li{position:relative;margin:0;border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:8px 10px;min-width:0}
+.chain > li::after{content:"↓";position:absolute;left:50%;bottom:-21px;transform:translateX(-50%);font-size:15px;color:var(--text2);line-height:1}
+.chain > li:last-child::after{content:none}
+.chain b{display:block;font-size:15px}
+.chain span{font-size:13px;color:var(--text2)}
+.chain > li.off{border-style:dashed;background:var(--grey-bg)}
+.lanes{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.lane{border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:10px 12px}
+.lane.off{border-style:dashed}
+.lane h3{margin:0 0 6px}
+.slices{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.slice{display:inline-flex;align-items:center;min-height:48px;padding:2px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);font-size:14px}
+.slice.x{border-style:dashed;color:var(--text2)}
+.states{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin:8px 0 0}
+
+/* ── chip ── */
+.chip{display:inline-flex;align-items:center;gap:4px;min-height:24px;padding:1px 10px;border-radius:12px;border:1px solid;font-size:14px;line-height:1.35;font-weight:700;white-space:normal}
+.t-neutral,.t-grey{color:var(--text);background:var(--grey-bg);border-color:var(--border)}
+.t-yellow{color:var(--yellow-tx);background:var(--yellow-bg);border-color:var(--yellow-bd)}
+.t-red{color:var(--red-tx);background:var(--red-bg);border-color:var(--red-bd)}
+
+/* ── 五頁區 ── */
+.pagehead{margin:0 0 8px}
+.pair{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin:8px 0 12px}
+.frlabel{font-size:13px;color:var(--text2);margin:0 0 4px}
+.deskwrap{overflow-x:auto;border-radius:8px}
+.fr{border:1px solid var(--border);border-radius:8px;background:var(--page);overflow:hidden}
+.fr.mob{width:min(390px,100%)}
+.fr.desk{min-width:1000px;display:grid;grid-template-columns:240px minmax(0,1fr)}
+.fr.mob .side{display:none}
+.fr.desk .topnav{display:none}
+.side{background:var(--sb);color:var(--sb-text);padding:16px 12px}
+.topnav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--surface);border-bottom:1px solid var(--border);margin:0;padding:0;list-style:none}
+.topnav li{margin:0;min-width:0}
+.tn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:60px;height:100%;
+  padding:2px 0;text-align:center;font-size:13px;line-height:1.2;color:var(--text2);border-bottom:3px solid transparent}
+.tn .ic{font-size:20px;line-height:1}
+.tn.now{color:var(--text);font-weight:700;border-bottom-color:var(--text);text-decoration:underline;text-underline-offset:3px}
+.tn.on{color:var(--text)}
+.tn .soon{font-size:13px}
+.main{padding:16px;min-width:0}
+.fr.desk .main{padding:24px}
+.brand{font-size:17px;font-weight:700;margin:0 0 12px;line-height:1.3}
+.sidenav{list-style:none;margin:0;padding:0}
+.sidenav li{margin:0 0 4px}
+.sn{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 12px;border-radius:8px;font-size:15px;color:var(--sb-text)}
+.sn.dis{color:var(--sb-text2)}
+.sn .soon{margin-left:auto;font-size:13px;border:1px dashed var(--sb-text2);border-radius:10px;padding:0 6px}
+.sn.now{font-weight:700;border-left:4px solid var(--sb-accent);background:var(--sb2)}
+.statusbar{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:13px;line-height:1.5;color:var(--text2);margin:0 0 8px}
+.statusbar .tag{font-weight:700;letter-spacing:.06em;border:1px solid currentColor;border-radius:4px;padding:0 5px}
+.apptitle{font-size:1.7rem;line-height:1.3;margin:0 0 8px}
+.cols{display:block}
+.fr.desk .cols{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:0 0 12px}
+.card h2{margin-bottom:4px}
+.card.dash{border-style:dashed}
+.chartph{border:1px dashed var(--border);border-radius:6px;min-height:110px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:13px;color:var(--text2);margin:8px 0;padding:8px}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0}
+.pillb{display:inline-flex;align-items:center;justify-content:center;min-height:48px;min-width:48px;padding:0 14px;border:1px solid var(--border);border-radius:999px;background:var(--surface);font-size:14px}
+.pillb.sel{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:700}
+.kv{margin:0 0 4px;font-size:14px}
+.kv .lb{color:var(--text2);margin-right:6px;font-size:13px}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}
+.fr.desk .cols .tiles.t3{grid-template-columns:minmax(0,1fr)}
+.tile{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface);min-width:0}
+.tile h3{margin:0 0 4px}
+.tile .v{font-size:20px;font-weight:700;line-height:1.3;display:block}
+.tile .ln{font-size:13px;color:var(--text2);margin:4px 0 0;line-height:1.45}
+.field{display:flex;align-items:center;min-height:48px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text2);font-size:14px;margin:4px 0}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 18px;border-radius:8px;background:var(--primary);color:#fff;font-weight:700;font-size:15px}
+.entry{display:flex;align-items:center;min-height:48px;margin:8px 0 0;padding:0 10px;border:1px dashed var(--primary);border-radius:8px;color:var(--primary);font-weight:700;font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.slot{display:block;border:1px dashed var(--border);border-radius:8px;padding:8px 10px;margin:6px 0;font-size:14px;color:var(--text2);background:var(--page)}
+.slot b{display:block;color:var(--text);font-size:14px}
+details.fold{border:1px solid var(--border);border-radius:8px;background:var(--surface);margin:0 0 12px}
+details.fold.ob{border-style:dashed}
+details.fold > summary{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;min-height:48px;padding:4px 12px;cursor:pointer;font-weight:700;font-size:15px;list-style:none}
+details.fold > summary::-webkit-details-marker{display:none}
+details.fold > summary::before{content:"▸ ";margin-right:4px}
+details.fold[open] > summary::before{content:"▾ "}
+details.fold .body{padding:0 12px 12px}
+.req{border-left:6px solid var(--border)}
+.lock{font-size:15px}
+@media (min-width:1000px){
+  .wrap{padding:24px}
+  .chain{grid-template-columns:repeat(5,minmax(0,1fr));gap:26px}
+  .chain.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .chain > li::after{content:"→";left:auto;right:-21px;bottom:auto;top:50%;transform:translateY(-50%)}
+  .chain > li:last-child::after{content:none}
+  .lanes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .states{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<h1>OneBrain × New UI2　跨頁共用分析線框草稿</h1>
+<ul class="doc-tags">
+<li>線框草稿（docs-only）</li>
+<li>未經客戶核准</li>
+<li>OneBrain 未啟用</li>
+<li>對應 BL-0561 R3／BL-0560</li>
+</ul>
+<div class="callout warn"><strong>這不是已實作的畫面。</strong>不接任何資料源、不掛載、不改 registry；框內數值一律用 <code>‹佔位›</code>，沒有任何範例結論、百分比或 AI 文字。基準 main <code>8ebb5290</code>，2026-11-20。</div>
+<p class="s">怎麼看：先看資料流，再看五頁各一組「桌機 1280／手機 390」畫面。每頁只在框內示意單一「OneBrain｜本頁解釋」位置（預設收合、未啟用）；虛線底線 <span class="pend">像這樣</span> ＝ 新字樣，待客戶定字（清單見 README）。虛線藍框＝文件層註記，不是產品元件。</p>
+</header>
+<section class="sec" id="flow">
+<h2>資料流與 OneBrain 位置</h2>
+<p class="s">方向依 <code>DEC-2026-11-20-02</code>（要點轉述〔待核〕）、<code>docs/v2/80</code> §16.3。虛線＝未啟用，不是現行功能。</p>
+<ol class="chain" aria-label="共用資料鏈">
+<li><b>Sources</b><span>已授權來源</span>
+</li>
+<li><b>驗證／正規化</b><span>缺值保持 Missing</span>
+</li>
+<li><b>Canonical</b><span>正式資料</span>
+</li>
+<li><b>Domain／Rules</b><span>deterministic 結果</span>
+</li>
+<li><b>Complete Evidence</b><span>同一份證據</span>
+</li>
+</ol>
+<div class="lanes">
+<div class="lane">
+<h3>現行：給人看</h3>
+<ol class="chain c3">
+<li><b>UI ViewModel 摘要</b><span>精簡、手機優先</span>
+</li>
+<li><b>各頁畫面</b><span>🌍 💼 🔍 ⚙️</span>
+</li>
+<li><b>必要提醒</b><span>Missing／Source／Freshness</span>
+</li>
+</ol>
+<p class="s">縮減 UI 不縮減取數、canonical 或 evidence。</p>
+</div>
+<div class="lane off">
+<h3><span class="pend">未來（未啟用）：給 OneBrain 讀</span>
+</h3>
+<ol class="chain c3">
+<li class="off"><b class="pend">Decision Digest</b><span>完整證據；欄位未定</span>
+</li>
+<li class="off"><b class="pend">單一 OneBrain</b><span>全站一個</span>
+</li>
+<li class="off"><b class="pend">各頁 slice</b><span>同一份快照</span>
+</li>
+</ol>
+<div class="slices"><span class="slice">🌍 本頁解釋</span><span class="slice">💼 本頁解釋</span><span class="slice">🔍 本頁解釋</span><span class="slice x">🤖 全站綜合（Phase 7）</span><span class="slice x">⚙️ 只有規則說明，無 slice</span>
+</div>
+<p class="s pend">翻頁只是看同一份快照的不同 slice，不各自重跑 AI。</p>
+</div>
+</div>
+<h3 style="margin-top:12px" class="pend">不可用狀態（位置不變，內容不顯示）</h3>
+<div class="states">
+<div class="card dash">
+<h3 class="pend">OneBrain｜本頁解釋</h3>
+<p><span class="chip t-grey"><span class="pend">⬜ 分析未完成</span></span>
+</p>
+<p class="s pend">本頁解釋暫不顯示，不以先前的結論頂替。</p>
+</div>
+<div class="card dash">
+<h3 class="pend">OneBrain｜本頁解釋</h3>
+<p><span class="chip t-yellow"><span class="pend">⬜ 快照不一致</span></span>
+</p>
+<p class="s pend">各頁未對齊到同一份分析快照，本頁解釋暫不顯示。</p>
+</div>
+<div class="card dash">
+<h3 class="pend">OneBrain｜本頁解釋</h3>
+<p><span class="chip t-grey"><span class="pend">⬜ 資料不足</span></span>
+</p>
+<p class="s pend">缺：‹類別清單›；無法產生本頁解釋。</p>
+</div>
+</div>
+<p class="s pend">是否允許顯示「舊分析」並標明產生時間＝待裁示；本稿預設不顯示，避免把舊結論當新分析。</p>
+<div class="callout warn"><strong>OB-B 現況揭露：</strong>OB-B（<code>services/onebrain/</code>）目前只是離線 Fake Provider 型別與測試，不連 UI、不得顯示於 UI（<code>DEC-2026-11-20-01</code>）；全 repo 僅該目錄與其測試引用它。本稿所有 OneBrain 位置都只是未啟用的設計示意。</div>
+</section>
+<section class="sec" id="p-mkt">
+<h2>🌍 市場與趨勢</h2>
+<div class="note">
+<h3>框外註記（文件層，不是產品畫面）</h3>
+<ul>
+<li>保留的 UI 證據：Primary 圖卡與其基準日／頻率／缺值不補／資料日／來源、Secondary 卡、Missing／新鮮度／來源提醒（BL-0540 搬遷前一項都不刪）。</li>
+<li>OneBrain 預留位置：主內容之後、預設收合的單一「本頁解釋」；不在首屏（44 之十八其二：桌機第一屏至多 1 個 AI 入口）。</li>
+</ul>
+</div>
+<div class="pair">
+<div>
+<p class="frlabel">桌機 1280（深色左側欄＋淺色主區；視窗較窄時此框在框內橫向捲動）</p>
+<div class="deskwrap">
+<div class="fr desk" aria-label="desk 畫面示意">
+<ul class="topnav" aria-label="主要導覽（手機頁首五格）示意">
+<li>
+<div class="tn now"><span class="ic" aria-hidden="true">🌍</span><span>市場</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">💼</span><span>資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🤖</span><span>AI</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+<nav class="side" aria-label="主要導覽（桌機側欄）示意">
+<p class="brand">基金投資儀表板</p>
+<ul class="sidenav">
+<li>
+<div class="sn now"><span aria-hidden="true">🌍</span><span>市場與趨勢</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">💼</span><span>我的資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🤖</span><span>AI 投資總結</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+</nav>
+<div class="main">
+<div class="statusbar" role="status"><span class="tag">PREVIEW</span><span>‹n›／‹m› 項已取得</span><span>更新：‹時間›</span>
+</div>
+<div class="cols">
+<div>
+<div class="card">
+<h2>🌍 市場與趨勢</h2>
+<p class="kv"><span class="chip t-grey">⬜ 暫無完整市場綜合判定</span>
+</p>
+<p class="s">（缺正式 aggregation rule）</p>
+</div>
+<div class="card">
+<h3>Primary 圖卡（沿用既有 🌍 線框，本稿不重畫）</h3>
+<div class="pills"><span class="pillb">3M</span><span class="pillb">6M</span><span class="pillb sel">1Y</span><span class="pillb">3Y</span>
+</div>
+<div class="chartph">‹圖表區；缺值斷線並標 ◇ 資料未備，不補值›</div>
+<p class="s">基準日 ‹日期›｜頻率 ‹›｜缺值不補</p>
+<p class="s">資料日 ‹日期›｜來源 ‹來源名›</p>
+</div>
+</div>
+<div>
+<div class="card">
+<h3>Secondary 卡（≤3，沿用既有線框）</h3>
+<div class="tiles t3">
+<div class="tile">
+<h3>‹指標 1›</h3><span class="v">‹值›</span>
+<p class="ln">資料日 ‹日期›｜來源 ‹來源名›</p>
+</div>
+<div class="tile">
+<h3>‹指標 2›</h3><span class="v">—</span>
+<p class="ln"><span class="chip t-grey">◇ 資料未備</span>
+</p>
+</div>
+<div class="tile">
+<h3>‹指標 3›</h3><span class="v">—</span>
+<p class="ln"><span class="chip t-red">⛔ 取數失敗</span>
+</p>
+</div>
+</div>
+</div>
+<div class="card req">
+<h2 class="pend" style="font-size:15px">必要揭露（保留在頁內）</h2>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> 尚未取得 ‹N› 項（名單收合，一項不刪）</p>
+<p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 門檻待裁示</span>
+</p>
+<p class="kv"><span class="lb pend">來源</span>‹來源名›（逐序列，沿用既有 ▸ 來源與限制）</p>
+<div class="entry pend">查看完整資料健康度 ›</div>
+</div>
+<details class="fold ob" aria-label="OneBrain 本頁解釋（未啟用，設計示意）">
+<summary><span class="pend">OneBrain｜本頁解釋</span> <span class="chip t-grey"><span class="pend">⬜ 未啟用</span></span><span class="chip t-yellow"><span class="pend">設計示意</span></span>
+</summary>
+<div class="body"><span class="slot"><b class="pend">本頁解釋</b>（此位置尚無內容；啟用前不顯示任何文字）</span><span class="slot"><b class="pend">查看依據</b>（未啟用）</span><span class="slot"><b class="pend">分析快照</b>‹快照識別›｜與其他頁為同一份（示意佔位，不是欄位定義）</span>
+<p class="s pend" style="margin:6px 0 0">此區是「同一份分析快照」的本頁 slice，不會在本頁自行重新分析。</p>
+</div>
+</details>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div>
+<p class="frlabel">手機 390（頁首五格，非 sticky）</p>
+<div class="fr mob" aria-label="mob 畫面示意">
+<ul class="topnav" aria-label="主要導覽（手機頁首五格）示意">
+<li>
+<div class="tn now"><span class="ic" aria-hidden="true">🌍</span><span>市場</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">💼</span><span>資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🤖</span><span>AI</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+<nav class="side" aria-label="主要導覽（桌機側欄）示意">
+<p class="brand">基金投資儀表板</p>
+<ul class="sidenav">
+<li>
+<div class="sn now"><span aria-hidden="true">🌍</span><span>市場與趨勢</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">💼</span><span>我的資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🤖</span><span>AI 投資總結</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+</nav>
+<div class="main">
+<div class="statusbar" role="status"><span class="tag">PREVIEW</span><span>‹n›／‹m› 項已取得</span><span>更新：‹時間›</span>
+</div>
+<div class="card">
+<h2>🌍 市場與趨勢</h2>
+<p class="kv"><span class="chip t-grey">⬜ 暫無完整市場綜合判定</span>
+</p>
+<p class="s">（缺正式 aggregation rule）</p>
+</div>
+<div class="card">
+<h3>Primary 圖卡（沿用既有 🌍 線框，本稿不重畫）</h3>
+<div class="pills"><span class="pillb">3M</span><span class="pillb">6M</span><span class="pillb sel">1Y</span><span class="pillb">3Y</span>
+</div>
+<div class="chartph">‹圖表區；缺值斷線並標 ◇ 資料未備，不補值›</div>
+<p class="s">基準日 ‹日期›｜頻率 ‹›｜缺值不補</p>
+<p class="s">資料日 ‹日期›｜來源 ‹來源名›</p>
+</div>
+<div class="card">
+<h3>Secondary 卡（≤3，沿用既有線框）</h3>
+<div class="tiles t3">
+<div class="tile">
+<h3>‹指標 1›</h3><span class="v">‹值›</span>
+<p class="ln">資料日 ‹日期›｜來源 ‹來源名›</p>
+</div>
+<div class="tile">
+<h3>‹指標 2›</h3><span class="v">—</span>
+<p class="ln"><span class="chip t-grey">◇ 資料未備</span>
+</p>
+</div>
+<div class="tile">
+<h3>‹指標 3›</h3><span class="v">—</span>
+<p class="ln"><span class="chip t-red">⛔ 取數失敗</span>
+</p>
+</div>
+</div>
+</div>
+<div class="card req">
+<h2 class="pend" style="font-size:15px">必要揭露（保留在頁內）</h2>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> 尚未取得 ‹N› 項（名單收合，一項不刪）</p>
+<p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 門檻待裁示</span>
+</p>
+<p class="kv"><span class="lb pend">來源</span>‹來源名›（逐序列，沿用既有 ▸ 來源與限制）</p>
+<div class="entry pend">查看完整資料健康度 ›</div>
+</div>
+<details class="fold ob" aria-label="OneBrain 本頁解釋（未啟用，設計示意）">
+<summary><span class="pend">OneBrain｜本頁解釋</span> <span class="chip t-grey"><span class="pend">⬜ 未啟用</span></span><span class="chip t-yellow"><span class="pend">設計示意</span></span>
+</summary>
+<div class="body"><span class="slot"><b class="pend">本頁解釋</b>（此位置尚無內容；啟用前不顯示任何文字）</span><span class="slot"><b class="pend">查看依據</b>（未啟用）</span><span class="slot"><b class="pend">分析快照</b>‹快照識別›｜與其他頁為同一份（示意佔位，不是欄位定義）</span>
+<p class="s pend" style="margin:6px 0 0">此區是「同一份分析快照」的本頁 slice，不會在本頁自行重新分析。</p>
+</div>
+</details>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="sec" id="p-ast">
+<h2>💼 我的資產</h2>
+<div class="note">
+<h3>框外註記（文件層，不是產品畫面）</h3>
+<ul>
+<li>保留的 UI 證據：主圖在前、摘要四項不因 Missing 消失、持倉來源／資料日／新鮮度。</li>
+<li>OneBrain 預留位置：同上，單一收合位。</li>
+</ul>
+</div>
+<div class="pair">
+<div>
+<p class="frlabel">桌機 1280（深色左側欄＋淺色主區；視窗較窄時此框在框內橫向捲動）</p>
+<div class="deskwrap">
+<div class="fr desk" aria-label="desk 畫面示意">
+<ul class="topnav" aria-label="主要導覽（手機頁首五格）示意">
+<li>
+<div class="tn on"><span class="ic" aria-hidden="true">🌍</span><span>市場</span>
+</div>
+</li>
+<li>
+<div class="tn now"><span class="ic" aria-hidden="true">💼</span><span>資產</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🤖</span><span>AI</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+<nav class="side" aria-label="主要導覽（桌機側欄）示意">
+<p class="brand">基金投資儀表板</p>
+<ul class="sidenav">
+<li>
+<div class="sn"><span aria-hidden="true">🌍</span><span>市場與趨勢</span>
+</div>
+</li>
+<li>
+<div class="sn now"><span aria-hidden="true">💼</span><span>我的資產</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🤖</span><span>AI 投資總結</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+</nav>
+<div class="main">
+<div class="statusbar" role="status"><span class="tag">PREVIEW</span><span>‹n›／‹m› 項已取得</span><span>更新：‹時間›</span>
+</div>
+<div class="cols">
+<div>
+<div class="card">
+<h2>💼 我的資產</h2>
+<p class="kv"><span class="lb pend">頁級狀態</span><span class="chip t-grey">⬜ 無法判定</span>
+</p>
+<div class="chartph">‹主要圖表：配置 現況 vs 目標（沿用既有最小切片線框，本稿不重畫）›</div>
+</div>
+<div class="card">
+<h3>摘要四項（缺值仍保留位置，不顯示 0）</h3>
+<div class="tiles">
+<div class="tile">
+<h3>總資產</h3><span class="v">‹值›</span>
+<p class="ln"><span class="chip t-grey">◇ 資料未備</span>
+</p>
+</div>
+<div class="tile">
+<h3>損益</h3><span class="v">‹值›</span>
+<p class="ln"><span class="chip t-grey">◇ 資料未備</span>
+</p>
+</div>
+<div class="tile">
+<h3>報酬</h3><span class="v">‹值›</span>
+<p class="ln"><span class="chip t-grey">◇ 資料未備</span>
+</p>
+</div>
+<div class="tile">
+<h3>配息</h3><span class="v">‹值›</span>
+<p class="ln"><span class="chip t-grey">◇ 資料未備</span>
+</p>
+</div>
+</div>
+</div>
+</div>
+<div>
+<div class="card">
+<h3>近期事件／配息（位置示意）</h3><span class="slot">‹事件›｜‹日期›（缺值時 ◇ 資料未備）</span>
+</div>
+<details class="fold">
+<summary>持股明細（預設收合）</summary>
+<div class="body">
+<p class="s">‹沿用既有線框›</p>
+</div>
+</details>
+<div class="card req">
+<h2 class="pend" style="font-size:15px">必要揭露（保留在頁內）</h2>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> 缺 ‹N› 項（四項摘要不因缺值消失）</p>
+<p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 門檻待裁示</span>
+</p>
+<p class="kv"><span class="lb pend">來源</span>持倉 ‹來源名›｜資料日 ‹日期›</p>
+<div class="entry pend">查看完整資料健康度 ›</div>
+</div>
+<details class="fold ob" aria-label="OneBrain 本頁解釋（未啟用，設計示意）">
+<summary><span class="pend">OneBrain｜本頁解釋</span> <span class="chip t-grey"><span class="pend">⬜ 未啟用</span></span><span class="chip t-yellow"><span class="pend">設計示意</span></span>
+</summary>
+<div class="body"><span class="slot"><b class="pend">本頁解釋</b>（此位置尚無內容；啟用前不顯示任何文字）</span><span class="slot"><b class="pend">查看依據</b>（未啟用）</span><span class="slot"><b class="pend">分析快照</b>‹快照識別›｜與其他頁為同一份（示意佔位，不是欄位定義）</span>
+<p class="s pend" style="margin:6px 0 0">此區是「同一份分析快照」的本頁 slice，不會在本頁自行重新分析。</p>
+</div>
+</details>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div>
+<p class="frlabel">手機 390（頁首五格，非 sticky）</p>
+<div class="fr mob" aria-label="mob 畫面示意">
+<ul class="topnav" aria-label="主要導覽（手機頁首五格）示意">
+<li>
+<div class="tn on"><span class="ic" aria-hidden="true">🌍</span><span>市場</span>
+</div>
+</li>
+<li>
+<div class="tn now"><span class="ic" aria-hidden="true">💼</span><span>資產</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🤖</span><span>AI</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+<nav class="side" aria-label="主要導覽（桌機側欄）示意">
+<p class="brand">基金投資儀表板</p>
+<ul class="sidenav">
+<li>
+<div class="sn"><span aria-hidden="true">🌍</span><span>市場與趨勢</span>
+</div>
+</li>
+<li>
+<div class="sn now"><span aria-hidden="true">💼</span><span>我的資產</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🤖</span><span>AI 投資總結</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+</nav>
+<div class="main">
+<div class="statusbar" role="status"><span class="tag">PREVIEW</span><span>‹n›／‹m› 項已取得</span><span>更新：‹時間›</span>
+</div>
+<div class="card">
+<h2>💼 我的資產</h2>
+<p class="kv"><span class="lb pend">頁級狀態</span><span class="chip t-grey">⬜ 無法判定</span>
+</p>
+<div class="chartph">‹主要圖表：配置 現況 vs 目標（沿用既有最小切片線框，本稿不重畫）›</div>
+</div>
+<div class="card">
+<h3>摘要四項（缺值仍保留位置，不顯示 0）</h3>
+<div class="tiles">
+<div class="tile">
+<h3>總資產</h3><span class="v">‹值›</span>
+<p class="ln"><span class="chip t-grey">◇ 資料未備</span>
+</p>
+</div>
+<div class="tile">
+<h3>損益</h3><span class="v">‹值›</span>
+<p class="ln"><span class="chip t-grey">◇ 資料未備</span>
+</p>
+</div>
+<div class="tile">
+<h3>報酬</h3><span class="v">‹值›</span>
+<p class="ln"><span class="chip t-grey">◇ 資料未備</span>
+</p>
+</div>
+<div class="tile">
+<h3>配息</h3><span class="v">‹值›</span>
+<p class="ln"><span class="chip t-grey">◇ 資料未備</span>
+</p>
+</div>
+</div>
+</div>
+<div class="card">
+<h3>近期事件／配息（位置示意）</h3><span class="slot">‹事件›｜‹日期›（缺值時 ◇ 資料未備）</span>
+</div>
+<details class="fold">
+<summary>持股明細（預設收合）</summary>
+<div class="body">
+<p class="s">‹沿用既有線框›</p>
+</div>
+</details>
+<div class="card req">
+<h2 class="pend" style="font-size:15px">必要揭露（保留在頁內）</h2>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> 缺 ‹N› 項（四項摘要不因缺值消失）</p>
+<p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 門檻待裁示</span>
+</p>
+<p class="kv"><span class="lb pend">來源</span>持倉 ‹來源名›｜資料日 ‹日期›</p>
+<div class="entry pend">查看完整資料健康度 ›</div>
+</div>
+<details class="fold ob" aria-label="OneBrain 本頁解釋（未啟用，設計示意）">
+<summary><span class="pend">OneBrain｜本頁解釋</span> <span class="chip t-grey"><span class="pend">⬜ 未啟用</span></span><span class="chip t-yellow"><span class="pend">設計示意</span></span>
+</summary>
+<div class="body"><span class="slot"><b class="pend">本頁解釋</b>（此位置尚無內容；啟用前不顯示任何文字）</span><span class="slot"><b class="pend">查看依據</b>（未啟用）</span><span class="slot"><b class="pend">分析快照</b>‹快照識別›｜與其他頁為同一份（示意佔位，不是欄位定義）</span>
+<p class="s pend" style="margin:6px 0 0">此區是「同一份分析快照」的本頁 slice，不會在本頁自行重新分析。</p>
+</div>
+</details>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="sec" id="p-exp">
+<h2>🔍 找基金</h2>
+<div class="note">
+<h3>框外註記（文件層，不是產品畫面）</h3>
+<ul>
+<li>保留的 UI 證據：查詢三態（有資料／查無／取數失敗）、基金身份、不排名、來源／資料日。</li>
+<li>OneBrain 預留位置：同上，單一收合位。</li>
+</ul>
+</div>
+<div class="pair">
+<div>
+<p class="frlabel">桌機 1280（深色左側欄＋淺色主區；視窗較窄時此框在框內橫向捲動）</p>
+<div class="deskwrap">
+<div class="fr desk" aria-label="desk 畫面示意">
+<ul class="topnav" aria-label="主要導覽（手機頁首五格）示意">
+<li>
+<div class="tn on"><span class="ic" aria-hidden="true">🌍</span><span>市場</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">💼</span><span>資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn now"><span class="ic" aria-hidden="true">🔍</span><span>找基金</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🤖</span><span>AI</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+<nav class="side" aria-label="主要導覽（桌機側欄）示意">
+<p class="brand">基金投資儀表板</p>
+<ul class="sidenav">
+<li>
+<div class="sn"><span aria-hidden="true">🌍</span><span>市場與趨勢</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">💼</span><span>我的資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn now"><span aria-hidden="true">🔍</span><span>找基金</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🤖</span><span>AI 投資總結</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+</nav>
+<div class="main">
+<div class="statusbar" role="status"><span class="tag">PREVIEW</span><span>‹n›／‹m› 項已取得</span><span>更新：‹時間›</span>
+</div>
+<div class="cols">
+<div>
+<div class="card">
+<h2>🔍 找基金</h2>
+<h3>查一檔基金</h3>
+<div class="field pend">MoneyDJ 基金代碼或 ISIN</div>
+<p class="s">ISIN：尚未啟用</p><span class="btn">查詢</span>
+<p class="kv" style="margin-top:8px"><span class="lb">基金身份</span><span class="chip t-grey">◇ 尚未確認</span>
+</p>
+<p class="s">結果三態要分開：有資料／<span class="chip t-grey"><span class="pend">查無此代碼</span></span>／<span class="chip t-red">⛔ 取數失敗</span>（查無 ≠ 取數失敗）</p>
+</div>
+<div class="card">
+<h3>依條件篩選</h3>
+<p>目前條件下有 N 檔符合</p>
+<p class="s">不排名、不標精選或推薦；比較上限 ‹n›／3。</p>
+</div>
+</div>
+<div>
+<div class="card req">
+<h2 class="pend" style="font-size:15px">必要揭露（保留在頁內）</h2>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> 缺 ‹N› 項</p>
+<p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 門檻待裁示</span>
+</p>
+<p class="kv"><span class="lb pend">來源</span>基金 ‹來源名›｜資料日 ‹日期›</p>
+<div class="entry pend">查看完整資料健康度 ›</div>
+</div>
+<details class="fold ob" aria-label="OneBrain 本頁解釋（未啟用，設計示意）">
+<summary><span class="pend">OneBrain｜本頁解釋</span> <span class="chip t-grey"><span class="pend">⬜ 未啟用</span></span><span class="chip t-yellow"><span class="pend">設計示意</span></span>
+</summary>
+<div class="body"><span class="slot"><b class="pend">本頁解釋</b>（此位置尚無內容；啟用前不顯示任何文字）</span><span class="slot"><b class="pend">查看依據</b>（未啟用）</span><span class="slot"><b class="pend">分析快照</b>‹快照識別›｜與其他頁為同一份（示意佔位，不是欄位定義）</span>
+<p class="s pend" style="margin:6px 0 0">此區是「同一份分析快照」的本頁 slice，不會在本頁自行重新分析。</p>
+</div>
+</details>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div>
+<p class="frlabel">手機 390（頁首五格，非 sticky）</p>
+<div class="fr mob" aria-label="mob 畫面示意">
+<ul class="topnav" aria-label="主要導覽（手機頁首五格）示意">
+<li>
+<div class="tn on"><span class="ic" aria-hidden="true">🌍</span><span>市場</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">💼</span><span>資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn now"><span class="ic" aria-hidden="true">🔍</span><span>找基金</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🤖</span><span>AI</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+<nav class="side" aria-label="主要導覽（桌機側欄）示意">
+<p class="brand">基金投資儀表板</p>
+<ul class="sidenav">
+<li>
+<div class="sn"><span aria-hidden="true">🌍</span><span>市場與趨勢</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">💼</span><span>我的資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn now"><span aria-hidden="true">🔍</span><span>找基金</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🤖</span><span>AI 投資總結</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+</nav>
+<div class="main">
+<div class="statusbar" role="status"><span class="tag">PREVIEW</span><span>‹n›／‹m› 項已取得</span><span>更新：‹時間›</span>
+</div>
+<div class="card">
+<h2>🔍 找基金</h2>
+<h3>查一檔基金</h3>
+<div class="field pend">MoneyDJ 基金代碼或 ISIN</div>
+<p class="s">ISIN：尚未啟用</p><span class="btn">查詢</span>
+<p class="kv" style="margin-top:8px"><span class="lb">基金身份</span><span class="chip t-grey">◇ 尚未確認</span>
+</p>
+<p class="s">結果三態要分開：有資料／<span class="chip t-grey"><span class="pend">查無此代碼</span></span>／<span class="chip t-red">⛔ 取數失敗</span>（查無 ≠ 取數失敗）</p>
+</div>
+<div class="card">
+<h3>依條件篩選</h3>
+<p>目前條件下有 N 檔符合</p>
+<p class="s">不排名、不標精選或推薦；比較上限 ‹n›／3。</p>
+</div>
+<div class="card req">
+<h2 class="pend" style="font-size:15px">必要揭露（保留在頁內）</h2>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> 缺 ‹N› 項</p>
+<p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 門檻待裁示</span>
+</p>
+<p class="kv"><span class="lb pend">來源</span>基金 ‹來源名›｜資料日 ‹日期›</p>
+<div class="entry pend">查看完整資料健康度 ›</div>
+</div>
+<details class="fold ob" aria-label="OneBrain 本頁解釋（未啟用，設計示意）">
+<summary><span class="pend">OneBrain｜本頁解釋</span> <span class="chip t-grey"><span class="pend">⬜ 未啟用</span></span><span class="chip t-yellow"><span class="pend">設計示意</span></span>
+</summary>
+<div class="body"><span class="slot"><b class="pend">本頁解釋</b>（此位置尚無內容；啟用前不顯示任何文字）</span><span class="slot"><b class="pend">查看依據</b>（未啟用）</span><span class="slot"><b class="pend">分析快照</b>‹快照識別›｜與其他頁為同一份（示意佔位，不是欄位定義）</span>
+<p class="s pend" style="margin:6px 0 0">此區是「同一份分析快照」的本頁 slice，不會在本頁自行重新分析。</p>
+</div>
+</details>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="sec" id="p-ai">
+<h2>🤖 AI 投資總結</h2>
+<div class="note">
+<h3>框外註記（文件層，不是產品畫面）</h3>
+<ul>
+<li>保留的 UI 證據：Phase 7 前不可進；只示意將來槽位結構，無內容。</li>
+<li>OneBrain 預留位置：本頁就是全站綜合，不再放 slice。</li>
+</ul>
+</div>
+<div class="pair">
+<div>
+<p class="frlabel">桌機 1280（深色左側欄＋淺色主區；視窗較窄時此框在框內橫向捲動）</p>
+<div class="deskwrap">
+<div class="fr desk" aria-label="desk 畫面示意">
+<ul class="topnav" aria-label="主要導覽（手機頁首五格）示意">
+<li>
+<div class="tn on"><span class="ic" aria-hidden="true">🌍</span><span>市場</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">💼</span><span>資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn now"><span class="ic" aria-hidden="true">🤖</span><span>AI</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+<nav class="side" aria-label="主要導覽（桌機側欄）示意">
+<p class="brand">基金投資儀表板</p>
+<ul class="sidenav">
+<li>
+<div class="sn"><span aria-hidden="true">🌍</span><span>市場與趨勢</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">💼</span><span>我的資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn now"><span aria-hidden="true">🤖</span><span>AI 投資總結</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+</nav>
+<div class="main">
+<div class="statusbar" role="status"><span class="tag">PREVIEW</span><span>‹n›／‹m› 項已取得</span><span>更新：‹時間›</span>
+</div>
+<div class="cols">
+<div>
+<div class="card dash">
+<h2>🤖 AI 投資總結 <span class="chip t-yellow"><span class="pend">示意：Phase 7 後</span></span>
+</h2>
+<p class="lock">現況：導覽項標「尚未開放」、不可點、不註冊頁面。</p>
+<p class="kv"><span class="lb pend">System State</span><span class="chip t-grey">⬜ 無法判定</span>（‹缺什麼›）</p>
+<p class="s pend">整區只顯示「AI 分析暫不可用／無法判定」。以下僅示意將來槽位結構，沒有任何內容。</p><span class="slot"><b class="pend">主要證據</b>（空）</span><span class="slot"><b class="pend">最強反證</b>（空）</span><span class="slot"><b class="pend">未確認</b>（空）</span><span class="slot"><b class="pend">Evidence trace</b>（空）</span>
+</div>
+</div>
+<div>
+<div class="card req">
+<h2 class="pend" style="font-size:15px">必要揭露（保留在頁內）</h2>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> ‹缺什麼›</p>
+<p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 無法判定</span>
+</p>
+<p class="kv"><span class="lb pend">來源</span>同一份分析快照（未啟用）</p>
+<div class="entry pend">查看完整資料健康度 ›</div>
+</div>
+<div class="card dash">
+<h3 class="pend">全站綜合</h3>
+<p class="s pend">🤖 是唯一的全站綜合頁；🌍／💼／🔍 的「本頁解釋」是同一份快照的 slice，不在此重複。</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div>
+<p class="frlabel">手機 390（頁首五格，非 sticky）</p>
+<div class="fr mob" aria-label="mob 畫面示意">
+<ul class="topnav" aria-label="主要導覽（手機頁首五格）示意">
+<li>
+<div class="tn on"><span class="ic" aria-hidden="true">🌍</span><span>市場</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">💼</span><span>資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn now"><span class="ic" aria-hidden="true">🤖</span><span>AI</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+<nav class="side" aria-label="主要導覽（桌機側欄）示意">
+<p class="brand">基金投資儀表板</p>
+<ul class="sidenav">
+<li>
+<div class="sn"><span aria-hidden="true">🌍</span><span>市場與趨勢</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">💼</span><span>我的資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn now"><span aria-hidden="true">🤖</span><span>AI 投資總結</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">⚙️</span><span>設定</span><span class="soon">開發中</span>
+</div>
+</li>
+</ul>
+</nav>
+<div class="main">
+<div class="statusbar" role="status"><span class="tag">PREVIEW</span><span>‹n›／‹m› 項已取得</span><span>更新：‹時間›</span>
+</div>
+<div class="card dash">
+<h2>🤖 AI 投資總結 <span class="chip t-yellow"><span class="pend">示意：Phase 7 後</span></span>
+</h2>
+<p class="lock">現況：導覽項標「尚未開放」、不可點、不註冊頁面。</p>
+<p class="kv"><span class="lb pend">System State</span><span class="chip t-grey">⬜ 無法判定</span>（‹缺什麼›）</p>
+<p class="s pend">整區只顯示「AI 分析暫不可用／無法判定」。以下僅示意將來槽位結構，沒有任何內容。</p><span class="slot"><b class="pend">主要證據</b>（空）</span><span class="slot"><b class="pend">最強反證</b>（空）</span><span class="slot"><b class="pend">未確認</b>（空）</span><span class="slot"><b class="pend">Evidence trace</b>（空）</span>
+</div>
+<div class="card req">
+<h2 class="pend" style="font-size:15px">必要揭露（保留在頁內）</h2>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> ‹缺什麼›</p>
+<p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 無法判定</span>
+</p>
+<p class="kv"><span class="lb pend">來源</span>同一份分析快照（未啟用）</p>
+<div class="entry pend">查看完整資料健康度 ›</div>
+</div>
+<div class="card dash">
+<h3 class="pend">全站綜合</h3>
+<p class="s pend">🤖 是唯一的全站綜合頁；🌍／💼／🔍 的「本頁解釋」是同一份快照的 slice，不在此重複。</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="sec" id="p-set">
+<h2>⚙️ 設定</h2>
+<div class="note">
+<h3>框外註記（文件層，不是產品畫面）</h3>
+<ul>
+<li>保留的 UI 證據：完整資料健康度三層（UI-B）。</li>
+<li>OneBrain 預留位置：無。只有 deterministic「缺資料會限制 AI 判讀」說明；67 §6.1 只批准 🌍／💼／🔍，不加第 4 個 local summary。</li>
+</ul>
+</div>
+<div class="pair">
+<div>
+<p class="frlabel">桌機 1280（深色左側欄＋淺色主區；視窗較窄時此框在框內橫向捲動）</p>
+<div class="deskwrap">
+<div class="fr desk" aria-label="desk 畫面示意">
+<ul class="topnav" aria-label="主要導覽（手機頁首五格）示意">
+<li>
+<div class="tn on"><span class="ic" aria-hidden="true">🌍</span><span>市場</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">💼</span><span>資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🤖</span><span>AI</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="tn now"><span class="ic" aria-hidden="true">⚙️</span><span>設定</span>
+</div>
+</li>
+</ul>
+<nav class="side" aria-label="主要導覽（桌機側欄）示意">
+<p class="brand">基金投資儀表板</p>
+<ul class="sidenav">
+<li>
+<div class="sn"><span aria-hidden="true">🌍</span><span>市場與趨勢</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">💼</span><span>我的資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🤖</span><span>AI 投資總結</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="sn now"><span aria-hidden="true">⚙️</span><span>設定</span>
+</div>
+</li>
+</ul>
+</nav>
+<div class="main">
+<div class="statusbar" role="status"><span class="tag">PREVIEW</span><span>‹n›／‹m› 項已取得</span><span>更新：‹時間›</span>
+</div>
+<div class="cols">
+<div>
+<div class="card">
+<h2>⚙️ 設定 ▸ 資料健康度</h2>
+<p class="s">完整三層沿用 UI-B 線框（#1297），本稿不重畫。</p>
+<details class="fold">
+<summary class="pend">① 全站資料取得摘要</summary>
+<div class="body">
+<p class="s">‹沿用 UI-B›</p>
+</div>
+</details>
+<details class="fold">
+<summary class="pend">② 逐來源／序列明細</summary>
+<div class="body">
+<p class="s">‹沿用 UI-B›</p>
+</div>
+</details>
+<details class="fold">
+<summary class="pend">③ 開發者診斷（預設收合）</summary>
+<div class="body">
+<p class="s">‹沿用 UI-B›</p>
+</div>
+</details>
+</div>
+</div>
+<div>
+<div class="card">
+<h2 class="pend" style="font-size:15px">資料限制說明 <span class="chip t-grey"><span class="pend">規則產生，非 AI</span></span>
+</h2>
+<p class="pend">缺資料會限制 AI 判讀：下列類別目前未取得，啟用 AI 後相關判讀會因此受限。</p><span class="slot">未取得：‹類別清單（由資料狀態逐項列出）›</span>
+<p class="s pend">這是 deterministic 的說明句，不是 OneBrain 輸出；本頁沒有 OneBrain 位置。</p>
+</div>
+<div class="card req">
+<h2 class="pend" style="font-size:15px">必要揭露（本頁即完整資料健康度所在）</h2>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> 逐類狀態見 ①</p>
+<p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 門檻待裁示</span>
+</p>
+<p class="kv"><span class="lb pend">來源</span>逐來源見 ②</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div>
+<p class="frlabel">手機 390（頁首五格，非 sticky）</p>
+<div class="fr mob" aria-label="mob 畫面示意">
+<ul class="topnav" aria-label="主要導覽（手機頁首五格）示意">
+<li>
+<div class="tn on"><span class="ic" aria-hidden="true">🌍</span><span>市場</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">💼</span><span>資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="tn"><span class="ic" aria-hidden="true">🤖</span><span>AI</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="tn now"><span class="ic" aria-hidden="true">⚙️</span><span>設定</span>
+</div>
+</li>
+</ul>
+<nav class="side" aria-label="主要導覽（桌機側欄）示意">
+<p class="brand">基金投資儀表板</p>
+<ul class="sidenav">
+<li>
+<div class="sn"><span aria-hidden="true">🌍</span><span>市場與趨勢</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">💼</span><span>我的資產</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🔍</span><span>找基金</span><span class="soon">開發中</span>
+</div>
+</li>
+<li>
+<div class="sn dis"><span aria-hidden="true">🤖</span><span>AI 投資總結</span><span class="soon">尚未開放</span>
+</div>
+</li>
+<li>
+<div class="sn now"><span aria-hidden="true">⚙️</span><span>設定</span>
+</div>
+</li>
+</ul>
+</nav>
+<div class="main">
+<div class="statusbar" role="status"><span class="tag">PREVIEW</span><span>‹n›／‹m› 項已取得</span><span>更新：‹時間›</span>
+</div>
+<div class="card">
+<h2>⚙️ 設定 ▸ 資料健康度</h2>
+<p class="s">完整三層沿用 UI-B 線框（#1297），本稿不重畫。</p>
+<details class="fold">
+<summary class="pend">① 全站資料取得摘要</summary>
+<div class="body">
+<p class="s">‹沿用 UI-B›</p>
+</div>
+</details>
+<details class="fold">
+<summary class="pend">② 逐來源／序列明細</summary>
+<div class="body">
+<p class="s">‹沿用 UI-B›</p>
+</div>
+</details>
+<details class="fold">
+<summary class="pend">③ 開發者診斷（預設收合）</summary>
+<div class="body">
+<p class="s">‹沿用 UI-B›</p>
+</div>
+</details>
+</div>
+<div class="card">
+<h2 class="pend" style="font-size:15px">資料限制說明 <span class="chip t-grey"><span class="pend">規則產生，非 AI</span></span>
+</h2>
+<p class="pend">缺資料會限制 AI 判讀：下列類別目前未取得，啟用 AI 後相關判讀會因此受限。</p><span class="slot">未取得：‹類別清單（由資料狀態逐項列出）›</span>
+<p class="s pend">這是 deterministic 的說明句，不是 OneBrain 輸出；本頁沒有 OneBrain 位置。</p>
+</div>
+<div class="card req">
+<h2 class="pend" style="font-size:15px">必要揭露（本頁即完整資料健康度所在）</h2>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> 逐類狀態見 ①</p>
+<p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 門檻待裁示</span>
+</p>
+<p class="kv"><span class="lb pend">來源</span>逐來源見 ②</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</body></html>
