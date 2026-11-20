@@ -80,16 +80,16 @@
 ## 版面量測原文（`UI_V2_CHROMIUM=... python .../measure.py shoot`，Chromium，DPR 1）
 
 ```
-== viewport 390: {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 7931, 'htmlMinFontPx': 13, 'htmlTextNodesUnder13px': 0, 'touchTargets': 29, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'overflowElements': 0, 'primaryCharts': 3, 'primaryChartWidthPx': 322, 'primaryChartSvgTextRenderedPx': [9.84, 10.73], 'sideDisplay': 'none', 'topnavDisplay': 'grid'}
+== viewport 390: {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 8022, 'htmlMinFontPx': 13, 'htmlTextNodesUnder13px': 0, 'touchTargets': 29, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'overflowElements': 0, 'primaryCharts': 3, 'primaryChartWidthPx': 322, 'primaryChartSvgTextRenderedPx': [9.84, 10.73], 'sideDisplay': 'none', 'topnavDisplay': 'grid'}
 screenshot shot_390.png: 390x3550px, 135333 bytes, palette 128 colors
-== viewport 1280: {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 4256, 'htmlMinFontPx': 13, 'htmlTextNodesUnder13px': 0, 'touchTargets': 29, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'overflowElements': 0, 'primaryCharts': 3, 'primaryChartWidthPx': 610, 'primaryChartSvgTextRenderedPx': [18.64, 20.33], 'sideDisplay': 'block', 'topnavDisplay': 'none'}
-screenshot shot_1280.png: 1280x2736px, 192006 bytes, palette 128 colors
+== viewport 1280: {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 4301, 'htmlMinFontPx': 13, 'htmlTextNodesUnder13px': 0, 'touchTargets': 29, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'overflowElements': 0, 'primaryCharts': 3, 'primaryChartWidthPx': 590, 'primaryChartSvgTextRenderedPx': [18.03, 19.67], 'sideDisplay': 'block', 'topnavDisplay': 'none'}
+screenshot shot_1280.png: 1280x2736px, 189789 bytes, palette 128 colors
 ```
 
 - 橫向溢出：390／1280 皆 `scrollWidth == clientWidth`、`overflowElements 0`。
 - HTML 文字最小字級 13px（`htmlTextNodesUnder13px 0`）；觸控目標（pill、summary、頁首格、側欄列）29 個，最小高 48px，`touchUnder48 0`。
-- **SVG 內文字不計入上面的字級**：主圖用正式 `chart_svg` 幾何（viewBox 360×240、字 11／12 user units），渲染後 390 約 9.8–10.7px、1280 約 18.6–20.3px。390 的數字比 #1298 實測的 10.88／11.87px 更小，因為示意殼的外框與內距讓圖寬為 322px（正式頁 358px）；這是已知的 chart_svg 字級問題（#1298 R1 候選 C），本批不處理。
-- 末點標籤在此示意殼的字型下會超出 viewBox 右緣，故示意頁對圖設 `overflow:visible`；正式頁字型不同，實際是否裁切**未驗**。
+- **SVG 內文字不計入上面的字級**：主圖用正式 `chart_svg` 幾何（viewBox 360×240、字 11／12 user units），渲染後 390 約 9.8–10.7px、1280 約 18.0–19.7px。390 的數字比 #1298 實測的 10.88／11.87px 更小，因為示意殼的外框與內距讓圖寬為 322px（正式頁 358px）；這是已知的 chart_svg 字級問題（#1298 R1 候選 C），本批不處理。
+- 1280 的主圖欄與右側辨識列間距已加大到 28px。末點標籤在此示意殼的字型下會超出 viewBox 右緣，故示意頁對圖設 `overflow:visible`；正式頁字型不同，實際是否裁切**未驗**。
 - 辨識列小圖無文字（裝飾，標籤在 HTML）。
 
 ## 測試
@@ -102,13 +102,16 @@ Cloud `ui_v3` URL 與部署 SHA；iOS／Android／WebView 真機；真人色覺�
 
 ## 測試輸出
 
+跑在 head `eafae515`（本次修改 commit 之前的 head；修改後的 SHA 見該 commit），**本機 scratchpad venv，非 CI**；未跑全套與 CI 四項 check。
+
 ```
 $ python -m pytest tests/test_canonical_rule_consistency.py tests/test_doc_counters.py tests/test_constitution_file_refs.py -q -p no:cacheprovider
-113 passed in 89.76s (0:01:29)
+........................................................................ [ 63%]
+.........................................                                [100%]
+113 passed in 90.47s (0:01:30)
 
 $ python -m pytest tests/test_services_purity_contract.py tests/ui_v3/test_ui_v3_fixtures_are_fake_guard.py tests/ui_v3/test_ui_v3_import_guard.py -q -p no:cacheprovider
-116 passed in 9.20s
+........................................................................ [ 62%]
+............................................                             [100%]
+116 passed in 8.81s
 ```
-
-（環境：scratchpad venv；非 CI；未跑全套與 CI 四項 check。）
-

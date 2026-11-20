@@ -305,7 +305,7 @@ details.fold .body{padding:0 12px 12px}
   .side{display:block}
   .topnav{display:none}
   .main{padding:16px 16px 16px 16px}
-  .cand{grid-template-columns:minmax(0,1fr) 230px;align-items:start}
+  .cand{grid-template-columns:minmax(0,1fr) 230px;column-gap:28px;align-items:start}
   .strip{grid-template-columns:minmax(0,1fr)}
   table.cmp{display:table}
   table.cmp thead{display:table-header-group}
@@ -337,7 +337,7 @@ def _candidate_card(key: str, m: dict) -> str:
   <h2>候選 {key}｜{c['name']}</h2>
   <p class="fake"><strong>設計提案，尚未核准。</strong>FAKE 示意波形，數值不代表任何真實行情；不是 production 畫面。</p>
   <div class="cand">
-    <div>
+    <div class="cmain">
       <h3>台股 vs S&amp;P 500（歸一化）</h3>
       <div class="ctl"><span class="lb">檢視</span><span class="pill on">比較</span><span class="pill">VIX</span><span class="pill">美10Y</span><span class="pill">美2Y</span></div>
       <div class="ctl"><span class="lb">期間</span><span class="pill">3M</span><span class="pill">6M</span><span class="pill on">1Y</span><span class="pill">3Y</span></div>
@@ -361,7 +361,7 @@ def _table(m: dict) -> str:
     head = ("<thead><tr><th>候選</th><th>series 色值</th><th>對 surface #ffffff</th><th>對 page.bg #f5f7fb</th>"
             "<th>兩線 ΔE76（原色／protan／deutan／tritan）</th><th>灰階（兩線亮度比）</th><th>主要風險</th></tr></thead>")
     risks = {
-        "A": "橙色是三組中離 yellow 狀態邊（ΔE76 20.3）與 red 狀態邊（32.2）最近的，可能被讀成「警示」；橙色對 page.bg 只有 3.41:1，剛過參考 3:1，沒有餘裕；深藍離 primary 藍 26.5，同屬冷色。",
+        "A": "橙色是三組中離 yellow 狀態邊（ΔE76 20.3）與 red 狀態邊（32.2）最近的，可能被讀成「警示」；橙色對 page.bg 只有 3.41:1，剛過參考 3:1，沒有餘裕；深藍離 primary 藍 26.5，同屬冷色；tritan 模擬下橙變 #e5525a（偏紅），與 red 狀態邊有聯想交集。",
         "B": "藍綠（teal）可能被讀成「綠＝好」；tritan 下兩線 ΔE 最小；靛紫與 primary 藍同屬冷色。",
         "C": "洋紅在視覺上偏紅系，仍可能被讀成「紅＝壞」（數值上離 red 狀態邊 58.0，比 A 的橙遠）；protan 下兩線 ΔE 最小（18.8），兩線都變成偏藍灰；灰階亮度比最低（1.94）。",
     }
@@ -450,8 +450,8 @@ def build_html() -> str:
 </section>
 
 <section aria-labelledby="h-rec"><h2 id="h-rec">推薦方案（僅為建議，不代客戶選色）</h2>
-<p><strong>建議候選 A（深藍＋橙）。</strong>理由（皆為上表量測）：色覺模擬下兩線距離在三型都最大（protan／deutan／tritan 的 ΔE76 見表，tritan 也最大）、灰階亮度比最高（兩線在灰階下仍有明顯深淺差）、橙與藍是色覺差異族群最常用的可分辨色對。
-<strong>它的風險要一併看：</strong>橙色與既有 yellow 狀態邊色相相近，且對 page.bg 的對比只剛過參考的 3:1。若客戶在意「橙＝警示」的聯想，B 的色彩距離次佳（tritan 38.3 明顯較弱）且藍綠有「綠＝好」的聯想風險；C 的 protan 距離最弱（18.8）、灰階亮度比最低。</p>
+<p><strong>建議候選 A（深藍＋橙）。</strong>理由（皆為上表量測）：色覺模擬下兩線距離在三型都最大（protan／deutan／tritan 的 ΔE76 見表，tritan 也最大）、灰階亮度比最高（兩線在灰階下仍有明顯深淺差）。以上是本模擬下的數字，不是真人測試。
+<strong>它的風險要一併看：</strong>橙色與既有 yellow 狀態邊色相相近，且對 page.bg 的對比只剛過參考的 3:1。若客戶在意「橙＝警示」的聯想，B 在 protan／deutan 下距離次佳（68.9／61.0），但 tritan 下 38.3 明顯較弱（tritan 下次佳是 C，85.9）；且藍綠有「綠＝好」的聯想風險；C 的 protan 距離最弱（18.8）、灰階亮度比最低。</p>
 <p>三個候選都：不用紅／綠當好壞、保留實線／虛線與末點標籤（顏色全程不是唯一訊息）、兩線同時存在時不改變單 Y 軸、不畫 band／目標價／100 基準線、缺值仍斷線。<strong>這是建議，不是決定；是否採用、採哪一組、是否要換更保守的色，由客戶裁示。</strong></p>
 </section>
 
@@ -475,7 +475,7 @@ def build_html() -> str:
 </section>
 
 <section aria-labelledby="h-unv"><h2 id="h-unv">NOT VERIFIED</h2>
-<p>Cloud <code>ui_v3</code> URL、部署 SHA、真機、真人色覺測試、客戶是否同意兩線不同色與具體色值、本提案的獨立複驗。<strong>示意殼的字級（13px）與正式頁首導覽（12px／10px，見 #1298 R1）不同，這是示意，不代表正式畫面。</strong></p>
+<p>390 示意殼的圖內 SVG 文字約 9.8–10.7px（<code>chart_svg</code> 既有字級，未動，低於 13px）。Cloud <code>ui_v3</code> URL、部署 SHA、真機、真人色覺測試、客戶是否同意兩線不同色與具體色值、本提案的獨立複驗。<strong>示意殼的字級（13px）與正式頁首導覽（12px／10px，見 #1298 R1）不同，這是示意，不代表正式畫面。</strong></p>
 </section>
 </div>
 </div>
