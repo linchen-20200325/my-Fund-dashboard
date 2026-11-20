@@ -8,7 +8,7 @@
 1. 【F】現存三條合法離線 UI 路徑（NAS 診斷、單檔查詢元件、找基金＋條件篩選）在真 Chromium（390／1280）實際操作皆無缺陷：無橫向溢出、可互動控制項（renderer 內）高度 ≥48px、鍵盤焦點可見、缺值不顯示成 0、全程只出現 FAKE 代碼、無任何個人資料或真實持倉。本次探測**未發現「已授權、不需客戶 Gate 的純修復」**，因此**沒有做任何程式修正**，也就沒有變異負控可附。
 2. 【F】⚙️ 與 🔍 目前都「只存在隔離 poc／未掛載頁」：`registry` 只有 🌍 為 True。⚙️ 只有 NAS 診斷一塊有 renderer（`ui_v3/pages/nas_diag.py`，FAKE 輸入）；「資料健康度」三層**沒有 renderer、沒有 view model**，只有 docs-only 線框。🔍 的 renderer 全在 `poc/`（`DEC-2026-11-19-04` G-A：目前不搬）。
 3. 【F】🔍 現存**兩套互不共用的單碼查詢**：`poc/fund_lookup_component_preview/`（經 `ui_v3.adapters.fund_lookup`＋`viewmodels/fund_lookup.py`）與 `poc/fund_search_fixture_preview/` 上區（自帶 `fund_search_logic.py`，不經 adapter）。同一個 FAKE 碼在兩邊的缺值字樣與無法判定原因句不同（見 §2.3）。
-4. 【I】兩個最小可交付選項都**卡在客戶 Gate，不卡在工程能力**；推薦先裁「⚙️ 分階段」（§5 G1），因為它是唯一能讓新增 UI 工作有明確 DoD 的路徑，且不需動 `registry`。
+4. 【I】兩個最小可交付選項都**卡在客戶 Gate，不卡在工程能力**；推薦先裁「⚙️ 分階段」（§5 P1；本稿 P≠ledger G），因為它能讓 BL-0540 主線有明確 DoD，且不需動 `registry`（選項 B 同樣有 DoD，但價值較低）。
 
 ## 1. 方法（FACT）
 
@@ -54,10 +54,10 @@
 | 頁 | 已可實際操作（【F】） | 只存在 FAKE | 缺 renderer／adapter | 掛載需改的檔與守衛（【I】依 grep；未實際試改） | 客戶 Gate |
 |---|---|---|---|---|---|
 | 🌍 `mkt` | registry True；`app_preview` 有 renderer；controls＋adapter 取數；本稿**未實跑**（有既有 AppTest／browser 守衛） | 無 | 無 | 已掛載 | 無（BL-0559 視覺批另案；BL-0540 G-3 影響其 `▸ 各項資料狀態`） |
-| 💼 `ast` | 本稿未實跑；`pages/assets.py` 僅 FAKE 隔離預覽 | `pages/assets.py` FAKE renderer＋`poc/assets_fixture_preview/` | 正式掛載用 renderer 入口、真來源接線（`adapters/assets_source.py` 無 production 呼叫端，引自 BL-0540 證據，本組未重驗） | `shell/registry.py`、`app_preview.py::renderers`；守衛 `test_ui_v3_page_registry_guard.py`（寫死 `["mkt"]`）、`test_ui_v3_navigation_shell.py:41`、`test_ui_v3_assets_source_import_isolation.py:240`、`test_ui_v3_top_nav_browser.py` 等 | 開放 G2（S-AST-M1，`open_items_ledger` §4） |
+| 💼 `ast` | 本稿未實跑；`pages/assets.py` 僅 FAKE 隔離預覽 | `pages/assets.py` FAKE renderer＋`poc/assets_fixture_preview/` | 正式掛載用 renderer 入口、真來源接線（`adapters/assets_source.py` 無 production 呼叫端，引自 BL-0540 證據，本組未重驗） | `shell/registry.py`、`app_preview.py::renderers`；守衛 `test_ui_v3_page_registry_guard.py`（寫死 `["mkt"]`）、`test_ui_v3_navigation_shell.py:41`、`test_ui_v3_assets_source_import_isolation.py:240`、`test_ui_v3_top_nav_browser.py` 等 | 開放 ledger G2（S-AST-M1，`open_items_ledger` §4；本稿 P≠ledger G） |
 | 🔍 `exp` | 單碼查詢（2.1、2.3 上區）、條件篩選（2.3 下區）皆可操作 | 兩個 poc 預覽全是 FAKE 輸入；選股池情境全為人造 | renderer 住 `poc/`（G-A 不搬）；無正式取數 loader（adapter 只收注入函式）；EXP-6 正式契約未核准 | 同上；另需把 renderer 移進 `ui_v3/pages/`（`LAYER_DEPS["pages"]` 現可 import viewmodels，但 poc 的 `fund_lookup_wording`、`fund_search_logic` 不在 ui_v3 內）；`tests/poc_*` 守衛的 `ALLOWED_PREFIX` | `DEC-2026-11-19-04` 已裁 G-A（轉述〔待核〕）；搬移須新 Gate（Gate-M） |
 | 🤖 `ai` | 不可進（正確） | — | — | `PageSlot` 建構時即擋 registered=True | Phase 7（`DEC-2026-10-29-07`） |
-| ⚙️ `set` | NAS 診斷 13 情境可操作（2.2） | NAS 診斷全為 FAKE；`docs/design/ui_b_settings_data_health_wireframe_2026_11_20.html` 為靜態線框 | **資料健康度三層無 VM、無 renderer**；類別層狀態詞全待客戶定字；`freshness_state` 恆 undetermined（門檻待 Threshold Gate）；NAS 診斷欄位 `infra/proxy.py` 能否產出＝【NV】 | `registry.py`、`app_preview.py`、同 💼 的守衛；`pages/nas_diag.py` 經 `ui_v3.shell.nav` 取斷點常數，非獨立 | BL-0540 G-3（G1）、BL-0550 九項 Pending、BL-0560(a)（⚙️ 不得有獨立 OneBrain 摘要） |
+| ⚙️ `set` | NAS 診斷 13 情境可操作（2.2） | NAS 診斷全為 FAKE；`docs/design/ui_b_settings_data_health_wireframe_2026_11_20.html` 為靜態線框 | **資料健康度三層無 VM、無 renderer**；類別層狀態詞全待客戶定字；`freshness_state` 恆 undetermined（門檻待 Threshold Gate）；NAS 診斷欄位 `infra/proxy.py` 能否產出＝【NV】 | `registry.py`、`app_preview.py`、同 💼 的守衛；`pages/nas_diag.py` 經 `ui_v3.shell.nav` 取斷點常數，非獨立 | BL-0540 G-3（ledger G1；本稿 P≠ledger G）、BL-0550 九項 Pending、BL-0560(a)（⚙️ 不得有獨立 OneBrain 摘要） |
 
 註：⚙️ 唯一與 🌍 的耦合是 BL-0540 要把 `▸ 各項資料狀態` 移到 ⚙️；搬動前提（bl0540 證據 §3、R7）是「⚙️ 掛載、搬遷、入口同批同 PR」。本稿**不建議先做新增入口**（死入口）。
 
@@ -73,20 +73,20 @@
 | 掛載（之後） | 仍需 Gate-M＋BL-0540 同批 PR。 | 仍需 Gate-M＋G-A 反轉。 |
 | 【I】本組讀法 | 價值較高（解鎖 BL-0540 主線），工程量中，客戶決定數 3。 | 價值較低（多為字樣統一），工程量小，但是「重複實作」是否為問題本身待客戶定義。 |
 
-## 5. 可直接裁示的清單（≤3 項；推薦為執行組讀法，可被推翻）
+## 5. 可直接裁示的提案 P1–P3（≤3 項；本稿 P 編號與 `open_items_ledger` 的 G1–G3 是不同東西；推薦為執行組讀法，可被推翻）
 
-**G1｜是否核准「⚙️ 資料健康度分階段」：第一階段只做隔離 FAKE Preview（選項 A），不掛 registry、不搬 🌍 任何揭露**
+**P1｜（本稿 P≠ledger G）是否核准「⚙️ 資料健康度分階段」：第一階段只做隔離 FAKE Preview（選項 A），不掛 registry、不搬 🌍 任何揭露**
 - 選項：(a) 核准；(b) 先只定字樣（類別層狀態詞），暫不做 Preview；(c) 不做。
 - 推薦：(a)。理由：它是 BL-0540 G-3 的前置、與 NAS 診斷同型、不動任何現有已掛頁。
 - 若選 (a)，請同時回答：線框 `ui_b_settings_data_health_wireframe_2026_11_20.html` 是否作為草稿核准（§-1.5.4）。
 
-**G2｜🔍 兩套單碼查詢：維持現狀（G-A）或收斂**
+**P2｜（本稿 P≠ledger G）🔍 兩套單碼查詢：維持現狀（G-A）或收斂**
 - 選項：(a) 維持現狀，僅在 README 並列說明差異；(b) 收斂為單一路徑（走 adapter），缺值／無法判定字樣二選一；(c) 暫不處理。
 - 推薦：(a)。理由：不重複實作的代價目前只是預覽字樣不同，兩邊都是 FAKE；(b) 需先定字樣且觸及已核准預覽。
 
-**G3｜⚙️／🔍 是否授權之後「掛載到 Preview App」的 Gate-M 預審（只做影響清單與守衛差額，不改 registry）**
-- 選項：(a) 授權預審；(b) 暫緩至 G1 完成。
-- 推薦：(b)。理由：G1 沒定前掛載 ⚙️ 只會得到 NAS 一塊；與 BL-0540 要求的「同批同 PR」衝突。
+**P3｜（本稿 P≠ledger G）⚙️／🔍 是否授權之後「掛載到 Preview App」的 Gate-M 預審（只做影響清單與守衛差額，不改 registry）**
+- 選項：(a) 授權預審；(b) 暫緩至 P1 完成。
+- 推薦：(b)。理由：P1 沒定前掛載 ⚙️ 只會得到 NAS 一塊；與 BL-0540 要求的「同批同 PR」衝突。
 
 ## 6. 測試原文輸出
 
@@ -96,7 +96,7 @@
 1971 passed in 574.52s (0:09:34)
 ```
 
-指令：`pytest tests/poc_nas_diag_preview tests/poc_fund_search_preview tests/poc_fund_lookup_component_preview tests/ui_v3/test_ui_v3_nas_diag_renderer.py tests/ui_v3/test_ui_v3_nas_diag_viewmodel.py tests/ui_v3/test_ui_v3_fund_lookup_adapter.py tests/ui_v3/test_ui_v3_fund_lookup_viewmodel.py tests/ui_v3/test_ui_v3_fund_lookup_mutations.py -q -p no:cacheprovider`（`UI_V2_CHROMIUM` 已設）。含 browser slow lane；CI 的 slow lane `continue-on-error`，此結果是本機證據，不是 CI 結論。
+指令：`pytest tests/poc_nas_diag_preview tests/poc_fund_search_preview tests/poc_fund_lookup_component_preview tests/ui_v3/test_ui_v3_nas_diag_renderer.py tests/ui_v3/test_ui_v3_nas_diag_viewmodel.py tests/ui_v3/test_ui_v3_fund_lookup_adapter.py tests/ui_v3/test_ui_v3_fund_lookup_viewmodel.py tests/ui_v3/test_ui_v3_fund_lookup_mutations.py -q -p no:cacheprovider`。測試時 HEAD＝`bf3d61b2013adc4f1aae7aac525f76a003e7a887`（worktree 基準；本報告檔當時尚未 commit，不影響該批測試目標）；環境：scratchpad venv 的 python、`UI_V2_CHROMIUM=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`，未帶 `--noconftest`，無其他旗標。含 browser slow lane；CI 的 slow lane `continue-on-error`，此結果是本機證據，不是 CI 結論。
 
 ### 6.2 治理守衛四檔
 
@@ -106,7 +106,7 @@
 120 passed in 82.90s (0:01:22)
 ```
 
-指令：`pytest tests/test_canonical_rule_consistency.py tests/test_doc_counters.py tests/test_constitution_file_refs.py tests/test_retired_exception_ids.py -q -p no:cacheprovider`（此結果於本檔寫成後執行）。
+指令：`pytest tests/test_canonical_rule_consistency.py tests/test_doc_counters.py tests/test_constitution_file_refs.py tests/test_retired_exception_ids.py -q -p no:cacheprovider`。測試時 HEAD＝`bf3d61b2013adc4f1aae7aac525f76a003e7a887`；執行時 report.md 已寫成但尚未 commit（工作樹含該未追蹤檔）；同 scratchpad venv，未帶 `--noconftest`，無其他旗標。
 
 ## 7. FACT／INFERENCE／NOT VERIFIED
 
