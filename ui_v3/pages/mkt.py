@@ -68,6 +68,7 @@ h1{{font-size:{page} !important;padding:.2rem 0 !important}}
 h3{{font-size:{section} !important}}
 .uv3-pending{{border-bottom:1px dashed {border}}}
 {theme.tone_css()}
+{theme.pill_css()}
 .uv3-st{{white-space:normal}}
 .uv3-st-red{{font-weight:700}}
 .uv3-row{{margin:{theme.v("space.1")} 0;line-height:1.55}}

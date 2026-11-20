@@ -375,6 +375,8 @@ def pill_violations(m):
         for k, v in exp.items():
             if p[k] != v:
                 bad.append(("單選色與 token 不符", i, "selected" if p["selected"] else "unselected", k, p[k], v))
+        if not p["selected"] and p["textColor"] != _rgb(_tok("color.text.primary")):
+            bad.append(("未選項文字色不是 color.text.primary", i, p["textColor"]))
         if p["selected"]:
             if int(float(p["weight"])) < 700:
                 bad.append(("選取項不是粗體（顏色不得是唯一訊息）", i, p["weight"]))
@@ -410,7 +412,7 @@ def token_violations(m):
     a = m["applied"]
     expect = {"appBg": _rgb(_tok("color.page.bg")), "appColor": _rgb(_tok("color.text.primary")),
               "sidebarBg": _rgb(_tok("color.sidebar.bg")), "sidebarColor": _rgb(_tok("color.sidebar.text")),
-              "radioSelectedBg": _rgb(_tok("color.primary")), "h1Color": _rgb(_tok("color.text.primary"))}
+              "radioSelectedBg": _rgb(_tok("color.pill.selected.bg")), "h1Color": _rgb(_tok("color.text.primary"))}
     bad = [("token 未套用", k, a[k], want) for k, want in expect.items() if a[k] != want]
     if a["headerBg"]["backgroundColor"] != _rgb(_tok("color.page.bg")):
         bad.append(("頁首背景不是 color.page.bg", a["headerBg"]))
@@ -826,6 +828,8 @@ def test_mutation_pill_visual_regressions_are_flagged(base_and_browser):
     assert any("圓點沒有隱藏" in v[0] for v in pill_violations(m))
     m = _mutated(base_and_browser, "normal", 390, css=f'{opt}[data-selected="true"]{{background:#1f6feb !important}}')
     assert any("單選色與 token 不符" in v[0] for v in pill_violations(m))
+    m = _mutated(base_and_browser, "normal", 390, css=f"{opt} p{{color:#1f6feb !important}}")
+    assert any("未選項文字色" in v[0] for v in pill_violations(m))
     m = _mutated(base_and_browser, "normal", 1280, css="html body svg.uv3-chart{margin-left:0 !important;margin-right:0 !important}")
     assert centered_violations(m, 1280)
     m = _mutated(base_and_browser, "normal", 1280, css="html body svg.uv3-spark{width:160px !important}")
@@ -833,6 +837,31 @@ def test_mutation_pill_visual_regressions_are_flagged(base_and_browser):
     m = _mutated(base_and_browser, "normal", 1280, css="html body svg.uv3-spark{height:40px !important;width:100% !important}",
                  js="() => document.querySelectorAll('svg.uv3-spark').forEach(s => s.setAttribute('preserveAspectRatio', 'none'))")
     assert any("末點不是正圓" in v[0] for v in spark_violations(m))
+
+
+_STRIP_HAS_JS = r"""
+() => {   // 模擬不支援 :has() 的瀏覽器：從所有樣式表刪掉含 ':has(' 的規則
+  let n = 0;
+  for (const sh of document.styleSheets) { let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+    for (let i = rules.length - 1; i >= 0; i--) { if (rules[i].selectorText && rules[i].selectorText.includes(':has(')) { sh.deleteRule(i); n++; } } }
+  return n;
+}
+"""
+
+
+@pytest.mark.parametrize("width", (390, 1280))
+def test_keyboard_focus_ring_survives_without_has_support_via_data_focus_visible(base_and_browser, width):
+    """S1：Streamlit（react-aria）在鍵盤聚焦時於 label 加 data-focus-visible="true"；拿掉所有 :has() 規則後焦點環仍在。"""
+    base, browser, _ = base_and_browser
+    ctx, page = _open(browser, base, "normal", width)
+    try:
+        assert page.evaluate(_STRIP_HAS_JS) >= 1, "找不到 :has() 規則可移除（守衛本身失效）"
+        f = _focused_period(page)
+        assert not focus_violations(f), (focus_violations(f), f)
+        attr = page.evaluate("""() => document.querySelector('[data-testid="stMain"] [data-testid="stRadioGroup"][aria-label="期間"] input:checked').closest('label').getAttribute('data-focus-visible')""")
+        assert attr == "true", "Streamlit 內部屬性 data-focus-visible 不見了（升版改 DOM？）：備援焦點環已失效"
+    finally:
+        ctx.close()
 
 
 def test_mutation_removed_focus_ring_is_flagged(base_and_browser):

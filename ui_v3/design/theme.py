@@ -4,7 +4,7 @@
 - 只用標準函式庫；零 streamlit import；import 零副作用（只有 def）。
 - 取值一律 Fail Loud：`tokens.value()` 對沒有核准值的 token 直接 raise，不給預設。
 - 只注入在 ui_v3 頁面（`shell.nav.shell_css()` 由 `pages/chrome.render_navigation` 輸出；`pages/mkt.CSS`）。
-  ⚠️ 這裡的 `app_css()` 會覆寫 Streamlit 在 `.streamlit/config.toml` 設的 theme 色（背景／文字／側欄／單選選取色）：
+  ⚠️ 這裡的 `app_css()` 會覆寫 Streamlit 在 `.streamlit/config.toml` 設的 theme 色（背景／文字／側欄／primary 單選點）：
   config.toml 為全 repo 共用（正式入口與 `ui_v2` 也讀它），G3 批不改它，所以覆寫只能住在 ui_v3 自己的 CSS。
   覆寫的選擇器是 Streamlit 的 `data-testid`；Streamlit 升級若改了 DOM，瀏覽器守衛（`test_ui_v3_market_page_browser.py` 的
   「token 實際套用」測試）會轉紅，不會靜默退回 config.toml 的舊色。
@@ -62,11 +62,17 @@ def tone_css() -> str:
 def pill_css() -> str:
     """原生單選（`st.radio`）→ segmented／pill（🌍 視覺批 1；純 CSS，不換 widget 型別，`key` 與狀態契約不變）。
 
+    **只由 `pages/mkt.py` 的 `CSS` 注入**（不在共用的 `app_css()` 內）：assets／nas_diag／poc 預覽等其他頁的 CSS 輸出不含本段，行為不變
+    （它們用 `app_css()` 內原有的圓點規則）。
+
     - 選項＝48px 高膠囊（`size.touch.min`）、圓點隱藏（原生 `input[type=radio]` 仍在 DOM、仍可 Tab 與方向鍵）；
     - 選取＝填 `color.pill.selected.bg`＋粗體（顏色不是唯一訊息：粗體與填色同時出現）；文字色取 `color.pill.selected.text`；
-    - 鍵盤焦點＝2px `color.pill.focus` 外框（`:has(input:focus-visible)`，滑鼠點擊不出環、鍵盤一定出環）；
-    - 「檢視／期間／…」標籤與選項同列（標籤 `type.caption`、無額外上下距），省掉原本標籤獨占一行的 20px 左右。
-    依賴 Streamlit 內部 `data-testid`（80 §17.1 已知限制）；升版若改 DOM，`test_ui_v3_market_page_browser.py` 的 pill 守衛會轉紅。"""
+    - 鍵盤焦點＝2px `color.pill.focus` 外框。兩條**各自獨立**的規則（不可合併成一個選擇器清單：不支援 `:has()` 的瀏覽器會讓整個清單失效）：
+      (1) `label[data-focus-visible="true"]`——Streamlit 1.59.2（react-aria）在鍵盤聚焦時加在 label 上的屬性（實測：鍵盤 Tab 後出現，滑鼠點擊後不出現；
+          poc/dual_theme_isolated 有同款先例）；(2) `label:has(input:focus-visible)`——標準偽類。任一生效即出環；
+    - 「檢視／期間／…」標籤與選項同列（標籤 `type.caption`、無額外上下距）。
+    ⚠️ 依賴 Streamlit 內部 `data-testid`／`data-selected`／`data-focus-visible`（80 §17.1 已知限制）；升版若改 DOM，
+    `test_ui_v3_market_page_browser.py` 的 pill 與焦點環守衛會轉紅。"""
     caption, s1, s2, s3 = v("type.caption"), v("space.1"), v("space.2"), v("space.3")
     radius, touch = v("radius.pill"), v("size.touch.min")
     bg, border = v("color.pill.bg"), v("color.pill.border")
@@ -84,12 +90,13 @@ def pill_css() -> str:
 {opt} p{{margin:0}}
 {opt}[data-selected="true"]{{background:{sel_bg};border-color:{sel_bg}}}
 {opt}[data-selected="true"],{opt}[data-selected="true"] *{{color:{sel_text};font-weight:700}}
+{opt}[data-focus-visible="true"]{{outline:2px solid {focus};outline-offset:2px}}
 {opt}:has(input:focus-visible){{outline:2px solid {focus};outline-offset:2px}}"""
 
 
 def app_css() -> str:
-    """覆寫 Streamlit theme 色（只在 ui_v3 頁面；理由見檔頭）：主內容淺色、側欄深藍；單選 pill（`pill_css`）；expander 邊線。"""
-    page, text = v("color.page.bg"), v("color.text.primary")
+    """覆寫 Streamlit theme 色（只在 ui_v3 頁面；理由見檔頭）：主內容淺色、側欄深藍；primary 單選點；expander 邊線。"""
+    page, text, primary = v("color.page.bg"), v("color.text.primary"), v("color.primary")
     sb_bg, sb_bg2, sb_text = v("color.sidebar.bg"), v("color.sidebar.bg2"), v("color.sidebar.text")
     sb_border = v("color.sidebar.border")
     return f"""
@@ -103,6 +110,9 @@ body,.stApp,[data-testid="stApp"]{{background:{page};color:{text}}}
 /* 側欄目前頁的連結字色：Streamlit 以 primary 衍生一個淡紫（舊 theme）→ 改回側欄文字色；「目前頁」由粗體＋左側色條表示，不靠這個顏色 */
 [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"],[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"] *{{color:{sb_text}}}
 [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:hover{{background:{sb_bg2}}}
-{pill_css()}
+/* 單選的圓點（原生控制項；config.toml 的 primaryColor／背景是舊值）：選取＝primary 實心；未選＝卡片邊線色的 1px 圓環＋卡面色內圈 */
+[data-testid="stMain"] label[data-testid="stRadioOption"][data-selected="true"] > div > div > div:first-child{{background-color:{primary} !important}}
+[data-testid="stMain"] label[data-testid="stRadioOption"]:not([data-selected="true"]) > div > div > div:first-child{{background-color:{v('color.card.border')} !important}}
+[data-testid="stMain"] label[data-testid="stRadioOption"]:not([data-selected="true"]) > div > div > div:first-child > div{{background-color:{v('color.surface')} !important}}
 [data-testid="stMain"] [data-testid="stExpander"] details{{border-color:{v('color.card.border')}}}
 """
