@@ -43,3 +43,26 @@ git show 678812d10cb8d0dfd2c601f98f58242cb746e8f8:results/20261013T185433Z_run38
 - 分支名 `probe/fx-obs-date-results`：另見 `.github/workflows/fx_obs_date_probe.yml`、`tests/test_fx_obs_date_probe_workflow.py`（那兩處是寫入目標設定，不是引用報告內容）。
 
 `docs/v2/49_data_integration_plan.md` 已於上列各處行內補「保存於 main：本目錄路徑」。production 程式、script 與測試檔的引用**未改**（本批不動程式），對應關係只記在本檔與交接本〈第六十六次更新〉。
+
+## 追加保存（2026-11-20）：11-08 探測報告
+
+保存日 2026-11-20。2026-11-08 那次探測的報告原本只存在於報告分支 `probe/fx-obs-date-results` 的 commit 物件（`6b180d6fd3d77f255df8bcebbcf470027abf79c3`），本檔先前三份之外不含這一份；本次依同一慣例（`git show <commit>:<原路徑>` 逐位元組不改、`gzip -9 -n`）落盤到 main。只保存既有檔，未觸發 workflow、未取新資料。
+
+| 本目錄檔名 | 原路徑（分支上） | 引入該檔的 commit | commit 時間 | GitHub run | 報告內 `generated_at_utc` | 報告內 `executed_sha` |
+|---|---|---|---|---|---|---|
+| `20261108T063652Z_run42455423910_report.json.gz` | `results/20261108T063652Z_run42455423910/report.json` | `6b180d6fd3d77f255df8bcebbcf470027abf79c3` | 2026-11-08T06:36:53+00:00 | `42455423910` | 2026-11-08T06:36:50.569726+00:00 | `15538a571f62dfdc6c7b1ef00d5538d47b869bf6` |
+
+| 本目錄檔名 | 原始大小（bytes） | 原始 sha256 | gzip 後 sha256 |
+|---|---|---|---|
+| `20261108T063652Z_run42455423910_report.json.gz` | 908102 | `8fe1aca5de4236847ee24c9c8abc736b828c4d25a81f7074948a4c9d001be5a9` | `031c3bba04658c98de5f5162e0141d51fef87d4802c966412cb937cfd2689531` |
+
+驗證指令（repo 根目錄執行；兩行輸出應相同，且等於上表「原始 sha256」）：
+
+```
+gzip -dc docs/evidence/probe_fx_obs_date/20261108T063652Z_run42455423910_report.json.gz | sha256sum
+git show 6b180d6fd3d77f255df8bcebbcf470027abf79c3:results/20261108T063652Z_run42455423910/report.json | sha256sum
+```
+
+對本次保存的 gzip 另做的檢查（2026-11-20 實跑）：`gzip -dc` 後 sha256 與 `git show` 原檔一致，皆為 `8fe1aca5…`；保存檔大小 136739 bytes，低於 `check-added-large-files` 的 500KB 上限。引用本份報告的離線重算見 `docs/evidence/fx_m1a_offline_recompute_2026_11_20.md`。
+
+備援與可攜驗證：原始報告仍在分支 `probe/fx-obs-date-results`（commit `6b180d6fd3d77f255df8bcebbcf470027abf79c3`，該分支本批未動），本檔保存為 main 上的另一份備援。上表「gzip 後 sha256」取決於 gzip 實作與版本，換環境重新壓縮不保證相同；**可攜的驗證只有解壓後 sha256 ＝ `8fe1aca5…`**（上列驗證指令的第一行）。
