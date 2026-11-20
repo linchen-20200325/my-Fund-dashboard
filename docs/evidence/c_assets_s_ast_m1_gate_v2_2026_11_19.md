@@ -2,10 +2,12 @@
 
 > **兩點先講清楚**：(i) **「改固定情境③」是作者（執行組）推薦【R】，不是客戶核准的 A1a 內容**——客戶方向（〔待核〕轉述）只含「A1a 安全修正版」與條件，未指定情境；(ii) 本卡內的條件編號 (1)～(8)（以及 §a／§b／§e／§f 引用的「條件 (n)」）是**作者自編、非來源編號**，與 `DEC-2026-11-19-01` S-a(1)～(7) 的條號無關；提到 S-a 時一律寫「S-a(n)」。
 
+> **卡狀態（2026-11-20 起）**：單組草稿；稽核 1 組（與作者共享派工來源）；修正後未複驗。2026-11-20 稽核結果見文末「2026-11-20 獨立稽核後修正」節（[F]／[I]／NV 標記），其更正就地以刪除線＋新句呈現。
+
 > 單組執行組唯讀草稿，**未經第二組獨立複驗**；不是授權、不是 DEC、不改 repo（突變實跑只在 `git archive` 暫存副本）。
 > 標記：【F】事實（讀檔／實跑）、【I】推論、【R】執行組推薦（可被推翻）、【未驗】。不寫行號。
 > **裁示來源**：下列「已方向核准」皆為 ChatGPT 總管轉達、客戶經其轉述〔待核〕，**非客戶逐字、repo 無原文**；本卡不把方向寫成逐字規格，不捏造引言。
-> 基準 `origin/main` `eb08c5fc`（重核）。【F】自 `0cfd86b9` 起 `ui_v3`／`poc`／`tests` 無任何變動，僅 docs（#1285、#1286；#1286 已把上一版卡落為 `docs/evidence/c_assets_s_ast_m1_gate_card_2026_11_19.md`，本組未重讀該檔）。**原 A1a（固定 ⑤）作廢，不得直接施工。**
+> ~~基準 `origin/main` `eb08c5fc`（重核）。【F】自 `0cfd86b9` 起 `ui_v3`／`poc`／`tests` 無任何變動，僅 docs（#1285、#1286；#1286 已把上一版卡落為 `docs/evidence/c_assets_s_ast_m1_gate_card_2026_11_19.md`，本組未重讀該檔）。~~ **（2026-11-20 有意識的更正，不是漏刪：原句在 `eb08c5fc` 當時為真；被推翻的是它的前提——#1299 與 #1298 之後 `ui_v3`／`tests` 已有變動，見文末 M1。兩邊理由：舊基準讓本卡讀碼有確定版本，仍有追溯價值；但「無變動」「一字不動」已不成立，沿用會讓人在過期基準上施工。）** 現行基準：`origin/main` `72b64531`（2026-11-20 查 `git log origin/main`；施工前須再取最新 SHA 並重核）。**原 A1a（固定 ⑤）作廢，不得直接施工。**
 
 ## 0　結論
 
@@ -18,11 +20,11 @@
 |---|---|---|---|---|
 | **X1（推薦）固定情境③** | `_render_ast` 吃與③相同的封包；基準列走既有「set 但無值」路徑 | **無 VM／adapter／renderer／fixture 內容變更**；新增一個純常數函式（見 §d）＝既有③封包的複本，以 drift 測試鎖等於 `tests/ui_v3/assets_page_support.py::market_blocked_result()` | 基準 `◇ 資料未備`（已核准字樣） | **滿足條件 (1)、(7)** |
 | X2 ⑤＋基準「未設定」 | 在⑤封包把 `settings_status.alo_basis` 設 `unset` | 僅 fixture 層一個鍵；實渲染：基準 `⬜ 未設定`（`user_param_unset`，已核准字樣） | 不顯示設定值，但**宣稱「使用者尚未設定基準」＝仍是對個人設定狀態的 FAKE 陳述** | 可行但較差；僅在客戶要「選定來源」敘事時備用 |
-| X3 改 renderer／VM 隱藏基準列 | 動 `ui_v3/pages/assets.py` 或 adapter | VM／renderer＋既有 renderer／adapter 測試 | — | **不滿足「優先既有」，且動已驗收程式；不採** |
+| X3 改 renderer／VM 隱藏基準列 | 動 `ui_v3/pages/assets.py` 或 adapter | VM／renderer＋既有 renderer／adapter 測試 | — | **不滿足「優先既有」，且~~動已驗收程式~~（2026-11-20 更正：`assets.py` 已於 #1299 `adb760e2` 改過〔`st.title(..., anchor=False)`、A10 `h4`→`div role=heading`〕，故「已驗收、未動」之說不實；仍不採的理由改為「不滿足優先既有」＋改它會牽動已被 #1299 重新量測過的版面證據）；不採** |
 | X4 維持⑤（顯示「成本」） | — | — | FAKE 個人設定值 | **違反條件 (1)，禁止** |
 
 【F】已知舊落差照舊（`blocked_basis_state_without_value`：③ 的基準狀態是 set 但無值，顯示 `◇ 資料未備`）——poc README 已登記，本版不處置。【I】③ 的 A10 原因句「配置比較的計算口徑尚未核准，故不提供結果」為既有 PendingWording，非核准字樣。
-【F】③ 是否等同「production 載入端現況」：BACKLOG／gap supplement 記載載入端在市值基準下一律 blocked、不讀持倉（本組未重驗）。【I】故③頁面是誠實的「現況空狀態」，不是假資料頁；代價＝**可見進展僅限「💼 在 Preview 可進入、版面與缺值語意可審」，沒有任何資料。**
+【F】③ 是否等同「production 載入端現況」：BACKLOG／gap supplement 記載載入端在市值基準下一律 blocked、不讀持倉（本組未重驗）。~~【I】故③頁面是誠實的「現況空狀態」，不是假資料頁；~~（2026-11-20 有意識的更正，不是漏刪：此為建立在未重驗載入端記載上的推論，不應寫成結論；見 §i M3。舊句理由——③ 確無任何假值——仍成立，被權衡掉的是「等於現況」這半句。）代價＝**可見進展僅限「💼 在 Preview 可進入、版面與缺值語意可審」，沒有任何資料。**
 
 ## b　導覽標記與頁頂標記機制（作者自編條件 (2)(3)(4)）
 
@@ -58,7 +60,7 @@
 | 7 | `test_ui_v3_preview_not_formal_guard.py::test_preview_main_fails_loud_when_registered_page_has_no_renderer` | 以 `ast` 當「已掛載但無 renderer」 | 僅把被突變的 slug `ast` 換為 `exp`；仍須 `pytest.raises(NotImplementedError)` |
 | 8 | `test_ui_v3_top_nav_browser.py::test_mobile_top_nav_states_and_aria`（slow） | `cells[1:]` 皆 aria-disabled、無 href、文字含「開發中」；Tab 只聚焦 🌍 | `cells[0]`、`cells[1]` 為可進（href 非空、無 aria-disabled）；`cells[2:]` 保留原斷言（`_SOON` 去掉「資產」）；Tab 路徑 in-nav 恰 2 個（市場、資產）；**新增**：資產格旁有 `data-nav-demo` 標記、文字不含「開發中」、標記非 `aria-disabled` |
 
-**重核「≥8 條」**：【F】實跑突變（registry 翻 ast＋adapters 常數＋`_render_ast`，無 streamlit）仍只轉紅 #1、#2（另 2 條既有環境失敗為缺 `requests`，與本案無關）；#3～#8 為讀碼推論未執行（需 streamlit／Chromium）。**本版仍是 8 條**，但**上一版的 4 條「FAKE 供應處」條件式守衛本版不再觸發**——因為封包放 `ui_v3/adapters/` 而非 `ui_v3/fixtures/`：【F】實跑確認 `fixtures_are_fake_guard`／`import_guard`／`preview_module_has_no_module_level…` 皆不轉紅（【I】`test_page_imports_no_fixtures_and_no_old_ui` 同理不紅，AppTest 未執行）。**不再需要放寬 fixtures 相關守衛**。
+**重核「≥8 條」**（2026-11-20 加註：僅 #1、#2 為實跑；#3～#8 為讀碼推論、「僅此 8 條」為單組全稱句未驗，且另有未列入的受影響測試，見 §i Should-Fix 3）：【F】實跑突變（registry 翻 ast＋adapters 常數＋`_render_ast`，無 streamlit）仍只轉紅 #1、#2（另 2 條既有環境失敗為缺 `requests`，與本案無關）；#3～#8 為讀碼推論未執行（需 streamlit／Chromium）。**本版仍是 8 條**，但**上一版的 4 條「FAKE 供應處」條件式守衛本版不再觸發**——因為封包放 `ui_v3/adapters/` 而非 `ui_v3/fixtures/`：【F】實跑確認 `fixtures_are_fake_guard`／`import_guard`／`preview_module_has_no_module_level…` 皆不轉紅（【I】`test_page_imports_no_fixtures_and_no_old_ui` 同理不紅，AppTest 未執行）。**不再需要放寬 fixtures 相關守衛**。
 **必須「不改即過」的既有守衛**（驗收項；任何一條「需改才過」＝超出本例外，**回 Decision Gate 或落 A0**）：
 - `test_ui_v3_top_nav_browser.py` 共 5 個測試函式：`test_mobile_top_nav_five_equal_visible_cells_at_least_48px`、`test_mobile_top_nav_states_and_aria`（＝§c #8，唯一允許改的）、`test_desktop_keeps_sidebar_and_hides_top_nav`、`test_top_nav_survives_190_percent_text_without_clipping_or_scrolling`、`test_top_nav_scrolls_away_with_the_page_flow`；其餘 4 條須不改即過。
 - `test_ui_v3_market_page_browser.py`：`test_top_nav_s1_five_cells_mobile_and_sidebar_desktop` 與其 mutation／版面測試——🌍 頁頁首同樣會多出 demo 標記，須驗不破壞。
@@ -67,7 +69,7 @@
 - `poc_fund_search_preview`／`poc_fund_lookup_component_preview`／`poc_nas_diag_preview` 三組守衛：以子字串掃 `registry.py`、`app_preview.py`、`shell/*`、`pages/*`（禁字含 `fund_search`、`fund_lookup_component`、`nas_diag`、`NAS`、`poc`；registry 內連 `poc` 子字串都不能有），且整個 `ui_v3/**` 禁含 `poc/`。
 - `tests/test_canonical_rule_consistency.py`：`nav.py` 須仍含 `TOP_KEY = "uv3-top-nav"`。
 - `test_ui_v3_navigation_shell.py`：`test_css_switches_between_sidebar_and_top_nav_at_one_breakpoint`（新規則不得進入 `.st-key-uv3-top-nav{…}` 主塊、不得 `position:`／固定高度）；`test_shell_files_do_not_call_refresh_or_cache_clearing_or_fetch`（`nav.py`／`chrome.py` 不得含 `global_refresh_all`、`clear_all_caches`、`cache_clear`、`st.cache`、`fetch_url`、`session_state.pop`）；`test_shell_wording_lives_only_in_the_rules_table…`（`shell_*` 恰 19 鍵）；`test_old_provisional_shell_wording_is_banned…`。
-- `test_ui_v3_preview_wording_guard.py::test_no_pending_text_equals_or_embeds_an_approved_registry_wording`：新字樣不得等於／內含已核准字樣，**且不得含符號 ◆◇⬜⛔◷**。
+- `test_ui_v3_preview_wording_guard.py::test_no_pending_text_equals_or_embeds_an_approved_registry_wording`：新字樣不得等於／~~內含~~已核准字樣，**且不得含符號 ◆◇⬜⛔◷**。（2026-11-20 有意識的更正：守衛實際只檢整串相等與符號，不檢子字串內含，見 §i Should-Fix 6。）
 - `test_ui_v3_no_engineering_leak_guard.py`、`test_ui_v3_degraded_first_screen_budget.py`、`test_ui_v3_market_page_apptest.py`、`test_ui_v3_first_screen_c_and_wording_unify.py`：掃 `at.markdown`／sidebar 的名額與字樣——**標記文字不得含方向詞／工程詞，不得使用 `uv3-chip`／`uv3-evidence` class**（否則計入首屏名額或違 Shell 不放 chip 裁示）。
 - `test_nothing_in_ui_v3_references_the_adapter…`：新檔與 docstring 不得含 `assets_source` 字樣。
 【未驗】守衛搜尋只用字面詞，未列者可能仍漏；slow／browser 層其餘守衛未讀。
@@ -77,7 +79,7 @@
 **白名單（共 5 改＋1 新生產檔）**：`ui_v3/shell/registry.py`、`ui_v3/shell/nav.py`、`ui_v3/pages/chrome.py`、`ui_v3/viewmodels/preview_wording.py`、`ui_v3/app_preview.py`；新增 `ui_v3/adapters/assets_demo_envelope.py`（純常數函式，回傳與③相同的無值「市值基準未開放」封包；不 import 任何東西；檔名與 docstring 不得含 `assets_source`、`poc/`）。**同批必須更新的過時 docstring（在白名單檔內，不另增檔）**：`ui_v3/app_preview.py` 開頭「preview 不得顯示 fake 資料」（改為如實描述：🌍 為真實資料頁；💼 為離線示範頁、封包無任何值）；`ui_v3/shell/registry.py` 開頭「`registered` 是『已有核准 wireframe 且已實作的頁』」（補 `data_mode` 與 💼 以離線示範掛載的例外說明）。docstring 一律不得含 `poc/`、`poc`、`assets_source`。**測試**：改 §c 的 8 條；新增 `tests/ui_v3/test_ui_v3_assets_demo_mount.py`（見 §e），其中**新增一條機械守衛專鎖新檔**：封包 `evidence is None`、`holdings` 無列、封包遞迴掃描無金額／持倉值欄位（以 `build_assets_page` 結果驗 `a50` 為 status-only、`a10.basis_value is None`）。
 【R】封包放 `adapters/` 的理由：`app_preview` 禁 import `ui_v3.fixtures`、`ui_v3` 禁含 `poc/`；放 adapters 不觸發任何 fixtures／層級守衛。【I】代價＝adapters 層語意本是「真實取數轉接」，此檔是無值示範封包，須在 docstring 明寫；替代方案「封包直接寫在 `_render_ast` 函式內」亦不觸發守衛但較難測，本組未實測。
 
-**不得碰**：frozen `docs/v2/44_fund_ui_ssot.md` 與 `docs/v2/44*`、其他 `docs/**` 類檔案（文件同步另批）；`shared/ui_semantics/rules.py`；`ui_v3/viewmodels/assets_page.py`、`assets_preview_wording.py`、`ui_v3/adapters/assets_page.py`、`assets_source.py`、`ui_v3/pages/assets.py`（renderer／VM／adapter 一字不動）；`ui_v3/fixtures/**`；`poc/**`；`services/`、`repositories/`、`shared/`（rules 外）、`infra/`；`ui_v2/**`、`app.py`、`ui/**`；`.github/**`；正式 registry 以外的頁（🔍／🤖／⚙️ 仍未掛載）；任何 `st.secrets`／環境變數／網路／Sheet 存取。
+**不得碰**：frozen `docs/v2/44_fund_ui_ssot.md` 與 `docs/v2/44*`、其他 `docs/**` 類檔案（文件同步另批）；`shared/ui_semantics/rules.py`；`ui_v3/viewmodels/assets_page.py`、`assets_preview_wording.py`、`ui_v3/adapters/assets_page.py`、`assets_source.py`、`ui_v3/pages/assets.py`（renderer／VM／adapter ~~一字不動~~〔2026-11-20 更正：`assets.py` 在 `eb08c5fc` 之後已被 #1299 改動；本卡的意思是「本批施工不再動它」，不是「它自卡片基準起沒變」。舊句在 `eb08c5fc` 時為真，被推翻的是前提〕）；`ui_v3/fixtures/**`；`poc/**`；`services/`、`repositories/`、`shared/`（rules 外）、`infra/`；`ui_v2/**`、`app.py`、`ui/**`；`.github/**`；正式 registry 以外的頁（🔍／🤖／⚙️ 仍未掛載）；任何 `st.secrets`／環境變數／網路／Sheet 存取。
 
 ## e　驗收清單（作者自編條件 (6)；全部需 exact-head CI 四 lane success＋獨立 QA）
 
@@ -85,7 +87,7 @@
 2. **AppTest**：`AppTest.from_function` 直接跑 `_render_ast`（【I】`AppTest` 對 `st.navigation` 頁切換的支援依 Streamlit 版本，未驗，不以它切頁）；socket 攔截下無網路、不讀憑證環境變數（沿用 poc 既有手法）；橫幅在 `st.title` 之前；頁面無 engineering leak。
 3. **導覽 AppTest**：`render_navigation` 下 `ast` 的 page_link 存在、短標「資產」「我的資產」未變；標記元素有 `data-nav-demo`、**無 `aria-disabled`、無 `uv3-nav-soon`／`uv3-tn-soon`**；`exp`／`ai`／`set` 仍是 soon 且 aria-disabled。
 4. **Chromium（slow lane；沿用 `test_ui_v3_top_nav_browser.py` 的 `base_and_browser`、`_MEASURE`）**：在 374／375／390／768 驗五格全可見、等寬（±1px）、每格 ≥48px、文字不被裁、整頁與頁首無橫向溢出；190% 字放大五格仍可見（含 demo 標記不被裁）；≥769／1280 側欄在、頁首隱藏、側欄 💼 項可點且旁有標記；進入 `/ast`（url_path）在 **390 與 1280** 量測：橫幅在頁頂、無橫向溢出、A60 `<details>` 高度 48px 可開合且不產生 websocket client→server 訊息、首屏標記 5。
-5. **字樣**：新 PendingWording 皆有來源標示、不等於／不內含已核准字樣、不進 `rules.py`、不以 `shell_` 開頭、source 不含 `poc/`。
+5. **字樣**：新 PendingWording 皆有來源標示、不等於~~／不內含~~已核准字樣、不含符號、不進 `rules.py`（「不內含」2026-11-20 更正：守衛不檢，見 §i）、不以 `shell_` 開頭、source 不含 `poc/`。
 6. **獨立 QA**：治理／守衛修改＋Shell 變動屬高風險，≥1 組非作者獨立稽核（`DEC-2026-10-16-05`）；開工前依 `PROJECT_RULES.md` §5.1 重評 Model／Effort（該表本組未讀【未驗】）。
 7. **完成宣稱上限**：只能寫「fixture／Chromium 層」，不得寫 Cloud／真機／像素驗收、不得寫 💼 正式完成；BL-0544 的 Cloud／非作者 QA 缺口不因此關閉。
 8. **落 A0 的觸發（作者自編條件 (8)；任一成立即停、保留隔離預覽、回報）**：需改 VM／adapter／renderer／rules.py；五格量測不過且唯一解法是改短標、縮小觸控區或移除標記；§c 任一守衛需超出「僅允許的修改形狀」；標記無法與 soon 語意區隔；新增檔必須含 `poc/` 或 import fixtures；需任何真實資料／Sheet／網路。
@@ -115,3 +117,41 @@
 4. 「③＝production 載入端現況」引自 BACKLOG／evidence，本組未重驗；#1286 落檔的上一版卡本組未重讀。
 5. 所有客戶方向皆〔待核〕轉述；導覽標記字詞、橫幅字樣皆未核准；`AppTest` 對 `st.navigation` 切頁支援未驗。
 6. 守衛清單以字面詞搜尋，可能漏列；slow／browser 層除 `top_nav_browser` 外未讀。
+
+## i　2026-11-20 獨立稽核後修正（稽核 1 組，與作者共享派工來源；以下修正未經複驗）
+
+> 標記：[F]＝讀檔／`git` 可重現；[I]＝推論；NV＝NOT VERIFIED。本節不是客戶裁示、不是授權；不改 `DEC-2026-11-19-09` 任何字。
+
+**M1　基準過期（[F]）**
+- 2026-11-20 `git log origin/main` 最新為 `72b64531`；`eb08c5fc` 之後 `ui_v3`／`tests` 有變動：`git diff --name-only eb08c5fc origin/main -- ui_v3 poc tests` 含 `ui_v3/pages/assets.py`、`ui_v3/shell/nav.py`、`ui_v3/design/theme.py`、`ui_v3/design/tokens.py`、`ui_v3/pages/mkt.py`、`ui_v3/pages/chart_svg.py`，以及 `tests/ui_v3/` 下 `assets_page_renderer`、`design_tokens`、`market_page_browser`、`navigation_shell`、`token_contrast` 與 `tests/poc_assets_preview/` 兩檔。
+- #1299（merge `b6603f23`）對 `assets.py`：`st.title(PAGE_TITLE, anchor=False)`；A10 標題由 `<h4>` 改為 `<div class="uv3-card-title" role="heading" aria-level="4">`（避免 Streamlit 自動標題錨點造成看不見的 Tab 停駐點）。#1298（`8ebb5290`，市場頁視覺批 2）另動 `nav.py`／`theme.py`／`tokens.py`／`mkt.py`。
+- 故 §0「自 `0cfd86b9` 起 `ui_v3`／`poc`／`tests` 無變動」、§d「`ui_v3/pages/assets.py` 一字不動」、§a X3「動已驗收程式」三句已就地劃線更正。
+- `DEC-2026-11-19-09` F1 引用 `eb08c5fc` 的處置：**只在本卡內註明**，不改該 DEC；該 DEC 引用的是當時基準，仍為歷史事實。
+- NV：§b／§c 對 `nav.py`／`chrome.py`／各守衛的描述是以 `eb08c5fc` 讀的，**在 `72b64531` 上未逐項重讀**（含 #1298 對 `nav.py` 的改動）；施工前須整體重核。
+
+**M2　D4（固定情境③）與條件 (1)——選項空間實質只有 ③**
+- [F] 在 `poc/assets_fixture_preview/assets_fake_inputs.py` 的情境建構器中，`market_blocked_result()`（③）是唯一傳 `evidence=None` 者；其餘情境建構器均經 `fake_evidence(...)` 產生證據，其預設 `basis_value="成本"`、`basis_status="set"`，**掛載後 A10 會顯示「成本」**（本組讀建構器原碼，未逐一渲染其餘 10 個，故「會顯示」為讀碼推論 [I]）。
+- 結論：條件 (1)（不顯示個人設定值／假成本）在 11 個既有情境中**只有 ③ 可滿足**；X1 的「推薦」其實是「唯一不需改程式的可行解」，不是從多個等價選項中挑出。X2 仍需改 fixture 層，X3／X4 如表。
+- 代價（須客戶知悉）：選 ③ 後，**A50（持倉）／A60（來源與缺項證據）已驗收版面在 Preview 永遠看不到內容**——③ 的 A50 是 status-only、無持倉列，已驗收的列版面與 A60 展開內容無從審視；Preview 可審的只剩「可進入」與缺值語意。
+
+**M3　「③ 是誠實現況空狀態」是推論（[I]）**
+- §a 該句依據「production 載入端在市值基準下一律 blocked」的 BACKLOG／evidence 記載，**本組未重驗**。
+- NV：「固定封包是否等於 production 現況」。若不等，**等於以常數假冒系統狀態**（頁面宣稱「資料未備／無法判定」，實際系統可能能讀到持倉）。
+- 風險張力：頁頂「FAKE」橫幅說「這是測試資料」，與③「這是現況空狀態」兩種語意並陳，使用者可能讀成「現況是假的」或「空狀態是假的」；與 §b 的選字張力同源，列入 §g 待確認。
+
+**Should-Fix**
+1. **不做空殼 vs registered 定義（[F]／[I]）**：掛載 💼 為 `registered=True` 與 registry docstring 對 `registered` 的定義（「已有核准 wireframe 且已實作的頁」）、`DEC-2026-10-27-10`／`-12`（不做空殼頁的相關裁示）、`REASON_WIREFRAME_PENDING` 的語意是否相容，**未判定**；③ 頁無任何資料，是否構成「空殼」須客戶／總管裁。已列入 §g。（本組未重讀上述 DEC 逐字，NV。）
+2. **Preview URL 可見對象（NV）**：`DEC-2026-11-19-01` 的未驗清單含 Preview 對外可見範圍；掛載後 💼 頁對誰可見未驗。已列入 §g。
+3. **「8 條守衛」標題加註**：§c 的「8 條」中，#1、#2 為實跑突變轉紅（[F]）；**#3～#8 為讀碼推論（[I]），「僅此 8 條、無其他」是單組全稱句，未驗**。另補列一條**受影響但原未列入「不改即過」清單**的測試：`tests/ui_v3/test_ui_v3_navigation_shell.py::test_not_yet_open_label_is_not_open_for_ai_and_under_development_for_the_rest`（其 `labels` 斷言含 `"ast": "開發中"`；`ast` 改為可進後，`soon_key` 是否仍被該測試以 `nav_items()` 全五項取用須重核，若有改動需併入 §c 修改範圍或確認不改即過）。
+4. **導覽標記 CSS 風險（[I]）**：`nav.py` 手機版 `.st-key-uv3-top-nav` 為 `display:flex` 一列，每格 `> div` 為 `flex:1 1 0`；標記作為連結的兄弟元素，可能壓縮連結可點寬度或改變格高。現有 browser 測試的 `_MEASURE` 量的是連結／soon 格，**量不到標記本身**；§e-4 的 Chromium 量測須**明寫涵蓋標記元素本身**（寬度、不被裁、不遮連結、≥48px 觸控區不受影響）。
+5. **§g-4b 補充**：除 Status Bar PREVIEW 與頁尾提示缺席外，**側欄「資料狀態」區與「更新資料」CTA 在 💼 頁也會缺**（`_render_ast` 不呼叫 `chrome.render_status`／`render_footer`）；另 `page_icon="🌍"` 寫死，💼 頁的瀏覽器分頁圖示與頁籤標題會是 🌍 市場頁的——是否可接受須確認。
+6. **§e「新字樣不得內含已核准字樣」改寫（[F]）**：依實際守衛 `test_no_pending_text_equals_or_embeds_an_approved_registry_wording`，守衛只檢 (a) 暫時字樣**整串**不等於任一已核准字樣、(b) 不含規則表符號（◆◇⬜⛔◷）；**並不檢查「內含已核准子字串」**。故 §e 與 §c 倒數第三項中「不得內含」之說，應改為「不得整串相等、不得含符號」；是否另自律不內含已核准子字串，屬作者慣例而非守衛強制。
+7. **§g 的捆綁拆題**：原 §g 把多件事捆成一串；改為依序由客戶一題一答（每題附推薦，[R]可被推翻）：
+   - **Q1**　要不要掛 💼（含「③ 空狀態＋FAKE 橫幅」情境，及「不做空殼」疑慮）？推薦：僅在客戶接受 M2／M3 代價時才掛，否則 A0。
+   - **Q2**　導覽標記與頁頂橫幅字樣（「FAKE」或其他；字樣最終需核准）。
+   - **Q3**　S-a(7) 例外守衛的修改形狀（§c 逐條；僅 💼、不刪斷言、不改 `rules.py`）。
+   - **Q4**　Shell 新增結構（`PageSlot.data_mode`、`NavItem.demo`、`adapters/assets_demo_envelope.py`）與放置位置（`adapters/` vs `fixtures/` 取捨）。
+   - **Q5**　施工授權與 Model／Effort（Change Gate；高風險至少 1 組真獨立稽核）。
+   Q1 否決則 Q2～Q5 不必問。
+
+**本節未驗事項彙總**：NV——§b／§c 在新基準上的重核、其餘 10 情境的實際渲染、「③＝production 現況」、Preview URL 可見對象、`DEC-2026-10-27-10`／`-12` 逐字、`test_not_yet_open_label…` 對 `ast` 改可進的實際反應。本節由稽核後修正組單組寫成，未經複驗。
