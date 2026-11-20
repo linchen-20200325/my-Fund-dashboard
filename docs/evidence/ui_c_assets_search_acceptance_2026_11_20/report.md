@@ -11,10 +11,22 @@
 |---|---|---|
 | 1 | 💼（11 個 FAKE 情境）與 🔍（找基金篩選預覽、單檔查詢元件）在 390／1280：無橫向溢出、最小字級 13px、摘要／輸入／按鈕／核取框觸控目標 ≥48px、Tab 順序＝視覺順序、焦點變化可見（唯一例外 Streamlit 自己的捲動容器，D3） | FACT |
 | 2 | 缺值一律走缺值字樣，沒有任何一處把缺值顯示成 0；FAKE 資料無網址／試算表 ID／例外字串／內部鍵外洩；兩頁無 AI／OneBrain／Digest 字樣、無 ActionSlot；頁面對外請求 0 | FACT |
-| 3 | 找到 1 個明確缺陷並已最小修正：💼 頁多 2 個看不見的 Tab 停駐點（Streamlit 自動標題錨點 16×16）；不改版面（幾何差 ≤0.3px）、不增刪元件、不改資料語意；已加單元＋瀏覽器測試與變異負控 | FACT |
+| 3 | 找到 1 個明確缺陷並已最小修正：💼 頁多 2 個看不見的 Tab 停駐點（Streamlit 自動標題錨點 16×16）；不改版面（幾何差 ≤0.3px【INFERENCE／未入庫證據，見 §0.1】）、不增刪元件、不改資料語意；已加單元＋瀏覽器測試與變異負控 | FACT |
 | 4 | 另有 7 項只記錄不修的差額（D2–D8） | FACT |
 | 5 | 距離正式掛載共 5 道 Gate（§5）；最大單一阻擋：修正版 S-AST-M1 Gate 與 FAKE 標記字樣未經客戶核准；其次 🔍 renderer 仍住 `poc/` 須先搬模組 | FACT／INFERENCE |
 | 6 | 完成宣稱上限：本機 Chromium＋fixture。未驗 Cloud／真機／WebView／讀屏／768px／190% 字放大；未合併、本報告撰寫時未跑 exact-head CI | NOT VERIFIED |
+
+## 0.1 非作者 QA 後的揭露與降級（2026-11-20；QA 與作者共享派工來源，非人類層級獨立）
+
+| 項目 | 揭露 |
+|---|---|
+| 幾何數字（M1） | 「A10 高 179.5→179.2px、幾何差 ≤0.3px」**降為 INFERENCE／未入庫**：已入庫 JSON 無幾何欄位、量測腳本未入庫、前後截圖同名被覆蓋。可重現的只有：錨點 22 筆（11 情境×2 寬度）前 2／後 0、可見文字逐字相同（抽核一組）、前後截圖位元組數不同（像素確有微差）。computed-style 比對（color／font-family／letter-spacing／line-height／padding）未做，「樣式對齊原 h4」是對 Streamlit 預設 h4 樣式的推定，**未實測** |
+| Shell 最小字級（S4） | §0 第 1 列「最小字級 13px」只適用隔離預覽頁；`measure_unmounted.json`（正式 Preview Shell）390 寬最小字級 10px（「開發中」標籤）、1280 寬 12px（導覽短標與 PREVIEW 標籤）。掛載後 💼 將落在此 Shell 內；與 BL-0561 R1（caption 12→13）同類，**只登記不處置** |
+| 🔍 洩漏掃描範圍（S5） | AI／OneBrain／洩漏掃描對 🔍 只涵蓋 idle 態；`network_non_local_requests` 為單一全域欄位、未標明涵蓋哪些頁 |
+| 修正的授權依據（S6） | 本修正的判斷依據是 `CLAUDE.md` §-1.5.4 兩步判定（第 1 步：只換 DOM 標籤與兩個無障礙屬性，不動版面結構、元件存在與動線；第 2 步：「多出看不見的 Tab 停駐點」是缺陷，`nas_diag` 與 🔍 兩預覽有先例）＝「修正錯誤，內部自決」，為 QA 與實作組的**判斷，非客戶裁示**；派工依據為 #1296 C 線第 5 點「已有授權的安全 UI 改善可另開最小 PR」。另揭露：`c_assets_s_ast_m1_gate_v2_2026_11_19.md` 除 §d（`assets.py`「一字不動」）外，§a 的 X3 列也以「動已驗收程式；不採」排斥動 `assets.py`；該 v2 卡為執行組草稿、未核准 |
+| 🌍 可能同類（I4，推論） | 讀碼：`ui_v3/pages/mkt.py` 的 `st.title(PAGE_TITLE)` 未帶 `anchor=False`，且卡片標題以 markdown 內 `<h4>` 輸出；🌍 可能有同類 Tab 停駐點。**本批未量 🌍、不宣稱有或沒有**；本 PR 不得動正式頁面，登記為後續可查項 |
+| role／aria-level（I2） | 「`role="heading" aria-level="4"` 被 Streamlit 保留」目前只由單元測試（原始碼字串）支撐；瀏覽器級斷言與正控由後續 commit 補（見 PR 描述） |
+| 其他 Nit | 截圖：1280 寬的 💼 截圖只有代表性子集（6 張，非 11 情境全部）；`unmounted_url_ast_1280.png` 與 `unmounted_url_exp_1280.png` 位元組數相同，疑為同一畫面（未逐位元組比對）；`measure_search.json`／`measure_lookup.json` 的 `clippedCount`（3／1）看似 1px 視覺隱藏的核取框標籤（Streamlit），未逐一查證；AST 守衛只涵蓋 `st.title`，未涵蓋 `st.header`／`st.subheader`／markdown `#`（目前頁面未用）；`measure_unmounted.json` 內的 `127.0.0.1:8604` 為 loopback，無害 |
 
 ## 1. 環境與方法
 
@@ -39,7 +51,7 @@
 | 缺值≠0 | ✅ A20 四格 11 情境皆 `◇ 資料未備`；A60 件數整數照顯示、`None` 一律 `◇ 資料未備` | ✅ 缺格 `⬜ 資料未備`；篩選計數 0 為 FAKE 池真實計數 | ✅ 缺欄「此欄尚無可顯示的值」 |
 | FAKE 與真資料分隔 | 頁頂虛線框（harness）＋`FAKE` 前綴；**卡片本身無 FAKE 標記**（D5） | 頁頂框＋每卡「FAKE 模擬」標籤＋`FAKE 值` | 同左 |
 | 敏感字串／工程詞 | ✅ 11 情境（含 ⑩ 假網址／ID／例外）未命中 | ✅ `<script>` 輸入已 escape | ✅ |
-| AI／OneBrain 字樣、ActionSlot | ✅ 0 | ✅ 0 | ✅ 0 |
+| AI／OneBrain 字樣、ActionSlot | ✅ 0 | ⚠️ 僅涵蓋 idle 態（`measure_leak_onebrain_network.json` 對 🔍 只有 `other_previews_idle`；查詢後態、6 個篩選情境、單檔 15 種輸入未入庫掃描） | ⚠️ 同左 |
 | 對外請求 | ✅ 0 | ✅ 0 | ✅ 0 |
 
 ## 3. 狀態矩陣
@@ -57,10 +69,10 @@
 
 | # | 內容（FACT） | 處置 |
 |---|---|---|
-| D1 | 💼 頁有 2 個 `a[aria-label="Link to heading"]`（H1 與 A10 `<h4>`；16×16、平時透明、卻是 Tab 停駐點）。`nas_diag` 與 🔍 兩預覽早已避開 | **已修**（`ui_v3/pages/assets.py`）：`st.title(..., anchor=False)`；A10 標題由 `<h4>` 改 `<div class="uv3-card-title" role="heading" aria-level="4">`，樣式對齊原 h4。前後 11 情境×2 寬度：錨點 2→0、可見文字逐字相同、幾何差 ≤0.3px（A10 高 179.5→179.2px） |
+| D1 | 💼 頁有 2 個 `a[aria-label="Link to heading"]`（H1 與 A10 `<h4>`；16×16、平時透明、卻是 Tab 停駐點）。`nas_diag` 與 🔍 兩預覽早已避開 | **已修**（`ui_v3/pages/assets.py`）：`st.title(..., anchor=False)`；A10 標題由 `<h4>` 改 `<div class="uv3-card-title" role="heading" aria-level="4">`，樣式對齊原 h4。前後 11 情境×2 寬度：錨點 2→0、可見文字逐字相同、幾何差 ≤0.3px（A10 高 179.5→179.2px）【INFERENCE／未入庫證據：已入庫 JSON 無任何幾何欄位、量測腳本未入庫、截圖已被修正後版本覆蓋，無法由 repo 重現；僅有間接旁證＝同名截圖位元組數前後不同（像素確有微差）】 |
 | D2 | harness selectbox 輸入 38px、`Open` 32×38（<48）；Streamlit 工具列 28px | 只記錄：非 renderer 一部分；工具列為 Streamlit 預設 |
 | D3 | Streamlit 主捲動容器 `section`（stMain）本身是 Tab 停駐點，聚焦無可見變化 | 只記錄：框架行為，需動 Shell／全域，超出授權 |
-| D4 | 💼 11 情境中 10 個在 A10 顯示「基準 成本」（FAKE 個人設定值）。`DEC-2026-11-19-09` 條件 (1)：掛載版不得顯示假持股／假金額／個人設定值（含假「成本」）；該 DEC「改用情境 ③」為作者推薦、非客戶核准 | 只記錄：屬 Gate 決定（G2） |
+| D4 | 💼 11 情境中 10 個在 A10 顯示「基準 成本」（FAKE 個人設定值）。`DEC-2026-11-19-09` 區分欄 1 條件 (1)：預覽頁（即掛載後）不得顯示假持股／假金額／個人設定值（含假「成本」）。**條件 (1) 含三項；有列的情境 A50 顯示「FAKE 基金 n／單位數」同樣屬「假持股」，本欄原只對映「成本」一項，G2「情境選擇」的範圍因此不應被低估**；該 DEC「改用情境 ③」為作者推薦、非客戶核准 | 只記錄：屬 Gate 決定（G2） |
 | D5 | FAKE 標示不一致：🔍 每卡有標籤；💼 只有頁頂 harness 框（非 sticky），卡片與 A50 列無 FAKE 標記，A00 寫「來源已讀完」 | 只記錄：屬 G1 |
 | D6 | 缺值字樣三套並存：💼 `◇ 資料未備`；🔍 篩選 `⬜ 資料未備`；🔍 單檔元件「此欄尚無可顯示的值」 | 只記錄：`DEC-2026-11-18-01` R2／`-04` (E5) 待客戶裁（G1） |
 | D7 | harness 虛線框上緣在 390／1280 被 Streamlit 頁首蓋住約 6px（【INFERENCE】內容 `padding-top:3.4rem`＝54.4px，頁首 60px；`ui_next_batch_gap` 列 4 另記「stHeader 60→40 未做」） | 只記錄：影響只在 harness 框 |
