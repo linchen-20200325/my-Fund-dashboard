@@ -64,3 +64,5 @@ git show 6b180d6fd3d77f255df8bcebbcf470027abf79c3:results/20261108T063652Z_run42
 ```
 
 對本次保存的 gzip 另做的檢查（2026-11-20 實跑）：`gzip -dc` 後 sha256 與 `git show` 原檔一致，皆為 `8fe1aca5…`；保存檔大小 136739 bytes，低於 `check-added-large-files` 的 500KB 上限。引用本份報告的離線重算見 `docs/evidence/fx_m1a_offline_recompute_2026_11_20.md`。
+
+備援與可攜驗證：原始報告仍在分支 `probe/fx-obs-date-results`（commit `6b180d6fd3d77f255df8bcebbcf470027abf79c3`，該分支本批未動），本檔保存為 main 上的另一份備援。上表「gzip 後 sha256」取決於 gzip 實作與版本，換環境重新壓縮不保證相同；**可攜的驗證只有解壓後 sha256 ＝ `8fe1aca5…`**（上列驗證指令的第一行）。

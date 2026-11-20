@@ -8,19 +8,20 @@
 | # | 結論 | 標籤 |
 |---|---|---|
 | 1 | M1-a 所指「既有報告」＝ `results/20261108T063652Z_run42455423910/report.json`（補證表 §1(1) 與 E1174 §1）。本組在本機取得（commit 物件 `6b180d6f` 在本機 git 中可 `git show`），sha256 與 E1174 §1 記載一致 | FACT |
-| 2 | 以 E1174 附錄腳本（原樣抽出）加一支本組自寫腳本重算，E1174 §3.2／§3.4／§4／§6 的數字**全部可重現**，無不一致項（見 §2）。但這是同一份資料的**算術重現**，不證明 Yahoo 的語意，也不是獨立資料來源 | FACT／INFERENCE |
-| 3 | M1-b＝**NO-RUN**（Work 獨立結論，ChatGPT 總管轉述〔待核〕，非 DEC、非逐字；原作者推論亦為視同相同方法）。預設參數重跑與 11-08 那次的**參數完全相同**，僅變更日期不構成新方法；新取數須另行授權；FX Gate 維持關閉（見 §3） | FACT／INFERENCE |
-| 4 | 在不觸發 workflow、不取新資料的前提下，窗口內**沒有任何能新增觀測的路徑**；只剩「離線重讀已保存報告」，且 11-08 報告保存至 main 已於本批完成（見 §4） | INFERENCE／FACT |
-| 5 | 2026-11-20 改讀**保存檔**（`gzip -dc` 後 sha256 與原檔一致）重跑附錄腳本與獨立腳本，輸出與原稿一致；原稿「無法重算」兩項（fixed_offset_scan 逐 k、各期最大差值）已補算，**無不一致項**（見 §2） | FACT |
+| 2 | 以 E1174 附錄腳本（原樣抽出）加一支本組自寫腳本重算，E1174 §3.2／§3.4／§4／§6 的數字**全部可重現**，無不一致項（見 §2；**單組字面比對、未經第二組驗證**）。但這是同一份資料的**算術重現**，不證明 Yahoo 的語意，也不是獨立資料來源 | FACT／INFERENCE |
+| 3a | 預設參數重跑與 11-08 那次的**工具參數逐項相同**（程式版本、代號集、端點、range／interval），唯一差異是取數時刻（見 §3.2） | FACT |
+| 3b | M1-b＝**NO-RUN**：「Work」（＝ChatGPT 總管轉述之獨立驗收）的結論，**轉述〔待核〕**，非 DEC、非客戶逐字；本檔原作者的推論亦為視同相同方法（INFERENCE）。理由（轉述）：同 workflow、腳本、來源與預設取樣方式，僅變更日期不構成新方法；新取數須另行授權；FX Gate 維持關閉。**不依賴此轉述**：另有 DEC-2026-11-08-02 效果欄 (4)「判定前不得執行」，見 §3.3 | 轉述〔待核〕／INFERENCE |
+| 4 | 在不觸發 workflow、不取新資料的前提下，窗口內**沒有任何能新增觀測的路徑**（**單組字面搜尋、未經第二組驗證**）；只剩「離線重讀已保存報告」，且 11-08 報告保存至 main 已於本批完成（見 §4） | INFERENCE／FACT |
+| 5 | 2026-11-20 改讀**保存檔**（`gzip -dc` 後 sha256 與原檔一致）重跑附錄腳本與 `indep_recompute.py`，輸出與原稿一致；原稿「無法重算」兩項（fixed_offset_scan 逐 k、各期最大差值）已補算，**無不一致項**（見 §2） | FACT |
 
 ## 1. 輸入與可重現性
 
 | 項目 | 內容 | 標籤 |
 |---|---|---|
 | 11-08 報告取得 | `git show 6b180d6fd3d77f255df8bcebbcf470027abf79c3:results/20261108T063652Z_run42455423910/report.json`（commit 時間 2026-11-08T06:36:53Z）；`sha256sum` ＝ `8fe1aca5de4236847ee24c9c8abc736b828c4d25a81f7074948a4c9d001be5a9`，與 E1174 §1 同；大小 908102 bytes | FACT |
-| 本機 ref 狀態（原稿撰寫時） | `origin/probe/fx-obs-date-results` 在撰寫當時的本機**不存在**；報告只靠該 commit 物件在本機存活，**當時不在 main**。**此狀態已於 2026-11-20 本批改變**：報告已保存至 main（見 §1.1） | FACT（已被 §1.1 取代） |
+| 本機 ref 狀態（原稿撰寫時） | `origin/probe/fx-obs-date-results` 在撰寫當時的本機**不存在**；報告只靠該 commit 物件在本機存活，**當時不在 main**。**此狀態已於 2026-11-20 本批改變**：報告已保存至 main（見 §1.1）。該分支是否另有備份未查（未連網）；報告本身已在 main，不再影響其可得性 | FACT（已被 §1.1 取代）／未驗（他處備份） |
 | 10-14 舊報告 | `docs/evidence/probe_fx_obs_date/20261014T064729Z_run38524215912_report.json.gz`（`gzip -dc` 後使用） | FACT |
-| 腳本 | 四支皆唯讀、離線、純標準庫，全文收錄於本檔附錄 A：`recompute_appendix.py`（E1174 附錄原樣抽出）、`indep_recompute.py`（原作者自寫，不沿用附錄邏輯）、`scan_recompute.py`（逐 k 重算 fixed_offset_scan，2026-11-20 新增）、`maxdiff_recompute.py`（各期最大絕對差，2026-11-20 新增）。用法皆為 `python3 -I <腳本> <11-08 報告.json> [<10-14 報告.json>]`。暫存目錄中的副本不是持久證據，以附錄 A 為準 | FACT |
+| 腳本 | 六支皆唯讀、離線、純標準庫，全文收錄於本檔附錄 A，各腳本最後輸出貼於附錄 B：`recompute_appendix.py`（E1174 附錄原樣抽出）、`indep_recompute.py`（原作者自寫，另一套程式碼，但與報告同一份輸入）、`scan_recompute.py`（逐 k 重算 fixed_offset_scan，2026-11-20 新增）、`maxdiff_recompute.py`（各期最大絕對差，2026-11-20 新增）、`monday_count.py`（週一 GMT／BST 分組計數，2026-11-20 新增）、`cn_check.py`（4 份保存檔 CNY／CNH 根數，2026-11-20 新增）。用法見附錄 B 每個輸出上方的指令。暫存目錄中的副本不是持久證據，以附錄為準 | FACT |
 
 ### 1.1 保存 11-08 報告至 main，且重算改讀保存檔（2026-11-20，FACT）
 
@@ -37,26 +38,26 @@
 
 | # | 宣稱（出處） | 本組重算結果 | 判定 |
 |---|---|---|---|
-| 1 | USD 23 個可比日分 P1／P2／P3＝13／5／5（E1174 §3.2） | 獨立腳本 n＝13／5／5 | 一致 |
-| 2 | USD 與 UTC 當日 00:00 起點小時價中位數絕對差 P1 0.0034%、P2 0.0028%、P3 0.0037%（§3.2） | 獨立腳本：0.0034／0.0028／0.0037 | 一致 |
-| 3 | 各期最大絕對差 0.0249／0.0624／0.0251%；全期 0.0624%（§3.2、補證表 §1(1)） | 附錄腳本 S4：0.0249／0.0624／0.0251（全期 0.0624）。2026-11-20 補：`maxdiff_recompute.py`（不沿用附錄邏輯）USD P1 0.0249（10-14）、P2 0.0624（10-29）、P3 0.0251（11-06），全期 23 日最大 0.0624（10-29）；同腳本 EUR 最大 0.2173／3.3853／2.9709、JPY 1.1809／1.1594／1.1719 與附錄 S4 同 | 一致（兩支不同腳本；仍同一份輸入） |
-| 4 | 值對應時刻不隨倫敦夏令移動：以倫敦當地 00:00 比，P1 0.0323%、P2 0.0028%、P3 0.0037%（§3.2） | 獨立腳本以 UTC 00:00 為基準掃 −3～+3 小時：三期最佳皆為 offset 0（P1 offset −1＝倫敦 00:00 為 0.0323%）。附錄 S4 同 | 一致 |
-| 5 | 報告自帶合併掃描 USD 最佳 k＝+1、0.0051%、n＝22（§3.2、§3.4） | 2026-11-20 補算：`scan_recompute.py` 對 USD／EUR／JPY 各 33 個 k（−6～+26）、`by_end` 與 `by_start` 兩版，共 **198 組（n、中位數、中位絕對值）與報告自帶 `fixed_offset_scan` 逐組比對，0 不一致**；日 K 根數 22＝報告 `daily_bars`。USD 兩版最小中位\|差\|皆 **0.0051%、k＝+1、n＝22**；EUR 終點版 0.1148%（k＝+0，n＝17）、起點版 0.1120%（k＝−1，n＝17）；JPY 終點版 0.7827%、起點版 0.6338%，皆在 k＝+26 | 一致（原稿「無法重算」已補算；演算法為依該函式註解的獨立重寫，與報告同一份輸入） |
+| 1 | USD 23 個可比日分 P1／P2／P3＝13／5／5（E1174 §3.2） | `indep_recompute.py` n＝13／5／5 | 一致 |
+| 2 | USD 與 UTC 當日 00:00 起點小時價中位數絕對差 P1 0.0034%、P2 0.0028%、P3 0.0037%（§3.2） | `indep_recompute.py`：0.0034／0.0028／0.0037 | 一致 |
+| 3 | 各期最大絕對差 0.0249／0.0624／0.0251%；全期 0.0624%（§3.2、補證表 §1(1)） | 附錄腳本 S4：0.0249／0.0624／0.0251（全期 0.0624）。2026-11-20 補：`maxdiff_recompute.py`（與附錄 S4 同公式、同輸入）USD P1 0.0249（10-14）、P2 0.0624（10-29）、P3 0.0251（11-06），全期 23 日最大 0.0624（10-29）；同腳本 EUR 最大 0.2173／3.3853／2.9709、JPY 1.1809／1.1594／1.1719 與附錄 S4 同 | 一致（同公式、同輸入的重算，驗算術與抄寫） |
+| 4 | 值對應時刻不隨倫敦夏令移動：以倫敦當地 00:00 比，P1 0.0323%、P2 0.0028%、P3 0.0037%（§3.2） | `indep_recompute.py`以 UTC 00:00 為基準掃 −3～+3 小時：三期最佳皆為 offset 0（P1 offset −1＝倫敦 00:00 為 0.0323%）。附錄 S4 同 | 一致 |
+| 5 | 報告自帶合併掃描 USD 最佳 k＝+1、0.0051%、n＝22（§3.2、§3.4） | 2026-11-20 補算：`scan_recompute.py` 對 USD／EUR／JPY 各 33 個 k（−6～+26）、`by_end` 與 `by_start` 兩版，共 **198 組（n、中位數、中位絕對值）與報告自帶 `fixed_offset_scan` 逐組比對，0 不一致**（此 0 只涵蓋這 198 組三項數值，**不含** `daily_bars` 根數；根數另於腳本輸出並列顯示重算 22／報告 22，未計入 198 組比對）。USD 兩版最小中位\|差\|皆 **0.0051%、k＝+1、n＝22**；EUR 終點版 0.1148%（k＝+0，n＝17）、起點版 0.1120%（k＝−1，n＝17）；JPY 終點版 0.7827%、起點版 0.6338%，皆在 k＝+26 | 一致（原稿「無法重算」已補算；依該函式註解改寫的同公式、同輸入重算，驗算術與抄寫，非獨立驗證） |
 | 6 | 「UTC 00:00」與「台北 08:00」本資料分不出（§3.2、§8-4） | 數學上同一瞬間，無新資料可分 | 一致（邏輯，非資料） |
-| 7 | EUR 日 K 523 根中 45 根 `\|close/open−1\|>1%`，42 根週一，週一 close 比 open 低 1.66%～3.41%（§4 疑點 1） | 獨立腳本：45／42、週一範圍 −3.41～−1.66；USD 0、JPY 3 且皆非週一 | 一致 |
-| 8 | 週一異常冬令集中：週一共 103 根（GMT 44、BST 59），>1% 者 GMT 40、BST 2（§4） | 本組計數：Mon GMT 44、BST 59、>1% GMT 40、BST 2 | 一致 |
+| 7 | EUR 日 K 523 根中 45 根 `\|close/open−1\|>1%`，42 根週一，週一 close 比 open 低 1.66%～3.41%（§4 疑點 1） | `indep_recompute.py`：45／42、週一範圍 −3.41～−1.66；USD 0、JPY 3 且皆非週一 | 一致 |
+| 8 | 週一異常冬令集中：週一共 103 根（GMT 44、BST 59），>1% 者 GMT 40、BST 2（§4） | `monday_count.py`（附錄 A／B，2026-11-20 補）：EUR 週一（close 非 null）共 103 根，GMT 44、BST 59，>1% 者 GMT 40、BST 2；另有 1 根週一 close 為 null 不計入。USD、JPY 週一 >1% 皆 0 | 一致（原稿為手工計數，現有腳本與輸出） |
 | 9 | EUR 10-26 日 K 35.388 對 UTC 00:00 小時價 36.586；11-02 35.377 對 36.428（§4） | 同值（35.388／36.586、35.377／36.428） | 一致 |
-| 10 | EUR 小時價對日 K 系統差 +0.1324%、JPY −1.0788%（§3.4） | 附錄 S4「all」：EUR +0.1324、JPY −1.0788；獨立腳本分期中位數與之相容（EUR 0.1197／0.136／0.1312；JPY 1.0412／1.075／1.0938） | 一致 |
-| 11 | JPY 固定位移最小值落在掃描邊界 k＝+26（§3.4） | 2026-11-20 補算（同 #5）：JPY 終點版與起點版最小中位\|差\|皆落在 k＝+26（0.7827%／0.6338%），即掃描上界；k 範圍 −6～+26 內無內部最小值。獨立腳本在 offset −3～+3 內 JPY 最佳偏向較大 offset（P1＋2、P2＋3、P3＋2），方向相容 | 一致（k＝+26 邊界已驗；「為何如此」的成因仍不可由本報告確認） |
-| 12 | 新舊報告重疊根：USD／EUR／JPY 日 K 共 505 根無改值，唯一變化是 10-14 那根 null 變有值（§4） | 獨立腳本：重疊 506 根、不同 1 根（USD／EUR／JPY 各 1）；VIX 505 根、0 不同。附錄 S10 的 505 為「同值」計數，506 含該 1 根 null→有值 | 一致（505＋1＝506） |
-| 13 | CNY／CNH 日 K 只回 1 根、`status=ok`（§6；補證表 §1(7)：四次取數皆 1 根） | 2026-11-20 讀 main 上 `docs/evidence/probe_fx_obs_date/` 的 4 份保存檔（10-13、10-14 兩份、11-08），CNY 與 CNH 皆 `raw_bar_count`＝1、`status`＝ok | 一致（4 份全部已讀） |
+| 10 | EUR 小時價對日 K 系統差 +0.1324%、JPY −1.0788%（§3.4） | 附錄 S4「all」：EUR +0.1324、JPY −1.0788；`indep_recompute.py`分期中位數與之相容（EUR 0.1197／0.136／0.1312；JPY 1.0412／1.075／1.0938） | 一致 |
+| 11 | JPY 固定位移最小值落在掃描邊界 k＝+26（§3.4） | 2026-11-20 補算（同 #5）：JPY 終點版與起點版最小中位\|差\|皆落在 k＝+26（0.7827%／0.6338%），即掃描上界；k 範圍 −6～+26 內無內部最小值。`indep_recompute.py`在 offset −3～+3 內 JPY 最佳偏向較大 offset（P1＋2、P2＋3、P3＋2），方向相容 | 一致（k＝+26 邊界已驗；「為何如此」的成因仍不可由本報告確認） |
+| 12 | 新舊報告重疊根：USD／EUR／JPY 日 K 共 505 根無改值，唯一變化是 10-14 那根 null 變有值（§4） | `indep_recompute.py`：重疊 506 根、不同 1 根（USD／EUR／JPY 各 1）；VIX 505 根、0 不同。附錄 S10 的 505 為「同值」計數，506 含該 1 根 null→有值 | 一致（505＋1＝506） |
+| 13 | CNY／CNH 日 K 只回 1 根、`status=ok`（§6；補證表 §1(7)：四次取數皆 1 根） | 2026-11-20 以 `cn_check.py`（附錄 A／B）讀 main 上 `docs/evidence/probe_fx_obs_date/` 的 4 份保存檔（10-13、10-14 兩份、11-08），CNY 與 CNH 皆 `raw_bar_count`＝1、`status`＝ok | 一致（4 份全部已讀；輸出見附錄 B） |
 | 14 | null close：匯率 5 根、VIX 19 根（§2、§3.5） | 本組：USD／EUR／JPY 5、VIX 19 | 一致 |
-| 15 | prev_weekday 重現：518 列、2024-11-05～2026-11-05、漏平日 5 個（2024-12-31、2025-04-17、04-18、12-24、12-31）、被寫成觀測日但當天無收盤 4 個（§5） | 附錄 S7 輸出同（`appendix_out.txt`）；為重現邏輯，**非**呼叫正式 `rows_from_daily_close` | 一致（重現邏輯，非正式函式） |
+| 15 | prev_weekday 重現：518 列、2024-11-05～2026-11-05、漏平日 5 個（2024-12-31、2025-04-17、04-18、12-24、12-31）、被寫成觀測日但當天無收盤 4 個（§5） | 附錄 S7 輸出同（`recompute_appendix.py` 輸出，貼於附錄 B）；為重現邏輯，**非**呼叫正式 `rows_from_daily_close` | 一致（重現邏輯，非正式函式） |
 | 16 | 10-14 舊報告小時 K 起於 2026-09-14T06:00Z；末三根 05:00Z、06:00Z、06:47:27Z；末根 O＝H＝L＝C＝32.14＝`regularMarketPrice`，`regularMarketTime`＝06:47:27Z（補證表 §1(2)(5)） | 本組讀同檔：起點 2026-09-14 06:00:00Z；末三根時間戳同；末根四價 32.14；rmp 32.14、rmt 06:47:27Z；06:00Z 根 H 32.217／L 32.108／C 32.134 | 一致 |
 
 **仍無法重算／不可由本報告確認的項目**（2026-11-20 修訂後；原稿另列的 fixed_offset_scan 逐 k 與各期最大差值、舊報告 CNY／CNH 根數已補算，不再列此）：(a) Yahoo 日 K close 欄位的官方定義（E1174 §8-5；報告內無此資訊）；(b) 小時 K 時間戳＝區間起點之假設，本報告僅能給旁證，不能證明（§3.4 自述 INFERENCE）；(c) EUR 週一異常與 JPY 水位差的成因；(d) 10-14 原稽核報告（X／Y／P／Q）內容與其假日清單（本倉無原文）；(e) 補證表 §1(1)「23 個可比日」中 10-07 一日由附錄補算（報告 `compared`＝22）：`maxdiff_recompute.py` 與 `indep_recompute.py` 皆得 n＝23（P1 13／P2 5／P3 5），與 E1174 一致；`fixed_offset_scan` 的 22 根是另一個口徑（觀測日唯一且在 31 日窗內者，不含 10-07），兩者並不矛盾。
 
-**重算性質的限制（INFERENCE）**：附錄腳本與報告同源（E1174 §8-1 自述不構成獨立驗證）；本組另寫的腳本與其共用同一份輸入資料。2026-11-20 補算的兩支腳本（`scan_recompute.py`、`maxdiff_recompute.py`）亦然。因此本節只證明「由該報告可算出這些數字、E1174 的算術與計數無誤」，**不能**證明「Yahoo 日 K close 對應 UTC 當日 00:00」是一條可寫成正式收盤規則的事實（樣本 P2、P3 各僅 5 日、小時解析度）。
+**重算性質的限制（INFERENCE）**：附錄腳本與報告同源（E1174 §8-1 自述不構成獨立驗證）；本組另寫的腳本與其共用同一份輸入資料。2026-11-20 補算的兩支腳本（`scan_recompute.py`、`maxdiff_recompute.py`）亦然。因此本節只證明「由該報告可算出這些數字、E1174 的算術與計數無誤」，**不能**證明「Yahoo 日 K close 對應 UTC 當日 00:00」是一條可寫成正式收盤規則的事實（樣本 P2、P3 各僅 5 日、小時解析度）。**負面證據須一併看**：(1) 只有 USD 呈現貼合（最小中位\|差\|約 0.0051%，k＝+1）；EUR 最小中位差約 0.11%（終點版 0.1148%、起點版 0.1120%），JPY 為 0.63～0.78%（起點版 0.6338%、終點版 0.7827%）且落在掃描邊界 k＝+26，**未呈現與 USD 相同的貼合**，原因不明；(2) 「UTC 當日 00:00」假設僅由 USD 的小樣本（23 個可比日）支持；(3) 「小時 K 時間戳＝區間起點」為**未實證的假設**（報告 `hourly_timestamp_convention`），本報告只能給旁證。
 
 ## 3. M1-b 文字核對（只讀文字，未重跑任何探測）
 
@@ -85,6 +86,7 @@
 
 - **FACT**：預設重跑在**工具參數、程式版本、代號集、端點、range／interval 上與 11-08 那次逐項相同**；唯一不同的是取數時刻（及因此後移的小時 K 窗口）。`DEC-2026-11-08-02` 全文沒有定義「相同方法」，也沒有指名判定人；BACKLOG BL-0217 與 `open_work_inventory_2026_11_19.md` X2 皆記「待判、repo 無具名承接人」（原作者讀取；本批未改這兩處）。
 - **判定（M1-b＝NO-RUN）**：Work 已獨立判定 M1-b 為 NO-RUN，ChatGPT 總管轉述〔待核〕，**非 DEC、非客戶逐字**：同一 workflow、同一腳本、同一來源與同一預設取樣方式，僅變更日期不構成新方法；新取數須另行取得授權；FX Gate 維持關閉。本檔原作者的推論（見下）亦得到同向結論（視同相同方法）。依此，本批**不執行**任何探測重跑。
+- **不依賴轉述的執行依據（FACT）**：`DEC-2026-11-08-02` 效果欄 (4) 要求「補證表 M1-b 等是否算『以相同方法立即重跑』待客戶／總管判定，判定前不得執行」。repo 內**尚無**該判定（客戶或總管）的紀錄；因此即使不採信上述轉述，依效果欄 (4)「判定前不得執行」，M1-b 同樣不執行。
 - **INFERENCE**：依字面，預設參數重跑屬「相同方法」；「立即」一詞的作用不明（可能指「不要現在馬上」也可能指「不要用這個方法」），文本無法分辨，故**不能**用「已過 12 天、不算立即」自行化解。若只縮減代號（例如 `tickers=USDTWD=X`，VIX 仍強制納入）：只改輸入、不改方法與端點，本組判讀仍近似同法，同樣不屬可自行放行的範圍。M1-b 唯一可增加的資料是 P3（兩地皆冬令）日數；P2（10-26～10-30）日數不會增加（補證表 §1(1)，轉引）。
 - **RECOMMENDATION**（不構成裁示）：M1-b 不執行。若日後要取任何新 Yahoo 觀測，須另行取得客戶書面授權，授權內容需明列入口、代號與取樣方式；「變更日期」本身不得被當作新方法的理由。上述判定屬 Work／總管轉述，**客戶可推翻**。
 
@@ -104,16 +106,16 @@
 | 3 | 舊報告 CNY／CNH 根數：原稿只驗兩份，2026-11-20 已讀 main 上 4 份保存檔，皆 1 根、status ok | 已補 |
 | 4 | 10-14 原稽核 X／Y／P／Q、舊假日清單、Yahoo 欄位定義、成因類問題 | 無法驗（缺原文／原始資料） |
 | 5 | 「相同方法」的客戶本意；DEC 要點為經總管轉述、非逐字；M1-b＝NO-RUN 為 Work 判定經 ChatGPT 總管轉述〔待核〕，非 DEC | 未驗（客戶可推翻） |
-| 6 | 原稿稱撰寫時本機無 `origin/probe/fx-obs-date-results` ref；該分支是否另有備份未查（未連網）。11-08 報告本身已保存於 main，此項不再影響報告可得性 | 未驗（影響已降低） |
+| 6 | 分支備份與本機 ref 狀態：已併入 §1 第 2 列，不重複 | 見 §1 |
 | 7 | 未呼叫任何正式函式（`rows_from_daily_close`、`_obs_date` 等）；未改任何閘門、門檻、公式、容差、`.py`、workflow | 聲明 |
 | 8 | 保存檔為 gzip 壓縮；日後若有任何文字類 hook 改寫該檔，須以 README 載明的 sha256 驗證 | 聲明 |
 
-## 附錄 A：重算腳本全文（皆唯讀、離線、純標準庫；用法 `python3 -I <腳本> <報告.json> [<舊報告.json>]`，報告先以 `gzip -dc` 解壓）
+## 附錄 A：重算腳本全文（皆唯讀、離線、純標準庫；報告先以 `gzip -dc` 解壓；用法見附錄 B 各指令）
 
 ### A-recompute_appendix.py
 
 ```python
-# usage: python3 -I recompute.py REPORT.json [OLD_REPORT.json]   (read-only; no network)
+# usage: python3 -I recompute_appendix.py REPORT.json [OLD_REPORT.json]   (read-only; no network)
 import json,sys,statistics as st,collections
 from datetime import datetime,timezone,timedelta
 from zoneinfo import ZoneInfo
@@ -378,4 +380,218 @@ for tk in ('USDTWD=X', 'EURTWD=X', 'JPYTWD=X'):
     allv = [x for p in res for x in res[p]]
     print(tk, {p: (len(res[p]), round(max(res[p])[0], 4), max(res[p])[1]) for p in res},
           '全期', len(allv), round(max(allv)[0], 4), max(allv)[1])
+```
+
+### A-monday_count.py
+
+```python
+# monday_count.py：EUR 日 K 週一根數，依倫敦 GMT／BST 分組，及 |close/open-1|>1% 者。唯讀離線。
+# 用法: python3 -I monday_count.py REPORT.json
+import json
+import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+R = json.load(open(sys.argv[1]))
+LON = ZoneInfo('Europe/London')
+for tk in ('EURTWD=X', 'USDTWD=X', 'JPYTWD=X'):
+    D = R['tickers'][tk]['raw_daily_full']
+    tot = {'GMT': 0, 'BST': 0}
+    big = {'GMT': 0, 'BST': 0}
+    nul = 0
+    for t, o, c in zip(D['t'], D['open'], D['close']):
+        d = datetime.fromtimestamp(t, LON)
+        if d.weekday() != 0:
+            continue
+        if c is None:
+            nul += 1
+            continue
+        z = 'BST' if d.dst() else 'GMT'
+        tot[z] += 1
+        if o is not None and c is not None and abs(c / o - 1) > 0.01:
+            big[z] += 1
+    print(tk, '週一(close非null)共', sum(tot.values()), 'GMT', tot['GMT'], 'BST', tot['BST'],
+          '| >1% GMT', big['GMT'], 'BST', big['BST'], '| 週一 close=null 另計', nul)
+```
+
+### A-cn_check.py
+
+```python
+# 讀 main 上已保存的 4 份報告（gz）核對 CNY/CNH 日 K 根數與 status。唯讀離線。用法: python3 -I cn_check.py DIR
+import gzip, json, sys, glob, hashlib
+for f in sorted(glob.glob(sys.argv[1] + '/*_report.json.gz')):
+    raw = gzip.open(f).read()
+    R = json.loads(raw)
+    T = R['tickers']
+    out = {k: (T[k]['raw_bar_count'], T[k]['status']) for k in ('CNYTWD=X', 'CNHTWD=X') if k in T}
+    print(f.split('/')[-1], hashlib.sha256(raw).hexdigest()[:8], R.get('generated_at_utc'), out)
+```
+
+## 附錄 B：各腳本最後輸出（2026-11-20 實跑；輸入皆為保存檔 `gzip -dc` 後；行尾空白已去除，內容不改）
+
+指令中 `r1108.json`＝`gzip -dc docs/evidence/probe_fx_obs_date/20261108T063652Z_run42455423910_report.json.gz`（sha256 `8fe1aca5…`）；`r1014.json`＝`gzip -dc docs/evidence/probe_fx_obs_date/20261014T064729Z_run38524215912_report.json.gz`（sha256 `fd1be036…`）。
+
+### B-recompute_appendix
+
+指令：`python3 -I recompute_appendix.py r1108.json r1014.json`
+
+```
+## S1 per-ticker summary
+USDTWD=X status ok raw 523 null 5 nonnull 518 tz Europe/London diff 298 / 518 weekend(new) 0 dup(new) 0 rule prev_weekday rows 518 2024-11-05 2026-11-05 skipped 0 True
+^VIX status ok raw 523 null 19 nonnull 504 tz America/Chicago diff 0 / 504 weekend(new) 0 dup(new) 0 rule same_day rows 504 2024-11-06 2026-11-06 skipped 0 False
+EURTWD=X status ok raw 523 null 5 nonnull 518 tz Europe/London diff 298 / 518 weekend(new) 0 dup(new) 0 rule prev_weekday rows 518 2024-11-05 2026-11-05 skipped 0 True
+JPYTWD=X status ok raw 523 null 5 nonnull 518 tz Europe/London diff 298 / 518 weekend(new) 0 dup(new) 0 rule prev_weekday rows 518 2024-11-05 2026-11-05 skipped 0 True
+CNYTWD=X status ok raw 1 null 0 nonnull 1 tz Europe/London diff 0 / 1 weekend(new) 0 dup(new) 0 rule prev_weekday rows 0 None None skipped 1 False
+CNHTWD=X status ok raw 1 null 0 nonnull 1 tz Europe/London diff 0 / 1 weekend(new) 0 dup(new) 0 rule prev_weekday rows 0 None None skipped 1 False
+legacy-UTC USDTWD=X weekend 59 weeks missing Fri 60 | new-rule weeks missing Fri ['2025-W16']
+legacy-UTC EURTWD=X weekend 59 weeks missing Fri 60 | new-rule weeks missing Fri ['2025-W16']
+legacy-UTC JPYTWD=X weekend 59 weeks missing Fri 60 | new-rule weeks missing Fri ['2025-W16']
+## S2 DST transitions seen in daily stamps (UTC hh:mm change)
+USDTWD=X 00:00 -> 23:00 first bar 2025-03-31 Mon 00:00 BST
+USDTWD=X 23:00 -> 00:00 first bar 2025-10-27 Mon 00:00 GMT
+USDTWD=X 00:00 -> 23:00 first bar 2026-03-30 Mon 00:00 BST
+USDTWD=X 23:00 -> 00:00 first bar 2026-10-26 Mon 00:00 GMT
+^VIX 08:00 -> 07:00 first bar 2025-03-10 Mon 02:00 CDT
+^VIX 07:00 -> 08:00 first bar 2025-11-03 Mon 02:00 CST
+^VIX 08:00 -> 07:00 first bar 2026-03-09 Mon 02:00 CDT
+^VIX 07:00 -> 08:00 first bar 2026-11-02 Mon 02:00 CST
+## S3 hourly window / meta (USD)
+2026-10-06T23:00:00+00:00 2026-11-06T23:00:00+00:00 compared 22 ties_gt_1 7 within_tol(1e-6) 1
+## S3b bar value vs Yahoo self-reported previous close (USD)
+bar 2026-10-14 close 32.10499954223633 vs 32.124 (doc 49 cond. b) pct -0.0591
+bar 2026-11-06 close 33.10929870605469 vs previousClose 33.098 pct 0.0341
+## S5b Monday bar close vs prior Friday last hourly close
+USDTWD=X 2026-10-12 Mon close 31.9161 Fri last hourly Fri 21:00 31.91 pct 0.0191
+USDTWD=X 2026-10-19 Mon close 32.387 Fri last hourly Fri 21:00 32.428 pct -0.1264
+USDTWD=X 2026-10-26 Mon close 32.5708 Fri last hourly Fri 21:00 32.57 pct 0.0025
+USDTWD=X 2026-11-02 Mon close 32.6064 Fri last hourly Fri 22:00 32.605 pct 0.0043
+EURTWD=X 2026-10-12 Mon close 35.7559 Fri last hourly Fri 21:00 35.743 pct 0.0362
+EURTWD=X 2026-10-19 Mon close 36.3552 Fri last hourly Fri 21:00 36.493 pct -0.3777
+EURTWD=X 2026-10-26 Mon close 35.388 Fri last hourly Fri 21:00 36.53 pct -3.1262
+EURTWD=X 2026-11-02 Mon close 35.377 Fri last hourly Fri 21:00 36.427 pct -2.8825
+## S4 daily close vs hourly open at UTC D 00:00 (signed %, hourly-daily), by period; and vs London-midnight open
+USDTWD=X P1 Lon BST/NY EDT n 13 UTC00 med|%| 0.0034 max|%| 0.0249 med signed -0.0031 | London00 med|%| 0.0323
+USDTWD=X P2 Lon GMT/NY EDT n 5 UTC00 med|%| 0.0028 max|%| 0.0624 med signed -0.0025 | London00 med|%| 0.0028
+USDTWD=X P3 both std n 5 UTC00 med|%| 0.0037 max|%| 0.0251 med signed -0.0037 | London00 med|%| 0.0037
+USDTWD=X all n 23 UTC00 med|%| 0.0034 max|%| 0.0624 med signed -0.0031 | London00 med|%| 0.0098
+EURTWD=X P1 Lon BST/NY EDT n 13 UTC00 med|%| 0.1197 max|%| 0.2173 med signed 0.1197 | London00 med|%| 0.1158
+EURTWD=X P2 Lon GMT/NY EDT n 5 UTC00 med|%| 0.136 max|%| 3.3853 med signed 0.136 | London00 med|%| 0.136
+EURTWD=X P3 both std n 5 UTC00 med|%| 0.1312 max|%| 2.9709 med signed 0.1312 | London00 med|%| 0.1312
+EURTWD=X all n 23 UTC00 med|%| 0.1324 max|%| 3.3853 med signed 0.1324 | London00 med|%| 0.1312
+JPYTWD=X P1 Lon BST/NY EDT n 13 UTC00 med|%| 1.0412 max|%| 1.1809 med signed -1.0412 | London00 med|%| 1.0687
+JPYTWD=X P2 Lon GMT/NY EDT n 5 UTC00 med|%| 1.075 max|%| 1.1594 med signed -1.075 | London00 med|%| 1.075
+JPYTWD=X P3 both std n 5 UTC00 med|%| 1.0938 max|%| 1.1719 med signed -1.0938 | London00 med|%| 1.0938
+JPYTWD=X all n 23 UTC00 med|%| 1.0788 max|%| 1.1809 med signed -1.0788 | London00 med|%| 1.0791
+## S5 hourly weekly gaps USD (UTC)
+last Fri 10-09 02:00 next Fri 10-09 12:00
+last Fri 10-09 21:00 next Sun 10-11 23:00
+last Fri 10-16 21:00 next Sun 10-18 23:00
+last Fri 10-23 21:00 next Mon 10-26 00:00
+last Fri 10-30 22:00 next Mon 11-02 00:00
+zero-range bars ['Fri 10-16 21:00', 'Tue 10-20 23:00', 'Thu 10-22 20:00', 'Thu 10-22 22:00', 'Fri 10-23 21:00', 'Fri 10-30 08:00', 'Fri 10-30 22:00', 'Fri 11-06 22:00']
+USDTWD=X rmp 32.765 rmt 11-06 22:00:00 prevClose 33.098 rmp-fulldayChange 33.098 last hourly stamp 11-06 22:00 32.76499938964844 last daily 33.10929870605469
+EURTWD=X rmp 36.557 rmt 11-06 22:26:32 prevClose 37.174 rmp-fulldayChange 37.174 last hourly stamp 11-06 22:00 36.55699920654297 last daily 37.170555114746094
+JPYTWD=X rmp 0.2046 rmt 11-06 22:26:32 prevClose 0.2077 rmp-fulldayChange 0.2077 last hourly stamp 11-06 22:00 0.2046000063419342 last daily 0.21028700470924377
+## S6 daily close vs open anomalies (|c/o-1|>1%)
+USDTWD=X 0 {}
+EURTWD=X 45 {'Mon': 42, 'Tue': 1, 'Wed': 1, 'Thu': 1}
+JPYTWD=X 3 {'Tue': 1, 'Wed': 1, 'Thu': 1}
+## S7 obs dates by prev_weekday replication (not the production function)
+USDTWD=X 518 2024-11-05 2026-11-05 gaps ['2024-12-31', '2025-04-17', '2025-04-18', '2025-12-24', '2025-12-31'] null-D ['2025-01-01', '2025-04-18', '2025-04-21', '2025-12-25', '2026-01-01'] written=nullD ['2025-01-01', '2025-04-21', '2025-12-25', '2026-01-01']
+EURTWD=X 518 2024-11-05 2026-11-05 gaps ['2024-12-31', '2025-04-17', '2025-04-18', '2025-12-24', '2025-12-31'] null-D ['2025-01-01', '2025-04-18', '2025-04-21', '2025-12-25', '2026-01-01'] written=nullD ['2025-01-01', '2025-04-21', '2025-12-25', '2026-01-01']
+JPYTWD=X 518 2024-11-05 2026-11-05 gaps ['2024-12-31', '2025-04-17', '2025-04-18', '2025-12-24', '2025-12-31'] null-D ['2025-01-01', '2025-04-18', '2025-04-21', '2025-12-25', '2026-01-01'] written=nullD ['2025-01-01', '2025-04-21', '2025-12-25', '2026-01-01']
+## S8 VIX
+last2 closes [('11-05', 28.18000030517578), ('11-06', 25.639999389648438)] rmp 25.64 fulldayChange -2.54 nulls 19
+## S9 CNY/CNH
+CNYTWD=X raw 1 t 2026-11-06 22:26:32 close 4.912799835205078 last==rmt True rows 0 skipped ['已收盤平日根中與過半數基準 22:26:32（交易所時區 Europe/London）同一時刻者只有 1 根，少於外匯最少根數門檻 20，無法自證日界，1 筆不寫']
+CNHTWD=X raw 1 t 2026-11-06 22:26:32 close 4.912399768829346 last==rmt True rows 0 skipped ['已收盤平日根中與過半數基準 22:26:32（交易所時區 Europe/London）同一時刻者只有 1 根，少於外匯最少根數門檻 20，無法自證日界，1 筆不寫']
+## S10 vs old report 2026-10-14T06:47:25.588769+00:00
+USDTWD=X overlap same 505 diff 0 null<->value 1
+^VIX overlap same 505 diff 0 null<->value 0
+EURTWD=X overlap same 505 diff 0 null<->value 1
+JPYTWD=X overlap same 505 diff 0 null<->value 1
+```
+
+### B-indep_recompute
+
+指令：`python3 -I indep_recompute.py r1108.json r1014.json`
+
+```
+R sha/gen 2026-11-08T06:36:50.569726+00:00 executed_sha 15538a571f62dfdc6c7b1ef00d5538d47b869bf6
+USDTWD=X P1 n 13 median|%| by UTC-hour offset from UTC00(open价): {-1: 0.0323, 0: 0.0034, 1: 0.0677, 2: 0.2049} best 0
+USDTWD=X P2 n 5 median|%| by UTC-hour offset from UTC00(open价): {0: 0.0028, 1: 0.0364, 2: 0.1218, 3: 0.0824} best 0
+USDTWD=X P3 n 5 median|%| by UTC-hour offset from UTC00(open价): {0: 0.0037, 1: 0.0646, 2: 0.2474, 3: 0.3086} best 0
+EURTWD=X P1 n 13 median|%| by UTC-hour offset from UTC00(open价): {-1: 0.1158, 0: 0.1197, 1: 0.2615, 2: 0.2726} best -1
+EURTWD=X P2 n 5 median|%| by UTC-hour offset from UTC00(open价): {0: 0.136, 1: 0.114, 2: 0.2201, 3: 0.3308} best 1
+EURTWD=X P3 n 5 median|%| by UTC-hour offset from UTC00(open价): {0: 0.1312, 1: 0.3265, 2: 0.5977, 3: 0.6411} best 0
+JPYTWD=X P1 n 13 median|%| by UTC-hour offset from UTC00(open价): {-1: 1.0687, 0: 1.0412, 1: 0.9344, 2: 0.9186} best 2
+JPYTWD=X P2 n 5 median|%| by UTC-hour offset from UTC00(open价): {0: 1.075, 1: 1.1272, 2: 1.0306, 3: 0.9825} best 3
+JPYTWD=X P3 n 5 median|%| by UTC-hour offset from UTC00(open价): {0: 1.0938, 1: 0.8965, 2: 0.7996, 3: 0.7996} best 2
+B USDTWD=X raw 523 null 5 status ok
+B ^VIX raw 523 null 19 status ok
+B EURTWD=X raw 523 null 5 status ok
+B JPYTWD=X raw 523 null 5 status ok
+B CNYTWD=X raw 1 null 0 status ok
+B CNHTWD=X raw 1 null 0 status ok
+C EURTWD=X >1% 45 Mon 42 range of Mon pct (-3.41, -1.66)
+C USDTWD=X >1% 0 Mon 0 range of Mon pct None
+C JPYTWD=X >1% 3 Mon 0 range of Mon pct None
+D EUR Mon 2026-10-26 close 35.38800048828125 hourly UTC00 open 36.58599853515625
+D EUR Mon 2026-11-02 close 35.37699890136719 hourly UTC00 open 36.428001403808594
+E overlap USDTWD=X 506 diff 1
+E overlap EURTWD=X 506 diff 1
+E overlap JPYTWD=X 506 diff 1
+E overlap ^VIX 505 diff 0
+F old hourly first 2026-09-14 06:00:00+00:00 last3 ['05:00:00', '06:00:00', '06:47:27'] last3 OHLC [(32.1510009765625, 32.19900131225586, 32.145999908447266, 32.189998626708984), (32.189998626708984, 32.21699905395508, 32.108001708984375, 32.13399887084961), (32.13999938964844, 32.13999938964844, 32.13999938964844, 32.13999938964844)]
+F old rmp 32.14 rmt 2026-10-14 06:47:27+00:00
+G CNYTWD=X [1, 1]
+G CNHTWD=X [1, 1]
+```
+
+### B-scan_recompute
+
+指令：`python3 -I scan_recompute.py r1108.json`
+
+```
+USDTWD=X by_end k數 33 不一致 0 最小中位|差|0.0051 k=+1 n=22
+USDTWD=X by_start k數 33 不一致 0 最小中位|差|0.0051 k=+1 n=22
+USDTWD=X daily_bars 重算 22 報告 22 k範圍 [-6, 26]
+EURTWD=X by_end k數 33 不一致 0 最小中位|差|0.1148 k=+0 n=17
+EURTWD=X by_start k數 33 不一致 0 最小中位|差|0.1120 k=-1 n=17
+EURTWD=X daily_bars 重算 22 報告 22 k範圍 [-6, 26]
+JPYTWD=X by_end k數 33 不一致 0 最小中位|差|0.7827 k=+26 n=17
+JPYTWD=X by_start k數 33 不一致 0 最小中位|差|0.6338 k=+26 n=17
+JPYTWD=X daily_bars 重算 22 報告 22 k範圍 [-6, 26]
+逐 k 比對總數 198 不一致 0
+```
+
+### B-maxdiff_recompute
+
+指令：`python3 -I maxdiff_recompute.py r1108.json`
+
+```
+USDTWD=X {'P1': (13, 0.0249, '2026-10-14'), 'P2': (5, 0.0624, '2026-10-29'), 'P3': (5, 0.0251, '2026-11-06')} 全期 23 0.0624 2026-10-29
+EURTWD=X {'P1': (13, 0.2173, '2026-10-09'), 'P2': (5, 3.3853, '2026-10-26'), 'P3': (5, 2.9709, '2026-11-02')} 全期 23 3.3853 2026-10-26
+JPYTWD=X {'P1': (13, 1.1809, '2026-10-07'), 'P2': (5, 1.1594, '2026-10-29'), 'P3': (5, 1.1719, '2026-11-02')} 全期 23 1.1809 2026-10-07
+```
+
+### B-monday_count
+
+指令：`python3 -I monday_count.py r1108.json`
+
+```
+EURTWD=X 週一(close非null)共 103 GMT 44 BST 59 | >1% GMT 40 BST 2 | 週一 close=null 另計 1
+USDTWD=X 週一(close非null)共 103 GMT 44 BST 59 | >1% GMT 0 BST 0 | 週一 close=null 另計 1
+JPYTWD=X 週一(close非null)共 103 GMT 44 BST 59 | >1% GMT 0 BST 0 | 週一 close=null 另計 1
+```
+
+### B-cn_check
+
+指令：`python3 -I cn_check.py docs/evidence/probe_fx_obs_date（repo 根目錄執行）`
+
+```
+20261013T185433Z_run38450455092_report.json.gz e2a75721 2026-10-13T18:54:31.263102+00:00 {'CNYTWD=X': (1, 'ok'), 'CNHTWD=X': (1, 'ok')}
+20261014T041819Z_run38510633247_report.json.gz 2029ae66 2026-10-14T04:18:15.157678+00:00 {'CNYTWD=X': (1, 'ok'), 'CNHTWD=X': (1, 'ok')}
+20261014T064729Z_run38524215912_report.json.gz fd1be036 2026-10-14T06:47:25.588769+00:00 {'CNYTWD=X': (1, 'ok'), 'CNHTWD=X': (1, 'ok')}
+20261108T063652Z_run42455423910_report.json.gz 8fe1aca5 2026-11-08T06:36:50.569726+00:00 {'CNYTWD=X': (1, 'ok'), 'CNHTWD=X': (1, 'ok')}
 ```
