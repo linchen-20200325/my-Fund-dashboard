@@ -361,9 +361,9 @@ def _table(m: dict) -> str:
     head = ("<thead><tr><th>候選</th><th>series 色值</th><th>對 surface #ffffff</th><th>對 page.bg #f5f7fb</th>"
             "<th>兩線 ΔE76（原色／protan／deutan／tritan）</th><th>灰階（兩線亮度比）</th><th>主要風險</th></tr></thead>")
     risks = {
-        "A": "橙色是三組中離 yellow 狀態邊（ΔE76 20.3）與 red 狀態邊（32.2）最近的，可能被讀成「警示」；橙色對 page.bg 只有 3.41:1，剛過參考 3:1，沒有餘裕；深藍離 primary 藍 26.5，同屬冷色；tritan 模擬下橙變 #e5525a（偏紅），與 red 狀態邊有聯想交集。",
-        "B": "藍綠（teal）可能被讀成「綠＝好」；tritan 下兩線 ΔE 最小；靛紫與 primary 藍同屬冷色。",
-        "C": "洋紅在視覺上偏紅系，仍可能被讀成「紅＝壞」（數值上離 red 狀態邊 58.0，比 A 的橙遠）；protan 下兩線 ΔE 最小（18.8），兩線都變成偏藍灰；灰階亮度比最低（1.94）。",
+        "A": "橙色是三組中離 yellow 狀態邊（ΔE76 20.3）與 red 狀態邊（32.2）最近的，可能被讀成「警示」；橙色對 page.bg 只有 3.41:1，剛過參考 3:1，沒有餘裕；深藍離 primary 藍 26.5，同屬冷色；深藍離 grey 狀態邊 43.6；tritan 模擬下橙變 #e5525a（偏紅），與 red 狀態邊有聯想交集。",
+        "B": "藍綠（teal）可能被讀成「綠＝好」；藍綠離 sidebar accent（#5fd3d0）ΔE76 只有 26.1、離 grey 狀態邊 39.5；tritan 下兩線 ΔE 最小；靛紫離 primary 藍 25.1，同屬冷色。",
+        "C": "C 的深藍離 primary 藍 ΔE76 21.6，是三組裡最近的（選取 pill 與線色較易混）；洋紅在視覺上偏紅系，仍可能被讀成「紅＝壞」（數值上離 red 狀態邊 58.0，比 A 的橙遠）；protan 下兩線 ΔE 最小（18.8），兩線都變成偏藍灰；灰階亮度比最低（1.94）。",
     }
     rows = []
     rows.append("<tr>" + cell("候選", "現況（基線）") + cell("series 色值", f"兩線同為文字色 {TEXT}") +
@@ -443,7 +443,7 @@ def build_html() -> str:
 <div class="notes">
 <section aria-labelledby="h-cmp"><h2 id="h-cmp">候選比較表</h2>
 {_table(m)}
-<p class="s">數值全由 <code>measure.py</code> 計算（公式與演算法見下）。對比欄是「series 1／series 2」。灰階欄是兩線轉灰階後的色值與其亮度比；比值接近 1 代表只靠灰階分不開、必須靠線型與末點標籤。</p>
+<p class="s">數值全由 <code>measure.py</code> 計算（公式與演算法見下）。對比欄是「series 1／series 2」。灰階欄是兩線轉灰階後的色值與其亮度比；比值接近 1 代表只靠灰階分不開、必須靠線型與末點標籤。灰階欄的比值是用 8 位元量化後的灰階色值算的（例如 A 的 #414141／#868686 → 2.80）；直接用未編碼的相對亮度 L 算則為 2.78，差異來自編回 8 位元時的四捨五入，不影響排序。</p>
 <h3 style="margin-top:12px">與既有語意色的距離（避開 red／yellow／grey 狀態語意）</h3>
 {_ref_table(m)}
 <p class="s">本專案沒有核准的 ΔE 門檻；這張表只用來比較「哪個候選離狀態色較近」，不做通過／不通過判定。</p>
@@ -538,6 +538,45 @@ def shoot() -> None:
         browser.close()
 
 
+LABEL_JS = """
+() => [...document.querySelectorAll('svg.chart')].map((svg, i) => {
+  const sr = svg.getBoundingClientRect();
+  const lineRight = Math.max(...[...svg.querySelectorAll('path[fill=none]')].map(p => p.getBoundingClientRect().right));
+  const texts = [...svg.querySelectorAll('text')].filter(t => /104|102/.test(t.textContent)).map(t => ({t: t.textContent, r: t.getBoundingClientRect()}));
+  const card = svg.closest('.card').getBoundingClientRect();
+  const strip = svg.closest('.cand').querySelector('.strip').getBoundingClientRect();
+  const r1 = Math.round;
+  const rights = texts.map(x => x.r.right);
+  const hi = texts[0].r.top < texts[1].r.top ? [texts[0], texts[1]] : [texts[1], texts[0]];
+  return {chart: i, labels: texts.map(x => x.t),
+    labelLeftMinusLineRightPx: r1(Math.min(...texts.map(x => x.r.left - lineRight)) * 10) / 10,
+    labelsVerticalGapPx: r1((hi[1].r.top - hi[0].r.bottom) * 10) / 10,
+    labelRightMinusSvgRightPx: r1((Math.max(...rights) - sr.right) * 10) / 10,
+    labelRightMinusCardInnerRightPx: r1((Math.max(...rights) - (card.right - 13)) * 10) / 10,
+    stripLeftMinusLabelRightPx: r1((strip.left - Math.max(...rights)) * 10) / 10};
+})
+"""
+
+
+def labelcheck() -> None:
+    """末點標籤與線尾／標籤互相／卡片邊／辨識列的距離（負數＝重疊或超出），並可存 390 的局部放大截圖（不入庫）。"""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=EXE, args=["--no-sandbox"])
+        for width in (390, 1280):
+            page = browser.new_context(viewport={"width": width, "height": 900}, device_scale_factor=1).new_page()
+            page.goto("file://" + str(HTML_OUT))
+            page.wait_for_timeout(300)
+            for row in page.evaluate(LABEL_JS):
+                print(f"viewport {width}:", row)
+            crop_dir = os.environ.get("UIE_CROP_DIR")
+            if crop_dir and width == 390:
+                b = page.query_selector_all("svg.chart")[1].bounding_box()
+                page.screenshot(path=str(Path(crop_dir) / "crop_390_B_labels.png"), full_page=True,
+                                clip={"x": b["x"] + b["width"] * 0.55, "y": b["y"], "width": b["width"] * 0.45 + 12, "height": b["height"] * 0.7})
+        browser.close()
+
+
 def main(argv) -> int:
     mode = argv[1] if len(argv) > 1 else "colors"
     if mode == "colors":
@@ -549,8 +588,10 @@ def main(argv) -> int:
         print(f"wrote {HTML_OUT.relative_to(ROOT)} ({HTML_OUT.stat().st_size} bytes)")
     elif mode == "shoot":
         shoot()
+    elif mode == "labelcheck":
+        labelcheck()
     else:
-        print("usage: measure.py [colors|build|shoot]")
+        print("usage: measure.py [colors|build|shoot|labelcheck]")
         return 2
     return 0
 

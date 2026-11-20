@@ -80,9 +80,9 @@
 ## 版面量測原文（`UI_V2_CHROMIUM=... python .../measure.py shoot`，Chromium，DPR 1）
 
 ```
-== viewport 390: {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 8022, 'htmlMinFontPx': 13, 'htmlTextNodesUnder13px': 0, 'touchTargets': 29, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'overflowElements': 0, 'primaryCharts': 3, 'primaryChartWidthPx': 322, 'primaryChartSvgTextRenderedPx': [9.84, 10.73], 'sideDisplay': 'none', 'topnavDisplay': 'grid'}
+== viewport 390: {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 8169, 'htmlMinFontPx': 13, 'htmlTextNodesUnder13px': 0, 'touchTargets': 29, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'overflowElements': 0, 'primaryCharts': 3, 'primaryChartWidthPx': 322, 'primaryChartSvgTextRenderedPx': [9.84, 10.73], 'sideDisplay': 'none', 'topnavDisplay': 'grid'}
 screenshot shot_390.png: 390x3550px, 135333 bytes, palette 128 colors
-== viewport 1280: {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 4301, 'htmlMinFontPx': 13, 'htmlTextNodesUnder13px': 0, 'touchTargets': 29, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'overflowElements': 0, 'primaryCharts': 3, 'primaryChartWidthPx': 590, 'primaryChartSvgTextRenderedPx': [18.03, 19.67], 'sideDisplay': 'block', 'topnavDisplay': 'none'}
+== viewport 1280: {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 4386, 'htmlMinFontPx': 13, 'htmlTextNodesUnder13px': 0, 'touchTargets': 29, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'overflowElements': 0, 'primaryCharts': 3, 'primaryChartWidthPx': 590, 'primaryChartSvgTextRenderedPx': [18.03, 19.67], 'sideDisplay': 'block', 'topnavDisplay': 'none'}
 screenshot shot_1280.png: 1280x2736px, 189789 bytes, palette 128 colors
 ```
 
@@ -99,6 +99,27 @@ screenshot shot_1280.png: 1280x2736px, 189789 bytes, palette 128 colors
 ## NOT VERIFIED
 
 Cloud `ui_v3` URL 與部署 SHA；iOS／Android／WebView 真機；真人色覺測試；實機螢幕與列印；severity 小於 1 與其他模擬演算法；示意殼是否與正式 Streamlit 頁一致（字型、末點標籤是否裁切）；客戶是否同意兩線不同色與色值；獨立稽核。
+
+## 末點標籤與線尾／辨識列的距離（`measure.py labelcheck`，Chromium，DPR 1）
+
+指令：`UI_V2_CHROMIUM=... python docs/evidence/ui_e_dual_series_palette_2026_11_20/measure.py labelcheck`（另設 `UIE_CROP_DIR` 可存 390 候選 B 的局部放大截圖，不入庫）。數值為像素，負數＝重疊或超出：
+
+```
+viewport 390: {'chart': 0, 'labels': ['台股 102.0', 'S&P 500 104.6'], 'labelLeftMinusLineRightPx': 5.4, 'labelsVerticalGapPx': 25.9, 'labelRightMinusSvgRightPx': 4.8, 'labelRightMinusCardInnerRightPx': 16.8, 'stripLeftMinusLabelRightPx': -314.8}
+viewport 390: {'chart': 1, 'labels': ['台股 102.0', 'S&P 500 104.6'], 'labelLeftMinusLineRightPx': 5.4, 'labelsVerticalGapPx': 25.9, 'labelRightMinusSvgRightPx': 4.8, 'labelRightMinusCardInnerRightPx': 16.8, 'stripLeftMinusLabelRightPx': -314.8}
+viewport 390: {'chart': 2, 'labels': ['台股 102.0', 'S&P 500 104.6'], 'labelLeftMinusLineRightPx': 5.4, 'labelsVerticalGapPx': 25.9, 'labelRightMinusSvgRightPx': 4.8, 'labelRightMinusCardInnerRightPx': 16.8, 'stripLeftMinusLabelRightPx': -314.8}
+viewport 1280: {'chart': 0, 'labels': ['台股 102.0', 'S&P 500 104.6'], 'labelLeftMinusLineRightPx': 9.8, 'labelsVerticalGapPx': 46.3, 'labelRightMinusSvgRightPx': 8.9, 'labelRightMinusCardInnerRightPx': -249.1, 'stripLeftMinusLabelRightPx': 19.1}
+viewport 1280: {'chart': 1, 'labels': ['台股 102.0', 'S&P 500 104.6'], 'labelLeftMinusLineRightPx': 9.8, 'labelsVerticalGapPx': 46.3, 'labelRightMinusSvgRightPx': 8.9, 'labelRightMinusCardInnerRightPx': -249.1, 'stripLeftMinusLabelRightPx': 19.1}
+viewport 1280: {'chart': 2, 'labels': ['台股 102.0', 'S&P 500 104.6'], 'labelLeftMinusLineRightPx': 9.8, 'labelsVerticalGapPx': 46.3, 'labelRightMinusSvgRightPx': 8.9, 'labelRightMinusCardInnerRightPx': -249.1, 'stripLeftMinusLabelRightPx': 19.1}
+```
+
+- **390 候選 B 的「S&P 500 104.6」與虛線尾端沒有重疊**：標籤左緣比所有線的最右緣多 5.4px；兩個標籤上下相隔 25.9px，也沒有互相重疊（已用 390 局部放大截圖目視確認）。三個候選數字相同（共通，因為幾何相同）。
+- **已知的示意殼瑕疵（三候選共通，未處理）**：390 時標籤右緣比 SVG 右緣多 4.8px、比卡片內容區右緣多 16.8px（卡片邊框加內距共 13px，所以約有 3.8px 越過卡片外緣）。原因是示意殼的字型（較寬的 fallback CJK 字型）與 `chart_svg` 的 84px 右側留白；這是既有版面（`chart_svg` 常數）問題，只調 CSS 無法在不縮字的前提下消除，本批不動。正式頁字型不同，**未驗**。
+- 1280：標籤右緣超出 SVG 右緣 8.9px，但離卡片內緣還有 249px，離右側辨識列 19.1px，沒有貼住。
+
+## 灰階比的小數差異
+
+表中 A 的灰階亮度比 2.80 是用 8 位元量化後的灰階色值（`#414141`／`#868686`）算的；直接用未編碼的相對亮度 L（0.0534、0.2372）算約為 2.78。差異來自把亮度編回 8 位元時的四捨五入，不影響候選排序。HTML 的比較表下方也有同樣說明。
 
 ## 測試輸出
 
