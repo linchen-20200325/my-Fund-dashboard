@@ -189,6 +189,14 @@ details.fold .body{padding:0 12px 12px}
 <p class="s pend">翻頁只是看同一份快照的不同 slice，不各自重跑 AI。</p>
 </div>
 </div>
+<div class="note" id="shared-note">
+<h3>共用註記（文件層）：同一畫面不等於同一上游證據</h3>
+<p class="pend">同一快照換頁、收合診斷或隱藏卡片，完整證據及 Missing 集合應保持一致。即使顯示相同，持倉只轉交 skipped_holdings／skipped_tabs，其他略過組未涵蓋，件數未知不能寫成零；NAV 須保留來源、資料日、取回時間及 stale／失敗／拒收原因；缺 FX 的幣別及未估值部位仍須保留；設定讀取失敗須與確實未設定分開。</p>
+<ul>
+<li>「持倉兩組轉交」是 CURRENT 限制；真實持倉的影響 NOT VERIFIED；BL-0545 BLOCKED。不得把它寫成「資料斷線」。</li>
+<li>本註記不新增產品欄位、不造數字、不定義 schema；只是證據一致性的設計方向。</li>
+</ul>
+</div>
 <h3 style="margin-top:12px" class="pend">不可用狀態（位置不變，內容不顯示）</h3>
 <div class="states">
 <div class="card dash">
@@ -449,6 +457,7 @@ details.fold .body{padding:0 12px 12px}
 <h3>框外註記（文件層，不是產品畫面）</h3>
 <ul>
 <li>保留的 UI 證據：主圖在前、摘要四項不因 Missing 消失、持倉來源／資料日／新鮮度。</li>
+<li>共用註記：持倉的略過與 Missing 證據不得因畫面相同而被視為相同，見資料流圖旁「共用註記」（#shared-note）。</li>
 <li>OneBrain 預留位置：同上，單一收合位。</li>
 </ul>
 </div>
@@ -1051,6 +1060,7 @@ details.fold .body{padding:0 12px 12px}
 <h3>框外註記（文件層，不是產品畫面）</h3>
 <ul>
 <li>保留的 UI 證據：完整資料健康度三層（UI-B）。</li>
+<li>共用註記：收合診斷時完整證據與 Missing 集合須保持一致；設定讀取失敗須與確實未設定分開，見資料流圖旁「共用註記」（#shared-note）。</li>
 <li>OneBrain 預留位置：無。畫面框內只有規則產生的「缺資料會限制分析判讀」說明（deterministic，不是 OneBrain 輸出、框內不出現 OneBrain 字樣）；67 §6.1 只批准 🌍／💼／🔍，不加第 4 個 local summary。</li>
 <li>命名差異：UI-B（#1297）把同一塊命名為「OneBrain｜資料限制說明」，本稿改為「資料限制說明」，兩者不同；以客戶裁示為準（BL-0560 (a)）。</li>
 </ul>

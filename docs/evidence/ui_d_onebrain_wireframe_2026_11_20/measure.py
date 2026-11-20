@@ -101,12 +101,10 @@ def main():
             page.screenshot(path=str(raw), full_page=True)
             out = HERE / f"shot_{width}.png"
             im = Image.open(raw).convert("RGB")
-            colors = 64
-            while True:
+            for colors in (64, 32, 16, 12, 8):
                 im.quantize(colors=colors, method=Image.MEDIANCUT, dither=Image.Dither.NONE).save(out, optimize=True)
-                if out.stat().st_size < 400_000 or colors <= 16:
+                if out.stat().st_size < 400_000:
                     break
-                colors //= 2
             raw.unlink()
             print(f"screenshot {out.name}: {im.width}x{im.height}px, {colors} colors, {out.stat().st_size} bytes")
         browser.close()

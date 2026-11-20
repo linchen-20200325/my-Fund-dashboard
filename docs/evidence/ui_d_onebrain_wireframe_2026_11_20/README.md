@@ -10,6 +10,11 @@
 3. 🌍 💼 🔍 三個位置是**同一份分析快照的不同 slice**（翻頁不各自重跑 AI）。資料流圖並示意「分析未完成／快照不一致／資料不足」三種不可用狀態：位置不變、內容不顯示，不以舊結論頂替。
 4. 揭露：OB-B（`services/onebrain/`）目前只是離線 Fake Provider 型別與測試，不連 UI。本組以 `git grep -ln "services.onebrain\|from services import onebrain" -- '*.py'` 實查，只有 `services/onebrain/` 自身與 `tests/test_onebrain_*.py` 三檔命中（單組、未複驗；不含動態 import 或非 `.py` 引用）。
 
+5. **共用註記（QA 非作者 Must-Fix，#1303）**：HTML 資料流圖旁加「共用註記」（`#shared-note`；💼／⚙️ 的框外註記指回此處），逐字採用 QA 建議文案：「同一快照換頁、收合診斷或隱藏卡片，完整證據及 Missing 集合應保持一致。即使顯示相同，持倉只轉交 skipped_holdings／skipped_tabs，其他略過組未涵蓋，件數未知不能寫成零；NAV 須保留來源、資料日、取回時間及 stale／失敗／拒收原因；缺 FX 的幣別及未估值部位仍須保留；設定讀取失敗須與確實未設定分開。」
+   - 「持倉兩組轉交」是 CURRENT 限制；真實持倉的影響 NOT VERIFIED；BL-0545 BLOCKED；不得寫成「資料斷線」。
+   - **驗收方向**：僅換頁→證據相同；僅改上游拒收／略過→同畫面仍可分辨（NOT RUN；設計層，本稿未驗任何實作）。
+   - 不新增產品欄位、不造數字、不發明 schema；`skipped_holdings`／`skipped_tabs` 為 QA 文案內既有識別名，本組未再核對其程式定義。
+
 ## 1. 檔案
 | 路徑 | 說明 |
 |---|---|
@@ -18,7 +23,7 @@
 | `docs/evidence/ui_d_onebrain_wireframe_2026_11_20/measure.py` | 量測＋截圖腳本（可重現；§6 的輸出原文即它的 stdout） |
 | 本 README | 說明、對照表、衝突與建議、PendingWording、最小 Gate、量測、測試輸出 |
 
-**截圖說明**：整頁（390 寬 11,601px 高；1280 寬 9,517px 高）。為符合單檔 < 400KB，以 Pillow 轉調色盤 PNG（無抖色）：390 為 64 色（317,579 bytes）、1280 為 16 色（371,779 bytes），**不是原始全彩輸出**，細緻色階（例如淡色底）會被合併。截圖內的 `⬜` 顯示成方框：截圖環境的字型沒有該字形，屬截圖環境問題，不是線框內容。390 視窗下桌機框（比視窗寬）放在自己的橫向捲動容器內，截圖只看得到它的左側一段。
+**截圖說明**：整頁（390 寬 12,187px 高；1280 寬 9,713px 高）。為符合單檔 < 400KB，以 Pillow 轉調色盤 PNG（無抖色）：390 為 64 色（358,335 bytes）、1280 為 12 色（368,607 bytes），**不是原始全彩輸出**，細緻色階（例如淡色底）會被合併。截圖內的 `⬜` 顯示成方框：截圖環境的字型沒有該字形，屬截圖環境問題，不是線框內容。390 視窗下桌機框（比視窗寬）放在自己的橫向捲動容器內，截圖只看得到它的左側一段。
 
 **版面說明**：390 與 1280 兩個畫面因寬度不同無法在 1280 視窗內左右並排，故上下堆疊（桌機框在上、手機框在下）；桌機框固定為桌機版型（深色左側欄＋淺色主區），不隨視窗寬度改變。
 
@@ -27,7 +32,7 @@
 
 | 頁 | 保留的 UI 證據（必要 Missing／Source／Freshness 與主要內容） | OneBrain 預留位置（線框內） | 正式 Gate（誰要拍板才能前進） |
 |---|---|---|---|
-| 🌍 市場與趨勢 | Primary 圖卡與基準日／頻率／缺值不補／資料日／來源；Secondary 卡；Missing（◇ 資料未備）、新鮮度（⬜ 門檻待裁示）、來源；「查看完整資料健康度」入口位置 | 主內容與必要揭露之後、預設收合的單一「OneBrain｜本頁解釋」（未啟用） | G2（位置與首屏限制）；加位置須 amend `docs/v2/81` 層 2（`DEC-2026-11-20-02` 不授權）；BL-0540 G-3 |
+| 🌍 市場與趨勢 | Primary 圖卡與基準日／頻率／缺值不補／資料日／來源；Secondary 卡；Missing（◇ 資料未備）、新鮮度（⬜ 門檻待裁示）、來源；「查看完整資料健康度」入口位置 | DOM 順序在必要揭露之後、預設收合的單一「OneBrain｜本頁解釋」（未啟用；桌機實測入口 summary 在首屏內，見 §3-2） | G2（位置與首屏限制）；加位置須 amend `docs/v2/81` 層 2（`DEC-2026-11-20-02` 不授權）；BL-0540 G-3 |
 | 💼 我的資產 | 主圖在前、摘要四項不因 Missing 消失（缺值顯示 ◇ 資料未備，不顯示 0）、近期事件位置、持倉來源／資料日／新鮮度 | 同上 | G2；💼 renderer／registry／真實接線仍未核准（`PROJECT_RULES.md` §0.4 文件地圖列） |
 | 🔍 找基金 | 查一檔基金（MoneyDJ 代碼或 ISIN；ISIN 尚未啟用）、基金身份、結果三態（有資料／查無／取數失敗）、不排名、來源／資料日 | 同上 | G2；🔍 線框尚未核准（registry `wireframe_not_approved`） |
 | 🤖 AI 投資總結 | Phase 7 前導覽可見不可點、不註冊頁面（`docs/v2/80` §7.4） | 無 slice：本頁就是全站綜合；只示意將來四個槽位（主要證據／最強反證／未確認／Evidence trace），全空 | G3（槽位與 67 §8.9／80 §16.4 對映）；Phase 7 與正式 OneBrain 入口 Gate |
@@ -36,7 +41,7 @@
 ## 3. 與既有契約的衝突與建議
 以下「建議」是本組讀法，可推翻。
 
-1. **67 §6.1 第 2 點（各頁至多一個 local summary，或一個「查看 AI 判斷」鏡像入口）**：本稿畫成收合的 local summary 位。「local summary」與「鏡像入口」二選一尚未定。建議：先採收合位（不佔首屏），待 G2 裁示。
+1. **67 §6.1 第 2 點（各頁至多一個 local summary，或一個「查看 AI 判斷」鏡像入口）**：本稿畫成收合的 local summary 位。「local summary」與「鏡像入口」二選一尚未定。現況（§3-2、§6 實測）：入口 summary 的位置，桌機三頁與手機 🔍 落在首屏內、手機 🌍／💼 在首屏外；收合內容預設不展開。是否維持收合位、入口是否須移出首屏，待 G2 裁示，本稿不裁決。
 2. **44 之十八其二第 3 點（桌機第一屏至多 1 個 AI 摘要入口；手機第一屏更少）**：本稿位置的 DOM 順序在必要揭露之後（手機單欄在主內容之後），預設收合。**但實測並非都在首屏之外**（`measure.py`，位移＝位置 summary 頂端相對所在框頂端，框頂視為開啟該頁時的視窗頂）：桌機框（視窗 1280×800）🌍 665／💼 439／🔍 248px，全部小於 800，即落在首屏內（桌機雙欄把右欄的位置拉高）；手機框（視窗 390×844）🔍 729px（底 789px）落在首屏內，🌍 1062px、💼 979px 在首屏外。桌機每頁仍只有 1 個入口、符合「至多 1 個」的數量上限，但「是否算首屏 AI 入口、手機是否算『更少』」與 44 該條的關係**待 Gate（G2）**，本稿不裁決。（390 視窗下的桌機框為 1000px 寬的捲動框，數值不代表 1280 桌機，以 1280 視窗的數值為準。）
 3. **`docs/v2/81` 層 2（現仍列 🌍 展開區）**：在 🌍 加 OneBrain 位置等於新增元素，`DEC-2026-11-20-02` 明示不授權修改 81 層 2。建議：本稿核准後，81 的 amendment 與 G2 同批處理，不單獨改 81。（81 層 2 現行逐字內容本組未再讀，只引 DEC 的記載。）
 4. **67 §6.1 只批准 🌍／💼／🔍，⚙️ 不在內**：UI-B（#1297）曾放「OneBrain｜資料限制說明」可見版（標尚未啟用、DOM 內有元素）；本稿把 ⚙️ 該塊改稱「資料限制說明（規則產生，非 AI）」，不使用 OneBrain 名稱，避免被讀成第 4 個 local summary。建議：UI-B 與本稿一併收斂為「⚙️ 只有 deterministic 說明」；UI-B 若已核准的部分與此不同，以客戶裁示為準。
@@ -54,6 +59,7 @@
 - 不可用狀態：⬜ 分析未完成；⬜ 快照不一致；⬜ 資料不足；「本頁解釋暫不顯示，不以先前的結論頂替。」；「各頁未對齊到同一份分析快照，本頁解釋暫不顯示。」；「缺：‹類別清單›；無法產生本頁解釋。」；「翻頁只是看同一份快照的不同 slice，不各自重跑 AI。」；「是否允許顯示「舊分析」並標明產生時間＝待裁示…」（文件層說明）。
 - 🤖：示意：Phase 7 後；「現況：導覽項標「尚未開放」、不可點、不註冊頁面。」；主要證據；最強反證；未確認；Evidence trace；全站綜合；「🤖 是唯一的全站綜合頁；🌍／💼／🔍 的「本頁解釋」是同一份快照的 slice，不在此重複。」；（空）。
 - ⚙️：資料限制說明；規則產生；「缺資料會限制分析判讀：下列類別目前未取得，分析啟用後相關判讀會因此受限。」；「未取得：‹類別清單›」；「這是規則產生的說明句，不是分析結果。」；必要揭露（本頁即完整資料健康度所在）；① 全站資料取得摘要、② 逐來源／序列明細、③ 開發者診斷（預設收合）（沿用 UI-B 的新字樣，仍未核准）。
+- 共用註記（文件層，但字樣待核）：同一畫面不等於同一上游證據；「同一快照換頁、收合診斷或隱藏卡片，完整證據及 Missing 集合應保持一致。…設定讀取失敗須與確實未設定分開。」（全文見 §0-5）；「持倉兩組轉交」「CURRENT 限制」「NOT VERIFIED」「BL-0545 BLOCKED」。
 - 資料流圖與位置標籤（畫面示意；名稱沿用既有概念、欄位未定）：Decision Digest；單一 OneBrain；各頁 slice；未來（未啟用）：給 OneBrain 讀；不可用狀態（位置不變，內容不顯示）；💼 的「頁級狀態」（作為列名；β 階梯語意沿用既有）。
 - 各頁共用：必要揭露（保留在頁內）；Missing／新鮮度／來源（作為列名）；「尚未取得 ‹N› 項（名單收合，一項不刪）」。
 - 🔍：查無此代碼；「結果三態要分開：有資料／查無此代碼／⛔ 取數失敗（查無 ≠ 取數失敗）」（說明句）。
@@ -74,7 +80,7 @@
 **G2｜OneBrain 位置與首屏限制（67 §6.1／44 之十八其二／81 層 2）**
 - 問題：🌍 💼 🔍 的位置是否定為「主內容之後、預設收合的單一 local summary 位」（而非「鏡像入口」）；是否可落在首屏另議？
 - 已知答案：67 §6.1 每頁至多一個 local summary 或一個鏡像入口；44 之十八其二桌機第一屏至多 1 個 AI 入口；81 層 2 現行不含它。
-- 推薦：採收合位；首屏落位待裁示（實測桌機三頁與手機 🔍 的位置落在首屏內，見 §3-2）；同批 amend 81 層 2（與 BL-0540 G-3 同一批處理）。
+- 推薦：收合內容預設不展開；入口 summary 的首屏落位待裁示（實測桌機三頁與手機 🔍 的 summary 落在首屏內，見 §3-2）；同批 amend 81 層 2（與 BL-0540 G-3 同一批處理）。
 - 風險：位置落在首屏可能與 44 之十八其二的首屏 AI 入口限制衝突，並擠掉必要的 Missing／Source／Freshness；放太深可能使用者找不到。
 
 **G3｜⚙️ 只有 deterministic 說明，與 🤖 槽位對映（BL-0560 (a)／67 §8.9／80 §16.4）**
@@ -87,25 +93,25 @@
 **stdout 原文**（只算「目前可見」的元素；未展開的 `<details>` 內容不計；視窗高 1280×800／390×844；`touchTargets` ＝ `summary`、頁首五格／側欄項、輸入欄、按鈕、pill、入口列、slice pill；`first-screen` 列＝OneBrain 位置的首屏位置）：
 ```
 == viewport 390
-default (all <details> closed): {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 11730, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 5, 'mobFrames': 5, 'mobFrameMaxWidthPx': 358, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': True, 'obSlots': 6}
+default (all <details> closed): {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 12187, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 5, 'mobFrames': 5, 'mobFrameMaxWidthPx': 358, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': True, 'obSlots': 6}
 first-screen: {'page': 'p-mkt', 'frame': 'desk', 'summaryTopInFramePx': 707, 'summaryBottomInFramePx': 768, 'viewportH': 844, 'inFirstScreen': True}
 first-screen: {'page': 'p-mkt', 'frame': 'mob', 'summaryTopInFramePx': 1062, 'summaryBottomInFramePx': 1122, 'viewportH': 844, 'inFirstScreen': False}
 first-screen: {'page': 'p-ast', 'frame': 'desk', 'summaryTopInFramePx': 482, 'summaryBottomInFramePx': 542, 'viewportH': 844, 'inFirstScreen': True}
 first-screen: {'page': 'p-ast', 'frame': 'mob', 'summaryTopInFramePx': 979, 'summaryBottomInFramePx': 1039, 'viewportH': 844, 'inFirstScreen': False}
 first-screen: {'page': 'p-exp', 'frame': 'desk', 'summaryTopInFramePx': 292, 'summaryBottomInFramePx': 352, 'viewportH': 844, 'inFirstScreen': True}
 first-screen: {'page': 'p-exp', 'frame': 'mob', 'summaryTopInFramePx': 729, 'summaryBottomInFramePx': 789, 'viewportH': 844, 'inFirstScreen': True}
-all <details> open: {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 13729, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 5, 'mobFrames': 5, 'mobFrameMaxWidthPx': 358, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': False, 'obSlots': 6}
-screenshot shot_390.png: 390x11730px, 64 colors, 329860 bytes
+all <details> open: {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 14186, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 5, 'mobFrames': 5, 'mobFrameMaxWidthPx': 358, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': False, 'obSlots': 6}
+screenshot shot_390.png: 390x12187px, 64 colors, 358335 bytes
 == viewport 1280
-default (all <details> closed): {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 9516, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 0, 'mobFrames': 5, 'mobFrameMaxWidthPx': 390, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': True, 'obSlots': 6}
+default (all <details> closed): {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 9713, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 0, 'mobFrames': 5, 'mobFrameMaxWidthPx': 390, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': True, 'obSlots': 6}
 first-screen: {'page': 'p-mkt', 'frame': 'desk', 'summaryTopInFramePx': 665, 'summaryBottomInFramePx': 725, 'viewportH': 800, 'inFirstScreen': True}
 first-screen: {'page': 'p-mkt', 'frame': 'mob', 'summaryTopInFramePx': 1019, 'summaryBottomInFramePx': 1080, 'viewportH': 800, 'inFirstScreen': False}
 first-screen: {'page': 'p-ast', 'frame': 'desk', 'summaryTopInFramePx': 439, 'summaryBottomInFramePx': 499, 'viewportH': 800, 'inFirstScreen': True}
 first-screen: {'page': 'p-ast', 'frame': 'mob', 'summaryTopInFramePx': 979, 'summaryBottomInFramePx': 1039, 'viewportH': 800, 'inFirstScreen': False}
 first-screen: {'page': 'p-exp', 'frame': 'desk', 'summaryTopInFramePx': 248, 'summaryBottomInFramePx': 309, 'viewportH': 800, 'inFirstScreen': True}
 first-screen: {'page': 'p-exp', 'frame': 'mob', 'summaryTopInFramePx': 729, 'summaryBottomInFramePx': 789, 'viewportH': 800, 'inFirstScreen': True}
-all <details> open: {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 11375, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 0, 'mobFrames': 5, 'mobFrameMaxWidthPx': 390, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': False, 'obSlots': 6}
-screenshot shot_1280.png: 1280x9516px, 16 colors, 380705 bytes
+all <details> open: {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 11572, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 0, 'mobFrames': 5, 'mobFrameMaxWidthPx': 390, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': False, 'obSlots': 6}
+screenshot shot_1280.png: 1280x9713px, 12 colors, 368607 bytes
 ```
 **讀法**
 - 文件溢出：兩個視窗、預設與「全部 `<details>` 展開」後，`scrollWidth` ＝ `clientWidth`（390／1280），`overflowElementsOutsideDeskWrap` ＝ 0。
@@ -166,5 +172,5 @@ $ git diff --cached --check
 - `docs/design/ui_b_settings_data_health_wireframe_2026_11_20.html`（UI-B）的版型與 token 是沿用；本組未驗 UI-B 是否已經客戶核准。
 - 「全 repo 只有 `services/onebrain/` 與其測試引用 OB-B」是單組 `git grep`，未涵蓋動態 import 與非 `.py` 引用；OB-B 程式 PR 的 GitHub 狀態本組未查。
 - Cloud／真機／WebView 實際畫面；瀏覽器相容性只在單一 Chromium 版本驗過。
-- 截圖為調色盤 PNG（390：64 色、1280：16 色，為符合 < 400KB），非原始全彩輸出；`⬜` 在截圖中顯示為方框屬字型缺字。
+- 截圖為調色盤 PNG（390：64 色、1280：12 色，為符合 < 400KB），非原始全彩輸出；`⬜` 在截圖中顯示為方框屬字型缺字。
 - CI 狀態未查；未 push、未開 PR、未合併。
