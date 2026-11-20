@@ -23,7 +23,7 @@
 
 ## 1. UI 線（#1297／#1298／#1299／#1300／#1301；BL-0536／0540／0542／0544／0559／0561 等）
 
-列數說明：U-13、U-14、C-05 為**指標列**（內容見其指向列），表內 60 列高估獨立項目數（扣除後約 57）。
+列數說明：U-13、U-14、C-05 為**指標列**（內容見其指向列），表內共 61 列（U 36／O 12／C 13），含上述 3 條指標列，獨立項目數約 58。
 
 分類縮寫：**技**＝技術可自行處理；**答待落**＝已答覆待落盤；**客裁**＝需客戶裁示；**阻**＝外部阻擋 BLOCKED；**完**＝已完成含證據。
 
@@ -99,6 +99,7 @@
 | C-10 資料來源／Secrets | BL-0509 probe 排程、BL-0501／0504 EPS／財報 Data Source Gate、BL-0480／0481 blocked、BL-0530 ISIN research-only、`secrets_recovery_verification_2026_11_10.md` Cloud Secrets 恢復 | 【F】probe workflows 仍 active（inventory 稱 11-18／11-19 成功執行）；新來源一律 Decision Gate；Cloud Secrets 恢復 NOT VERIFIED | `DEC-2026-11-08-01`（10 條非 main 分支全部保留、不停 cron、不改 workflow）；`DEC-2026-11-10-03` | 客戶或持有人提供事實 | 客戶／持有人 | 不得動 | 否（暫掛） | 阻（外部） |
 | C-11 BL-0411 與守衛缺口 | BL-0411『fixed 待稽核』；`DEC-2026-10-30-04` 要求 P3 production 前必修 | 【F】inventory X6(e)：稽核完成證據『未能確認』 | `DEC-2026-10-30-04` | 獨立稽核證據 | 專案 AI | 補獨立稽核證據（唯讀） | 否 | 技 |
 | C-12 BL-0342／0453 Py3.13 黃金檔 | `tests/ui_v2` 在 3.13 本機紅、CI（3.11）綠 | 【F】root cause 未查 | 無 | — | 專案 AI | 僅在證明影響 production／CI 時派工；Golden 不可重錄 | 否 | 技（條件式） |
+| C-13 assets_source 證據轉接缺口 | `ui_v3/adapters/assets_source.py` 頂部及 `holding_stage_inputs` 的證據轉接只承接 `skipped_holdings`／`skipped_tabs`；L2 其他孤兒／壞列等略過群組不進現有 Evidence。兩組為空**不可推出**『來源整體無拒收』 | 【F】限制 CURRENT（Work 資料線原始驗收：https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7040213389 ，main `8ebb5290`；本組未重讀該 comment 原文，引用其轉述，【NV】）。真實持倉是否受影響【NV】；完整真實來源取決於 BL-0545（BLOCKED）。本列只登記限制，**不是**『目前資料斷線』，也**不是**『已准入』。已查無等價既有列（grep `assets_source`／`skipped_holdings` 0 命中） | 無（未核准任何契約；不得僭越 BL-0527／D2-G2 的 schema 與正式 Digest Gate） | 下次契約審查最小反控制（**NOT RUN**）：同一可見 UI／數值的兩份離線上游 fixture（一份全無略過、一份只有『未轉交的其他略過群組』），檢查完整證據／Missing 集合能否辨別，並核對原有未知件數不被改為 0 | Work 資料線獨立驗收；後續 Gate＝BL-0527／D2-G2 | 登記；待 BL-0545 解鎖與契約審查。**不得修改** `assets_source`、Domain／Source 或資料契約 | 否（登記） | 阻（BL-0545）＋技（可查證） |
 
 ## 4. 現在真正阻斷下一步、需使用者回答的最小 Gate（≤3 項）
 
