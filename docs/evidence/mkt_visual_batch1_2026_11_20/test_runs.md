@@ -109,14 +109,14 @@ _ test_registry_app_preview_pages_and_shell_do_not_mention_the_preview_and_ui_v3
 >           assert "poc/" not in f.read_text(encoding="utf-8"), f.relative_to(ROOT).as_posix()
 E           AssertionError: ui_v3/design/theme.py
 E           assert 'poc/' not in '# -*- codin...')}}}\n"""\n'
-E             
+E
 E             'poc/' is contained here:
 E                         poc/dual_theme_isolated 有同款先例）；(2) `label:has(input:focus-visible)`——標準偽類。任一生效即出環；
 E             ?           ++++
 E                   - 「檢視／期間／…」標籤與選項同列（標籤 `type.caption`、無額外上下距）。
 E                   ⚠️ 依賴 Streamlit 內部 `data-testid`／`data-selected`／`data-focus-visible`（80 §17.1 已知限制）；升版若改 DOM，
 E                   `test_ui_v3_market_page_browser.py` 的 pill 與焦點環守衛會轉紅。"""...
-E             
+E
 E             ...Full output truncated, use '-vv' to show
 
 tests/poc_fund_lookup_component_preview/test_fund_lookup_cmp_guards.py:434: AssertionError
@@ -126,3 +126,5 @@ tests/poc_fund_lookup_component_preview/test_fund_lookup_cmp_guards.py:434: Asse
 ## 其他原文
 - `tests/ui_v3` 完整 pytest 輸出（含警告）過長，未入庫；結尾行見上表、逐檔 junit 見上節。
 - 瀏覽器兩支：`test_ui_v3_market_page_browser.py` 與 `test_ui_v3_top_nav_browser.py` 均在 `tests/ui_v3` 整目錄內實跑（上表逐檔）。
+
+> 註記（2026-11-20）：為通過 pre-commit 的 trailing-whitespace／end-of-file-fixer，本檔內貼上的 pytest 原文已去除行尾空白，measure_*.json 補結尾換行；內容無其他改動。
