@@ -12,8 +12,8 @@ AppTest 不載入 CSS，DOM 級守衛量不到「橫向溢出」「圖是否真�
 - 主圖：存在、可見（非 display:none／visibility:hidden）、非零尺寸、水平在視窗內、長寬比維持 viewBox 360:240、
   在摘要之後與第一張 Secondary 卡之前、中心點沒被別的元素蓋住（MV-05、MV-09 只斷言「存在、可見、非零尺寸」）。
 - **首屏主圖露出量（G3／G6 施工批起有門檻）**：G5 原本「暫時接受現況、只記錄」；客戶規則為「首屏圖的露出量不得明顯變差，因內距而下降時優先零額外內距」，
-  故改為斷言「露出量 ≥ 改前基線 − 1px（容次像素取整）」；基線＝改前 `origin/main`（192848b）同腳本同合成資料實測：390／768／1280 ＝ 156.6／181.4／198.4px
-  （`_FOLD_BASELINE`；🌍 視覺批 1 已上調，見該常數註解）。390 另斷言主圖渲染寬 ≥354（改前 358；卡內左右滿版後為卡內寬 356，比例仍 360:240、最大寬 720）。數字仍照舊 print 與 `record_property`。
+  故改為斷言「露出量 ≥ 基線 − 1px（容次像素取整）」。⚠️ **現行基線（`_FOLD_BASELINE`）＝ 390／768／1280 ＝ 194／244／261px**（🌍 視覺批 1 上調，依據與容差見該常數註解）；
+  本段原寫的 156.6／181.4／198.4px（改前 `origin/main` 192848b 實測）只是**歷史數字**，已不是現行門檻，勿引用。390 另斷言主圖渲染寬 ≥354（改前 358；卡內左右滿版後為卡內寬 356，比例仍 360:240、最大寬 720）。數字仍照舊 print 與 `record_property`。
 - 頁首五格 S1（`DEC-2026-11-06-01`／`-07-02`）：≤768 五格全可見、等寬、不重疊、不橫滑、各格 ≥48px 高；≥769 側欄在、頁首隱藏。
 - 已核准排版：區塊順序（MV-02）、首屏 chip＋核心數字 ≤5（MV-03）、缺資料恆 `⬜`／`◇ 資料未備`、Missing 不畫零不畫空座標軸、
   取數失敗原文不外漏（MV-04、MV-07）。
@@ -122,7 +122,8 @@ _MEASURE = r"""
   out.aux = {statusBar: fsOf('.uv3-statusbar'), footer: fsOf('.uv3-footer'), sideSoon: fsOf('.uv3-nav-soon'), cta: fsOf('.uv3-cta-note'),
              topNavP: fsOf('.st-key-uv3-top-nav a[data-testid="stPageLink-NavLink"] p'), topNavDisabled: fsOf('.uv3-tn-disabled'), topNavSoon: fsOf('.uv3-tn-soon')};
   const sbar = document.querySelector('.uv3-statusbar');
-  out.statusBarLines = sbar ? Math.max(1, Math.round(sbar.getBoundingClientRect().height / parseFloat(getComputedStyle(sbar).lineHeight))) : null;   // 行數＝高度÷行高（子元素置中，top 不一致不能用來數行）
+  const sbLh = sbar ? parseFloat(getComputedStyle(sbar).lineHeight) : NaN;
+  out.statusBarLines = Number.isFinite(sbLh) && sbLh > 0 ? Math.max(1, Math.round(sbar.getBoundingClientRect().height / sbLh)) : null;   // 行數＝高度÷行高（子元素置中，top 不一致不能用來數行）
   // G6：卡片容器與卡內控制項的位置關係
   const frame = k => q('.st-key-uv3-card-' + k);
   const F = {summary: frame('summary'), chart: frame('chart'), vix: frame('sec-vix'), rates: frame('sec-rates')};
@@ -211,8 +212,29 @@ _STATUS_ROWS = r"""
     while ((n = w.nextNode())) { const m = re.exec(n.nodeValue); if (m) { const rg = document.createRange(); rg.setStart(n, m.index); rg.setEnd(n, m.index + m[0].length);
       return new Set([...rg.getClientRects()].map(q => Math.round(q.top))).size > 1; } } return null; };
   out.rows = [...ex.querySelectorAll('[data-testid="stExpanderDetails"] .uv3-row')].map(row => { const s = getComputedStyle(row), b = row.getBoundingClientRect();
-    return {text: row.innerText.replace(/\s+/g, ' ').trim().slice(0, 60), lines: Math.round(b.height / (parseFloat(s.lineHeight) || 24.8)),
+    const lh = parseFloat(s.lineHeight);   // 取不到（'normal'）就回 null：判定函式報量測失敗，不用備援值
+    const text = row.innerText.replace(/\s+/g, ' ').trim();   // 不截斷（截斷會讓長列被誤判成短列）
+    return {text, hasDateWord: /資料日/.test(text), lines: Number.isFinite(lh) && lh > 0 ? Math.round(b.height / lh) : null,
             dateSplit: splitOf(row, /\d{4}-\d{2}-\d{2}/), labelSplit: splitOf(row, /資料日/), scrollW: row.scrollWidth, clientW: row.clientWidth}; });
+  return out;
+}
+"""
+
+_SYNTH_WRAP = r"""
+() => {   // 確定性折行探針：用頁面真實的 .uv3-status-row／.uv3-unit 樣式，在隱藏的合成列裡量「日期」與「資料日」會不會被拆開。
+  // 容器寬＝固定 150px 墊片＋空白＋被測字串量到寬度的一部分 → 剩餘空間必然不夠放整個詞，與本機／CI 字型無關（寬度都是現量的）。
+  const mk = (w, inner) => { const d = document.createElement('div'); d.className = 'uv3-row uv3-status-row';
+    d.style.cssText = 'position:absolute;left:0;top:0;visibility:hidden;margin:0;width:' + w + 'px'; d.innerHTML = inner; document.body.appendChild(d); return d; };
+  const width = html => { const d = mk(2000, '<span style="white-space:nowrap">' + html + '</span>'); const w = d.firstChild.getBoundingClientRect().width; d.remove(); return w; };
+  const GAP = 150, sp = width('a b') - width('ab'), dW = width('2026-11-02'), lW = width('資料日');
+  const splitOf = (row, re) => { const w = document.createTreeWalker(row, NodeFilter.SHOW_TEXT); let n;
+    while ((n = w.nextNode())) { const m = re.exec(n.nodeValue); if (m) { const rg = document.createRange(); rg.setStart(n, m.index); rg.setEnd(n, m.index + m[0].length);
+      return new Set([...rg.getClientRects()].map(q => Math.round(q.top))).size > 1; } } return null; };
+  const filler = '<span style="display:inline-block;width:' + GAP + 'px;height:1px"></span> ';
+  const dRow = mk(GAP + sp + 0.75 * dW, filler + '<span class="uv3-unit">2026-11-02</span>');
+  const lRow = mk(GAP + sp + 0.5 * lW, filler + '資料日');
+  const out = {dW, lW, sp, dateSplit: splitOf(dRow, /\d{4}-\d{2}-\d{2}/), labelSplit: splitOf(lRow, /資料日/)};
+  dRow.remove(); lRow.remove();
   return out;
 }
 """
@@ -329,7 +351,9 @@ def aux_font_violations(m, width):
         elif a[key]["fontSize"] != want:
             bad.append(("輔助字不是 type.caption", key, a[key]["fontSize"], want))
     sb = a["statusBar"]
-    if sb is not None and m["statusBarLines"] and sb["h"] > m["statusBarLines"] * _STATUS_BAR_LINE_PX + 0.6:
+    if sb is not None and not m["statusBarLines"]:
+        bad.append(("Status Bar 行數量測失敗（行高取不到）", m["statusBarLines"]))
+    elif sb is not None and sb["h"] > m["statusBarLines"] * _STATUS_BAR_LINE_PX + 0.6:
         bad.append(("Status Bar 高度超過行數×20px（字級放大不得吃首屏）", round(sb["h"], 1), m["statusBarLines"]))
     return bad
 
@@ -348,21 +372,43 @@ def top_nav_font_violations(m, width):
 
 
 def status_row_violations(s, width):
-    """`▸ 各項資料狀態` 展開後的逐列：不在字中折行（日期不拆、「資料日」不拆）、每列至多 2 行、無橫向溢出。"""
+    """`▸ 各項資料狀態` 展開後的逐列：不在字中折行（日期不拆、「資料日」不拆）、行數不失控、無橫向溢出。
+
+    行數上限刻意放寬：行數取決於字型寬度（本機與 CI 的 CJK 字型不同，同一列可能 2 行或 3 行），守衛要抓的是「失控」（逐字一行）而不是精確行數；
+    故 390 容 ≤3 行、≥768 容 ≤2 行（高度÷行高，四捨五入）。「不在字中折行」與「無溢出」才是不隨字型變的硬條件。
+    已取得列（含「資料日」字樣）一定要找得到日期節點與「資料日」節點：找不到＝量測失敗（None 不得當成沒拆）；行高取不到同樣報量測失敗。"""
     bad = []
     if not s["rows"]:
         return [("狀態列沒有任何一列",)]
     if s["docScrollW"] > s["vw"]:
         bad.append(("展開後整頁橫向溢出", s["docScrollW"], s["vw"]))
+    max_lines = 3 if width <= 390 else 2
     for row in s["rows"]:
+        if row["hasDateWord"] and (row["dateSplit"] is None or row["labelSplit"] is None):
+            bad.append(("已取得列找不到日期／「資料日」節點（量測失敗）", row["text"]))
         if row["dateSplit"]:
             bad.append(("日期在字中折行", row["text"]))
         if row["labelSplit"]:
             bad.append(("「資料日」在字中折行", row["text"]))
-        if row["lines"] > 2:
-            bad.append(("狀態列超過 2 行", row["lines"], row["text"]))
+        if row["lines"] is None:
+            bad.append(("行高取不到（量測失敗）", row["text"]))
+        elif row["lines"] > max_lines:
+            bad.append(("狀態列行數失控", row["lines"], max_lines, row["text"]))
         if row["scrollW"] > row["clientW"] + 1:
             bad.append(("狀態列橫向溢出", row["scrollW"], row["clientW"]))
+    return bad
+
+
+def synth_wrap_violations(r):
+    """確定性探針（`_SYNTH_WRAP`）：用真實樣式在合成列量折行；結果 None／寬度 0 ＝ 量測失敗，不得當成通過。"""
+    if not (r["dW"] > 0 and r["lW"] > 0):
+        return [("探針量不到字串寬度", r["dW"], r["lW"])]
+    bad = []
+    for key, label in (("dateSplit", "日期"), ("labelSplit", "「資料日」")):
+        if r[key] is None:
+            bad.append((f"探針找不到{label}節點（量測失敗）",))
+        elif r[key]:
+            bad.append((f"{label}在字中折行（確定性探針）",))
     return bad
 
 
@@ -647,15 +693,27 @@ def _status_rows(base_and_browser, scenario, width, *, css=None):
         ctx.close()
 
 
-@pytest.mark.parametrize("scenario", ("normal", "tw_missing"))
-@pytest.mark.parametrize("width", _WIDTHS)
+@pytest.mark.parametrize("scenario,width", [(sc, w) for sc in ("normal", "tw_missing") for w in _WIDTHS]
+                         + [(sc, 390) for sc in ("us_failed", "both_missing")])
 def test_status_group_rows_do_not_break_inside_tokens_or_overflow(base_and_browser, scenario, width):
-    """`▸ 各項資料狀態` 在 390 會折兩行：不得在日期／「資料日」字中折行；768／1280 一行；三寬度無橫向溢出。"""
+    """`▸ 各項資料狀態` 在 390 會折行：不得在日期／「資料日」字中折行；三寬度無橫向溢出；行數不失控（容差見 `status_row_violations`）。
+    情境含非 ok 列（tw_missing 台股缺、us_failed S&P 取數失敗、both_missing 兩條皆缺；後兩者只測 390，最窄）。"""
     s = _status_rows(base_and_browser, scenario, width)
     assert len(s["rows"]) == 5, s
     assert not status_row_violations(s, width), (status_row_violations(s, width), s["rows"])
-    if width >= 768:
-        assert all(r["lines"] == 1 for r in s["rows"]), s["rows"]
+    assert any(r["hasDateWord"] for r in s["rows"]), ("沒有任何已取得列可驗證日期折行", s["rows"])
+
+
+@pytest.mark.parametrize("width", _WIDTHS)
+def test_wrap_probe_date_and_label_are_never_split_with_production_css(base_and_browser, width):
+    """確定性探針（與字型無關）：合成列剩餘空間不夠放整個日期／「資料日」，正式 CSS 下仍整詞換行、不拆開。"""
+    base, browser, _ = base_and_browser
+    ctx, page = _open(browser, base, "normal", width)
+    try:
+        r = page.evaluate(_SYNTH_WRAP)
+    finally:
+        ctx.close()
+    assert not synth_wrap_violations(r), (synth_wrap_violations(r), r)
 
 
 @pytest.mark.parametrize("scenario", _SCENARIOS)
@@ -1004,10 +1062,32 @@ def test_mutation_shell_aux_text_back_to_12px_or_taller_status_bar_is_flagged(ba
 
 
 def test_mutation_status_rows_breaking_inside_date_or_label_are_flagged(base_and_browser):
-    """視覺批 2 負控：拿掉 keep-all／單位包裝後，390 的狀態列會在「資料日」或日期中折行（改前實測就是這樣）→ 判定函式要報。"""
-    css = ".uv3-status-row{word-break:normal !important;text-wrap:wrap !important}.uv3-unit{display:inline !important}"
-    s = _status_rows(base_and_browser, "normal", 390, css=css)
-    msgs = [v[0] for v in status_row_violations(s, 390)]
-    assert "日期在字中折行" in msgs or "「資料日」在字中折行" in msgs, (msgs, s["rows"])
+    """視覺批 2 負控（確定性，不靠字型斷點）：同一個合成列，拿掉 keep-all／單位包裝後日期與「資料日」**必然**被拆（剩餘空間不夠放整詞）→ 探針判定要報；
+    正式 CSS 下同一探針不報（見 `test_wrap_probe_…`）。另：單位撐寬 → 橫向溢出被報（420px 大於任何測試寬度的列寬，與字型無關）。"""
+    base, browser, _ = base_and_browser
+    ctx, page = _open(browser, base, "normal", 390)
+    try:
+        assert not synth_wrap_violations(page.evaluate(_SYNTH_WRAP))
+        page.add_style_tag(content=".uv3-status-row{word-break:normal !important;text-wrap:wrap !important}.uv3-unit{display:inline !important}")
+        msgs = [v[0] for v in synth_wrap_violations(page.evaluate(_SYNTH_WRAP))]
+    finally:
+        ctx.close()
+    assert any("日期在字中折行" in t for t in msgs) and any("「資料日」在字中折行" in t for t in msgs), msgs
     s = _status_rows(base_and_browser, "normal", 390, css=".uv3-unit{display:inline-block !important;min-width:420px !important}")
     assert any(v[0] in ("狀態列橫向溢出", "展開後整頁橫向溢出") for v in status_row_violations(s, 390)), s
+
+
+def test_status_row_violations_flag_measurement_failures_instead_of_passing_silently():
+    """N2／N3：已取得列找不到日期節點（None）、行高取不到（None）、探針量不到都要報，不得靜默通過。純函式，不需瀏覽器。"""
+    ok = dict(text="台股：取得 ｜ 來源 X ｜ 資料日 2026-11-02", hasDateWord=True, lines=2, dateSplit=False, labelSplit=False, scrollW=300, clientW=300)
+    page = dict(vw=390, docScrollW=390, rows=[ok])
+    assert status_row_violations(page, 390) == []
+    for patch, needle in (({"dateSplit": None}, "量測失敗"), ({"labelSplit": None}, "量測失敗"), ({"lines": None}, "行高取不到"),
+                          ({"lines": 4}, "行數失控"), ({"dateSplit": True}, "日期在字中折行")):
+        msgs = [v[0] for v in status_row_violations(dict(page, rows=[dict(ok, **patch)]), 390)]
+        assert any(needle in t for t in msgs), (patch, msgs)
+    assert status_row_violations(dict(page, rows=[dict(ok, lines=3)]), 390) == []        # 390 容 3 行（字型差異）
+    assert any("行數失控" in v[0] for v in status_row_violations(dict(page, rows=[dict(ok, lines=3)]), 768))
+    assert synth_wrap_violations(dict(dW=0, lW=10, dateSplit=False, labelSplit=False))
+    assert synth_wrap_violations(dict(dW=50, lW=30, dateSplit=None, labelSplit=False))
+    assert synth_wrap_violations(dict(dW=50, lW=30, dateSplit=False, labelSplit=False)) == []
