@@ -17,7 +17,8 @@ C. **FAKE 隔離**：掃全 repo `*.py`，除 `services/onebrain/` 與 `tests/` 
 
 每一類偵測都有**變異負控**：在測試內以 f-string 動態組出違規原始碼，餵給和 production 掃描
 同一個函式，證明「拿掉該偵測邏輯就會轉紅」；同時有反向對照（合規原始碼不誤報）。
-負控只活在測試內，不寫進任何文件（`CLAUDE.md` §-2.A 第 8 款）。
+負控以字串拼接現編，不寫進文件（`CLAUDE.md` §-2.A 第 8 款）；金鑰樣式負控尤其刻意拆開拼接，
+不留可 grep 的完整字面量。
 
 ⚠️ 本守衛看不到什麼（誠實列出）：
 - 名稱在執行期才決定的動態 import（`import_module(變數)`）— 靜態分析無法解析。
@@ -25,6 +26,18 @@ C. **FAKE 隔離**：掃全 repo `*.py`，除 `services/onebrain/` 與 `tests/` 
 - 把 import 函式轉存後再呼叫（`f = importlib.import_module; f(...)`）。
 - 非 `.py` 檔（例如 `.ipynb`、經 `exec(open(...).read())` 載入的程式）。
 - `services/onebrain/` 與 `tests/` 兩個豁免區內的 import 不受 C 檢查（設計如此）。
+- **頂層 `tests/` 整體豁免**（Gate 卡 §3-5-5 字面）：任何頂層測試都可 import `services.onebrain`。
+  收緊（例如只准 `tests/test_onebrain_*.py`）比 Gate 卡更嚴，屬客戶／總管決定，本檔不單方收緊。
+- 變數別名：`x = services; x.onebrain`（只追蹤 `import services [as y]` 綁定的名稱）；
+  區域變數剛好叫 `services` 時屬性偵測只會多報、不會漏報。
+- `sys.modules.get("…")`／`sys.modules.setdefault`（本檔只偵測下標 `sys.modules["…"]`）。
+- 檔案路徑載入器：`importlib.util.spec_from_file_location`、`runpy.run_path` 等以路徑而非模組名載入。
+- `exec`／`eval` 字串內的 import（字串內容不被解析）。
+- 排除目錄名（`.git`、`venv`、`env`、`site-packages` 等）對**任何深度**生效；專案內若有同名
+  一般目錄會被整棵跳過。`.claude/worktrees` 僅在 repo 根下整棵跳過。
+- 非 `.py` 檔：`.ipynb`、`.yml` workflow 內的 `python -c "…"`、shell 腳本等不在掃描範圍。
+- 全 repo 掃描每次約數秒；CI 時間成本待觀察。`text`／`input_text` 型別允許空字串（設計如此）。
+- 白名單相等斷言只看 `*.py`（套件內多放非 .py 檔不會被抓）。
 
 本檔不依賴 conftest 的任何 fixture：只用 stdlib + pytest。
 """
@@ -206,6 +219,7 @@ def test_package_scan_is_not_vacuous():
         ("import_uuid", "import " + "uuid\n"),
         ("import_datetime", "import " + "datetime\n"),
         ("import_pathlib", "import " + "pathlib\n"),
+        ("import_math", "import " + "math\n"),
         ("import_sdk_like", "import " + "anthropic\n"),
         ("import_other_services", "from services import " + "fund_service\n"),
         ("import_shared", "from shared import " + "ttls\n"),
@@ -229,6 +243,8 @@ def test_package_scan_is_not_vacuous():
         ("secret_sk", "K = '" + "sk-" + "A1b2C3d4E5f6G7h8I9j0" + "'\n"),
         ("secret_google", "K = '" + "AIza" + "Sy" + "A" * 24 + "'\n"),
         ("secret_long_token", "K = '" + "A1" * 24 + "'\n"),
+        ("secret_github", "K = '" + "gh" + "p_" + "A1" * 12 + "'\n"),
+        ("secret_slack", "K = '" + "xo" + "xb-" + "1234567890" + "abcdef" + "'\n"),
         ("secret_pem", "K = '-----BEGIN " + "PRIVATE KEY-----'\n"),
     ],
 )
@@ -253,8 +269,12 @@ def test_package_clean_sources_are_not_flagged(src):
     assert scan_package_source(src) == []
 
 
-def test_services_purity_whitelist_would_also_accept_every_package_import():
-    """交叉核對：本檔更窄的白名單是通用 L2 白名單的子集（不需要改既有守衛）。"""
+def test_package_import_roots_are_within_this_files_narrow_whitelist():
+    """包內實際 import 的頂層模組 ⊆ 本檔白名單（再加上 `services` 自引）。
+
+    刻意**不**讀 `tests/test_services_purity_contract.py` 的 ALLOWED_IMPORTS：讀它會讓本檔綁死該守衛的
+    內部常數名稱（改名即紅），且本批不得修改該守衛。與通用 L2 白名單的相容性，由該守衛本身實跑證明。
+    """
     tree_imports: set[str] = set()
     for p in _pkg_py_files():
         for n in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):

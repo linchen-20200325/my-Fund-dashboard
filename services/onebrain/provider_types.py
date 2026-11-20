@@ -63,7 +63,11 @@ class ProviderRequest:
             self.timeout_seconds, (int, float)
         ):
             raise TypeError("timeout_seconds 必須是 int 或 float")
-        if not self.timeout_seconds > 0:
+        # 不 import math（本套件 import 白名單不含）：NaN 以 `x != x` 判斷，無限大以相等比較判斷。
+        timeout = self.timeout_seconds
+        if timeout != timeout or timeout in (float("inf"), float("-inf")):
+            raise ValueError("timeout_seconds 必須是有限數")
+        if not timeout > 0:
             raise ValueError("timeout_seconds 必須大於 0")
         if isinstance(self.max_retries, bool) or not isinstance(self.max_retries, int):
             raise TypeError("max_retries 必須是 int")

@@ -39,6 +39,9 @@ FORBIDDEN_OUTPUT_WORDS = (
     "買進",
     "賣出",
     "替代比較",
+    # 作者暫定，Gate 卡 §3-6 待總管確認：「無法判定」同屬 67 第 2 節六詞，但 75 第 4.2 節與
+    # DEC-2026-10-31-03 第 13 點要求全失敗時可顯示「AI 分析暫不可用／無法判定」。
+    # 降級字樣與行動詞的區分細節待定；暫時保守列入禁用（不移除）。
     "無法判定",
     "建議",
     "Risk Cap",
@@ -67,10 +70,19 @@ def _req(request_id: str = "req-42", model: str = "model-x") -> ProviderRequest:
 
 def _assert_fake_text_is_clean(text: str) -> None:
     assert "FAKE" in text
+    folded = text.casefold()
     for word in FORBIDDEN_OUTPUT_WORDS:
-        assert word not in text, f"FAKE 文字含不得出現的語意：{word}"
+        assert word.casefold() not in folded, f"FAKE 文字含不得出現的語意：{word}"
     assert not re.search(r"\d", text), "FAKE 文字不得含數字（機率／信心／數值）"
     assert "%" not in text and "％" not in text
+
+
+def test_output_word_check_is_case_insensitive_and_catches_mutants():
+    """變異負控：大小寫變體與行動詞必須被同一個檢查函式抓到。"""
+    for bad in ("FAKE RISK CAP", "FAKE Confidence", "FAKE 建議", "FAKE 減碼", "FAKE 90", "FAKE 50%"):
+        with pytest.raises(AssertionError):
+            _assert_fake_text_is_clean(bad)
+    _assert_fake_text_is_clean("FAKE｜離線測試")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -1,7 +1,7 @@
 """OB-B 離線切片：`services/onebrain/provider_types.py` 的型別不變式與欄位集合釘死。
 
 守什麼：
-1. 每個資料型別的**欄位名集合 `==` 核准清單**（防悄悄加 confidence／cost／trace 等被禁欄位）。
+1. 每個資料型別的**欄位名集合 `==` 本批設計定稿（未經使用者逐項核准，見 DEC-2026-11-20-01 計法註）**（防悄悄加 confidence／cost／trace 等被禁欄位）。
 2. 任何欄位名都不得含禁用詞（token／cost／trace／confidence／action／risk／policy…）。
 3. `ProviderOutcome` 的「恰一者非空」不變式、各型別的建構時驗證、不可變性。
 
@@ -26,7 +26,8 @@ from services.onebrain.provider_types import (
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 核准的欄位集合（Gate 卡 §3-2／§3-3 的候選，經本批設計後的定稿）
+# 欄位集合：本批設計定稿（未經使用者逐項核准，見 DEC-2026-11-20-01 計法註）。
+# Gate 卡 §3-2／§3-3 為候選；ProviderFailure.is_fake 等為本批設計新增。
 # ═══════════════════════════════════════════════════════════════════════════
 EXPECTED_FIELDS: dict[type, frozenset[str]] = {
     ProviderRequest: frozenset(
@@ -82,7 +83,7 @@ def _field_names(cls: type) -> frozenset[str]:
 def _assert_field_set(cls: type, expected: frozenset[str]) -> None:
     actual = _field_names(cls)
     assert actual == expected, (
-        f"{cls.__name__} 欄位集合與核准清單不符："
+        f"{cls.__name__} 欄位集合與本批設計定稿（未經使用者逐項核准，見 DEC-2026-11-20-01 計法註）不符："
         f"多出 {sorted(actual - expected)}、缺少 {sorted(expected - actual)}"
     )
 
@@ -147,16 +148,16 @@ def _valid_failure(**overrides) -> ProviderFailure:
 
 
 @pytest.mark.parametrize("cls", list(EXPECTED_FIELDS))
-def test_field_sets_match_approved_list(cls):
+def test_field_sets_match_design_list(cls):
     _assert_field_set(cls, EXPECTED_FIELDS[cls])
 
 
-def test_module_defines_exactly_the_approved_dataclasses():
+def test_module_defines_exactly_the_designed_dataclasses():
     """防止悄悄多一個資料型別（例如 TokenUsage／TraceMetadata／Capability）。"""
     assert set(_dataclasses_defined_in_module()) == set(EXPECTED_FIELDS)
 
 
-def test_error_kind_members_are_exactly_the_approved_four():
+def test_error_kind_members_are_exactly_the_designed_four():
     assert frozenset(m.name for m in ProviderErrorKind) == EXPECTED_ERROR_KINDS
 
 
@@ -166,7 +167,7 @@ def test_no_forbidden_field_names(cls):
 
 
 def test_expected_field_sets_themselves_are_clean():
-    """核准清單自己不能含禁用詞（防有人把禁用欄位連同核准清單一起改）。"""
+    """設計定稿清單自己不能含禁用詞（防有人把禁用欄位連同清單一起改）。"""
     for cls, names in EXPECTED_FIELDS.items():
         for name in names:
             for frag in FORBIDDEN_FIELD_SUBSTRINGS:
@@ -263,8 +264,8 @@ def test_request_rejects_wrong_types(overrides):
         _valid_request(**overrides)
 
 
-@pytest.mark.parametrize("bad", [0, -1, -0.5, float("nan")])
-def test_request_rejects_non_positive_or_nan_timeout(bad):
+@pytest.mark.parametrize("bad", [0, -1, -0.5, float("nan"), float("inf"), float("-inf")])
+def test_request_rejects_non_positive_nan_or_infinite_timeout(bad):
     with pytest.raises(ValueError):
         _valid_request(timeout_seconds=bad)
 
