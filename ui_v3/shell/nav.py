@@ -76,17 +76,17 @@ def shell_css() -> str:
 .uv3-brand{{font-size:17px;font-weight:700;margin:0 0 .6rem 0;line-height:1.3}}
 .uv3-nav-disabled{{display:flex;align-items:center;gap:.5rem;min-height:{touch}px;padding:0 .75rem;color:{sb_text2};cursor:not-allowed;
   border-radius:.5rem;font-size:15px}}
-.uv3-nav-disabled .uv3-nav-soon{{font-size:12px;margin-left:auto;border:1px dashed {sb_text2};border-radius:10px;padding:0 6px}}
+.uv3-nav-disabled .uv3-nav-soon{{font-size:{caption};margin-left:auto;border:1px dashed {sb_text2};border-radius:10px;padding:0 6px}}
 .uv3-side-block{{border-top:1px solid {sb_border};margin-top:.8rem;padding-top:.6rem;font-size:{caption};line-height:1.55}}
 .uv3-side-block .uv3-label{{color:{sb_text2};margin-right:6px}}
-.uv3-cta-note{{font-size:12px;color:{sb_text2};margin-top:.25rem}}
+.uv3-cta-note{{font-size:{caption};color:{sb_text2};margin-top:.25rem}}
 /* 目前頁：除了顏色，還有粗體＋左側色條（不只靠顏色） */
 [class*="st-key-uv3-nav-now-side"] a[data-testid="stPageLink-NavLink"]{{font-weight:700;border-left:4px solid {accent};background:{sb_bg2}}}
 [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]{{min-height:{touch}px}}
-/* Top／Status Bar：極薄一行（Shell 的一部分，不是頁級狀態 chip） */
-.uv3-statusbar{{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:12px;line-height:1.5;color:{text2};margin:0 0 .25rem 0}}
+/* Top／Status Bar：極薄一行（Shell 的一部分，不是頁級狀態 chip）。視覺批 2：非主導覽的輔助字 12→13px（type.caption）；Status Bar 行高固定 18px（＝原 12px×1.5），首屏露出量不變 */
+.uv3-statusbar{{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:{caption};line-height:18px;color:{text2};margin:0 0 .25rem 0}}
 .uv3-statusbar .uv3-tag{{font-weight:700;letter-spacing:.06em;border:1px solid currentColor;border-radius:4px;padding:0 5px;cursor:help}}
-.uv3-footer{{font-size:12px;color:{text2};margin-top:1.2rem}}
+.uv3-footer{{font-size:{caption};color:{text2};margin-top:1.2rem}}
 /* 頁首導覽：桌機／平板完全不顯示；手機佔用文件流（不吸頂、不貼定位），位於 Streamlit 自帶 stHeader 之下、不覆蓋它 */
 .st-key-{TOP_KEY}{{display:none !important}}
 @media (max-width:{mobile}px){{

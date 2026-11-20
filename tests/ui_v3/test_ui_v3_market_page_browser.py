@@ -34,6 +34,12 @@ AppTest 不載入 CSS，DOM 級守衛量不到「橫向溢出」「圖是否真�
 - `spark_violations`：迷你圖寬＝其所在卡的內寬（容 1px）、末點為正圓（`r` 相等、`<circle>` 渲染後寬高比 1）。
 - ≥769 主圖水平置中（左右留白差 ≤1px）；鍵盤 Tab 進入單選時焦點環＝2px `color.pill.focus`。
 
+**🌍 視覺批 2（輔助字 12→13px／狀態列折行；`docs/evidence/mkt_visual_batch2_2026_11_20/`）新增守衛**
+- `aux_font_violations`：Status Bar／頁尾（三寬度）與側欄「開發中」標籤／更新資料註記（≥769）的字級＝`type.caption`（13px）；Status Bar 高度 ≤ 行數×20px（13px 字不得把它撐高而吃首屏）。
+- `top_nav_font_violations`：≤768 頁首五格的字級不得縮小（頁名／未掛載格 ≥12px、「開發中」≥10px；本批不動導覽）。
+- `status_row_violations`：`▸ 各項資料狀態` 展開後逐列，日期與「資料日」不在字中折行、每列至多 2 行（768／1280 為 1 行）、無橫向溢出。
+- 首屏露出量：施工後三寬度實測與批 1 完全相同（199.8／249.4／266.4；降級情境同），`_FOLD_BASELINE` 不變（未放寬、未收緊）。
+
 **變異驗證（負控）**：本檔後半 `test_mutation_*` 在**測試內**對已載入的頁面注入 CSS／DOM（橫溢、隱藏圖、零尺寸圖、遮蓋圖、縮小頁首格、
 改順序、加爆 chip、缺資料畫零），斷言上面同一組判定函式**真的會報**；不改任何 production 程式。負控全在記憶體內現編。
 """
@@ -111,6 +117,12 @@ _MEASURE = r"""
   out.statusbarChips = document.querySelectorAll('.uv3-statusbar .uv3-chip').length;
   out.sidebarChips = document.querySelectorAll('[data-testid="stSidebar"] .uv3-chip').length;
   out.mainText = main.innerText;
+  // 視覺批 2：Shell 輔助字（Status Bar／頁尾／側欄註記）與主導覽字級；Status Bar 行數與高度（行高變大會吃首屏）
+  const fsOf = sel => { const e = document.querySelector(sel); if (!e || !vis(e)) return null; const s = getComputedStyle(e); return {fontSize: s.fontSize, lineHeight: s.lineHeight, h: e.getBoundingClientRect().height}; };
+  out.aux = {statusBar: fsOf('.uv3-statusbar'), footer: fsOf('.uv3-footer'), sideSoon: fsOf('.uv3-nav-soon'), cta: fsOf('.uv3-cta-note'),
+             topNavP: fsOf('.st-key-uv3-top-nav a[data-testid="stPageLink-NavLink"] p'), topNavDisabled: fsOf('.uv3-tn-disabled'), topNavSoon: fsOf('.uv3-tn-soon')};
+  const sbar = document.querySelector('.uv3-statusbar');
+  out.statusBarLines = sbar ? Math.max(1, Math.round(sbar.getBoundingClientRect().height / parseFloat(getComputedStyle(sbar).lineHeight))) : null;   // 行數＝高度÷行高（子元素置中，top 不一致不能用來數行）
   // G6：卡片容器與卡內控制項的位置關係
   const frame = k => q('.st-key-uv3-card-' + k);
   const F = {summary: frame('summary'), chart: frame('chart'), vix: frame('sec-vix'), rates: frame('sec-rates')};
@@ -190,6 +202,21 @@ _HIT = r"""
 }
 """
 
+_STATUS_ROWS = r"""
+() => {   // 已展開的「各項資料狀態」逐列：行數、日期／「資料日」是否被折成兩行（Range 在不同 top 即被拆）、橫向溢出
+  const ex = [...document.querySelectorAll('[data-testid="stMain"] [data-testid="stExpander"]')].find(e => e.innerText.includes('各項資料狀態'));
+  const out = {vw: document.documentElement.clientWidth, docScrollW: document.documentElement.scrollWidth, rows: []};
+  if (!ex) return out;
+  const splitOf = (row, re) => { const w = document.createTreeWalker(row, NodeFilter.SHOW_TEXT); let n;
+    while ((n = w.nextNode())) { const m = re.exec(n.nodeValue); if (m) { const rg = document.createRange(); rg.setStart(n, m.index); rg.setEnd(n, m.index + m[0].length);
+      return new Set([...rg.getClientRects()].map(q => Math.round(q.top))).size > 1; } } return null; };
+  out.rows = [...ex.querySelectorAll('[data-testid="stExpanderDetails"] .uv3-row')].map(row => { const s = getComputedStyle(row), b = row.getBoundingClientRect();
+    return {text: row.innerText.replace(/\s+/g, ' ').trim().slice(0, 60), lines: Math.round(b.height / (parseFloat(s.lineHeight) || 24.8)),
+            dateSplit: splitOf(row, /\d{4}-\d{2}-\d{2}/), labelSplit: splitOf(row, /資料日/), scrollW: row.scrollWidth, clientW: row.clientWidth}; });
+  return out;
+}
+"""
+
 _NAMES = ["市場", "資產", "找基金", "AI", "設定"]
 _SCENARIOS = ("normal", "tw_missing", "both_missing", "us_failed")
 _WIDTHS = (390, 768, 1280)
@@ -241,6 +268,7 @@ def chart_violations(m):
 # 🌍 視覺批 1（單選 pill＋標籤內嵌，只上調不下調）：施工後同腳本同合成資料實測 390／768／1280 ＝ 199.8／249.4／266.4px
 # （施工前 origin/main 747c7585 實測 159.8／209.4／226.4；舊基線 156.6／181.4／198.4 來自更早的 192848b）。
 # 新基線＝施工後實測取整後再扣 5px（容 CI 字型／hinting 差異；仍遠高於施工前，退回舊版面或再多 40px 間距都會被抓）。
+# 🌍 視覺批 2（輔助字 13px＋狀態列折行）：同腳本同合成資料實測露出量與批 1 逐位相同（Status Bar 行高固定 18px），基線不變。
 _FOLD_BASELINE = {390: 194.0, 768: 244.0, 1280: 261.0}
 _FOLD_TOLERANCE = 1.0
 _CHART_MIN_W_390 = 354   # 改前 358；卡內左右滿版後 356；窄於此代表卡片內距又吃掉圖寬
@@ -284,6 +312,57 @@ def nav_violations(m, width):
         bad.append(("五格重疊",))
     if m["navScrollW"] > m["navClientW"]:
         bad.append(("頁首可橫向捲動", m["navScrollW"], m["navClientW"]))
+    return bad
+
+
+# ───────────────────────── 🌍 視覺批 2（輔助字 12→13px／狀態列折行；`docs/evidence/mkt_visual_batch2_2026_11_20/`）判定函式 ─────────────────────────
+
+_STATUS_BAR_LINE_PX = 20.0   # Status Bar 每一行的占高（行高 18px＋標籤框 2px；批 1 實測單行 20、兩行 40）；13px 字不得把它撐高（會吃首屏主圖）
+
+
+def aux_font_violations(m, width):
+    """Shell 輔助字（非主導覽格）＝`type.caption`（13px）；Status Bar 不因字級變大而增高。"""
+    a, want, bad = m["aux"], _tok("type.caption"), []
+    for key in ("statusBar", "footer") + (("sideSoon", "cta") if width >= 769 else ()):
+        if a[key] is None:
+            bad.append(("輔助字元素不存在或不可見", key))
+        elif a[key]["fontSize"] != want:
+            bad.append(("輔助字不是 type.caption", key, a[key]["fontSize"], want))
+    sb = a["statusBar"]
+    if sb is not None and m["statusBarLines"] and sb["h"] > m["statusBarLines"] * _STATUS_BAR_LINE_PX + 0.6:
+        bad.append(("Status Bar 高度超過行數×20px（字級放大不得吃首屏）", round(sb["h"], 1), m["statusBarLines"]))
+    return bad
+
+
+def top_nav_font_violations(m, width):
+    """主導覽格（≤768 頁首五格）字級不得縮小：頁名／未掛載格 ≥12px、「開發中」標籤 ≥10px（本批不動導覽）。"""
+    if width >= 769:
+        return []
+    a, bad = m["aux"], []
+    for key, floor in (("topNavP", 12.0), ("topNavDisabled", 12.0), ("topNavSoon", 10.0)):
+        if a[key] is None:
+            bad.append(("頁首導覽字級元素不存在", key))
+        elif float(a[key]["fontSize"].removesuffix("px")) < floor:
+            bad.append(("頁首導覽字級被縮小", key, a[key]["fontSize"], floor))
+    return bad
+
+
+def status_row_violations(s, width):
+    """`▸ 各項資料狀態` 展開後的逐列：不在字中折行（日期不拆、「資料日」不拆）、每列至多 2 行、無橫向溢出。"""
+    bad = []
+    if not s["rows"]:
+        return [("狀態列沒有任何一列",)]
+    if s["docScrollW"] > s["vw"]:
+        bad.append(("展開後整頁橫向溢出", s["docScrollW"], s["vw"]))
+    for row in s["rows"]:
+        if row["dateSplit"]:
+            bad.append(("日期在字中折行", row["text"]))
+        if row["labelSplit"]:
+            bad.append(("「資料日」在字中折行", row["text"]))
+        if row["lines"] > 2:
+            bad.append(("狀態列超過 2 行", row["lines"], row["text"]))
+        if row["scrollW"] > row["clientW"] + 1:
+            bad.append(("狀態列橫向溢出", row["scrollW"], row["clientW"]))
     return bad
 
 
@@ -544,6 +623,39 @@ def test_primary_chart_present_visible_nonzero_and_in_place(measure, width, reco
 def test_top_nav_s1_five_cells_mobile_and_sidebar_desktop(measure, width):
     m = measure("normal", width)
     assert not nav_violations(m, width), nav_violations(m, width)
+
+
+@pytest.mark.parametrize("scenario", _SCENARIOS)
+@pytest.mark.parametrize("width", _WIDTHS)
+def test_shell_aux_text_is_13px_and_top_nav_text_is_not_shrunk(measure, scenario, width):
+    """🌍 視覺批 2（`DEC-2026-11-11-02` V2）：Status Bar／頁尾／側欄註記 12→13px（`type.caption`）；主導覽格字級不縮、Status Bar 不增高。"""
+    m = measure(scenario, width)
+    assert not aux_font_violations(m, width), (aux_font_violations(m, width), m["aux"])
+    assert not top_nav_font_violations(m, width), (top_nav_font_violations(m, width), m["aux"])
+
+
+def _status_rows(base_and_browser, scenario, width, *, css=None):
+    base, browser, _ = base_and_browser
+    ctx, page = _open(browser, base, scenario, width)
+    try:
+        if css:
+            page.add_style_tag(content=css)
+        page.locator('[data-testid="stMain"] [data-testid="stExpander"] summary', has_text="各項資料狀態").click()
+        page.wait_for_timeout(500)
+        return page.evaluate(_STATUS_ROWS)
+    finally:
+        ctx.close()
+
+
+@pytest.mark.parametrize("scenario", ("normal", "tw_missing"))
+@pytest.mark.parametrize("width", _WIDTHS)
+def test_status_group_rows_do_not_break_inside_tokens_or_overflow(base_and_browser, scenario, width):
+    """`▸ 各項資料狀態` 在 390 會折兩行：不得在日期／「資料日」字中折行；768／1280 一行；三寬度無橫向溢出。"""
+    s = _status_rows(base_and_browser, scenario, width)
+    assert len(s["rows"]) == 5, s
+    assert not status_row_violations(s, width), (status_row_violations(s, width), s["rows"])
+    if width >= 768:
+        assert all(r["lines"] == 1 for r in s["rows"]), s["rows"]
 
 
 @pytest.mark.parametrize("scenario", _SCENARIOS)
@@ -872,3 +984,30 @@ def test_mutation_removed_focus_ring_is_flagged(base_and_browser):
         assert any("焦點環" in v[0] for v in focus_violations(_focused_period(page)))
     finally:
         ctx.close()
+
+
+def test_mutation_shell_aux_text_back_to_12px_or_taller_status_bar_is_flagged(base_and_browser):
+    """視覺批 2 負控：輔助字退回 12px、Status Bar 行高放大（吃首屏）、側欄註記退回 12px、主導覽字級被縮小。負控全在記憶體內現編。"""
+    m = _mutated(base_and_browser, "normal", 390, css="html body .uv3-statusbar{font-size:12px !important}")
+    assert any(v[0] == "輔助字不是 type.caption" and v[1] == "statusBar" for v in aux_font_violations(m, 390))
+    m = _mutated(base_and_browser, "normal", 390, css="html body .uv3-footer{font-size:12px !important}")
+    assert any(v[0] == "輔助字不是 type.caption" and v[1] == "footer" for v in aux_font_violations(m, 390))
+    m = _mutated(base_and_browser, "normal", 390, css="html body .uv3-statusbar{line-height:1.5 !important}")
+    assert any("Status Bar 高度" in v[0] for v in aux_font_violations(m, 390)), aux_font_violations(m, 390)
+    m = _mutated(base_and_browser, "normal", 1280, css="html body .uv3-cta-note,html body .uv3-nav-disabled .uv3-nav-soon{font-size:12px !important}")
+    assert {v[1] for v in aux_font_violations(m, 1280) if v[0] == "輔助字不是 type.caption"} == {"sideSoon", "cta"}
+    m = _mutated(base_and_browser, "normal", 390,
+                 css='html body .st-key-uv3-top-nav a[data-testid="stPageLink-NavLink"] p{font-size:11px !important}')
+    assert any(v[0] == "頁首導覽字級被縮小" and v[1] == "topNavP" for v in top_nav_font_violations(m, 390))
+    m = _mutated(base_and_browser, "normal", 390, css="html body .uv3-tn-disabled{font-size:11px !important}")
+    assert any(v[0] == "頁首導覽字級被縮小" and v[1] == "topNavDisabled" for v in top_nav_font_violations(m, 390))
+
+
+def test_mutation_status_rows_breaking_inside_date_or_label_are_flagged(base_and_browser):
+    """視覺批 2 負控：拿掉 keep-all／單位包裝後，390 的狀態列會在「資料日」或日期中折行（改前實測就是這樣）→ 判定函式要報。"""
+    css = ".uv3-status-row{word-break:normal !important;text-wrap:wrap !important}.uv3-unit{display:inline !important}"
+    s = _status_rows(base_and_browser, "normal", 390, css=css)
+    msgs = [v[0] for v in status_row_violations(s, 390)]
+    assert "日期在字中折行" in msgs or "「資料日」在字中折行" in msgs, (msgs, s["rows"])
+    s = _status_rows(base_and_browser, "normal", 390, css=".uv3-unit{display:inline-block !important;min-width:420px !important}")
+    assert any(v[0] in ("狀態列橫向溢出", "展開後整頁橫向溢出") for v in status_row_violations(s, 390)), s

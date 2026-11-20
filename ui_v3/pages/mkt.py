@@ -56,7 +56,11 @@ def _css() -> str:
 
     390px 首屏（G5 守衛的後續處置）：≤768 時主圖在卡內左右滿版（圖本身的左右各伸入卡片內距 `pad_x`，文字與控制項仍保留內距、不貼邊），
     寬度回到卡外寬（390 約 358；比例不變、最大寬 720）；`card.chart` 內標題的上內距歸零（卡片自己的 10px 內距已是上緣留白），
-    讓首屏露出量不低於改前。"""
+    讓首屏露出量不低於改前。
+
+    狀態列折行（視覺批 2，390 折行復測）：`.uv3-status-row` ＝ CJK 不在字中折行（`keep-all`；沒有可折處時 `anywhere` 兜底，不橫向溢出）、兩行時平均分配
+    （`text-wrap:balance`）；`.uv3-unit` ＝ 來源與資料日各自是不拆開的單位（`inline-block`；比一整行寬才在單位內折）。只改折行，不改字樣、順序、欄位。
+    （CSS 字串內不放中文：守衛 `test_mkt_page_has_no_hardcoded_cjk_screen_wording` 會掃。）"""
     gutter, page, section = theme.v("gutter.mobile"), theme.v("type.page"), theme.v("type.section")
     caption, metric, body = theme.v("type.caption"), theme.v("type.metric"), theme.v("type.body")
     text2, border, pad_x = theme.v("color.text.secondary"), theme.v("color.card.border"), theme.card_pad_x()
@@ -72,6 +76,8 @@ h3{{font-size:{section} !important}}
 .uv3-st{{white-space:normal}}
 .uv3-st-red{{font-weight:700}}
 .uv3-row{{margin:{theme.v("space.1")} 0;line-height:1.55}}
+.uv3-status-row{{word-break:keep-all;overflow-wrap:anywhere;text-wrap:balance}}
+.uv3-unit{{display:inline-block;max-width:100%}}
 .uv3-label{{font-size:{caption};color:{text2};margin-right:6px}}
 .uv3-note{{font-size:{caption};color:{text2};line-height:1.5;margin:.15rem 0}}
 {theme.card_css(".uv3-card")}
@@ -354,11 +360,21 @@ def fact_html(fact: EvidenceFact) -> str:
     return f'<div class="uv3-row">{label} {status_html(fact.status, fact.reason_code, fact.label_key)}</div>'
 
 
+def _unit(text: str) -> str:
+    """不拆開的單位（`.uv3-unit`；純包裝，不改字、不加元件）。"""
+    return f'<span class="uv3-unit">{escape(text)}</span>'
+
+
 def status_row_html(row: DomainStatus) -> str:
     label = W.text(row.label_key)
     if row.status == STATUS_OK:
-        return f'<div class="uv3-row">{W.span("status_ok_row", label=label, source=row.source or "—", date=row.as_of or "—")}</div>'
-    return f'<div class="uv3-row">{W.span("label_colon", label=label)}{status_html(row.status, row.reason_code, row.label_key)}</div>'
+        # 來源與資料日包成不拆開的單位（390 折行復測；字樣與順序不變）。字樣仍走暫時字樣模板（span_html 會跳脫模板）；
+        # 暫時字樣的標記（虛線底線＋data-pending-wording）與 `W.pending_span` 同形，核准後（is_approved）則不加。
+        inner = W.span_html("status_ok_row", label=escape(label), source=_unit(row.source or "—"), date=_unit(row.as_of or "—"))
+        if not W.is_approved("status_ok_row"):
+            inner = f'<span class="uv3-pending" data-pending-wording="status_ok_row">{inner}</span>'
+        return f'<div class="uv3-row uv3-status-row">{inner}</div>'
+    return f'<div class="uv3-row uv3-status-row">{W.span("label_colon", label=label)}{status_html(row.status, row.reason_code, row.label_key)}</div>'
 
 
 # ───────────────────────────── 進入點 ─────────────────────────────
