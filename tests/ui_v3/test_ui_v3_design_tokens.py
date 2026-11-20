@@ -48,6 +48,10 @@ APPROVED_SCALARS = {
     "color.primary": "#1a5fd0", "color.card.border": "#7f8ca6",
     "color.sidebar.bg": "#101a33", "color.sidebar.bg2": "#18254a", "color.sidebar.text": "#e6edf3",
     "color.sidebar.text2": "#aab6cf", "color.sidebar.accent": "#5fd3d0", "color.sidebar.border": "#34466e",
+    # 🌍 視覺批 1（ChatGPT 總管／客戶 2026-11-20 授權）：單選 pill。色沿用上列色票同一組值（不新增新色）；
+    # 圓角 999px＝膠囊；48px＝觸控下限（同頁首五格 TOUCH_MIN_PX）。
+    "color.pill.bg": "#ffffff", "color.pill.border": "#7f8ca6", "color.pill.selected.bg": "#1a5fd0",
+    "color.pill.selected.text": "#ffffff", "color.pill.focus": "#1a5fd0", "radius.pill": "999px", "size.touch.min": "48px",
 }
 APPROVED_TONES = {
     "neutral": {"text": "#172033", "background": "#e6eaf3", "border": "#7f8ca6"},
@@ -72,6 +76,15 @@ def test_only_approved_tokens_have_values_and_the_values_are_the_approved_ones()
         assert dict(tokens.TOKENS[name].value) == APPROVED_CARD, name
     for kind in components.CHIP_KINDS:
         assert dict(tokens.TOKENS[f"chip.{kind}"].value) == APPROVED_CHIP, kind
+
+
+def test_pill_tokens_reuse_the_approved_palette_values_and_touch_size_matches_nav():
+    """pill 色不得是新色：必須等於 G3 已核准色票的某一個值；48px 與頁首五格觸控下限同值。"""
+    from ui_v3.shell import nav
+    palette = {v for k, v in APPROVED_SCALARS.items() if k.startswith("color.") and not k.startswith("color.pill.")}
+    for name in ("color.pill.bg", "color.pill.border", "color.pill.selected.bg", "color.pill.selected.text", "color.pill.focus"):
+        assert tokens.value(name) in palette, name
+    assert tokens.value("size.touch.min") == f"{nav.TOUCH_MIN_PX}px"
 
 
 def test_tokens_outside_g3_scope_stay_unvalued():

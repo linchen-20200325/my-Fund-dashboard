@@ -23,6 +23,8 @@ from typing import Dict, Optional, Tuple
 
 _SRC_80_5 = "80 §5 Design Contract"
 _SRC_G3 = "G3 核准值（候選 B 色票＋候選 A 尺寸；evidence #1204 §A.5；客戶經總管轉達）"
+_SRC_MKT_B1 = ("🌍 視覺批 1（ChatGPT 總管／客戶 2026-11-20 授權；docs/evidence/mkt_page_visual_gap_analysis_2026_11_19.md §4 第 1／3／4 項）："
+               "單選改 pill（segmented）；色取既有色票、圓角與觸控高度為本批新 token")
 _SRC_NG4 = "NG-4 A（DEC-2026-11-02-05：沿用狀態符號、語意色名、字樣規範；版面／元件／spacing／typography 重建）"
 
 
@@ -88,6 +90,17 @@ TONE_VALUES: Dict[str, Dict[str, str]] = {
     "red": {"text": "#8a1f12", "background": "#fbe6e2", "border": "#c0392b"},
 }
 # chip 形狀（候選 A：圓角 12、內距 1×10、字級 14；顏色由 tone 給）
+# 單選 pill（🌍 視覺批 1）：色沿用 G3 色票的同一組值（不新增新色）；選取＝填 primary＋粗體（顏色不是唯一訊息）；
+# 圓角 999px＝膠囊；48px＝觸控下限（與頁首五格 `TOUCH_MIN_PX` 同值）。
+PILL_VALUES: Dict[str, str] = {
+    "color.pill.bg": "#ffffff",
+    "color.pill.border": "#7f8ca6",
+    "color.pill.selected.bg": "#1a5fd0",
+    "color.pill.selected.text": "#ffffff",
+    "color.pill.focus": "#1a5fd0",
+    "radius.pill": "999px",
+    "size.touch.min": "48px",
+}
 _CHIP_SHAPE = {"radius": "12px", "padding": "1px 10px", "font_size": "14px"}
 # 卡片（候選 A：邊 1px、內距 10×12、不收斂到 4px 基數；面色與邊色取 `color.surface`／`color.card.border`）
 _CARD_SHAPE = {"border_width": "1px", "padding": "10px 12px"}
@@ -113,6 +126,8 @@ _TOKEN_LIST: Tuple[Token, ...] = (
     _t("card.detail", source=_SRC_G3, value=_CARD_SHAPE),
     _t("radius.card", source=_SRC_G3, value="8px"),
     _t("elevation.none", source=_SRC_G3, value="none"),
+    # 單選 pill（🌍 視覺批 1；值見 PILL_VALUES）
+    *(_t(name, source=_SRC_MKT_B1, value=value) for name, value in PILL_VALUES.items()),
     # status chips（符號＋字樣由規則表依 kind 給；顏色只是第三重）
     *(_t(f"chip.{kind}", source=_SRC_G3, value=_CHIP_SHAPE) for kind in CHIP_TOKEN_KINDS),
     # source／freshness display

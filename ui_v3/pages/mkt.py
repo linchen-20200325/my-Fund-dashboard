@@ -79,11 +79,15 @@ h3{{font-size:{section} !important}}
 .uv3-card h4,.uv3-card-in h4{{margin:0 0 4px 0;font-size:{body}}}
 .uv3-metric{{font-size:{metric};margin:2px 0}}
 .uv3-chart{{width:100%;max-width:720px;height:auto;display:block}}
+@media (min-width:{nav.MOBILE_MAX_PX + 1}px){{
+  .uv3-chart{{margin-left:auto;margin-right:auto}}
+}}
 [class*="st-key-uv3-card-chart"] h3{{padding-top:0}}
 @media (max-width:{nav.MOBILE_MAX_PX}px){{
   .uv3-chart{{width:calc(100% + 2 * {pad_x});margin-left:-{pad_x}}}
 }}
-.uv3-spark{{width:160px;height:40px;display:block;margin:4px 0}}
+.uv3-spark{{width:100%;height:auto;display:block;margin:4px 0}}
+.uv3-spark path{{vector-effect:non-scaling-stroke}}
 </style>
 """
 

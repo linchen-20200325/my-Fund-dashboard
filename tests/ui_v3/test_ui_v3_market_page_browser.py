@@ -13,7 +13,7 @@ AppTest 不載入 CSS，DOM 級守衛量不到「橫向溢出」「圖是否真�
   在摘要之後與第一張 Secondary 卡之前、中心點沒被別的元素蓋住（MV-05、MV-09 只斷言「存在、可見、非零尺寸」）。
 - **首屏主圖露出量（G3／G6 施工批起有門檻）**：G5 原本「暫時接受現況、只記錄」；客戶規則為「首屏圖的露出量不得明顯變差，因內距而下降時優先零額外內距」，
   故改為斷言「露出量 ≥ 改前基線 − 1px（容次像素取整）」；基線＝改前 `origin/main`（192848b）同腳本同合成資料實測：390／768／1280 ＝ 156.6／181.4／198.4px
-  （`_FOLD_BASELINE`）。390 另斷言主圖渲染寬 ≥354（改前 358；卡內左右滿版後為卡內寬 356，比例仍 360:240、最大寬 720）。數字仍照舊 print 與 `record_property`。
+  （`_FOLD_BASELINE`；🌍 視覺批 1 已上調，見該常數註解）。390 另斷言主圖渲染寬 ≥354（改前 358；卡內左右滿版後為卡內寬 356，比例仍 360:240、最大寬 720）。數字仍照舊 print 與 `record_property`。
 - 頁首五格 S1（`DEC-2026-11-06-01`／`-07-02`）：≤768 五格全可見、等寬、不重疊、不橫滑、各格 ≥48px 高；≥769 側欄在、頁首隱藏。
 - 已核准排版：區塊順序（MV-02）、首屏 chip＋核心數字 ≤5（MV-03）、缺資料恆 `⬜`／`◇ 資料未備`、Missing 不畫零不畫空座標軸、
   取數失敗原文不外漏（MV-04、MV-07）。
@@ -27,6 +27,12 @@ AppTest 不載入 CSS，DOM 級守衛量不到「橫向溢出」「圖是否真�
 
 **穩定性**：不寫像素精確值。容差都有理由：長寬比 ±0.03（SVG `preserveAspectRatio` 縮放為浮點）、水平邊界 ±0.5px（次像素取整）、
 五格等寬 ±1px（沿用頁首守衛）。順序用 DOM 順序（`compareDocumentPosition`），不用 y 座標（768／1280 兩欄並排時 y 會相等）。
+
+**🌍 視覺批 1（單選 pill／迷你圖滿寬／主圖置中；`docs/evidence/mkt_visual_batch1_2026_11_20/`）新增守衛**
+- `pill_violations`：三組單選共 11 個選項，每個 ≥48px 高、≥44px 寬、圓點隱藏（原生 input 仍在）；選取＝填 `color.pill.selected.bg`＋文字 `color.pill.selected.text`＋
+  粗體（≥700；顏色不是唯一訊息）；未選＝`color.pill.bg`＋`color.pill.border`；圓角＝`radius.pill`。
+- `spark_violations`：迷你圖寬＝其所在卡的內寬（容 1px）、末點為正圓（`r` 相等、`<circle>` 渲染後寬高比 1）。
+- ≥769 主圖水平置中（左右留白差 ≤1px）；鍵盤 Tab 進入單選時焦點環＝2px `color.pill.focus`。
 
 **變異驗證（負控）**：本檔後半 `test_mutation_*` 在**測試內**對已載入的頁面注入 CSS／DOM（橫溢、隱藏圖、零尺寸圖、遮蓋圖、縮小頁首格、
 改順序、加爆 chip、缺資料畫零），斷言上面同一組判定函式**真的會報**；不改任何 production 程式。負控全在記憶體內現編。
@@ -123,12 +129,25 @@ _MEASURE = r"""
     vixInVixFrame: inside(q('[data-card="vix"]'), F.vix),
     radioCount: radios.length,
   };
+  // 視覺批 1：單選 pill（每個選項的尺寸／粗體／色／圓點是否隱藏）
+  out.pills = [...main.querySelectorAll('label[data-testid="stRadioOption"]')].map(o => {
+    const s = getComputedStyle(o), b = o.getBoundingClientRect(), dot = o.querySelector('div > div > div:first-child');
+    return {selected: o.getAttribute('data-selected') === 'true', w: b.width, h: b.height, weight: s.fontWeight, bg: s.backgroundColor, color: s.color,
+            border: s.borderTopColor, radius: s.borderTopLeftRadius, dotDisplay: dot ? getComputedStyle(dot).display : null,
+            textColor: o.querySelector('p') ? getComputedStyle(o.querySelector('p')).color : null};
+  });
+  out.sparks = [...main.querySelectorAll('svg.uv3-spark')].map(sp => {
+    const card = sp.closest('[class*="st-key-uv3-card-"]'), cs = getComputedStyle(card), b = sp.getBoundingClientRect(), dot = sp.querySelector('circle');
+    const inner = card.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+    const db = dot ? dot.getBoundingClientRect() : null;
+    return {w: b.width, h: b.height, cardInner: inner, dotW: db ? db.width : null, dotH: db ? db.height : null};
+  });
   const rr = radioIn('利率與信用');
   out.ratesRadio = rr ? {name: rr.querySelector('[data-testid="stRadioGroup"]').getAttribute('aria-label'), options: rr.querySelectorAll('[data-testid="stRadioOption"]').length,
                          labelVisible: !!rr.querySelector('[data-testid="stWidgetLabel"]') && vis(rr.querySelector('[data-testid="stWidgetLabel"]'))} : null;
   // token 實際套用（computed style）
   const sideEl = document.querySelector('[data-testid="stSidebar"]');
-  const sel = main.querySelector('label[data-testid="stRadioOption"][data-selected="true"] > div > div > div:first-child');
+  const sel = main.querySelector('label[data-testid="stRadioOption"][data-selected="true"]');   // 視覺批 1：圓點隱藏，量 label 本體（pill）
   const tone = c => { const e = main.querySelector('.uv3-chip.uv3-tone-' + c); if (!e) return null; const s = getComputedStyle(e); return {color: s.color, bg: s.backgroundColor, bc: s.borderTopColor, radius: s.borderTopLeftRadius, pad: s.paddingTop + ' ' + s.paddingLeft, fs: s.fontSize}; };
   const cs1 = (e, ...ps) => e ? Object.fromEntries(ps.map(p => [p, getComputedStyle(e)[p]])) : null;
   out.applied = {appBg: getComputedStyle(document.querySelector('.stApp')).backgroundColor, appColor: getComputedStyle(document.querySelector('.stApp')).color,
@@ -218,8 +237,11 @@ def chart_violations(m):
     return bad
 
 
-# 改前（origin/main 192848b）首屏主圖露出量基線（px；Chromium、視窗高 844／844／800、合成資料）。容差 1px＝次像素取整。
-_FOLD_BASELINE = {390: 156.6, 768: 181.4, 1280: 198.4}
+# 首屏主圖露出量基線（px；Chromium、視窗高 844／844／800、合成資料）。容差 1px＝次像素取整。
+# 🌍 視覺批 1（單選 pill＋標籤內嵌，只上調不下調）：施工後同腳本同合成資料實測 390／768／1280 ＝ 199.8／249.4／266.4px
+# （施工前 origin/main 747c7585 實測 159.8／209.4／226.4；舊基線 156.6／181.4／198.4 來自更早的 192848b）。
+# 新基線＝施工後實測取整後再扣 5px（容 CI 字型／hinting 差異；仍遠高於施工前，退回舊版面或再多 40px 間距都會被抓）。
+_FOLD_BASELINE = {390: 194.0, 768: 244.0, 1280: 261.0}
 _FOLD_TOLERANCE = 1.0
 _CHART_MIN_W_390 = 354   # 改前 358；卡內左右滿版後 356；窄於此代表卡片內距又吃掉圖寬
 
@@ -328,6 +350,58 @@ def secondary_alignment_violations(m, width):
             bad.append(("兩張 Secondary 卡被強制等高（不應補齊高度）", round(vix["h"], 1), round(rates["h"], 1)))
     elif vix["b"] > rates["y"] + 0.5:
         bad.append(("單欄時兩張 Secondary 卡重疊", vix["b"], rates["y"]))
+    return bad
+
+
+def pill_violations(m):
+    """單選 pill（視覺批 1）：觸控尺寸、圓點隱藏、選取＝填色＋粗體、色與圓角＝token。"""
+    pills = m["pills"]
+    if len(pills) != 11:   # 檢視 4＋期間 4＋利率子序列 3
+        return [("單選選項數不是 11", len(pills))]
+    bad = []
+    want = {"bg": _rgb(_tok("color.pill.bg")), "border": _rgb(_tok("color.pill.border"))}
+    want_sel = {"bg": _rgb(_tok("color.pill.selected.bg")), "color": _rgb(_tok("color.pill.selected.text")),
+                "border": _rgb(_tok("color.pill.selected.bg"))}
+    if sum(p["selected"] for p in pills) != 3:
+        bad.append(("每組單選應恰有一個選取項（共 3）", sum(p["selected"] for p in pills)))
+    for i, p in enumerate(pills):
+        if p["h"] < 48 - 0.5 or p["w"] < 44:
+            bad.append(("單選選項低於觸控下限 48×44", i, round(p["w"], 1), round(p["h"], 1)))
+        if p["dotDisplay"] != "none":
+            bad.append(("單選圓點沒有隱藏", i, p["dotDisplay"]))
+        if float(p["radius"].replace("px", "")) < p["h"] / 2 - 0.5:
+            bad.append(("單選圓角小於半高（不是膠囊）", i, p["radius"], round(p["h"], 1)))
+        exp = want_sel if p["selected"] else want
+        for k, v in exp.items():
+            if p[k] != v:
+                bad.append(("單選色與 token 不符", i, "selected" if p["selected"] else "unselected", k, p[k], v))
+        if p["selected"]:
+            if int(float(p["weight"])) < 700:
+                bad.append(("選取項不是粗體（顏色不得是唯一訊息）", i, p["weight"]))
+            if p["textColor"] != want_sel["color"]:
+                bad.append(("選取項文字色不是 color.pill.selected.text", i, p["textColor"]))
+    return bad
+
+
+def centered_violations(m, width):
+    """≥769 主圖在卡內水平置中（左右留白差 ≤1px）；≤768 維持卡內滿版（不判）。"""
+    c, f = m["chart"], m["frames"].get("chart")
+    if width <= 768 or not c["exists"] or not f:
+        return []
+    left, right = c["x"] - f["x"], f["r"] - c["r"]
+    return [("≥769 主圖沒有水平置中", round(left, 1), round(right, 1))] if abs(left - right) > 1.0 else []
+
+
+def spark_violations(m):
+    """迷你圖寬＝其所在卡的內寬（卡寬扣左右邊框與內距）；末點渲染後仍為正圓。"""
+    bad = []
+    if not m["sparks"]:
+        return [("沒有迷你圖",)]
+    for sp in m["sparks"]:
+        if sp["w"] < sp["cardInner"] - 1.0 or sp["w"] > sp["cardInner"] + 1.0:
+            bad.append(("迷你圖寬度沒有對齊卡內寬", round(sp["w"], 1), round(sp["cardInner"], 1)))
+        if sp["dotW"] is None or abs(sp["dotW"] - sp["dotH"]) > 0.3:
+            bad.append(("迷你圖末點不是正圓", sp["dotW"], sp["dotH"]))
     return bad
 
 
@@ -503,6 +577,28 @@ def test_tokens_are_applied_and_no_legacy_theme_colour_remains(measure, width):
     assert not token_violations(m), token_violations(m)
 
 
+@pytest.mark.parametrize("width", _WIDTHS)
+def test_radio_options_are_pills_with_touch_size_bold_selection_and_token_colours(measure, width):
+    m = measure("normal", width)
+    assert not pill_violations(m), pill_violations(m)
+
+
+@pytest.mark.parametrize("width", _WIDTHS)
+def test_sparks_fill_card_width_with_round_end_dot_and_primary_chart_is_centered_on_desktop(measure, width):
+    m = measure("normal", width)
+    assert not spark_violations(m), (spark_violations(m), m["sparks"])
+    assert not centered_violations(m, width), centered_violations(m, width)
+
+
+@pytest.mark.parametrize("scenario", ("tw_missing", "us_failed"))
+@pytest.mark.parametrize("width", _WIDTHS)
+def test_pills_and_sparks_hold_in_degraded_scenarios(measure, scenario, width):
+    m = measure(scenario, width)
+    assert not pill_violations(m), pill_violations(m)
+    assert not spark_violations(m), spark_violations(m)
+    assert not centered_violations(m, width)
+
+
 @pytest.mark.parametrize("scenario", _SCENARIOS)
 @pytest.mark.parametrize("width", (390, 1280))
 def test_containers_and_tokens_hold_in_degraded_scenarios(measure, scenario, width):
@@ -546,6 +642,45 @@ def test_native_radio_controls_inside_cards_are_operable_and_keep_state(base_and
         m = page.evaluate(_MEASURE)
         assert not container_violations(m) and not overflow_violations(m) and not token_violations(m), (
             container_violations(m), overflow_violations(m), token_violations(m))
+    finally:
+        ctx.close()
+
+
+_FOCUS_JS = r"""
+() => {   // 鍵盤焦點落在「期間」已選項時，量它的 label（pill）外框
+  const g = document.querySelector('[data-testid="stMain"] [data-testid="stRadioGroup"][aria-label="期間"]');
+  const input = g.querySelector('input[type="radio"]:checked');
+  const label = input.closest('label'), s = getComputedStyle(label);
+  return {focused: document.activeElement === input, outlineStyle: s.outlineStyle, outlineWidth: s.outlineWidth, outlineColor: s.outlineColor};
+}
+"""
+
+
+def focus_violations(f):
+    want = _rgb(_tok("color.pill.focus"))
+    bad = []
+    if not f["focused"]:
+        bad.append(("鍵盤焦點沒有落在單選的 input 上",))
+    if f["outlineStyle"] != "solid" or f["outlineWidth"] != "2px" or f["outlineColor"] != want:
+        bad.append(("鍵盤焦點環不是 2px solid color.pill.focus", f["outlineStyle"], f["outlineWidth"], f["outlineColor"], want))
+    return bad
+
+
+def _focused_period(page):
+    page.locator('[data-testid="stMain"] [data-testid="stRadioGroup"][aria-label="期間"] input[type="radio"]:checked').focus()
+    page.keyboard.press("Shift+Tab")   # 先離開再以鍵盤回來，讓瀏覽器把焦點標成 focus-visible（鍵盤來源）
+    page.keyboard.press("Tab")
+    page.wait_for_timeout(200)
+    return page.evaluate(_FOCUS_JS)
+
+
+@pytest.mark.parametrize("width", (390, 1280))
+def test_keyboard_focus_ring_on_pill_is_visible(base_and_browser, width):
+    base, browser, _ = base_and_browser
+    ctx, page = _open(browser, base, "normal", width)
+    try:
+        f = _focused_period(page)
+        assert not focus_violations(f), (focus_violations(f), f)
     finally:
         ctx.close()
 
@@ -669,7 +804,7 @@ def test_mutation_legacy_theme_colours_are_flagged(base_and_browser):
     m = _mutated(base_and_browser, "normal", 390, css=".stApp{background:#f6f8fa !important}")
     assert any(v[0] in ("token 未套用", "殘留舊 theme 色") for v in token_violations(m))
     m = _mutated(base_and_browser, "normal", 390,
-                 css='html body [data-testid="stMain"] label[data-testid="stRadioOption"][data-selected="true"] > div > div > div:first-child{background-color:#1f6feb !important}')
+                 css='html body [data-testid="stMain"] label[data-testid="stRadioOption"][data-selected="true"]{background-color:#1f6feb !important}')
     assert any(v[0] == "token 未套用" and v[1] == "radioSelectedBg" for v in token_violations(m))
 
 
@@ -678,3 +813,33 @@ def test_mutation_extra_top_spacing_pushing_chart_below_baseline_is_flagged(base
     assert any("低於改前基線" in v[0] for v in firstscreen_violations(m, 390))
     m = _mutated(base_and_browser, "normal", 390, css="html body svg.uv3-chart{width:100% !important;margin-left:0 !important}")
     assert any("354" in v[0] for v in firstscreen_violations(m, 390))
+
+
+def test_mutation_pill_visual_regressions_are_flagged(base_and_browser):
+    """視覺批 1 負控：縮小觸控高度、取消粗體、顯示圓點、選取底換成舊色、拿掉置中、迷你圖縮回 160px、把末點壓扁成橢圓、拿掉焦點環。"""
+    opt = 'html body [data-testid="stMain"] label[data-testid="stRadioOption"]'
+    m = _mutated(base_and_browser, "normal", 390, css=f"{opt}{{min-height:30px !important;height:30px !important}}")
+    assert any("低於觸控下限" in v[0] for v in pill_violations(m))
+    m = _mutated(base_and_browser, "normal", 390, css=f'{opt}[data-selected="true"],{opt}[data-selected="true"] *{{font-weight:400 !important}}')
+    assert any("不是粗體" in v[0] for v in pill_violations(m))
+    m = _mutated(base_and_browser, "normal", 390, css=f"{opt} > div > div > div:first-child{{display:block !important}}")
+    assert any("圓點沒有隱藏" in v[0] for v in pill_violations(m))
+    m = _mutated(base_and_browser, "normal", 390, css=f'{opt}[data-selected="true"]{{background:#1f6feb !important}}')
+    assert any("單選色與 token 不符" in v[0] for v in pill_violations(m))
+    m = _mutated(base_and_browser, "normal", 1280, css="html body svg.uv3-chart{margin-left:0 !important;margin-right:0 !important}")
+    assert centered_violations(m, 1280)
+    m = _mutated(base_and_browser, "normal", 1280, css="html body svg.uv3-spark{width:160px !important}")
+    assert any("沒有對齊卡內寬" in v[0] for v in spark_violations(m))
+    m = _mutated(base_and_browser, "normal", 1280, css="html body svg.uv3-spark{height:40px !important;width:100% !important}",
+                 js="() => document.querySelectorAll('svg.uv3-spark').forEach(s => s.setAttribute('preserveAspectRatio', 'none'))")
+    assert any("末點不是正圓" in v[0] for v in spark_violations(m))
+
+
+def test_mutation_removed_focus_ring_is_flagged(base_and_browser):
+    base, browser, _ = base_and_browser
+    ctx, page = _open(browser, base, "normal", 390)
+    try:
+        page.add_style_tag(content='html body [data-testid="stMain"] label[data-testid="stRadioOption"]{outline:none !important}')
+        assert any("焦點環" in v[0] for v in focus_violations(_focused_period(page)))
+    finally:
+        ctx.close()

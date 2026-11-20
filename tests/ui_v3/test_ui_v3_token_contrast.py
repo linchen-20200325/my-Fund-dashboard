@@ -64,6 +64,13 @@ def pairs() -> List[Tuple[str, Tuple[int, int, int], Tuple[int, int, int], float
         ("卡片邊線 on 主背景", border, page, UI), ("卡片邊線 on 卡面", border, surf, UI),
         ("圖刻度文字（opacity .7）on 卡面", over(t1, 0.7, surf), surf, TEXT), ("圖線與端點標籤 on 卡面", t1, surf, UI),
     ]
+    # 🌍 視覺批 1：單選 pill（選取＝填色＋粗體；文字須 ≥4.5:1，不得只靠顏色之外的線索補救低對比）與鍵盤焦點環
+    pbg, pborder, psel, pseltext, pfocus = (_c("color.pill.bg"), _c("color.pill.border"), _c("color.pill.selected.bg"),
+                                            _c("color.pill.selected.text"), _c("color.pill.focus"))
+    out += [("pill 選取：文字 on 選取底", pseltext, psel, TEXT), ("pill 未選：主文字 on pill 底", t1, pbg, TEXT),
+            ("pill 邊線 on 卡面", pborder, surf, UI), ("pill 邊線 on 主背景", pborder, page, UI),
+            ("pill 選取底 on 卡面", psel, surf, UI), ("pill 選取底 on 主背景", psel, page, UI),
+            ("焦點環 on 卡面", pfocus, surf, UI), ("焦點環 on 主背景", pfocus, page, UI)]
     for tone in tokens.TONE_KEYS:
         out += [(f"chip {tone}：字 on 底", _tone(tone, "text"), _tone(tone, "background"), TEXT),
                 (f"chip {tone}：邊 on 卡面", _tone(tone, "border"), surf, UI),
@@ -88,7 +95,8 @@ def test_known_values_match_the_hand_computed_table():
     """與 evidence 的獨立自算表對得上（容差 0.01）；同時驗公式本身（黑對白＝21）。"""
     assert abs(ratio((0, 0, 0), (255, 255, 255)) - 21.0) < 1e-9
     expect: Dict[str, float] = {"主文字 on 卡面": 16.27, "次要文字 on 卡面": 7.35, "primary on 主背景": 5.45,
-                                "卡片邊線 on 主背景": 3.16, "側欄文字 on 側欄底": 14.60, "chip red：字 on 底": 7.67}
+                                "卡片邊線 on 主背景": 3.16, "pill 選取：文字 on 選取底": 5.85, "pill 未選：主文字 on pill 底": 16.27,
+                                "焦點環 on 卡面": 5.85, "焦點環 on 主背景": 5.45, "側欄文字 on 側欄底": 14.60, "chip red：字 on 底": 7.67}
     got = {label: ratio(fg, bg) for label, fg, bg, _ in pairs()}
     for label, want in expect.items():
         assert abs(got[label] - want) < 0.01, (label, got[label], want)
@@ -98,6 +106,14 @@ def test_no_listed_pairing_is_below_3_to_1_decorative_lines_are_not_listed():
     """清單內每一組（文字或非文字）都 ≥3；裝飾線（`DECORATIVE`）不在清單內，所以不會被誤當成已驗。"""
     assert [label for label, fg, bg, _ in pairs() if ratio(fg, bg) < UI] == []
     assert not {label for label, *_ in pairs()} & set(DECORATIVE)
+
+
+def test_pill_selected_pairing_is_listed_and_negative_control_for_it_reports():
+    """pill 選取底上的文字色配對必須在清單內；現編一個「淺字 on pill 選取底」確認 `failures()` 會報（不改任何檔）。"""
+    labels = {label for label, *_ in pairs()}
+    assert {"pill 選取：文字 on 選取底", "焦點環 on 卡面", "焦點環 on 主背景"} <= labels
+    bad = [("假的淺藍字 on pill 選取底", _rgb("#8fb1ee"), _c("color.pill.selected.bg"), TEXT)]
+    assert [f[0] for f in failures(bad)] == ["假的淺藍字 on pill 選取底"]
 
 
 def test_negative_control_low_contrast_pair_is_reported():
