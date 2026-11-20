@@ -1,0 +1,5185 @@
+{
+  "app": "poc/assets_fixture_preview/app_assets_preview.py",
+  "scenarios": {
+    "multi_currency": {
+      "390": {
+        "label": "①完整（新臺幣＋美元）",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 21,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "screenshot_collapsed": [
+          "assets_multi_currency_390.png",
+          66442
+        ],
+        "screenshot_fold": [
+          "assets_multi_currency_390_fold.png",
+          65896
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 21,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱FAKE 基金 1\n基金代號FK0001\n幣別TWD\n單位數1001.0\n基金名稱FAKE 基金 2\n基金代號FK0002\n幣別USD\n單位數1002.0",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數0\n略過列數0\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數0",
+            "略過列數0"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "tab_stops_anchor_links": 2,
+        "screenshot_opened": [
+          "assets_multi_currency_390_open.png",
+          100789
+        ]
+      },
+      "1280": {
+        "label": "①完整（新臺幣＋美元）",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 21,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "screenshot_collapsed": [
+          "assets_multi_currency_1280.png",
+          69472
+        ],
+        "screenshot_fold": [
+          "assets_multi_currency_1280_fold.png",
+          69158
+        ],
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 21,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱FAKE 基金 1\n基金代號FK0001\n幣別TWD\n單位數1001.0\n基金名稱FAKE 基金 2\n基金代號FK0002\n幣別USD\n單位數1002.0",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數0\n略過列數0\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數0",
+            "略過列數0"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "tab_stops_anchor_links": 2,
+        "screenshot_opened": [
+          "assets_multi_currency_1280_open.png",
+          108780
+        ]
+      }
+    },
+    "complete_no_rows": {
+      "390": {
+        "label": "②來源完整但沒有持倉列",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 16,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "a",
+              "type": null,
+              "role": null,
+              "label": "Link to heading",
+              "w": 16,
+              "h": 16,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源來源已讀完 沒有有效持倉列",
+          "a10": "資產配置 ◇ 資料未備｜沒有有效持倉列 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉來源已讀完 沒有有效持倉列",
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "screenshot_collapsed": [
+          "assets_complete_no_rows_390.png",
+          66263
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 16,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源來源已讀完 沒有有效持倉列",
+          "a10": "資產配置 ◇ 資料未備｜沒有有效持倉列 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉來源已讀完 沒有有效持倉列",
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數0\n略過列數0\n本次已讀取的資料沒有可顯示的持倉列。",
+          "a60counts": [
+            "略過分頁數0",
+            "略過列數0"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "tab_stops_anchor_links": 2
+      },
+      "1280": {
+        "label": "②來源完整但沒有持倉列",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 16,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "a",
+              "type": null,
+              "role": null,
+              "label": "Link to heading",
+              "w": 16,
+              "h": 16,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源來源已讀完 沒有有效持倉列",
+          "a10": "資產配置 ◇ 資料未備｜沒有有效持倉列 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉來源已讀完 沒有有效持倉列",
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 16,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源來源已讀完 沒有有效持倉列",
+          "a10": "資產配置 ◇ 資料未備｜沒有有效持倉列 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉來源已讀完 沒有有效持倉列",
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數0\n略過列數0\n本次已讀取的資料沒有可顯示的持倉列。",
+          "a60counts": [
+            "略過分頁數0",
+            "略過列數0"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "tab_stops_anchor_links": 2
+      }
+    },
+    "market_blocked": {
+      "390": {
+        "label": "③市值基準未開放",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜配置比較的計算口徑尚未核准，故不提供結果 基準◇ 資料未備 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⬜ 無法判定",
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "screenshot_collapsed": [
+          "assets_market_blocked_390.png",
+          64954
+        ],
+        "screenshot_fold": [
+          "assets_market_blocked_390_fold.png",
+          64529
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜配置比較的計算口徑尚未核准，故不提供結果 基準◇ 資料未備 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⬜ 無法判定",
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數◇ 資料未備\n略過列數◇ 資料未備\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數◇ 資料未備",
+            "略過列數◇ 資料未備"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "tab_stops_anchor_links": 2
+      },
+      "1280": {
+        "label": "③市值基準未開放",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜配置比較的計算口徑尚未核准，故不提供結果 基準◇ 資料未備 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⬜ 無法判定",
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "screenshot_collapsed": [
+          "assets_market_blocked_1280.png",
+          68126
+        ],
+        "screenshot_fold": [
+          "assets_market_blocked_1280_fold.png",
+          67928
+        ],
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜配置比較的計算口徑尚未核准，故不提供結果 基準◇ 資料未備 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⬜ 無法判定",
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數◇ 資料未備\n略過列數◇ 資料未備\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數◇ 資料未備",
+            "略過列數◇ 資料未備"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "tab_stops_anchor_links": 2
+      }
+    },
+    "partial": {
+      "390": {
+        "label": "④局部缺漏",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "a",
+              "type": null,
+              "role": null,
+              "label": "Link to heading",
+              "w": 16,
+              "h": 16,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源部分略過",
+          "a10": "資產配置 ◇ 資料未備｜來源不完整（部分略過） ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "screenshot_collapsed": [
+          "assets_partial_390.png",
+          71635
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源部分略過",
+          "a10": "資產配置 ◇ 資料未備｜來源不完整（部分略過） ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱◇ 資料未備\n基金代號FK0001\n幣別USD\n單位數1001.0\n基金名稱FAKE 基金 2\n基金代號FK0002\n幣別USD\n單位數◇ 資料未備",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數1\n略過列數2\n本次資料有部分略過，詳見上方件數。",
+          "a60counts": [
+            "略過分頁數1",
+            "略過列數2"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "tab_stops_anchor_links": 2,
+        "screenshot_opened": [
+          "assets_partial_390_open.png",
+          111517
+        ]
+      },
+      "1280": {
+        "label": "④局部缺漏",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "a",
+              "type": null,
+              "role": null,
+              "label": "Link to heading",
+              "w": 16,
+              "h": 16,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源部分略過",
+          "a10": "資產配置 ◇ 資料未備｜來源不完整（部分略過） ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "screenshot_collapsed": [
+          "assets_partial_1280.png",
+          75266
+        ],
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源部分略過",
+          "a10": "資產配置 ◇ 資料未備｜來源不完整（部分略過） ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱◇ 資料未備\n基金代號FK0001\n幣別USD\n單位數1001.0\n基金名稱FAKE 基金 2\n基金代號FK0002\n幣別USD\n單位數◇ 資料未備",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數1\n略過列數2\n本次資料有部分略過，詳見上方件數。",
+          "a60counts": [
+            "略過分頁數1",
+            "略過列數2"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "tab_stops_anchor_links": 2,
+        "screenshot_opened": [
+          "assets_partial_1280_open.png",
+          120273
+        ]
+      }
+    },
+    "no_active": {
+      "390": {
+        "label": "⑤未選定來源",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "a",
+              "type": null,
+              "role": null,
+              "label": "Link to heading",
+              "w": 16,
+              "h": 16,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源尚未選定持倉資料來源（不退回別本 Sheet）",
+          "a10": "資產配置 ◇ 資料未備｜尚未選定持倉資料來源（不退回別本 Sheet） 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉尚未選定持倉資料來源（不退回別本 Sheet）",
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "screenshot_collapsed": [
+          "assets_no_active_390.png",
+          74419
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源尚未選定持倉資料來源（不退回別本 Sheet）",
+          "a10": "資產配置 ◇ 資料未備｜尚未選定持倉資料來源（不退回別本 Sheet） 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉尚未選定持倉資料來源（不退回別本 Sheet）",
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數◇ 資料未備\n略過列數◇ 資料未備\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數◇ 資料未備",
+            "略過列數◇ 資料未備"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "tab_stops_anchor_links": 2
+      },
+      "1280": {
+        "label": "⑤未選定來源",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源尚未選定持倉資料來源（不退回別本 Sheet）",
+          "a10": "資產配置 ◇ 資料未備｜尚未選定持倉資料來源（不退回別本 Sheet） 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉尚未選定持倉資料來源（不退回別本 Sheet）",
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源尚未選定持倉資料來源（不退回別本 Sheet）",
+          "a10": "資產配置 ◇ 資料未備｜尚未選定持倉資料來源（不退回別本 Sheet） 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉尚未選定持倉資料來源（不退回別本 Sheet）",
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數◇ 資料未備\n略過列數◇ 資料未備\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數◇ 資料未備",
+            "略過列數◇ 資料未備"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "tab_stops_anchor_links": 2
+      }
+    },
+    "read_failed": {
+      "390": {
+        "label": "⑥讀取失敗",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源⛔ 取數失敗",
+          "a10": "資產配置 ◇ 資料未備｜⛔ 取數失敗 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⛔ 取數失敗",
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "screenshot_collapsed": [
+          "assets_read_failed_390.png",
+          59619
+        ],
+        "screenshot_fold": [
+          "assets_read_failed_390_fold.png",
+          59372
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源⛔ 取數失敗",
+          "a10": "資產配置 ◇ 資料未備｜⛔ 取數失敗 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⛔ 取數失敗",
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數◇ 資料未備\n略過列數◇ 資料未備\n來源讀取失敗，略過情形無法確認。",
+          "a60counts": [
+            "略過分頁數◇ 資料未備",
+            "略過列數◇ 資料未備"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "tab_stops_anchor_links": 2
+      },
+      "1280": {
+        "label": "⑥讀取失敗",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源⛔ 取數失敗",
+          "a10": "資產配置 ◇ 資料未備｜⛔ 取數失敗 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⛔ 取數失敗",
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "screenshot_collapsed": [
+          "assets_read_failed_1280.png",
+          62789
+        ],
+        "screenshot_fold": [
+          "assets_read_failed_1280_fold.png",
+          62591
+        ],
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源⛔ 取數失敗",
+          "a10": "資產配置 ◇ 資料未備｜⛔ 取數失敗 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⛔ 取數失敗",
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數◇ 資料未備\n略過列數◇ 資料未備\n來源讀取失敗，略過情形無法確認。",
+          "a60counts": [
+            "略過分頁數◇ 資料未備",
+            "略過列數◇ 資料未備"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "tab_stops_anchor_links": 2
+      }
+    },
+    "unprovided_skip_evidence": {
+      "390": {
+        "label": "⑦略過證據未提供",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜⬜ 無法判定 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⬜ 無法判定",
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "screenshot_collapsed": [
+          "assets_unprovided_skip_evidence_390.png",
+          58216
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜⬜ 無法判定 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⬜ 無法判定",
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數0\n略過列數◇ 資料未備\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數0",
+            "略過列數◇ 資料未備"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "tab_stops_anchor_links": 2
+      },
+      "1280": {
+        "label": "⑦略過證據未提供",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜⬜ 無法判定 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⬜ 無法判定",
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 12,
+            "14": 1,
+            "15": 2,
+            "16": 14,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜⬜ 無法判定 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": null,
+          "a50status": "完整持倉⬜ 無法判定",
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數0\n略過列數◇ 資料未備\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數0",
+            "略過列數◇ 資料未備"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 0
+        },
+        "tab_stops_anchor_links": 2
+      }
+    },
+    "same_fund_two_policies": {
+      "390": {
+        "label": "⑧多保單同基金",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 21,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "screenshot_collapsed": [
+          "assets_same_fund_two_policies_390.png",
+          65996
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 21,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱FAKE 基金 同基金\n基金代號FK0001\n幣別USD\n單位數1001.0\n基金名稱FAKE 基金 同基金\n基金代號FK0001\n幣別USD\n單位數2500.5",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數0\n略過列數0\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數0",
+            "略過列數0"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "tab_stops_anchor_links": 2
+      },
+      "1280": {
+        "label": "⑧多保單同基金",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 21,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 21,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱FAKE 基金 同基金\n基金代號FK0001\n幣別USD\n單位數1001.0\n基金名稱FAKE 基金 同基金\n基金代號FK0001\n幣別USD\n單位數2500.5",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數0\n略過列數0\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數0",
+            "略過列數0"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "tab_stops_anchor_links": 2
+      }
+    },
+    "many_rows": {
+      "390": {
+        "label": "⑨大量列（50 列）",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 212,
+            "14": 1,
+            "15": 3,
+            "16": 213,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 50
+        },
+        "screenshot_collapsed": [
+          "assets_many_rows_390.png",
+          65826
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 212,
+            "14": 1,
+            "15": 3,
+            "16": 213,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱FAKE <b>基金</b> & \"引號\" <script>x</script>\n基金代號FK0001\n幣別USD\n單位數1001.0\n基金名稱FAKE 基金 2\n基金代號FK0002\n幣別USD\n單位數1002.0\n基金名稱FAKE 基金 3\n基金代號FK0003\n幣別TWD\n單位數1003.0\n基金名稱FAKE 基金 4\n基金代號FK0004\n幣別USD\n單位數1004.0\n基金名稱FAKE 基金 5\n基金代號FK0005\n幣別USD\n單位數1005.0\n基金名稱FAKE 基金 6\n基金代號FK0006\n幣別TWD\n單位數1006.0\n基金名稱FAKE 基金 7\n基金代號FK0007\n幣別USD\n單位數1007.0\n基金名稱FAKE 基金 8\n基金代號FK0008\n幣別USD\n單位數1008.0\n基金名稱FAKE 基金 9\n基金代號FK0009\n幣別TWD\n單位數1009.0\n基金名稱FAKE 基金 10\n基金代號FK0010\n幣別USD\n單位數1010.0\n基金名稱FAKE 基金 11\n基金代號FK0011\n幣別USD\n單位數1011.0\n基金名稱FAKE 基金 12\n基金代號FK0012\n幣別TWD\n單位數1012.0\n基金名稱FAKE 基金 13\n基金代號FK0013\n幣別USD\n單位數1013.0\n基金名稱FAKE 基金 14\n基金代號FK0014\n幣別USD\n單位數1014.0\n基金名稱FAKE 基金 15\n基金代號FK0015\n幣別TWD\n單位數1015.0\n基金名稱FAKE 基金 16\n基金代號FK0016\n幣別USD\n單位數1016.0\n基金名稱FAKE 基金 17\n基金代號FK0017\n幣別USD\n單位數1017.0\n基金名稱FAKE 基金 18\n基金代號FK0018\n幣別TWD\n單位數1018.0\n基金名稱FAKE 基金 19\n基金代號FK0019\n幣別USD\n單位數1019.0\n基金名稱FAKE 基金 20\n基金代號FK0020\n幣別USD\n單位數1020.0\n基金名稱FAKE 基金 21\n基金代號FK0021\n幣別TWD\n單位數1021.0\n基金名稱FAKE 基金 22\n基金代號FK0022\n幣別USD\n單位數1022.0\n基金名稱FAKE 基金 23\n基金代號FK0023\n幣別USD\n單位數1023.0\n基金名稱FAKE 基金 24\n基金代號FK0024\n幣別TWD\n單位數1024.0\n基金名稱FAKE 基金 25\n基金代號FK0025\n幣別USD\n單位數1025.0\n基金名稱FAKE 基金 26\n基金代號FK0026\n幣別USD\n單位數1026.0\n基金名稱FAKE 基金 27\n基金代號FK0027\n幣別TWD\n單位數1027.0\n基金名稱FAKE 基金 28\n基金代號FK0028\n幣別USD\n單位數1028.0\n基金名稱FAKE 基金 29\n基金代號FK0029\n幣別USD\n單位數1029.0\n基金名稱FAKE 基金 30\n基金代號FK0030\n幣別TWD\n單位數1030.0\n基金名稱FAKE 基金 31\n基金代號FK0031\n幣別USD\n單位數1031.0\n基金名稱FAKE 基金 32\n基金代號FK0032\n幣別USD\n單位數1032.0\n基金名稱FAKE 基金 33\n基金代號FK0033\n幣別TWD\n單位數1033.0\n基金名稱FAKE 基金 34\n基金代號FK0034\n幣別USD\n單位數1034.0\n基金名稱FAKE 基金 35\n基金代號FK0035\n幣別USD\n單位數1035.0\n基金名稱FAKE 基金 36\n基金代號FK0036\n幣別TWD\n單位數1036.0\n基金名稱FAKE 基金 37\n基金代號FK0037\n幣別USD\n單位數1037.0\n基金名稱FAKE 基金 38\n基金代號FK0038\n幣別USD\n單位數1038.0\n基金名稱FAKE 基金 39\n基金代號FK0039\n幣別TWD\n單位數1039.0\n基金名稱FAKE 基金 40\n基金代號FK0040\n幣別USD\n單位數1040.0\n基金名稱FAKE 基金 41\n基金代號FK0041\n幣別USD\n單位數1041.0\n基金名稱FAKE 基金 42\n基金代號FK0042\n幣別TWD\n單位數1042.0\n基金名稱FAKE 基金 43\n基金代號FK0043\n幣別USD\n單位數1043.0\n基金名稱FAKE 基金 44\n基金代號FK0044\n幣別USD\n單位數1044.0\n基金名稱FAKE 基金 45\n基金代號FK0045\n幣別TWD\n單位數1045.0\n基金名稱FAKE 基金 46\n基金代號FK0046\n幣別USD\n單位數1046.0\n基金名稱FAKE 基金 47\n基金代號FK0047\n幣別USD\n單位數1047.0\n基金名稱FAKE 基金 48\n基金代號FK0048\n幣別TWD\n單位數1048.0\n基金名稱FAKE 基金 49\n基金代號FK0049\n幣別USD\n單位數1049.0\n基金名稱FAKE 基金 50\n基金代號FK0050\n幣別USD\n單位數1050.0",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數0\n略過列數0\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數0",
+            "略過列數0"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 50
+        },
+        "tab_stops_anchor_links": 2,
+        "screenshot_opened": [
+          "assets_many_rows_390_open.png",
+          66917
+        ]
+      },
+      "1280": {
+        "label": "⑨大量列（50 列）",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 212,
+            "14": 1,
+            "15": 3,
+            "16": 213,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 50
+        },
+        "screenshot_collapsed": [
+          "assets_many_rows_1280.png",
+          68756
+        ],
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 212,
+            "14": 1,
+            "15": 3,
+            "16": 213,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源來源已讀完",
+          "a10": "資產配置 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱FAKE <b>基金</b> & \"引號\" <script>x</script>\n基金代號FK0001\n幣別USD\n單位數1001.0\n基金名稱FAKE 基金 2\n基金代號FK0002\n幣別USD\n單位數1002.0\n基金名稱FAKE 基金 3\n基金代號FK0003\n幣別TWD\n單位數1003.0\n基金名稱FAKE 基金 4\n基金代號FK0004\n幣別USD\n單位數1004.0\n基金名稱FAKE 基金 5\n基金代號FK0005\n幣別USD\n單位數1005.0\n基金名稱FAKE 基金 6\n基金代號FK0006\n幣別TWD\n單位數1006.0\n基金名稱FAKE 基金 7\n基金代號FK0007\n幣別USD\n單位數1007.0\n基金名稱FAKE 基金 8\n基金代號FK0008\n幣別USD\n單位數1008.0\n基金名稱FAKE 基金 9\n基金代號FK0009\n幣別TWD\n單位數1009.0\n基金名稱FAKE 基金 10\n基金代號FK0010\n幣別USD\n單位數1010.0\n基金名稱FAKE 基金 11\n基金代號FK0011\n幣別USD\n單位數1011.0\n基金名稱FAKE 基金 12\n基金代號FK0012\n幣別TWD\n單位數1012.0\n基金名稱FAKE 基金 13\n基金代號FK0013\n幣別USD\n單位數1013.0\n基金名稱FAKE 基金 14\n基金代號FK0014\n幣別USD\n單位數1014.0\n基金名稱FAKE 基金 15\n基金代號FK0015\n幣別TWD\n單位數1015.0\n基金名稱FAKE 基金 16\n基金代號FK0016\n幣別USD\n單位數1016.0\n基金名稱FAKE 基金 17\n基金代號FK0017\n幣別USD\n單位數1017.0\n基金名稱FAKE 基金 18\n基金代號FK0018\n幣別TWD\n單位數1018.0\n基金名稱FAKE 基金 19\n基金代號FK0019\n幣別USD\n單位數1019.0\n基金名稱FAKE 基金 20\n基金代號FK0020\n幣別USD\n單位數1020.0\n基金名稱FAKE 基金 21\n基金代號FK0021\n幣別TWD\n單位數1021.0\n基金名稱FAKE 基金 22\n基金代號FK0022\n幣別USD\n單位數1022.0\n基金名稱FAKE 基金 23\n基金代號FK0023\n幣別USD\n單位數1023.0\n基金名稱FAKE 基金 24\n基金代號FK0024\n幣別TWD\n單位數1024.0\n基金名稱FAKE 基金 25\n基金代號FK0025\n幣別USD\n單位數1025.0\n基金名稱FAKE 基金 26\n基金代號FK0026\n幣別USD\n單位數1026.0\n基金名稱FAKE 基金 27\n基金代號FK0027\n幣別TWD\n單位數1027.0\n基金名稱FAKE 基金 28\n基金代號FK0028\n幣別USD\n單位數1028.0\n基金名稱FAKE 基金 29\n基金代號FK0029\n幣別USD\n單位數1029.0\n基金名稱FAKE 基金 30\n基金代號FK0030\n幣別TWD\n單位數1030.0\n基金名稱FAKE 基金 31\n基金代號FK0031\n幣別USD\n單位數1031.0\n基金名稱FAKE 基金 32\n基金代號FK0032\n幣別USD\n單位數1032.0\n基金名稱FAKE 基金 33\n基金代號FK0033\n幣別TWD\n單位數1033.0\n基金名稱FAKE 基金 34\n基金代號FK0034\n幣別USD\n單位數1034.0\n基金名稱FAKE 基金 35\n基金代號FK0035\n幣別USD\n單位數1035.0\n基金名稱FAKE 基金 36\n基金代號FK0036\n幣別TWD\n單位數1036.0\n基金名稱FAKE 基金 37\n基金代號FK0037\n幣別USD\n單位數1037.0\n基金名稱FAKE 基金 38\n基金代號FK0038\n幣別USD\n單位數1038.0\n基金名稱FAKE 基金 39\n基金代號FK0039\n幣別TWD\n單位數1039.0\n基金名稱FAKE 基金 40\n基金代號FK0040\n幣別USD\n單位數1040.0\n基金名稱FAKE 基金 41\n基金代號FK0041\n幣別USD\n單位數1041.0\n基金名稱FAKE 基金 42\n基金代號FK0042\n幣別TWD\n單位數1042.0\n基金名稱FAKE 基金 43\n基金代號FK0043\n幣別USD\n單位數1043.0\n基金名稱FAKE 基金 44\n基金代號FK0044\n幣別USD\n單位數1044.0\n基金名稱FAKE 基金 45\n基金代號FK0045\n幣別TWD\n單位數1045.0\n基金名稱FAKE 基金 46\n基金代號FK0046\n幣別USD\n單位數1046.0\n基金名稱FAKE 基金 47\n基金代號FK0047\n幣別USD\n單位數1047.0\n基金名稱FAKE 基金 48\n基金代號FK0048\n幣別TWD\n單位數1048.0\n基金名稱FAKE 基金 49\n基金代號FK0049\n幣別USD\n單位數1049.0\n基金名稱FAKE 基金 50\n基金代號FK0050\n幣別USD\n單位數1050.0",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數0\n略過列數0\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數0",
+            "略過列數0"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 50
+        },
+        "tab_stops_anchor_links": 2,
+        "screenshot_opened": [
+          "assets_many_rows_1280_open.png",
+          75794
+        ]
+      }
+    },
+    "a60_sensitive_strings": {
+      "390": {
+        "label": "⑩部分略過（略過內容含敏感字串）",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源部分略過",
+          "a10": "資產配置 ◇ 資料未備｜來源不完整（部分略過） ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "screenshot_collapsed": [
+          "assets_a60_sensitive_strings_390.png",
+          73781
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源部分略過",
+          "a10": "資產配置 ◇ 資料未備｜來源不完整（部分略過） ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱FAKE 基金 1\n基金代號FK0001\n幣別USD\n單位數1001.0\n基金名稱FAKE 基金 2\n基金代號FK0002\n幣別USD\n單位數1002.0",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數1\n略過列數2\n本次資料有部分略過，詳見上方件數。",
+          "a60counts": [
+            "略過分頁數1",
+            "略過列數2"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "tab_stops_anchor_links": 2,
+        "screenshot_opened": [
+          "assets_a60_sensitive_strings_390_open.png",
+          112016
+        ]
+      },
+      "1280": {
+        "label": "⑩部分略過（略過內容含敏感字串）",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源部分略過",
+          "a10": "資產配置 ◇ 資料未備｜來源不完整（部分略過） ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源部分略過",
+          "a10": "資產配置 ◇ 資料未備｜來源不完整（部分略過） ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱FAKE 基金 1\n基金代號FK0001\n幣別USD\n單位數1001.0\n基金名稱FAKE 基金 2\n基金代號FK0002\n幣別USD\n單位數1002.0",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數1\n略過列數2\n本次資料有部分略過，詳見上方件數。",
+          "a60counts": [
+            "略過分頁數1",
+            "略過列數2"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "tab_stops_anchor_links": 2
+      }
+    },
+    "complete_counts_unprovided": {
+      "390": {
+        "label": "⑪來源完整但略過件數未提供",
+        "measure_collapsed": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜⬜ 無法判定 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "screenshot_collapsed": [
+          "assets_complete_counts_unprovided_390.png",
+          71312
+        ],
+        "measure_opened": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 358,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜⬜ 無法判定 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱FAKE 基金 1\n基金代號FK0001\n幣別USD\n單位數1001.0\n基金名稱FAKE 基金 2\n基金代號FK0002\n幣別USD\n單位數1002.0",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數◇ 資料未備\n略過列數◇ 資料未備\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數◇ 資料未備",
+            "略過列數◇ 資料未備"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "tab_stops_anchor_links": 2
+      },
+      "1280": {
+        "label": "⑪來源完整但略過件數未提供",
+        "measure_collapsed": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": false
+            },
+            {
+              "block": "a60",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜⬜ 無法判定 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉",
+          "a50status": null,
+          "a60": "來源與缺項證據",
+          "a60counts": [
+            null,
+            null
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "screenshot_collapsed": [
+          "assets_complete_counts_unprovided_1280.png",
+          74904
+        ],
+        "measure_opened": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 20,
+            "14": 1,
+            "15": 3,
+            "16": 24,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "情境",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "完整持倉",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "來源與缺項證據",
+              "w": 1068,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "a00",
+            "a10",
+            "a20",
+            "a50",
+            "a60"
+          ],
+          "details": [
+            {
+              "block": "a50",
+              "open": true
+            },
+            {
+              "block": "a60",
+              "open": true
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（非真實持倉，不代表任何實際資料）",
+          "title": "Streamlit"
+        },
+        "text_opened": {
+          "a00": "來源⬜ 無法判定",
+          "a10": "資產配置 ◇ 資料未備｜⬜ 無法判定 ◇ 資料未備｜已有持倉資料可查看；配置比較的計算口徑尚未核准，故不提供結果 基準成本 此預覽不提供匯率換算或跨幣別合計",
+          "a20cells": [
+            {
+              "code": "a20_cell_1",
+              "text": "總資產 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_2",
+              "text": "總損益 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_3",
+              "text": "報酬 ◇ 資料未備"
+            },
+            {
+              "code": "a20_cell_4",
+              "text": "配息 ◇ 資料未備"
+            }
+          ],
+          "a20note": "四格標籤為暫行字樣，尚未核准",
+          "a50": "完整持倉\n欄名與單位數顯示為暫行字樣，尚未核准\n基金名稱FAKE 基金 1\n基金代號FK0001\n幣別USD\n單位數1001.0\n基金名稱FAKE 基金 2\n基金代號FK0002\n幣別USD\n單位數1002.0",
+          "a50status": null,
+          "a60": "來源與缺項證據\n標題、欄名與說明句為暫行字樣，尚未核准\n略過分頁數◇ 資料未備\n略過列數◇ 資料未備\n⬜ 無法判定",
+          "a60counts": [
+            "略過分頁數◇ 資料未備",
+            "略過列數◇ 資料未備"
+          ],
+          "firstScreenMarks": 5,
+          "rowCount": 2
+        },
+        "tab_stops_anchor_links": 2
+      }
+    }
+  },
+  "keyboard": {
+    "390": {
+      "focus_walk_scenario1": [
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "Deploy",
+          "x": 283.03125,
+          "y": 16,
+          "w": 56.96875,
+          "h": 28,
+          "docY": 16,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 0
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "Main menu",
+          "text": "",
+          "x": 344,
+          "y": 15.5,
+          "w": 28,
+          "h": 28,
+          "docY": 15.5,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 1
+        },
+        {
+          "tag": "section",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "FAKE／測試資料（非真實持倉，不代表任何實際資料） 情",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 844,
+          "docY": 0,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": false,
+          "i": 2
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "role": "combobox",
+          "aria": "情境",
+          "text": "①完整（新臺幣＋美元）",
+          "x": 17,
+          "y": 124.1875,
+          "w": 324,
+          "h": 38,
+          "docY": 124.1875,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 3
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": "Link to heading",
+          "text": "",
+          "x": 172.140625,
+          "y": 208.625,
+          "w": 16,
+          "h": 16,
+          "docY": 208.625,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 4
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": "Link to heading",
+          "text": "",
+          "x": 97,
+          "y": 311.109375,
+          "w": 16,
+          "h": 16,
+          "docY": 311.109375,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 5
+        },
+        {
+          "tag": "summary",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "完整持倉",
+          "x": 16,
+          "y": 666.375,
+          "w": 358,
+          "h": 48,
+          "docY": 666.375,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 6
+        },
+        {
+          "tag": "summary",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "來源與缺項證據",
+          "x": 16,
+          "y": 722.375,
+          "w": 358,
+          "h": 48,
+          "docY": 722.375,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 7
+        },
+        {
+          "i": 8,
+          "note": "focus left document"
+        }
+      ],
+      "selectbox_listbox_open_after_ArrowDown": true,
+      "state_after_keyboard_select": "not_read",
+      "selected_label": "③市值基準未開放",
+      "a50_summary_open_states_initial_enter_space": [
+        false,
+        true,
+        false
+      ],
+      "focus_ring_on_summary": {
+        "outline": "auto 1px rgb(16, 16, 16)",
+        "boxShadow": "none",
+        "focusVisible": true
+      }
+    },
+    "1280": {
+      "focus_walk_scenario1": [
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "Deploy",
+          "x": 1173.03125,
+          "y": 16,
+          "w": 56.96875,
+          "h": 28,
+          "docY": 16,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 0
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "Main menu",
+          "text": "",
+          "x": 1234,
+          "y": 15.5,
+          "w": 28,
+          "h": 28,
+          "docY": 15.5,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 1
+        },
+        {
+          "tag": "section",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "FAKE／測試資料（非真實持倉，不代表任何實際資料） 情",
+          "x": 0,
+          "y": 0,
+          "w": 1280,
+          "h": 800,
+          "docY": 0,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": false,
+          "i": 2
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "role": "combobox",
+          "aria": "情境",
+          "text": "①完整（新臺幣＋美元）",
+          "x": 107,
+          "y": 124.1875,
+          "w": 1034,
+          "h": 38,
+          "docY": 124.1875,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 3
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": "Link to heading",
+          "text": "",
+          "x": 262.140625,
+          "y": 208.625,
+          "w": 16,
+          "h": 16,
+          "docY": 208.625,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 4
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": "Link to heading",
+          "text": "",
+          "x": 187,
+          "y": 311.109375,
+          "w": 16,
+          "h": 16,
+          "docY": 311.109375,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 5
+        },
+        {
+          "tag": "summary",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "完整持倉",
+          "x": 106,
+          "y": 557.984375,
+          "w": 1068,
+          "h": 48,
+          "docY": 557.984375,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 6
+        },
+        {
+          "tag": "summary",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "來源與缺項證據",
+          "x": 106,
+          "y": 613.984375,
+          "w": 1068,
+          "h": 48,
+          "docY": 613.984375,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 7
+        },
+        {
+          "i": 8,
+          "note": "focus left document"
+        }
+      ],
+      "selectbox_listbox_open_after_ArrowDown": true,
+      "state_after_keyboard_select": "not_read",
+      "selected_label": "③市值基準未開放",
+      "a50_summary_open_states_initial_enter_space": [
+        false,
+        true,
+        false
+      ],
+      "focus_ring_on_summary": {
+        "outline": "auto 1px rgb(16, 16, 16)",
+        "boxShadow": "none",
+        "focusVisible": true
+      }
+    }
+  },
+  "page_errors": []
+}

@@ -995,3 +995,47 @@ def test_a60_text_is_only_pending_spans_approved_status_and_counts(name):
 def test_a60_labels_note_is_visible_inside_the_collapsed_container_not_in_a_new_first_screen_element():
     a60 = a60_of("multi_currency")
     assert 'data-a60="labels-note"' in a60 and "暫行字樣，尚未核准" in visible(a60) and "data-first-screen" not in a60
+
+
+# ───────────────────────── 鍵盤停駐點：不得有 Streamlit 自動產生的標題錨點（UI-C 驗收缺陷 D1） ─────────────────────────
+# 事實（Chromium 實測）：st.markdown 內的 h1～h6（含 unsafe_allow_html 的 `<h4>`）與 `st.title` 預設都會被 Streamlit 加上
+# `a[aria-label="Link to heading"]`——16×16、平時不可見、卻是 Tab 停駐點。本頁不得出現（與 nas_diag／🔍 預覽一致）。
+
+HEADING_TAG = re.compile(r"<h[1-6][\s>]", re.I)
+
+
+def _title_calls(src):
+    """renderer 原始碼內所有 `st.title(...)` 呼叫的 keyword 字典。"""
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "title"
+                and isinstance(node.func.value, ast.Name) and node.func.value.id == "st"):
+            out.append({k.arg: ast.literal_eval(k.value) if isinstance(k.value, ast.Constant) else None for k in node.keywords})
+    return out
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_page_html_has_no_markdown_heading_tag_that_streamlit_would_turn_into_an_anchor_link(name):
+    assert not HEADING_TAG.search(html_of(name))
+
+
+def test_a10_title_keeps_heading_semantics_without_a_heading_tag():
+    a10 = html_of("multi_currency")
+    a10 = a10[a10.index('data-block="a10"'):a10.index('data-block="a20"')]
+    assert 'class="uv3-card-title" role="heading" aria-level="4"' in a10
+    assert re.search(r"\.uv3-card-title\{[^}]*font-weight:600", assets.CSS)   # 視覺維持原 h4 的字重
+
+
+def test_page_title_is_rendered_without_an_anchor_link():
+    calls = _title_calls(RENDERER_SRC)
+    assert calls and all(c.get("anchor") is False for c in calls), calls
+
+
+@pytest.mark.parametrize("src", ['import streamlit as st\nst.title("x")\n', 'import streamlit as st\nst.title("x", anchor=True)\n'])
+def test_negative_control_title_anchor_checker_turns_red(src):
+    assert not all(c.get("anchor") is False for c in _title_calls(src))
+
+
+@pytest.mark.parametrize("snippet", ["<h4>x</h4>", "<H1 id=a>x</H1>", "<h6>x</h6>"])
+def test_negative_control_heading_tag_checker_turns_red(snippet):
+    assert HEADING_TAG.search("<div>" + snippet + "</div>")

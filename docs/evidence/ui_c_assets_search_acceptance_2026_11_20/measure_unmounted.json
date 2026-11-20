@@ -1,0 +1,1452 @@
+{
+  "app": "ui_v3/app_preview.py（正式 Preview 入口，registry 現況）",
+  "widths": {
+    "390": {
+      "home": {
+        "items": [
+          {
+            "tag": "a",
+            "text": "🌍 市場",
+            "href": "",
+            "ariaDisabled": null,
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "💼 資產 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🔍 找基金 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🤖 AI 尚未開放",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "⚙️ 設定 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          }
+        ],
+        "mainText": "🌍 市場 💼 資產 開發中 🔍 找基金 開發中 🤖 AI 尚未開放 ⚙️ 設定 開發中 PREVIEW ◇ 0／5 項已取得（其中 3 項取數失敗） 更新：◇ 資料未備 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 ⛔ 台股 取數失敗 ｜ S&P 500 ⛔ S&P 500 取數失敗 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 頻率：日｜缺值不補、斷線 此圖目前沒有可畫的資料 台股⛔ 台股 取數失敗 ｜ S&P 500⛔ S&P 500 取數失敗 keyboard_arrow_right ▸ 來源與限制 風險｜VIX ⛔ VIX 取數失敗 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 ⛔ 利率資料來源尚未設定 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 ⛔ 波動度指數 取數失敗 高收益信用利差 ⛔ 尚未設定 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 ⛔ 尚未設定 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+        "url": "http://127.0.0.1:8604/",
+        "vw": 390,
+        "docSW": 390,
+        "hasAstBlocks": 0,
+        "measure": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 10,
+          "fontHistogram": {
+            "10": 4,
+            "12": 10,
+            "13": 15,
+            "14": 39,
+            "15": 7,
+            "16": 29,
+            "20": 4,
+            "14.4": 1,
+            "27.2": 1,
+            "19.2": 1
+          },
+          "smallText": [
+            {
+              "fs": 12,
+              "text": "市場",
+              "el": "p"
+            },
+            {
+              "fs": 12,
+              "text": "資產",
+              "el": "span"
+            },
+            {
+              "fs": 10,
+              "text": "開發中",
+              "el": "span.uv3-tn-soon"
+            },
+            {
+              "fs": 12,
+              "text": "找基金",
+              "el": "span"
+            },
+            {
+              "fs": 10,
+              "text": "開發中",
+              "el": "span.uv3-tn-soon"
+            },
+            {
+              "fs": 12,
+              "text": "AI",
+              "el": "span"
+            },
+            {
+              "fs": 10,
+              "text": "尚未開放",
+              "el": "span.uv3-tn-soon"
+            },
+            {
+              "fs": 12,
+              "text": "設定",
+              "el": "span"
+            },
+            {
+              "fs": 10,
+              "text": "開發中",
+              "el": "span.uv3-tn-soon"
+            },
+            {
+              "fs": 12,
+              "text": "PREVIEW",
+              "el": "span.uv3-tag"
+            },
+            {
+              "fs": 12,
+              "text": "◇ 0／5 項已取得（其中 3 項取數失敗）",
+              "el": "span"
+            },
+            {
+              "fs": 12,
+              "text": "更新：",
+              "el": "span"
+            }
+          ],
+          "smallTextCount": 14,
+          "targets": [
+            {
+              "tag": "a",
+              "type": null,
+              "role": null,
+              "label": "🌍 市場",
+              "w": 71.6,
+              "h": 60,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "比較",
+              "w": 54,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "VIX",
+              "w": 48,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "美10Y",
+              "w": 60.6,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "美2Y",
+              "w": 53.6,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "3M",
+              "w": 48,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "6M",
+              "w": 48,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "1Y",
+              "w": 48,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "3Y",
+              "w": 48,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "keyboard_arrow_right ▸ 來源與限制",
+              "w": 330,
+              "h": 38,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "期限利差",
+              "w": 82,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "信用利差",
+              "w": 82,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "政策利率",
+              "w": 82,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "keyboard_arrow_right ▸ 尚未取得（7 項）",
+              "w": 356,
+              "h": 38,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "keyboard_arrow_right ▸ 各項資料狀態",
+              "w": 356,
+              "h": 38,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [
+            {
+              "el": "span.st-emotion-cache-hdmkwy.ewh6kot4",
+              "sw": 16,
+              "cw": 14,
+              "ox": "visible"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            }
+          ],
+          "clippedCount": 12,
+          "dataBlocks": [],
+          "details": [
+            {
+              "block": null,
+              "open": false
+            },
+            {
+              "block": null,
+              "open": false
+            },
+            {
+              "block": null,
+              "open": false
+            }
+          ],
+          "harnessBanner": null,
+          "title": "🌍 市場與趨勢"
+        },
+        "screenshot": [
+          "unmounted_home_390.png",
+          91543
+        ]
+      },
+      "direct_ast": {
+        "items": [
+          {
+            "tag": "a",
+            "text": "🌍 市場",
+            "href": "",
+            "ariaDisabled": null,
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "💼 資產 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🔍 找基金 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🤖 AI 尚未開放",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "⚙️ 設定 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          }
+        ],
+        "mainText": "🌍 市場 💼 資產 開發中 🔍 找基金 開發中 🤖 AI 尚未開放 ⚙️ 設定 開發中 PREVIEW ◇ 0／5 項已取得（其中 3 項取數失敗） 更新：◇ 資料未備 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 ⛔ 台股 取數失敗 ｜ S&P 500 ⛔ S&P 500 取數失敗 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 頻率：日｜缺值不補、斷線 此圖目前沒有可畫的資料 台股⛔ 台股 取數失敗 ｜ S&P 500⛔ S&P 500 取數失敗 keyboard_arrow_right ▸ 來源與限制 風險｜VIX ⛔ VIX 取數失敗 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 ⛔ 利率資料來源尚未設定 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 ⛔ 波動度指數 取數失敗 高收益信用利差 ⛔ 尚未設定 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 ⛔ 尚未設定 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+        "url": "http://127.0.0.1:8604/",
+        "vw": 390,
+        "docSW": 390,
+        "hasAstBlocks": 0,
+        "pageTitle": "🌍 市場與趨勢",
+        "screenshot": [
+          "unmounted_url_ast_390.png",
+          87398
+        ]
+      },
+      "direct_exp": {
+        "items": [
+          {
+            "tag": "a",
+            "text": "🌍 市場",
+            "href": "",
+            "ariaDisabled": null,
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "💼 資產 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🔍 找基金 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🤖 AI 尚未開放",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "⚙️ 設定 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          }
+        ],
+        "mainText": "🌍 市場 💼 資產 開發中 🔍 找基金 開發中 🤖 AI 尚未開放 ⚙️ 設定 開發中 PREVIEW ◇ 0／5 項已取得（其中 3 項取數失敗） 更新：◇ 資料未備 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 ⛔ 台股 取數失敗 ｜ S&P 500 ⛔ S&P 500 取數失敗 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 頻率：日｜缺值不補、斷線 此圖目前沒有可畫的資料 台股⛔ 台股 取數失敗 ｜ S&P 500⛔ S&P 500 取數失敗 keyboard_arrow_right ▸ 來源與限制 風險｜VIX ⛔ VIX 取數失敗 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 ⛔ 利率資料來源尚未設定 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 ⛔ 波動度指數 取數失敗 高收益信用利差 ⛔ 尚未設定 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 ⛔ 尚未設定 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+        "url": "http://127.0.0.1:8604/",
+        "vw": 390,
+        "docSW": 390,
+        "hasAstBlocks": 0,
+        "pageTitle": "🌍 市場與趨勢",
+        "screenshot": [
+          "unmounted_url_exp_390.png",
+          87398
+        ]
+      },
+      "direct_set": {
+        "items": [
+          {
+            "tag": "a",
+            "text": "🌍 市場",
+            "href": "",
+            "ariaDisabled": null,
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "💼 資產 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🔍 找基金 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🤖 AI 尚未開放",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "⚙️ 設定 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          }
+        ],
+        "mainText": "🌍 市場 💼 資產 開發中 🔍 找基金 開發中 🤖 AI 尚未開放 ⚙️ 設定 開發中 PREVIEW ◇ 0／5 項已取得（其中 3 項取數失敗） 更新：◇ 資料未備 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 ⛔ 台股 取數失敗 ｜ S&P 500 ⛔ S&P 500 取數失敗 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 頻率：日｜缺值不補、斷線 此圖目前沒有可畫的資料 台股⛔ 台股 取數失敗 ｜ S&P 500⛔ S&P 500 取數失敗 keyboard_arrow_right ▸ 來源與限制 風險｜VIX ⛔ VIX 取數失敗 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 ⛔ 利率資料來源尚未設定 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 ⛔ 波動度指數 取數失敗 高收益信用利差 ⛔ 尚未設定 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 ⛔ 尚未設定 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+        "url": "http://127.0.0.1:8604/",
+        "vw": 390,
+        "docSW": 390,
+        "hasAstBlocks": 0,
+        "pageTitle": "🌍 市場與趨勢"
+      },
+      "direct_ai": {
+        "items": [
+          {
+            "tag": "a",
+            "text": "🌍 市場",
+            "href": "",
+            "ariaDisabled": null,
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "💼 資產 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🔍 找基金 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🤖 AI 尚未開放",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "⚙️ 設定 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 72,
+            "h": 60,
+            "shown": true
+          }
+        ],
+        "mainText": "🌍 市場 💼 資產 開發中 🔍 找基金 開發中 🤖 AI 尚未開放 ⚙️ 設定 開發中 PREVIEW ◇ 0／5 項已取得（其中 3 項取數失敗） 更新：◇ 資料未備 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 ⛔ 台股 取數失敗 ｜ S&P 500 ⛔ S&P 500 取數失敗 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 頻率：日｜缺值不補、斷線 此圖目前沒有可畫的資料 台股⛔ 台股 取數失敗 ｜ S&P 500⛔ S&P 500 取數失敗 keyboard_arrow_right ▸ 來源與限制 風險｜VIX ⛔ VIX 取數失敗 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 ⛔ 利率資料來源尚未設定 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 ⛔ 波動度指數 取數失敗 高收益信用利差 ⛔ 尚未設定 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 ⛔ 尚未設定 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+        "url": "http://127.0.0.1:8604/",
+        "vw": 390,
+        "docSW": 390,
+        "hasAstBlocks": 0,
+        "pageTitle": "🌍 市場與趨勢"
+      },
+      "focus_walk": [
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "Deploy",
+          "x": 283.03125,
+          "y": 16,
+          "w": 56.96875,
+          "h": 28,
+          "docY": 16,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 0
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "Main menu",
+          "text": "",
+          "x": 344,
+          "y": 15.5,
+          "w": 28,
+          "h": 28,
+          "docY": 15.5,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 1
+        },
+        {
+          "tag": "section",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "🌍 市場 💼 資產 開發中 🔍 找基金 開發中 ?",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 844,
+          "docY": 0,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": false,
+          "i": 2
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "🌍 市場",
+          "x": 16,
+          "y": 70.390625,
+          "w": 71.59375,
+          "h": 60,
+          "docY": 70.390625,
+          "chrome": false,
+          "outline": "solid 2px",
+          "focusPixelsChanged": true,
+          "i": 3
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": "Link to heading",
+          "text": "",
+          "x": 199.328125,
+          "y": 220.828125,
+          "w": 16,
+          "h": 16,
+          "docY": 220.828125,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 4
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": "Link to heading",
+          "text": "",
+          "x": 262.28125,
+          "y": 483.921875,
+          "w": 16,
+          "h": 16,
+          "docY": 483.921875,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 5
+        },
+        {
+          "tag": "input",
+          "type": "radio",
+          "role": null,
+          "aria": null,
+          "text": "0",
+          "x": 89.5,
+          "y": 535.171875,
+          "w": 13,
+          "h": 13,
+          "docY": 535.171875,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": false,
+          "i": 6
+        },
+        {
+          "tag": "input",
+          "type": "radio",
+          "role": null,
+          "aria": null,
+          "text": "2",
+          "x": 198.5,
+          "y": 599.171875,
+          "w": 13,
+          "h": 13,
+          "docY": 599.171875,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": false,
+          "i": 7
+        },
+        {
+          "tag": "summary",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "keyboard_arrow_right ▸ 來源與限制",
+          "x": 30,
+          "y": 761.34375,
+          "w": 330,
+          "h": 38,
+          "docY": 761.34375,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 8
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": "Link to heading",
+          "text": "",
+          "x": 102.078125,
+          "y": 413.65625,
+          "w": 16,
+          "h": 16,
+          "docY": 413.65625,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 9
+        }
+      ]
+    },
+    "1280": {
+      "home": {
+        "items": [
+          {
+            "tag": "a",
+            "text": "🌍 市場與趨勢",
+            "href": "",
+            "ariaDisabled": null,
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "💼 我的資產 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🔍 找基金 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🤖 AI 投資總結 尚未開放",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "⚙️ 設定 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          }
+        ],
+        "mainText": "PREVIEW ◇ 0／5 項已取得（其中 3 項取數失敗） 更新：◇ 資料未備 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 ⛔ 台股 取數失敗 ｜ S&P 500 ⛔ S&P 500 取數失敗 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 頻率：日｜缺值不補、斷線 此圖目前沒有可畫的資料 台股⛔ 台股 取數失敗 ｜ S&P 500⛔ S&P 500 取數失敗 keyboard_arrow_right ▸ 來源與限制 風險｜VIX ⛔ VIX 取數失敗 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 ⛔ 利率資料來源尚未設定 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 ⛔ 波動度指數 取數失敗 高收益信用利差 ⛔ 尚未設定 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 ⛔ 尚未設定 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+        "url": "http://127.0.0.1:8604/",
+        "vw": 1280,
+        "docSW": 1280,
+        "hasAstBlocks": 0,
+        "measure": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 980,
+          "mainClientW": 980,
+          "fontMinPx": 12,
+          "fontHistogram": {
+            "12": 5,
+            "13": 15,
+            "14": 39,
+            "15": 7,
+            "16": 29,
+            "27.2": 1,
+            "19.2": 1
+          },
+          "smallText": [
+            {
+              "fs": 12,
+              "text": "PREVIEW",
+              "el": "span.uv3-tag"
+            },
+            {
+              "fs": 12,
+              "text": "◇ 0／5 項已取得（其中 3 項取數失敗）",
+              "el": "span"
+            },
+            {
+              "fs": 12,
+              "text": "更新：",
+              "el": "span"
+            },
+            {
+              "fs": 12,
+              "text": "◇ 資料未備",
+              "el": "span"
+            },
+            {
+              "fs": 12,
+              "text": "Preview 預覽（非正式頁面）：字樣標有虛線",
+              "el": "span.uv3-pending"
+            }
+          ],
+          "smallTextCount": 5,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "比較",
+              "w": 54,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "VIX",
+              "w": 48,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "美10Y",
+              "w": 60.6,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "美2Y",
+              "w": 53.6,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "3M",
+              "w": 48,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "6M",
+              "w": 48,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "1Y",
+              "w": 48,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "3Y",
+              "w": 48,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "keyboard_arrow_right ▸ 來源與限制",
+              "w": 920,
+              "h": 38,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "期限利差",
+              "w": 82,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "信用利差",
+              "w": 82,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "radio",
+              "role": null,
+              "label": "政策利率",
+              "w": 82,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "keyboard_arrow_right ▸ 尚未取得（7 項）",
+              "w": 946,
+              "h": 38,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "keyboard_arrow_right ▸ 各項資料狀態",
+              "w": 946,
+              "h": 38,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            }
+          ],
+          "clippedCount": 11,
+          "dataBlocks": [],
+          "details": [
+            {
+              "block": null,
+              "open": false
+            },
+            {
+              "block": null,
+              "open": false
+            },
+            {
+              "block": null,
+              "open": false
+            }
+          ],
+          "harnessBanner": null,
+          "title": "🌍 市場與趨勢"
+        },
+        "screenshot": [
+          "unmounted_home_1280.png",
+          144228
+        ]
+      },
+      "direct_ast": {
+        "items": [
+          {
+            "tag": "a",
+            "text": "🌍 市場與趨勢",
+            "href": "",
+            "ariaDisabled": null,
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "💼 我的資產 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🔍 找基金 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🤖 AI 投資總結 尚未開放",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "⚙️ 設定 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          }
+        ],
+        "mainText": "PREVIEW ◇ 0／5 項已取得（其中 3 項取數失敗） 更新：◇ 資料未備 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 ⛔ 台股 取數失敗 ｜ S&P 500 ⛔ S&P 500 取數失敗 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 頻率：日｜缺值不補、斷線 此圖目前沒有可畫的資料 台股⛔ 台股 取數失敗 ｜ S&P 500⛔ S&P 500 取數失敗 keyboard_arrow_right ▸ 來源與限制 風險｜VIX ⛔ VIX 取數失敗 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 ⛔ 利率資料來源尚未設定 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 ⛔ 波動度指數 取數失敗 高收益信用利差 ⛔ 尚未設定 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 ⛔ 尚未設定 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+        "url": "http://127.0.0.1:8604/",
+        "vw": 1280,
+        "docSW": 1280,
+        "hasAstBlocks": 0,
+        "pageTitle": "🌍 市場與趨勢",
+        "screenshot": [
+          "unmounted_url_ast_1280.png",
+          137873
+        ]
+      },
+      "direct_exp": {
+        "items": [
+          {
+            "tag": "a",
+            "text": "🌍 市場與趨勢",
+            "href": "",
+            "ariaDisabled": null,
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "💼 我的資產 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🔍 找基金 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🤖 AI 投資總結 尚未開放",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "⚙️ 設定 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          }
+        ],
+        "mainText": "PREVIEW ◇ 0／5 項已取得（其中 3 項取數失敗） 更新：◇ 資料未備 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 ⛔ 台股 取數失敗 ｜ S&P 500 ⛔ S&P 500 取數失敗 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 頻率：日｜缺值不補、斷線 此圖目前沒有可畫的資料 台股⛔ 台股 取數失敗 ｜ S&P 500⛔ S&P 500 取數失敗 keyboard_arrow_right ▸ 來源與限制 風險｜VIX ⛔ VIX 取數失敗 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 ⛔ 利率資料來源尚未設定 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 ⛔ 波動度指數 取數失敗 高收益信用利差 ⛔ 尚未設定 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 ⛔ 尚未設定 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+        "url": "http://127.0.0.1:8604/",
+        "vw": 1280,
+        "docSW": 1280,
+        "hasAstBlocks": 0,
+        "pageTitle": "🌍 市場與趨勢",
+        "screenshot": [
+          "unmounted_url_exp_1280.png",
+          137873
+        ]
+      },
+      "direct_set": {
+        "items": [
+          {
+            "tag": "a",
+            "text": "🌍 市場與趨勢",
+            "href": "",
+            "ariaDisabled": null,
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "💼 我的資產 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🔍 找基金 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🤖 AI 投資總結 尚未開放",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "⚙️ 設定 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          }
+        ],
+        "mainText": "PREVIEW ◇ 0／5 項已取得（其中 3 項取數失敗） 更新：◇ 資料未備 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 ⛔ 台股 取數失敗 ｜ S&P 500 ⛔ S&P 500 取數失敗 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 頻率：日｜缺值不補、斷線 此圖目前沒有可畫的資料 台股⛔ 台股 取數失敗 ｜ S&P 500⛔ S&P 500 取數失敗 keyboard_arrow_right ▸ 來源與限制 風險｜VIX ⛔ VIX 取數失敗 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 ⛔ 利率資料來源尚未設定 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 ⛔ 波動度指數 取數失敗 高收益信用利差 ⛔ 尚未設定 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 ⛔ 尚未設定 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+        "url": "http://127.0.0.1:8604/",
+        "vw": 1280,
+        "docSW": 1280,
+        "hasAstBlocks": 0,
+        "pageTitle": "🌍 市場與趨勢"
+      },
+      "direct_ai": {
+        "items": [
+          {
+            "tag": "a",
+            "text": "🌍 市場與趨勢",
+            "href": "",
+            "ariaDisabled": null,
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "💼 我的資產 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🔍 找基金 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "🤖 AI 投資總結 尚未開放",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          },
+          {
+            "tag": "div",
+            "text": "⚙️ 設定 開發中",
+            "href": null,
+            "ariaDisabled": "true",
+            "w": 239,
+            "h": 48,
+            "shown": true
+          }
+        ],
+        "mainText": "PREVIEW ◇ 0／5 項已取得（其中 3 項取數失敗） 更新：◇ 資料未備 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 ⛔ 台股 取數失敗 ｜ S&P 500 ⛔ S&P 500 取數失敗 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 頻率：日｜缺值不補、斷線 此圖目前沒有可畫的資料 台股⛔ 台股 取數失敗 ｜ S&P 500⛔ S&P 500 取數失敗 keyboard_arrow_right ▸ 來源與限制 風險｜VIX ⛔ VIX 取數失敗 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 ⛔ 利率資料來源尚未設定 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 ⛔ 波動度指數 取數失敗 高收益信用利差 ⛔ 尚未設定 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 ⛔ 尚未設定 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+        "url": "http://127.0.0.1:8604/",
+        "vw": 1280,
+        "docSW": 1280,
+        "hasAstBlocks": 0,
+        "pageTitle": "🌍 市場與趨勢"
+      },
+      "focus_walk": [
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "🌍 市場與趨勢",
+          "x": 30,
+          "y": 43.6875,
+          "w": 239,
+          "h": 48,
+          "docY": 43.6875,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": false,
+          "i": 0
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "Deploy",
+          "x": 1173.03125,
+          "y": 16,
+          "w": 56.96875,
+          "h": 28,
+          "docY": 16,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 1
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "Main menu",
+          "text": "",
+          "x": 1234,
+          "y": 15.5,
+          "w": 28,
+          "h": 28,
+          "docY": 15.5,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 2
+        },
+        {
+          "tag": "section",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "PREVIEW ◇ 0／5 項已取得（其中 3 項取數失",
+          "x": 300,
+          "y": 0,
+          "w": 980,
+          "h": 800,
+          "docY": 0,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": false,
+          "i": 3
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": "Link to heading",
+          "text": "",
+          "x": 499.328125,
+          "y": 139.828125,
+          "w": 16,
+          "h": 16,
+          "docY": 139.828125,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 4
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": "Link to heading",
+          "text": "",
+          "x": 562.28125,
+          "y": 350.4375,
+          "w": 16,
+          "h": 16,
+          "docY": 350.4375,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 5
+        },
+        {
+          "tag": "input",
+          "type": "radio",
+          "role": null,
+          "aria": null,
+          "text": "0",
+          "x": 389.5,
+          "y": 401.6875,
+          "w": 13,
+          "h": 13,
+          "docY": 401.6875,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": false,
+          "i": 6
+        },
+        {
+          "tag": "input",
+          "type": "radio",
+          "role": null,
+          "aria": null,
+          "text": "2",
+          "x": 498.5,
+          "y": 465.6875,
+          "w": 13,
+          "h": 13,
+          "docY": 465.6875,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": false,
+          "i": 7
+        },
+        {
+          "tag": "summary",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "keyboard_arrow_right ▸ 來源與限制",
+          "x": 330,
+          "y": 603.0625,
+          "w": 920,
+          "h": 38,
+          "docY": 603.0625,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 8
+        },
+        {
+          "tag": "a",
+          "type": null,
+          "role": null,
+          "aria": "Link to heading",
+          "text": "",
+          "x": 402.078125,
+          "y": 690.375,
+          "w": 16,
+          "h": 16,
+          "docY": 690.375,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 9
+        }
+      ]
+    }
+  },
+  "page_errors": [
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "console.error: The page that you have requested does not seem to exist. Running the app's main page.",
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "console.error: The page that you have requested does not seem to exist. Running the app's main page.",
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "console.error: The page that you have requested does not seem to exist. Running the app's main page.",
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

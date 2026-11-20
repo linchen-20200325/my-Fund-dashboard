@@ -1,0 +1,5461 @@
+{
+  "app": "fund_search",
+  "widths": {
+    "390": {
+      "idle": {
+        "measure": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 5,
+            "14": 6,
+            "15": 5,
+            "16": 4,
+            "27.2": 1,
+            "19.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": null,
+              "label": "MoneyDJ 基金代碼或 ISIN",
+              "w": 356,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "button",
+              "type": "submit",
+              "role": null,
+              "label": "查詢",
+              "w": 54,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "基本資料｜尚未取得｜來源與限制",
+              "w": 332,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "選股池情境（harness）",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "input",
+              "type": "checkbox",
+              "role": null,
+              "label": "FAKE 條件 1",
+              "w": 94,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "checkbox",
+              "role": null,
+              "label": "FAKE 條件 2",
+              "w": 94,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "checkbox",
+              "role": null,
+              "label": "FAKE 條件 3",
+              "w": 94,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            }
+          ],
+          "clippedCount": 3,
+          "dataBlocks": [
+            "isin-note",
+            "lookup-idle",
+            "basic-info",
+            "exp-divider",
+            "exp-title",
+            "exp0",
+            "exp1",
+            "exp2",
+            "exp7"
+          ],
+          "details": [
+            {
+              "block": "basic-info",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+          "title": "Streamlit"
+        },
+        "blocks": {
+          "blocks": {
+            "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+            "lookup-idle": "尚未查詢",
+            "basic-info": "基本資料｜尚未取得｜來源與限制",
+            "exp-divider": "",
+            "exp-title": "依條件篩選",
+            "exp0[ok]": "篩選結果 尚未設定條件",
+            "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+            "exp2[no-conditions]": "結果清單 尚未設定條件",
+            "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+          },
+          "states": [
+            "exp0:ok",
+            "exp2:no-conditions",
+            "exp7:no-conditions"
+          ],
+          "reasons": [],
+          "outcome": [],
+          "counts": "no",
+          "conditions": "0",
+          "checkboxes": [
+            false,
+            false,
+            false
+          ],
+          "htmlHasScript": false
+        },
+        "screenshot": [
+          "fund_search_idle_390.png",
+          85540
+        ]
+      },
+      "queries": {
+        "FAKE-OK01": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 12,
+              "14": 6,
+              "15": 5,
+              "16": 9,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 找到模擬項目（FAKE） 輸入代碼FAKE-OK01 基金名稱FAKE 模擬基金（非正式名稱） 配息方式配息型 成立日期⬜ 資料未備 經理費率⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "found"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_q_FAKE-OK01_390.png",
+            115494
+          ]
+        },
+        "FAKE-OK02": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 12,
+              "14": 6,
+              "15": 5,
+              "16": 9,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 找到模擬項目（FAKE） 輸入代碼FAKE-OK02 基金名稱FAKE 模擬基金（非正式名稱） 配息方式累積型 成立日期⬜ 資料未備 經理費率⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "found"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-LOW1": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 12,
+              "14": 6,
+              "15": 5,
+              "16": 9,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 資料不足 輸入代碼FAKE-LOW1 基金名稱⬜ 資料未備 配息方式⬜ 資料未備 成立日期⬜ 資料未備 經理費率⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "insufficient"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_q_FAKE-LOW1_390.png",
+            112421
+          ]
+        },
+        "FAKE-ERR1": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 10,
+              "14": 6,
+              "15": 5,
+              "16": 5,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金 這次取數失敗，不是對基金身份的判斷 輸入代碼FAKE-ERR1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "failed"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_q_FAKE-ERR1_390.png",
+            105695
+          ]
+        },
+        "FAKE-NOPE1": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 8,
+              "14": 6,
+              "15": 5,
+              "16": 6,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（離線預覽沒有這個代碼的模擬資料） 輸入代碼FAKE-NOPE1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "no_fixture"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          }
+        },
+        "US0378331005": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 6,
+              "14": 6,
+              "15": 5,
+              "16": 4,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "isin-notice",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "isin-notice": "ISIN 目前未啟用 未用 ISIN 取數、未猜測任何代碼",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          }
+        },
+        "<script>alert(1)</script>": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 8,
+              "14": 6,
+              "15": 5,
+              "16": 6,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼<script>alert(1)</script> 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          }
+        },
+        "(empty)": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 8,
+              "14": 6,
+              "15": 5,
+              "16": 6,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          }
+        }
+      },
+      "exp": {
+        "has_match": {
+          "label": "有符合（全勾 N=2、M=0）",
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 34,
+              "14": 6,
+              "15": 5,
+              "16": 30,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 目前條件下有 2 檔符合 符合2 無法判定0",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[rows]": "結果清單 基金代碼FAKE-001 基金名稱FAKE 基金 甲 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比FAKE 值 基金代碼FAKE-002 基金名稱FAKE 基金 乙 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比FAKE 值",
+              "exp7[rows]": "篩選軌跡 條件FAKE 條件 1 套用前檔數6 符合4 無法判定0 條件FAKE 條件 2 套用前檔數4 符合3 無法判定0 條件FAKE 條件 3 套用前檔數3 符合2 無法判定0"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:rows",
+              "exp7:rows"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "yes",
+            "conditions": "3",
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_has_match_390.png",
+            146255
+          ]
+        },
+        "no_match": {
+          "label": "無符合（全勾 N=0、M=0）",
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 22,
+              "14": 6,
+              "15": 5,
+              "16": 19,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 目前條件下沒有符合的基金 符合0 無法判定0",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[empty]": "結果清單 目前條件下沒有符合的基金",
+              "exp7[rows]": "篩選軌跡 條件FAKE 條件 1 套用前檔數4 符合2 無法判定0 條件FAKE 條件 2 套用前檔數2 符合1 無法判定0 條件FAKE 條件 3 套用前檔數1 符合0 無法判定0"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:empty",
+              "exp7:rows"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "yes",
+            "conditions": "3",
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_no_match_390.png",
+            127497
+          ]
+        },
+        "undetermined_only": {
+          "label": "只有無法判定（全勾 N=0、M=3）",
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 40,
+              "14": 6,
+              "15": 5,
+              "16": 42,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 目前條件下沒有符合的基金；另有 3 檔無法判定 符合0 無法判定3",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[rows]": "結果清單 ⬜ 無法判定（資料未備） 基金代碼FAKE-001 基金名稱FAKE 基金 甲 幣別FAKE 值 最近淨值日FAKE 值 最近淨值⬜ 資料未備 近 12 個月配息佔淨值比FAKE 值 ⬜ 無法判定（資料未備） 基金代碼FAKE-002 基金名稱FAKE 基金 乙 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比⬜ 資料未備 ⬜ 無法判定（資料未備） 基金代碼FAKE-003 基金名稱FAKE 基金 丙 幣別FAKE 值 最近淨值日⬜ 資料未備 最近淨值⬜ 資料未備 近 12 個月配息佔淨值比FAKE 值",
+              "exp7[rows]": "篩選軌跡 條件FAKE 條件 1 套用前檔數5 符合3 無法判定1 條件FAKE 條件 2 套用前檔數4 符合2 無法判定2 條件FAKE 條件 3 套用前檔數4 符合0 無法判定3"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:rows",
+              "exp7:rows"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "yes",
+            "conditions": "3",
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_undetermined_only_390.png",
+            185422
+          ]
+        },
+        "mixed": {
+          "label": "有符合也有無法判定（全勾 N=2、M=2）",
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 46,
+              "14": 6,
+              "15": 5,
+              "16": 46,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 目前條件下有 2 檔符合；另有 2 檔無法判定 符合2 無法判定2",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[rows]": "結果清單 基金代碼FAKE-001 基金名稱FAKE 基金 甲 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比FAKE 值 基金代碼FAKE-002 基金名稱FAKE 基金 乙 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比FAKE 值 ⬜ 無法判定（資料未備） 基金代碼FAKE-003 基金名稱FAKE 基金 丙 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比⬜ 資料未備 ⬜ 無法判定（資料未備） 基金代碼FAKE-004 基金名稱FAKE 基金 丁 幣別FAKE 值 最近淨值日FAKE 值 最近淨值⬜ 資料未備 近 12 個月配息佔淨值比FAKE 值",
+              "exp7[rows]": "篩選軌跡 條件FAKE 條件 1 套用前檔數6 符合4 無法判定1 條件FAKE 條件 2 套用前檔數5 符合2 無法判定2 條件FAKE 條件 3 套用前檔數4 符合2 無法判定2"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:rows",
+              "exp7:rows"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "yes",
+            "conditions": "3",
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_mixed_390.png",
+            187496
+          ]
+        },
+        "empty_pool": {
+          "label": "選股池為空（0 檔；全勾 N=0、M=0）",
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 22,
+              "14": 6,
+              "15": 5,
+              "16": 22,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 ○ 選股池目前是空的 目前條件下沒有符合的基金 符合0 無法判定0",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[empty]": "結果清單 ○ 選股池目前是空的 目前條件下沒有符合的基金",
+              "exp7[rows]": "篩選軌跡 ○ 選股池目前是空的 條件FAKE 條件 1 套用前檔數0 符合0 無法判定0 條件FAKE 條件 2 套用前檔數0 符合0 無法判定0 條件FAKE 條件 3 套用前檔數0 符合0 無法判定0"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:empty",
+              "exp7:rows"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "yes",
+            "conditions": "3",
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_empty_pool_390.png",
+            144694
+          ]
+        },
+        "source_failed": {
+          "label": "選股池來源失敗",
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 11,
+              "14": 6,
+              "15": 5,
+              "16": 6,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 332,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[failed]": "篩選結果 ⛔ 取數失敗 此區無法顯示篩選結果",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[failed]": "結果清單 ⛔ 取數失敗 此區無法顯示篩選結果",
+              "exp7[failed]": "篩選軌跡 ⛔ 取數失敗 此區無法顯示篩選結果"
+            },
+            "states": [
+              "exp0:failed",
+              "exp2:failed",
+              "exp7:failed"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_source_failed_390.png",
+            112563
+          ]
+        }
+      }
+    },
+    "1280": {
+      "idle": {
+        "measure": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 5,
+            "14": 6,
+            "15": 5,
+            "16": 4,
+            "27.2": 1,
+            "19.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": null,
+              "label": "MoneyDJ 基金代碼或 ISIN",
+              "w": 1066,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "button",
+              "type": "submit",
+              "role": null,
+              "label": "查詢",
+              "w": 54,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "summary",
+              "type": null,
+              "role": null,
+              "label": "基本資料｜尚未取得｜來源與限制",
+              "w": 1042,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "選股池情境（harness）",
+              "w": 1034,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "input",
+              "type": "checkbox",
+              "role": null,
+              "label": "FAKE 條件 1",
+              "w": 94,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "checkbox",
+              "role": null,
+              "label": "FAKE 條件 2",
+              "w": 94,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "checkbox",
+              "role": null,
+              "label": "FAKE 條件 3",
+              "w": 94,
+              "h": 48,
+              "harness": false
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            },
+            {
+              "el": "span",
+              "sw": 13,
+              "cw": 1,
+              "ox": "hidden"
+            }
+          ],
+          "clippedCount": 3,
+          "dataBlocks": [
+            "isin-note",
+            "lookup-idle",
+            "basic-info",
+            "exp-divider",
+            "exp-title",
+            "exp0",
+            "exp1",
+            "exp2",
+            "exp7"
+          ],
+          "details": [
+            {
+              "block": "basic-info",
+              "open": false
+            }
+          ],
+          "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+          "title": "Streamlit"
+        },
+        "blocks": {
+          "blocks": {
+            "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+            "lookup-idle": "尚未查詢",
+            "basic-info": "基本資料｜尚未取得｜來源與限制",
+            "exp-divider": "",
+            "exp-title": "依條件篩選",
+            "exp0[ok]": "篩選結果 尚未設定條件",
+            "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+            "exp2[no-conditions]": "結果清單 尚未設定條件",
+            "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+          },
+          "states": [
+            "exp0:ok",
+            "exp2:no-conditions",
+            "exp7:no-conditions"
+          ],
+          "reasons": [],
+          "outcome": [],
+          "counts": "no",
+          "conditions": "0",
+          "checkboxes": [
+            false,
+            false,
+            false
+          ],
+          "htmlHasScript": false
+        },
+        "screenshot": [
+          "fund_search_idle_1280.png",
+          94846
+        ]
+      },
+      "queries": {
+        "FAKE-OK01": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 12,
+              "14": 6,
+              "15": 5,
+              "16": 9,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 找到模擬項目（FAKE） 輸入代碼FAKE-OK01 基金名稱FAKE 模擬基金（非正式名稱） 配息方式配息型 成立日期⬜ 資料未備 經理費率⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "found"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_q_FAKE-OK01_1280.png",
+            127662
+          ]
+        },
+        "FAKE-OK02": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 12,
+              "14": 6,
+              "15": 5,
+              "16": 9,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 找到模擬項目（FAKE） 輸入代碼FAKE-OK02 基金名稱FAKE 模擬基金（非正式名稱） 配息方式累積型 成立日期⬜ 資料未備 經理費率⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "found"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-LOW1": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 12,
+              "14": 6,
+              "15": 5,
+              "16": 9,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 資料不足 輸入代碼FAKE-LOW1 基金名稱⬜ 資料未備 配息方式⬜ 資料未備 成立日期⬜ 資料未備 經理費率⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "insufficient"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_q_FAKE-LOW1_1280.png",
+            124388
+          ]
+        },
+        "FAKE-ERR1": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 10,
+              "14": 6,
+              "15": 5,
+              "16": 5,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金 這次取數失敗，不是對基金身份的判斷 輸入代碼FAKE-ERR1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "failed"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_q_FAKE-ERR1_1280.png",
+            118014
+          ]
+        },
+        "FAKE-NOPE1": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 8,
+              "14": 6,
+              "15": 5,
+              "16": 6,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（離線預覽沒有這個代碼的模擬資料） 輸入代碼FAKE-NOPE1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "no_fixture"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          }
+        },
+        "US0378331005": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 6,
+              "14": 6,
+              "15": 5,
+              "16": 4,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "isin-notice",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "isin-notice": "ISIN 目前未啟用 未用 ISIN 取數、未猜測任何代碼",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          }
+        },
+        "<script>alert(1)</script>": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 8,
+              "14": 6,
+              "15": 5,
+              "16": 6,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼<script>alert(1)</script> 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          }
+        },
+        "(empty)": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 8,
+              "14": 6,
+              "15": 5,
+              "16": 6,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 尚未設定條件",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[no-conditions]": "結果清單 尚未設定條件",
+              "exp7[no-conditions]": "篩選軌跡 尚未設定條件"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:no-conditions",
+              "exp7:no-conditions"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "no",
+            "conditions": "0",
+            "checkboxes": [
+              false,
+              false,
+              false
+            ],
+            "htmlHasScript": false
+          }
+        }
+      },
+      "exp": {
+        "has_match": {
+          "label": "有符合（全勾 N=2、M=0）",
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 34,
+              "14": 6,
+              "15": 5,
+              "16": 30,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 目前條件下有 2 檔符合 符合2 無法判定0",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[rows]": "結果清單 基金代碼FAKE-001 基金名稱FAKE 基金 甲 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比FAKE 值 基金代碼FAKE-002 基金名稱FAKE 基金 乙 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比FAKE 值",
+              "exp7[rows]": "篩選軌跡 條件FAKE 條件 1 套用前檔數6 符合4 無法判定0 條件FAKE 條件 2 套用前檔數4 符合3 無法判定0 條件FAKE 條件 3 套用前檔數3 符合2 無法判定0"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:rows",
+              "exp7:rows"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "yes",
+            "conditions": "3",
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_has_match_1280.png",
+            163277
+          ]
+        },
+        "no_match": {
+          "label": "無符合（全勾 N=0、M=0）",
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 22,
+              "14": 6,
+              "15": 5,
+              "16": 19,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 目前條件下沒有符合的基金 符合0 無法判定0",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[empty]": "結果清單 目前條件下沒有符合的基金",
+              "exp7[rows]": "篩選軌跡 條件FAKE 條件 1 套用前檔數4 符合2 無法判定0 條件FAKE 條件 2 套用前檔數2 符合1 無法判定0 條件FAKE 條件 3 套用前檔數1 符合0 無法判定0"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:empty",
+              "exp7:rows"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "yes",
+            "conditions": "3",
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_no_match_1280.png",
+            137879
+          ]
+        },
+        "undetermined_only": {
+          "label": "只有無法判定（全勾 N=0、M=3）",
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 40,
+              "14": 6,
+              "15": 5,
+              "16": 42,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 目前條件下沒有符合的基金；另有 3 檔無法判定 符合0 無法判定3",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[rows]": "結果清單 ⬜ 無法判定（資料未備） 基金代碼FAKE-001 基金名稱FAKE 基金 甲 幣別FAKE 值 最近淨值日FAKE 值 最近淨值⬜ 資料未備 近 12 個月配息佔淨值比FAKE 值 ⬜ 無法判定（資料未備） 基金代碼FAKE-002 基金名稱FAKE 基金 乙 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比⬜ 資料未備 ⬜ 無法判定（資料未備） 基金代碼FAKE-003 基金名稱FAKE 基金 丙 幣別FAKE 值 最近淨值日⬜ 資料未備 最近淨值⬜ 資料未備 近 12 個月配息佔淨值比FAKE 值",
+              "exp7[rows]": "篩選軌跡 條件FAKE 條件 1 套用前檔數5 符合3 無法判定1 條件FAKE 條件 2 套用前檔數4 符合2 無法判定2 條件FAKE 條件 3 套用前檔數4 符合0 無法判定3"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:rows",
+              "exp7:rows"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "yes",
+            "conditions": "3",
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_undetermined_only_1280.png",
+            213120
+          ]
+        },
+        "mixed": {
+          "label": "有符合也有無法判定（全勾 N=2、M=2）",
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 46,
+              "14": 6,
+              "15": 5,
+              "16": 46,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 目前條件下有 2 檔符合；另有 2 檔無法判定 符合2 無法判定2",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[rows]": "結果清單 基金代碼FAKE-001 基金名稱FAKE 基金 甲 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比FAKE 值 基金代碼FAKE-002 基金名稱FAKE 基金 乙 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比FAKE 值 ⬜ 無法判定（資料未備） 基金代碼FAKE-003 基金名稱FAKE 基金 丙 幣別FAKE 值 最近淨值日FAKE 值 最近淨值FAKE 值 近 12 個月配息佔淨值比⬜ 資料未備 ⬜ 無法判定（資料未備） 基金代碼FAKE-004 基金名稱FAKE 基金 丁 幣別FAKE 值 最近淨值日FAKE 值 最近淨值⬜ 資料未備 近 12 個月配息佔淨值比FAKE 值",
+              "exp7[rows]": "篩選軌跡 條件FAKE 條件 1 套用前檔數6 符合4 無法判定1 條件FAKE 條件 2 套用前檔數5 符合2 無法判定2 條件FAKE 條件 3 套用前檔數4 符合2 無法判定2"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:rows",
+              "exp7:rows"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "yes",
+            "conditions": "3",
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_mixed_1280.png",
+            216058
+          ]
+        },
+        "empty_pool": {
+          "label": "選股池為空（0 檔；全勾 N=0、M=0）",
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 22,
+              "14": 6,
+              "15": 5,
+              "16": 22,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[ok]": "篩選結果 ○ 選股池目前是空的 目前條件下沒有符合的基金 符合0 無法判定0",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[empty]": "結果清單 ○ 選股池目前是空的 目前條件下沒有符合的基金",
+              "exp7[rows]": "篩選軌跡 ○ 選股池目前是空的 條件FAKE 條件 1 套用前檔數0 符合0 無法判定0 條件FAKE 條件 2 套用前檔數0 符合0 無法判定0 條件FAKE 條件 3 套用前檔數0 符合0 無法判定0"
+            },
+            "states": [
+              "exp0:ok",
+              "exp2:empty",
+              "exp7:rows"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": "yes",
+            "conditions": "3",
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_empty_pool_1280.png",
+            161105
+          ]
+        },
+        "source_failed": {
+          "label": "選股池來源失敗",
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 11,
+              "14": 6,
+              "15": 5,
+              "16": 6,
+              "27.2": 1,
+              "19.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 1066,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "summary",
+                "type": null,
+                "role": null,
+                "label": "基本資料｜尚未取得｜來源與限制",
+                "w": 1042,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "選股池情境（harness）",
+                "w": 1034,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 1",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 2",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "checkbox",
+                "role": null,
+                "label": "FAKE 條件 3",
+                "w": 94,
+                "h": 48,
+                "harness": false
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              },
+              {
+                "el": "span",
+                "sw": 13,
+                "cw": 1,
+                "ox": "hidden"
+              }
+            ],
+            "clippedCount": 3,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "basic-info",
+              "exp-divider",
+              "exp-title",
+              "exp0",
+              "exp1",
+              "exp2",
+              "exp7"
+            ],
+            "details": [
+              {
+                "block": "basic-info",
+                "open": false
+              }
+            ],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 代碼：FAKE-OK01（找到・配息型）／FAKE-OK02（找到・累積型）／FAKE-LOW1（資料不足）／FAKE-ERR1（查詢失敗）",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result": "FAKE 模擬 ⬜ 無法判定（無法辨識格式） 輸入代碼⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "basic-info": "基本資料｜尚未取得｜來源與限制",
+              "exp-divider": "",
+              "exp-title": "依條件篩選",
+              "exp0[failed]": "篩選結果 ⛔ 取數失敗 此區無法顯示篩選結果",
+              "exp1": "本次瀏覽暫時條件 這些條件只在本次瀏覽生效，離開本頁後會清除",
+              "exp2[failed]": "結果清單 ⛔ 取數失敗 此區無法顯示篩選結果",
+              "exp7[failed]": "篩選軌跡 ⛔ 取數失敗 此區無法顯示篩選結果"
+            },
+            "states": [
+              "exp0:failed",
+              "exp2:failed",
+              "exp7:failed"
+            ],
+            "reasons": [],
+            "outcome": [
+              "unrecognized"
+            ],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [
+              true,
+              true,
+              true
+            ],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_search_exp_source_failed_1280.png",
+            124524
+          ]
+        }
+      }
+    }
+  },
+  "keyboard": {
+    "390": {
+      "focus_walk_idle": [
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "Deploy",
+          "x": 283.03125,
+          "y": 16,
+          "w": 56.96875,
+          "h": 28,
+          "docY": 16,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 0
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "Main menu",
+          "text": "",
+          "x": 344,
+          "y": 15.5,
+          "w": 28,
+          "h": 28,
+          "docY": 15.5,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 1
+        },
+        {
+          "tag": "section",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "FAKE／測試資料（離線注入，未執行任何真實請求） FA",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 844,
+          "docY": 0,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": false,
+          "i": 2
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "role": null,
+          "aria": "MoneyDJ 基金代碼或 ISIN",
+          "text": "",
+          "x": 17,
+          "y": 240.59375,
+          "w": 356,
+          "h": 48,
+          "docY": 240.59375,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 3
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "查詢",
+          "x": 16,
+          "y": 328.875,
+          "w": 54,
+          "h": 48,
+          "docY": 328.875,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 4
+        },
+        {
+          "tag": "summary",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "基本資料｜尚未取得｜來源與限制",
+          "x": 29,
+          "y": 456.671875,
+          "w": 332,
+          "h": 48,
+          "docY": 456.671875,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 5
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "role": "combobox",
+          "aria": "選股池情境（harness）",
+          "text": "有符合（全勾 N=2、M=0）",
+          "x": 17,
+          "y": 611.546875,
+          "w": 324,
+          "h": 38,
+          "docY": 611.546875,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 6
+        },
+        {
+          "tag": "input",
+          "type": "checkbox",
+          "role": null,
+          "aria": "FAKE 條件 1",
+          "text": "on",
+          "x": 15,
+          "y": 415.734375,
+          "w": 13,
+          "h": 13,
+          "docY": 415.734375,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 7
+        },
+        {
+          "tag": "input",
+          "type": "checkbox",
+          "role": null,
+          "aria": "FAKE 條件 2",
+          "text": "on",
+          "x": 15,
+          "y": 471.734375,
+          "w": 13,
+          "h": 13,
+          "docY": 471.734375,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 8
+        },
+        {
+          "tag": "input",
+          "type": "checkbox",
+          "role": null,
+          "aria": "FAKE 條件 3",
+          "text": "on",
+          "x": 15,
+          "y": 527.734375,
+          "w": 13,
+          "h": 13,
+          "docY": 527.734375,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 9
+        },
+        {
+          "i": 10,
+          "note": "focus left document"
+        }
+      ],
+      "details_open_initial_enter_space": [
+        false,
+        true,
+        false
+      ]
+    },
+    "1280": {
+      "focus_walk_idle": [
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "Deploy",
+          "x": 1173.03125,
+          "y": 16,
+          "w": 56.96875,
+          "h": 28,
+          "docY": 16,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 0
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "Main menu",
+          "text": "",
+          "x": 1234,
+          "y": 15.5,
+          "w": 28,
+          "h": 28,
+          "docY": 15.5,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 1
+        },
+        {
+          "tag": "section",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "FAKE／測試資料（離線注入，未執行任何真實請求） FA",
+          "x": 0,
+          "y": 0,
+          "w": 1280,
+          "h": 800,
+          "docY": 0,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": false,
+          "i": 2
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "role": null,
+          "aria": "MoneyDJ 基金代碼或 ISIN",
+          "text": "",
+          "x": 107,
+          "y": 199,
+          "w": 1066,
+          "h": 48,
+          "docY": 199,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 3
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "查詢",
+          "x": 106,
+          "y": 287.28125,
+          "w": 54,
+          "h": 48,
+          "docY": 287.28125,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 4
+        },
+        {
+          "tag": "summary",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "基本資料｜尚未取得｜來源與限制",
+          "x": 119,
+          "y": 415.078125,
+          "w": 1042,
+          "h": 48,
+          "docY": 415.078125,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 5
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "role": "combobox",
+          "aria": "選股池情境（harness）",
+          "text": "有符合（全勾 N=2、M=0）",
+          "x": 107,
+          "y": 569.953125,
+          "w": 1034,
+          "h": 38,
+          "docY": 569.953125,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 6
+        },
+        {
+          "tag": "input",
+          "type": "checkbox",
+          "role": null,
+          "aria": "FAKE 條件 1",
+          "text": "on",
+          "x": 105,
+          "y": 393.140625,
+          "w": 13,
+          "h": 13,
+          "docY": 393.140625,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 7
+        },
+        {
+          "tag": "input",
+          "type": "checkbox",
+          "role": null,
+          "aria": "FAKE 條件 2",
+          "text": "on",
+          "x": 105,
+          "y": 449.140625,
+          "w": 13,
+          "h": 13,
+          "docY": 449.140625,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 8
+        },
+        {
+          "tag": "input",
+          "type": "checkbox",
+          "role": null,
+          "aria": "FAKE 條件 3",
+          "text": "on",
+          "x": 105,
+          "y": 505.140625,
+          "w": 13,
+          "h": 13,
+          "docY": 505.140625,
+          "chrome": false,
+          "outline": "auto 1px",
+          "focusPixelsChanged": true,
+          "i": 9
+        },
+        {
+          "i": 10,
+          "note": "focus left document"
+        }
+      ],
+      "details_open_initial_enter_space": [
+        false,
+        true,
+        false
+      ]
+    }
+  },
+  "network_non_local_requests": [],
+  "page_errors": []
+}

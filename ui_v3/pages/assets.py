@@ -53,7 +53,7 @@ h3{{font-size:{section} !important}}
 .uv3-label{{font-size:{caption};color:{text2};margin-right:6px}}
 .uv3-note{{font-size:{caption};color:{text2};line-height:1.5;margin:.15rem 0;overflow-wrap:anywhere}}
 {theme.card_css(".uv3-card")}
-.uv3-card h4{{margin:0 0 4px 0;font-size:{body}}}
+.uv3-card-title{{margin:0 0 4px 0;padding:.5rem 0 1rem 0;font-size:{body};font-weight:600;line-height:1.2}}
 .uv3-a20{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:{space};margin-bottom:{space}}}
 .uv3-a20 > .uv3-card{{margin-bottom:0;min-width:0}}
 .uv3-a50,.uv3-a60{{margin-bottom:{space}}}
@@ -171,7 +171,8 @@ def a10_html(a10: vm.A10Card, source_state: str) -> str:
         f'<div class="uv3-row" data-a10="cause">{_missing()}{sep}{cause_html(c, source_state)}</div>' for c in a10.missing.causes)
     spec = f'<div class="uv3-row" data-a10="spec"><span class="uv3-label">{_label("a10_basis_label")}</span>{_basis_html(a10)}</div>'
     limits = "".join(f'<div class="uv3-row" data-a10="limit">{_limit_html(c)}</div>' for c in a10.limit_codes)
-    return f'<div class="uv3-card" data-block="a10"><h4>{_label("a10_title")}</h4>{rows}{spec}{limits}</div>'
+    return (f'<div class="uv3-card" data-block="a10"><div class="uv3-card-title" role="heading" aria-level="4">{_label("a10_title")}</div>'
+            f'{rows}{spec}{limits}</div>')   # 刻意不用 h4：Streamlit 會替 markdown 裡的 h1～h6 自動加錨點連結（多出看不見的 Tab 停駐點）；樣式與原 h4 等價
 
 
 # ───────────────────────────── A20 ─────────────────────────────
@@ -296,5 +297,5 @@ def render(model: vm.AssetsPageModel) -> None:
     import streamlit as st
 
     st.markdown(CSS, unsafe_allow_html=True)
-    st.title(PAGE_TITLE)
+    st.title(PAGE_TITLE, anchor=False)   # 不產生標題錨點連結（與 nas_diag／🔍 預覽一致；避免多出看不見的 Tab 停駐點）
     st.markdown(page_html(model), unsafe_allow_html=True)

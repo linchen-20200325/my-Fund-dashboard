@@ -23,7 +23,8 @@ MEASURE_JS = r"""
           blocks: [...document.querySelectorAll('[data-block]')].map(e => e.dataset.block),
           overflowing: body.filter(e => e.getBoundingClientRect().right > vw + 0.5).map(e => e.tagName + '.' + (e.className || '')).slice(0, 5),
           state: (document.querySelector('[data-source-state]') || {dataset: {}}).dataset.sourceState || null,
-          hasBanner: !!document.querySelector('[data-harness="true"]')};
+          hasBanner: !!document.querySelector('[data-harness="true"]'),
+          headingAnchors: document.querySelectorAll('a[aria-label="Link to heading"]').length};
 }
 """
 
@@ -37,6 +38,11 @@ def overflow_violations(m):
     if m["overflowing"]:
         bad.append(("頁本體元素超出視窗右緣", m["overflowing"]))
     return bad
+
+
+def anchor_violations(m):
+    """Streamlit 自動標題錨點（16×16、平時不可見、卻是 Tab 停駐點）不得出現。"""
+    return [("頁面出現標題錨點連結（多餘的 Tab 停駐點）", m["headingAnchors"])] if m["headingAnchors"] else []
 
 
 def visible_in_fold(m):

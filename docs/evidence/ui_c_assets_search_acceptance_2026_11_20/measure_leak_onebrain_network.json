@@ -1,0 +1,127 @@
+{
+  "assets": {
+    "multi_currency": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    },
+    "complete_no_rows": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    },
+    "market_blocked": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    },
+    "partial": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    },
+    "no_active": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    },
+    "read_failed": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    },
+    "unprovided_skip_evidence": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    },
+    "same_fund_two_policies": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    },
+    "many_rows": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    },
+    "a60_sensitive_strings": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    },
+    "complete_counts_unprovided": {
+      "text_leak_hits": [],
+      "dom_attr_leak_hits": [],
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "has_numeric_zero_next_to_missing": false,
+      "sensitive_fake_strings_present": false,
+      "visible_text_has_http": false,
+      "a_href_http_in_html": false
+    }
+  },
+  "other_previews_idle": {
+    "fund_search": {
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "text_leak_hits": []
+    },
+    "fund_lookup": {
+      "ai_terms_text": [],
+      "ai_terms_html": [],
+      "text_leak_hits": []
+    }
+  },
+  "network_non_local_requests": []
+}

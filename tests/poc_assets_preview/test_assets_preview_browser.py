@@ -96,6 +96,18 @@ def test_no_horizontal_overflow(measures, width, sid):
 
 
 @pytest.mark.parametrize("sid", IDS)
+@pytest.mark.parametrize("width", WIDTHS)
+def test_no_streamlit_heading_anchor_tab_stops(measures, width, sid):
+    assert lib.anchor_violations(measures[width][sid]) == []
+
+
+def test_mutation_injected_heading_anchor_is_flagged(server_and_browser):
+    js = ("document.querySelector('h1').insertAdjacentHTML('beforeend', "
+          "'<a href=\"#x\" aria-label=\"Link to heading\"></a>')")
+    assert lib.anchor_violations(_mutated(server_and_browser, IDS[0], js=js))
+
+
+@pytest.mark.parametrize("sid", IDS)
 def test_390_first_screen_marks_equal_model_count_and_are_all_visible_in_the_fold(measures, sid, record_property):
     m = measures[390][sid]
     assert EXPECTED[sid] == 5
