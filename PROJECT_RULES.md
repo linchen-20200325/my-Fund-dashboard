@@ -68,6 +68,17 @@
 | 未完成工作／現況 | `docs/BACKLOG.md`／`docs/HANDOFF.md` |
 | 已退役舊內容（NOT CURRENT） | `docs/evidence/history/` |
 
+**UI 來源與設計適用性（2026-11-20 新增指標；只放指標、不抄條文；各項來源分列於下表；決策者：總管整理，客戶裁示以各 DEC 為準）**：
+
+| 標記 | 內容（只指向來源，條文以來源為準） |
+|---|---|
+| **CURRENT** | (1) **手機（≤768px）頁首五格**：固定橫排、不橫滑、觸控 ≥48px——出自 `DEC-2026-11-06-01`、`DEC-2026-11-07-02`＋`docs/v2/80` §18＋`ui_v3/shell/nav.py`。(2) **桌機（>768px）深色左側導覽＋淺色主內容**——出自 `DEC-2026-10-27-09`（只限視覺 theme）＋`ui_v3/design/tokens.py`。(3) **無左側抽屜、無底部五頁導覽**：「無左側抽屜」＝程式現況（`nav.py` 手機隱藏側欄）＋使用者 2026-11-20 確認，**非 DEC 逐字**。(4) `ui_v3` 是未來正式 Presentation Layer，入口 `ui_v3/app_preview.py`，目前只有 🌍 市場頁掛入 Preview，其餘四項可見但不可進（🤖 另依 Phase 7 前不可進的既有裁示）。`docs/v2/81` 是 🌍 頁線框，**不是導覽來源**。**設計方向已裁示，不等於已驗收**：`DEC-2026-11-07-02` 的 44 適用性 Gate 與獨立 QA 未驗項不因列為 CURRENT 而升格 |
+| **SUPERSEDED** | 手機底部五頁導覽；手機左側抽屜作**主導覽**（「左側抽屜」僅指主導覽，不涉及 frozen 44 的帳號抽屜／浮層用語，該處須客戶另定位，見 `docs/evidence/new_ui2_top_tabs_44_amendment_inventory_2026_11_06.md`）；舊 B 線 Cloud 預覽站作為 `ui_v3` 的驗收對象。**本表的「B 線」＝`ui_v2` B 線預覽（入口 `ui_v2/app_preview.py`；maintenance-only／rollback candidate），≠ 本檔第 13.6 節 B 線 UI 的 `app.py` `[新]` 並行預覽頁** |
+| **REFERENCE ONLY** | 台股 HTML 視覺參考（不得移入基金正式契約）；早期基金 HTML 線框（`docs/wireframes/`）；舊 UI 的資料與能力參考 |
+| **NOT VERIFIED** | `ui_v3` 的 Cloud URL；Cloud 部署 SHA；Cloud 390／1280 像素驗收（尚未登記或取得，不得猜網址） |
+
+**換對話前確認六問（精簡版；依使用者要求新增，**非 DEC**；第 11、15 節只規範換對話與交接的一般流程，不含這六問本身）**：(1) 專案是基金、不是股票？(2) UI 世代是 Old UI、`ui_v2` 還是 `ui_v3`？(3) 引用的設計屬 CURRENT／SUPERSEDED／REFERENCE ONLY／NOT VERIFIED 哪一類？(4) 引用的 Cloud URL 對應哪個入口、哪個部署 SHA？(5) 該項是已核准、已施工、已驗收，還是僅草稿？(6) 新任務是否中斷既有未完成工作？
+
 **上位與規格文件（不因本檔改動）**：`CLAUDE.md`、`EXCEPTIONS.md`（`8.2.A` 例外與 `8.3.P` 待判定登記簿，屬憲法的檔案分割）、`PROCESS.md`、`docs/v2/CONSTITUTION.md`（子法 1，逐位元組存檔，守衛 `tests/test_constitution_archive_integrity.py`）、`docs/v2/57_amendment_8_directional_judgment.md`（子法 1 正式修正案 #8，與子法 1 合讀為單一版本；守衛 `tests/test_amendment_8_integrity.py`）、`docs/v2/44_fund_ui_ssot.md`（凍結 SSOT）、`docs/v2/54_phase7_design_backlog.md`（Phase 7 設計方向登記，Non-Production）。
 
 **歷史文件（凍結，只讀不續寫；檔頭指標由同批另組加，本檔不改它們）**：

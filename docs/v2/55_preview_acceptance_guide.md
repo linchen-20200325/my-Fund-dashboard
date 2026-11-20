@@ -1,5 +1,7 @@
 # 55｜B 線五頁預覽驗收前置與已知限制
 
+> 📌 **2026-11-20 適用範圍指標（有意識的更正，不是漏刪；決策者：總管；依據 `DEC-2026-11-02-06`〔`ui_v2` 為 maintenance-only／rollback candidate〕）**：B 線＝`ui_v2` B 線預覽（maintenance-only／rollback candidate；≠ `PROJECT_RULES.md` 第 13.6 節的 `app.py` `[新]` 並行預覽頁）。**本 SOP 與其中的預覽網址只適用 B 線（`ui_v2/app_preview.py`），不適用 `ui_v3` Preview 驗收**；`ui_v3` 的入口是 `ui_v3/app_preview.py`（目前只有 🌍 市場頁掛入），其 production-like Cloud URL／部署 SHA／Cloud 像素驗收尚未登記，**NOT VERIFIED**，不得以本檔或 B 線網址代替。本檔以下一字未改。
+
 > 本文件給客戶在驗收 B 線五頁預覽（`ui_v2/app_preview.py`）之前讀。它只整理 repo 內已經存在的事實，**不是新規格、不構成動工授權**（`CLAUDE.md` §-1）。
 > 寫入日 2026-10-16，對照基準 main `629d08a`（#971 的 merge commit）。程式之後若再改動，以當時的程式為準。
 > 2026-10-16 補寫：對照 main `498d971`（#976 的 merge commit），補上 #975、#976 的新行為（見 §00 最後一條）。

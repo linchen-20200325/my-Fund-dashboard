@@ -10,7 +10,7 @@
 |---|---|---|---|
 | `app.py`、`ui/` | `app.py` 是舊正式入口（Cloud 外部設定未核）；`docs/v2/80` §8–10 明確把 Old UI 留作唯讀邏輯參考 | **Legacy-live / DO NOT TOUCH**，不是死碼 | 不刪、不改、不搬畫面；cutover 另 Gate |
 | `ui_v2/app_preview.py`、`ui_v2/app_*_live.py` | `ui_v2/app_preview.py` 明列五頁 Live 接線與 OAuth／Active Sheet 路徑；`80` §3.2 分類 RETIRE LATER | **Legacy-rollback candidate**，不是可即刪 | 只保留維運／回切能力；不新增新 UI 功能 |
-| `ui_v3/app_preview.py`、`ui_v3/shell/*` | 新 Preview 入口已註冊 🌍；`shell/nav.py` 具 ≤768px 底部導覽；守衛禁止正式入口偷接 | **Current New UI2** | 唯一新 UI 主線、不可刪 |
+| `ui_v3/app_preview.py`、`ui_v3/shell/*` | 新 Preview 入口已註冊 🌍；`shell/nav.py` 具 ≤768px 底部導覽；守衛禁止正式入口偷接 | **Current New UI2** | 唯一新 UI 主線、不可刪 〔2026-11-20 註（有意識的更正，不是漏刪；決策者：總管）：`shell/nav.py` 現為手機頁首 S1 五格、已無底部導覽；本表為 2026-11-05 快照〕 |
 | `ui_v2/*/page.py::_grid_css` | GitHub code search 命中 mkt／hld／alo／exp／set 五份 | **確認重複 presentation**，非死碼 | 新 UI 用一份共同 layout/token；不在 Legacy 直接合併或刪 |
 | `services/v2_tables/alo_holdings.py::load_alo_tables` | 檔頭明說舊 `POLICY_SHEET_ID` 路徑只剩 `refetch_nav` 相容用途；持倉主要改 `load_alo_tables_active` | **Residual reachable compatibility path（文件宣告，待符號呼叫圖複驗）** | 專項列出 caller／CI／Cloud 流量／回切依賴後才判退役，不先動 |
 | `services/v2_tables/personal_session.py` | L2 明確包既有 Google OAuth、Pending／Active Sheet、白名單、失效清 Session | **權威認證與選本橋接** | New UI 共用，不重造認證／token 層 |
