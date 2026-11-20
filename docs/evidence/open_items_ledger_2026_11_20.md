@@ -4,7 +4,7 @@
 > 基準：origin/main `8ebb5290`（#1298 merge；本 worktree HEAD 與其相同）。GitHub 只用 REST 讀（`gh api`；GraphQL 在本環境不可用）。讀取時點為 2026-11-20 約 13:00 UTC 之前；之後的 PR／CI 變化本檔不含。
 > 標記：【F】本組讀檔或 REST 讀取所見；【I】推論（可被推翻）；【NV】NOT VERIFIED。
 > 位階：本檔是**追蹤帳**，不是 BACKLOG 的替代品。BL 列的權威狀態仍以 `docs/BACKLOG.md`、客戶裁示仍以 `docs/DECISIONS.md` 為準；本檔與它們不一致時以它們為準，並請回報差異。
-> 「已核准事項」欄只填 DECISIONS 已登記者。**絕大多數 11-17 之後的 DEC 是『客戶經 ChatGPT 轉達〔待核〕、非逐字、repo 無逐字存檔』**（open_work_inventory 通則、X5）；欄內一律註明，不得讀成已核准字樣或已授權施工。唯一標明『客戶本人逐字』者是 `DEC-2026-11-20-01`。
+> 「已核准事項」欄只填 DECISIONS 已登記者。**本組所讀的 DEC 絕大多數為要點轉述〔待核〕或『客戶經 ChatGPT／總管轉達、非逐字、repo 無逐字存檔』，不限 11-17 之後**（例：`DEC-2026-11-08-02`、`-11-11-04`、`-11-12-02` 標題自寫『要點轉述』；open_work_inventory 通則、X5 另述 11-17 之後各筆）；欄內一律註明，不得讀成已核准字樣或已授權施工。就本組所讀範圍，唯一標明『客戶本人逐字』者是 `DEC-2026-11-20-01`（未讀範圍可能另有，不宣稱唯一）。
 > 責任線慣例（`DEC-2026-11-07-04`）：決策＝客戶；產品／UI／語意／資料契約＝ChatGPT 總管；施工與非作者 QA＝專案 AI（Claude Code）。持有人＝尚未指定。
 
 ## 0. 讀取範圍（誠實揭露；不宣稱窮舉）
@@ -22,6 +22,8 @@
 **因此本檔不是窮舉**：BACKLOG 約 590 列中，本檔只編入派工單點名項目與本組實讀到的 open／待客戶列；舊債（約 260 筆 2026-10-27 前登記）不逐列展開，見 §6。「沒有其他 open 項」之類全稱句不成立，不得引用。
 
 ## 1. UI 線（#1297／#1298／#1299／#1300／#1301；BL-0536／0540／0542／0544／0559／0561 等）
+
+列數說明：U-13、U-14、C-05 為**指標列**（內容見其指向列），表內 60 列高估獨立項目數（扣除後約 57）。
 
 分類縮寫：**技**＝技術可自行處理；**答待落**＝已答覆待落盤；**客裁**＝需客戶裁示；**阻**＝外部阻擋 BLOCKED；**完**＝已完成含證據。
 
@@ -68,9 +70,9 @@
 
 | ID | 問題 | 目前狀態 | 已核准事項（DEC 出處） | 尚缺證據 | 責任線 | 下一個合法動作 | 需使用者回覆 | 分類 |
 |---|---|---|---|---|---|---|---|---|
-| O-01 BL-0527 Digest 前置缺口 | Decision Digest 最小契約缺口（`docs/v2/67` §5.6 七項）與兩類守衛（AI 不讀畫面、AI 輸出不回寫 canonical）；N1～N5 待裁 | 【F】BL-0527 open；N1～N5 待客戶，且受 D2-G2 順序約束；as_of／stale／rule_version 無 repo 定義；上述兩類守衛 repo 查無 | `DEC-2026-10-29-06`；`DEC-2026-11-08-02` D1 方案 C（資料契約先行，Digest 後續再建；正式 Digest 施工、D2 逐域契約、Digest schema、Phase 7 仍未授權） | O-D3b／O-D7a～e（stale_after／conflict／NAV 10 日／PIT）；`bl0527_digest_precontract_2026_11_18.md`、`onebrain_digest_decision_pack_2026_11_18.md`（本組未讀） | 客戶（threshold／identity／freshness 語意）；ChatGPT 總管 | 排入 Phase 7 前置批；涉 threshold 者先 Gate；**不得先做 Digest** | 是（但受 D2-G2 順序約束，現在不是最先要問的） | 客裁（暫掛） |
+| O-01 BL-0527 Digest 前置缺口 | Decision Digest 最小契約缺口（`docs/v2/67` §5.6 七項）與兩類守衛（AI 不讀畫面、AI 輸出不回寫 canonical）；N1～N5 待裁 | 【F】BL-0527 open；N1～N5 待客戶，且受 D2-G2 順序約束；as_of／stale／rule_version 無 repo 定義；上述兩類守衛 repo 查無 | `DEC-2026-10-29-06`；`DEC-2026-11-08-02`（要點轉述〔待核〕） D1 方案 C（資料契約先行，Digest 後續再建；正式 Digest 施工、D2 逐域契約、Digest schema、Phase 7 仍未授權） | O-D3b／O-D7a～e（stale_after／conflict／NAV 10 日／PIT）；`bl0527_digest_precontract_2026_11_18.md`、`onebrain_digest_decision_pack_2026_11_18.md`（本組未讀） | 客戶（threshold／identity／freshness 語意）；ChatGPT 總管 | 排入 Phase 7 前置批；涉 threshold 者先 Gate；**不得先做 Digest** | 是（但受 D2-G2 順序約束，現在不是最先要問的） | 客裁（暫掛） |
 | O-02 BL-0560 | (a) ⚙️ 的 OneBrain 說明 vs `67` §6.1；(b) 各頁共用同一 Digest／分析快照版本與資料刷新契約（fingerprint、refresh 觸發、失效、快取） | 【F】BL-0560 open；前置為 BL-0527、Digest Gate、Phase 7 | `DEC-2026-11-20-02`：方向（全站單一 OneBrain、各頁為同一快照 slice；轉述〔待核〕）；**不授權**快取／fingerprint／refresh／失效契約、⚙️ 獨立 AI local summary | 契約差額 Gate 尚未提出 | 客戶；ChatGPT 總管 | 待 O-01 與 D2 之後另案；不得默默擴充 runtime | 否（前置未滿足，現在不問） | 客裁（暫掛） |
-| O-03 正式 Digest／分析快照 Gate | 正式 Decision Digest schema 與分析快照契約 Gate | 【F】尚未提出。`DEC-2026-11-11-04` D2-G2＝A：D2 逐域契約與 Digest schema 是兩個獨立 Gate，**D2 逐域正式契約完成後才另行提 Digest schema Gate**，不得因 D2 方向核准就啟動 Digest schema 研究／施工／OneBrain | `DEC-2026-11-11-04`（D2-G1＝B 修正版／D2-G2＝A／D2-G3＝A）；`DEC-2026-11-08-02` | 前置：D2 完成（見 O-04） | 客戶 | 不可開；順序固定 | 否（現在不問） | 阻（內部依賴：D2） |
+| O-03 正式 Digest／分析快照 Gate | 正式 Decision Digest schema 與分析快照契約 Gate | 【F】尚未提出。`DEC-2026-11-11-04`（要點轉述〔待核〕） D2-G2＝A：D2 逐域契約與 Digest schema 是兩個獨立 Gate，**D2 逐域正式契約完成後才另行提 Digest schema Gate**，不得因 D2 方向核准就啟動 Digest schema 研究／施工／OneBrain | `DEC-2026-11-11-04`（D2-G1＝B 修正版／D2-G2＝A／D2-G3＝A）；`DEC-2026-11-08-02`（要點轉述〔待核〕） | 前置：D2 完成（見 O-04） | 客戶 | 不可開；順序固定 | 否（現在不問） | 阻（內部依賴：D2） |
 | O-04 D2 逐域契約進度（DEC-2026-11-11-04 D2-G2 順序約束） | D2 首批（基金身份、NAV、績效）尚有幾列 Pending？ | 【F】正式核准欄位：R-ID-1、R-NAV-1／-2／-4／-5；R-NAV-3 採 B 暫緩；R-NAV-6 與 D2 其餘列 Pending（inventory 稱約 12 列）；其餘六域延後（D2-G3） | `DEC-2026-11-13-06`（R-ID-1、R-NAV-1）；`DEC-2026-11-14-07`（R-NAV-2／5）；`DEC-2026-11-17-06`（R-NAV-4，轉述待核） | R-ID-2／3 卡在 S7（O-05）；R-PERF-1～8 | 客戶；ChatGPT 總管 | 見 O-05 | 見 O-05 | 客裁 |
 | O-05 D2 S7（通路後綴身分規則） | 取數用基金代碼可不可以帶通路／商品後綴（例 `TLZF9-AL001`、`ACDD01-EQTAL005`）？ | 【F】現行 resolver 對帶後綴輸入 `ok=True`、不標記（測試釘住）；但已核准 R-ID-1 對 Sheet 基金代號欄定義帶後綴＝違反契約，且 production 尚未實作該標示（F5）。S7 卡為單組草稿尚待稽核；回答『行為變更＋identity Stop Gate』，非純契約題 | 方向：`DEC-2026-11-19-10`（轉述〔待核〕）：D2 Q-ID 採方案 1＝先釐清 S7，不採方案 2；本批不改 resolver／別名表／Schema，不升格 DG2。**S7 本身未答** | 帶後綴輸入的 production 實際影響大小無法查證（卡 §6）；別名表跨部署非確定性（F9）；`full_key` 是否被用來走 `_BANK_PLATFORM_CODES`【NV】 | 客戶（identity Stop Gate） | 客戶答 S7（見最小 Gate G3）；稽核一組先審 S7 卡再送審 | 是 | 客裁 |
 | O-06 OB-B 離線切片（#1294） | OB-B 最小離線切片是否完成？ | 【F】已合併（`9b64d9bd`）：恰 7 檔、僅新增、+1640 行；CI run 44702544180（head `9ed8529d`）Fast／Schema／Visual／Slow 皆 success（PR 描述，逐 job 讀取）；獨立 QA（共享派工來源）Must-Fix 0；修正後**未送回 QA 複驗** | `DEC-2026-11-20-01`：**客戶本人逐字**（Q-OB1 A、Q-OB2 A）；授權範圍以逐字原文為準；測試位於頂層 `tests/` 為 ChatGPT 總管確認（轉述〔待核〕） | 修正後第二組確認；Model／Mode／Effort Change Gate【NV】（PR 描述自承未能確認）；main push CI 44710734615 success（#1296 引述，本組未重查） | 專案 AI | 已完成；複驗見 E3 | 否 | 完 |
@@ -85,15 +87,15 @@
 
 | ID | 問題 | 目前狀態 | 已核准事項（DEC 出處） | 尚缺證據 | 責任線 | 下一個合法動作 | 需使用者回覆 | 分類 |
 |---|---|---|---|---|---|---|---|---|
-| C-01 BL-0545 真實覆蓋率 | 五維健康評級的真實 Active Sheet 覆蓋率與資料准入 | 【F】BLOCKED；#1166 研究、#1168 Phase 1 唯讀探針已合併（`scripts/bl0545_coverage_probe.py`）；live 模式 NOT IMPLEMENTED；真實覆蓋 NOT VERIFIED；正式 admission NOT DEFINED；仍掛名『全域唯一 NEXT』但實質無人可動（X3） | `DEC-2026-11-12-02` (5)：繼續 BLOCKED、**不要求客戶提供輸入**；`DEC-2026-11-07-03`（Phase 1 探針授權） | 使用者合法輸入（方式 A 本人 session／方式 B 匿名清單）；branch protection API 403，required checks【NV】 | 使用者 | 等使用者主動提供；**不得重問**。HANDOFF 的『唯一 NEXT』文字過時（X3），隨 E1 同步 | **已答覆**（`DEC-2026-11-12-02`；使用者暫不提供，不重問） | 阻（外部輸入） |
+| C-01 BL-0545 真實覆蓋率 | 五維健康評級的真實 Active Sheet 覆蓋率與資料准入 | 【F】BLOCKED；#1166 研究、#1168 Phase 1 唯讀探針已合併（`scripts/bl0545_coverage_probe.py`）；live 模式 NOT IMPLEMENTED；真實覆蓋 NOT VERIFIED；正式 admission NOT DEFINED；仍掛名『全域唯一 NEXT』但實質無人可動（X3） | `DEC-2026-11-12-02`（要點轉述〔待核〕） (5)：繼續 BLOCKED、**不要求客戶提供輸入**；`DEC-2026-11-07-03`（Phase 1 探針授權） | 使用者合法輸入（方式 A 本人 session／方式 B 匿名清單）；branch protection API 403，required checks【NV】 | 使用者 | 等使用者主動提供；**不得重問**。HANDOFF 的『唯一 NEXT』文字過時（X3），隨 E1 同步 | **已答覆**（`DEC-2026-11-12-02`；使用者暫不提供，不重問） | 阻（外部輸入） |
 | C-02 BL-0551 TLS／NAS 安全 | proxy 模式預設 `verify=False` 等；G0 最小證據包由誰操作 | 【F】評估已交付（#1272）；客戶選 G1-1（僅 G0 證據包）；持有人**尚未指定**；D4／D8 明文不得啟動；執行組不探測、不索取帳密 | `DEC-2026-11-19-07`（轉述〔待核〕：G1-1、授權執行者僅為『後續由使用者指定的持有人』）；`DEC-2026-11-18-01` A 線 | 持有人與書面記錄形式；G0 證據 D1～D5（Squid 版本、攔截與否、流量分類、原站憑證比對、埠開放）全 NOT VERIFIED | 使用者（指定持有人） | 使用者指定持有人與書面記錄形式；之前不得動 | 是（指定持有人） | 阻 |
 | C-03 BL-0555 Gate-D 路徑 B 單檔查詢 | 🔍 單檔基本資料查詢接真實資料：五欄契約、Q0～Q11／X1～X5 | 【F】契約包已交付（#1272）；離線內部切片已合併（#1275，未接線、無 renderer、未掛載）；組合後五欄契約仍須再過最小 Decision Gate（inventory A5）；真取數須 BL-0551＋客戶核准 | `DEC-2026-11-19-02`／`-05`／`-06`（轉述〔待核〕：Q1／Q2 方向、G1＝A、G4＝A 契約語意、Q4＝A、Q5 暫行顯示；A1／A2（僅規範句）／A3／A6／A7／A8 為候選逐字條款核准、A4／A5 僅方向）；`DEC-2026-11-17-03`～`-06` | Q0（A 線 Gate 通過定義）、Q3、Q8～Q11、A4 佔位字歸屬、G1 頁面例外、Q6、配息值域；proxy 在線／MoneyDJ 可達／`PROXY_URL` 皆【NV】 | 客戶 | 客戶一次逐字核准五欄契約文字（不等於核准 Schema／Provider／接線）；依賴 C-02 | 是（排隊） | 客裁 |
-| C-04 BL-0217 FX 閘門（D8） | `FX_OBS_DATE_RULE_VERIFIED=False`；冬令重跑窗約 2026-11-24 關閉（上限約 11-26），錯過等明年 3 月 | 【F】M1-a 離線重算已合併（#1291）：逐項比對 16 項皆『一致』，與報告同源，不證明 Yahoo 語意；**M1-b＝NO-RUN**（Work 獨立結論，經總管轉述〔待核〕，非 DEC，與 `DEC-2026-11-08-02` 效果欄 (4)『判定前不得執行』一致）；FX Gate 維持關閉 | `DEC-2026-11-08-02`：FX 閘門維持關閉、不以與 11-08 探測相同的方法立即重跑（客戶字面；**補證方法是否算『相同方法』未判**）；補跑未授權、FX 開閘未核准 | 窗口內任何新取數需另行授權；窗口結束前按鈕分支 `probe/fx-obs-date-trigger` 不得刪（BL-0265） | 客戶（授權新取數）；總管（判定『相同方法』） | 依 M1-b NO-RUN 讓窗口自然關閉，或在 11-24 前由客戶明確授權新取數；**不得自行觸發 workflow** | 否（`DEC-2026-11-08-02` 已答覆；僅在要新取數時才需授權，**我們不推薦**，見 §4） | 阻（時效；NO-RUN） |
+| C-04 BL-0217 FX 閘門（D8） | `FX_OBS_DATE_RULE_VERIFIED=False`；冬令重跑窗約 2026-11-24 關閉（上限約 11-26），錯過等明年 3 月（出處：BACKLOG BL-0217 列『錯過要等明年 3 月』，第 367 行） | 【F】M1-a 離線重算已合併（#1291）：逐項比對 16 項皆『一致』，與報告同源，不證明 Yahoo 語意；**M1-b＝NO-RUN**（Work 獨立結論，經總管轉述〔待核〕，非 DEC，與 `DEC-2026-11-08-02`（要點轉述〔待核〕）效果欄 (4)『判定前不得執行』一致）；FX Gate 維持關閉 | `DEC-2026-11-08-02`（要點轉述〔待核〕；客戶指示經總管派工單轉達，repo 內無逐字存檔，DECISIONS 約 3847 行）：FX 閘門維持關閉、不以與 11-08 探測相同的方法立即重跑（**補證方法是否算『相同方法』未判**）；補跑未授權、FX 開閘未核准 | 窗口內任何新取數需另行授權；窗口結束前按鈕分支 `probe/fx-obs-date-trigger` 不得刪（BL-0265） | 客戶（授權新取數）；總管（判定『相同方法』） | 依 M1-b NO-RUN 讓窗口自然關閉，或在 11-24 前由客戶明確授權新取數；**不得自行觸發 workflow** | 否（`DEC-2026-11-08-02` 已答覆；僅在要新取數時才需授權，**我們不推薦**，見 §4） | 阻（時效；NO-RUN） |
 | C-05 BL-0540 子項（資料健康度集中） | 見 U-01、U-02、U-03、U-34 | 見各列 | 見各列 | 見各列 | 見各列 | 見各列 | 見各列 | 客裁 |
-| C-06 BL-0546／0547／0548 公式與缺值補 0 | 舊 UI／MCP 缺值被補 0／中性／HOLD（0546）；`calc_metrics` 直讀 raw `ret_1y_total` 繞 350 天閘門（0547）；六項品質補強發現（0548） | 【F】三列皆『待客戶裁示（Decision Gate 候選）』；New UI 路徑 Missing≠0 成立，Old UI 路徑未成立 | `DEC-2026-11-12-02` (4)：保留 BL-0546，未核准修改舊 UI 的 `composite_score`／`decision_matrix` | 不得改公式／門檻／重錄 Golden | 客戶 | 等逐點裁示；New UI2 接 1Y 績效前須先裁 | 是（排隊） | 客裁 |
+| C-06 BL-0546／0547／0548 公式與缺值補 0 | 舊 UI／MCP 缺值被補 0／中性／HOLD（0546）；`calc_metrics` 直讀 raw `ret_1y_total` 繞 350 天閘門（0547）；六項品質補強發現（0548） | 【F】三列皆『待客戶裁示（Decision Gate 候選）』；New UI 路徑 Missing≠0 成立，Old UI 路徑未成立 | `DEC-2026-11-12-02`（要點轉述〔待核〕） (4)：保留 BL-0546，未核准修改舊 UI 的 `composite_score`／`decision_matrix` | 不得改公式／門檻／重錄 Golden | 客戶 | 等逐點裁示；New UI2 接 1Y 績效前須先裁 | 是（排隊） | 客裁 |
 | C-07 BL-0537／0538／0541 Old UI 凍結與 Latest-Rule-Only | Old UI／`ui_v2` 凍結清單無機械守衛（0537）；Latest-Rule-Only 讀法（0538）；第二階段（0541） | 【F】0537 待客戶裁示（未建置）；0538 待客戶確認讀法；0541 open，讀法未確認前不動 | 0538：客戶不延伸授權修改 `CLAUDE.md`（HANDOFF 本批授權單，未另立 DEC） | — | 客戶 | 等裁示 | 是（排隊） | 客裁 |
 | C-08 BL-0549／Issue #1228 品質補強 | #1228 是否結案？零記憶驗收 FAIL 的失敗歸因（ZM-01／02／05／06b）未做 | 【F】#1228 open、無 assignee；BL-0549 進行中但 A/B 無節省證據、零記憶驗收整體 FAIL | `DEC-2026-11-13-05`（BL-0549 六項已裁）；`DEC-2026-11-13-04` | 失敗歸因（唯讀） | 客戶（是否結 #1228） | 歸因屬唯讀；結案由客戶決定 | 是（低優先） | 客裁（暫掛） |
-| C-09 BL-0556／0557／RE1 與授權鏈 | 11-17-05、11-18-01～-04、11-19-01～-10 全為轉述〔待核〕；open_decisions_ledger 提議的 RE1『本人一次確認』查無完成紀錄 | 【F】X5（inventory）；本組未能在 DECISIONS／HANDOFF 讀到 RE1 結案紀錄（未全讀，【NV】） | `DEC-2026-11-20-01` 是目前唯一『客戶本人逐字』的 11 月 DEC | RE1 確認紀錄 | 客戶 | 客戶以可存檔文字一次確認，可一次消除一批列的來源不確定 | 是（建議，非最小阻斷） | 客裁 |
+| C-09 BL-0556／0557／RE1 與授權鏈 | 11-17-05、11-18-01～-04、11-19-01～-10 全為轉述〔待核〕（11-08、11-11、11-12 的部分 DEC 亦為要點轉述，不限 11-17 之後）；open_decisions_ledger 提議的 RE1『本人一次確認』查無完成紀錄 | 【F】X5（inventory）；本組未能在 DECISIONS／HANDOFF 讀到 RE1 結案紀錄（未全讀，【NV】） | 就本組所讀範圍，`DEC-2026-11-20-01` 是唯一標明『客戶本人逐字』的 11 月 DEC | RE1 確認紀錄 | 客戶 | 客戶以可存檔文字一次確認，可一次消除一批列的來源不確定 | 是（建議，非最小阻斷） | 客裁 |
 | C-10 資料來源／Secrets | BL-0509 probe 排程、BL-0501／0504 EPS／財報 Data Source Gate、BL-0480／0481 blocked、BL-0530 ISIN research-only、`secrets_recovery_verification_2026_11_10.md` Cloud Secrets 恢復 | 【F】probe workflows 仍 active（inventory 稱 11-18／11-19 成功執行）；新來源一律 Decision Gate；Cloud Secrets 恢復 NOT VERIFIED | `DEC-2026-11-08-01`（10 條非 main 分支全部保留、不停 cron、不改 workflow）；`DEC-2026-11-10-03` | 客戶或持有人提供事實 | 客戶／持有人 | 不得動 | 否（暫掛） | 阻（外部） |
 | C-11 BL-0411 與守衛缺口 | BL-0411『fixed 待稽核』；`DEC-2026-10-30-04` 要求 P3 production 前必修 | 【F】inventory X6(e)：稽核完成證據『未能確認』 | `DEC-2026-10-30-04` | 獨立稽核證據 | 專案 AI | 補獨立稽核證據（唯讀） | 否 | 技 |
 | C-12 BL-0342／0453 Py3.13 黃金檔 | `tests/ui_v2` 在 3.13 本機紅、CI（3.11）綠 | 【F】root cause 未查 | 無 | — | 專案 AI | 僅在證明影響 production／CI 時派工；Golden 不可重錄 | 否 | 技（條件式） |
@@ -128,20 +130,20 @@
 
 ## 5. 可由執行 AI 直接處理的清單（不需新客戶裁示；建議派工）
 
-派工慣例【I】：每項依 `CLAUDE.md` §-2 由總管派工、風險分級決定稽核組數；Model／Effort 依 `PROJECT_RULES.md` §5.1（HANDOFF 引用：純機械文件同步＝Haiku 5.5／Low，總管讀法，可被推翻）。**下列皆為本組讀法，未經總管核定。**
+派工慣例【I】：每項依 `CLAUDE.md` §-2 由總管派工、風險分級決定稽核組數；模型與強度依 `PROJECT_RULES.md` §5.1 表（純機械文件同步屬低強度，總管讀法，可被推翻）。**下列皆為本組讀法，未經總管核定。**
 
 | # | 項目 | 為何不需新裁示 | 建議派工 | 注意 |
 |---|---|---|---|---|
-| E1 | 治理同步 PR（docs-only）：BACKLOG（BL-0561 R1 完成、R2→#1301、R3→#1300；BL-0559／0536／0540 補記；BL-0560 無變）、HANDOFF（#1297／#1298 已合併、X3／X4 過時句、`DEC-2026-11-20-01` 後的 OB-B 措辭 SF-2）、DECISIONS 只登記**使用者已說過的話**（#1296 comment 的指令），不得寫成『核准字樣』或『授權施工』 | `PROJECT_RULES.md` §12.1（新裁示同批 GitHub 落盤）、`CLAUDE.md` §-1.5 治理整合者單線；#1296 已說明『待 #1299 結案後同步』 | 治理整合者（單線）；Haiku 5.5／Low 起步【I】；治理規則等級語意變更仍至少 1 組獨立稽核 | `docs/HANDOFF.md` 上限 120 行（`test_canonical_rule_consistency`）；只此線可編三檔 |
-| E2 | #1299 收尾：等 CI run 結果；補 QA 複驗；補 S2 computed-style 比對（或明寫不做）；依 Auto-Ship 條件合併 | 已在 #1296 C 線第 5 點授權的『已有授權的安全 UI 改善可另開最小 PR』 | 專案 AI（施工）＋**另一組**非作者 QA | `assets.py` 與 v2 卡 §a X3 的排斥關係（U-11）；合併後治理同步併入 E1 |
+| E1 | 治理同步 PR（docs-only）：BACKLOG（BL-0561 R1 完成、R2→#1301、R3→#1300；BL-0559／0536／0540 補記；BL-0560 無變）、HANDOFF（#1297／#1298 已合併、X3／X4 過時句、`DEC-2026-11-20-01` 後的 OB-B 措辭 SF-2）、DECISIONS 只登記**使用者已說過的話**（#1296 comment 的指令），不得寫成『核准字樣』或『授權施工』 | `PROJECT_RULES.md` §12.1（新裁示同批 GitHub 落盤）、`CLAUDE.md` §-1.5 治理整合者單線；#1296 已說明『待 #1299 結案後同步』 | 治理整合者（單線）；低強度起步【I】（依 §5.1）；治理規則等級語意變更仍至少 1 組獨立稽核 | `docs/HANDOFF.md` 上限 120 行（`test_canonical_rule_consistency`）；只此線可編三檔 |
+| E2 | #1299 收尾：等 CI run 結果；補 QA 複驗；補 S2 computed-style 比對（或明寫不做）；依 Auto-Ship 條件合併 | 已在 #1296 C 線第 5 點授權的『已有授權的安全 UI 改善可另開最小 PR』 | 專案 AI（施工）＋**另一組**非作者 QA | **合併前須先排除 v2 卡 §a X3 衝突**（該卡排斥動 `assets.py`，U-11）；§-1.5.4 內部自決是 QA／實作組判斷，**非客戶裁示**；合併後治理同步併入 E1 |
 | E3 | 已合併 PR 的**補強後複驗**：#1297（QA 修正後未複驗）、#1298（補強後未再送 QA；`mkt.py` span 是否屬『內容呈現』待複判）、#1294（修正後未複驗） | 唯讀稽核，不改檔；僅增加證據 | 非作者唯讀 QA 一至兩組（風險：#1294 為 AI 行為邊界等級，至少 1 組） | 獨立性限制：與作者共享派工來源的 QA 不等於人類層級獨立，報告要照實寫 |
 | E4 | main push CI 後驗：#1297（run 44733150174）、#1298（run 44736916460）、#1294（run 44710734615）、#1299 head（run 44737188069） | 唯讀 GitHub REST | 專案 AI 一組；或併入 E3 | 不得把仍在跑的 Slow 記為 PASS；結果【NV】直到查過 |
 | E5 | 🌍 同類 Tab 停駐點（U-25）**唯讀**量測 | 只量不改；修法另案 | 專案 AI 一組（Chromium） | 結果可能顯示 🌍 有同類缺陷，屆時再依 §-1.5.4 兩步判定另開最小 PR |
-| E6 | #1300／#1301 兩個 docs-only 線框的實際承接（目前皆為 Issue、無分支／PR） | 使用者已在 #1296 指令（12:26Z、12:39Z comment）；Issue 內已限制為 docs-only、不啟動 Digest／Phase 7／runtime／色值核准 | ChatGPT 總管確認承接者；執行組（Sonnet 5.5／Medium）做 HTML 與 Chromium 證據 | 不得改既有主程式、registry、DECISIONS／BACKLOG／HANDOFF；寫檔被拒時**停手並回報原因**，不可改用 Bash 或他路徑繞過（#1296 已明文） |
+| E6 | #1300／#1301 兩個 docs-only 線框的實際承接（目前皆為 Issue、無分支／PR） | 使用者已在 #1296 指令（12:26Z、12:39Z comment）；Issue 內已限制為 docs-only、不啟動 Digest／Phase 7／runtime／色值核准 | ChatGPT 總管確認承接者；執行組（中強度，依 §5.1）做 HTML 與 Chromium 證據 | 不得改既有主程式、registry、DECISIONS／BACKLOG／HANDOFF；寫檔被拒時**停手並回報原因**，不可改用 Bash 或他路徑繞過（#1296 已明文） |
 | E7 | BL-0411 補獨立稽核證據；BL-0549 失敗歸因（唯讀） | 唯讀 | 專案 AI 一組 | 結論不得標『全部通過』 |
 | E8 | 起草 BL-0534（44 `pay_date`）最小 amendment 文字，**送客戶**（不是自行修 44） | BACKLOG 明載『起草後送客戶核准』 | 文件組；風險：frozen SSOT amendment＝治理等級，需獨立稽核 | 不得修改 frozen 44 |
 | E9 | 把本帳的 BL／DEC 對映交由**另一組**獨立複驗（逐列對 GitHub、BACKLOG、DECISIONS） | 本檔為單組產出，`CLAUDE.md` §-2 規則 6 | 專案 AI 一組（非本檔作者） | 本檔有 ≥10 處【NV】，不要先於複驗被引用為事實 |
-| E10 | BL-0540 A2：把『必要揭露清單』轉成契約守衛測試草案（只鎖現狀，不改 production） | bl0540 證據 §4 將其歸 A 類『現有 Gate 內』（單組分類，【I】）；屬 tests，仍需派工授權 | 專案 AI；至少 1 組獨立稽核 | 先與總管確認分類，避免與 G1 衝突 |
+| E10 | **【需先經總管確認分類；可能與 G1 衝突，不屬『不需新客戶裁示』】** BL-0540 A2：把『必要揭露清單』轉成契約守衛測試草案（只鎖現狀，不改 production） | bl0540 證據 §4 將其歸 A 類『現有 Gate 內』（單組分類，【I】）；屬 tests，仍需派工授權 | 專案 AI；至少 1 組獨立稽核 | 先與總管確認分類，避免與 G1 衝突 |
 
 ## 6. 本檔未涵蓋或不確定的範圍
 
