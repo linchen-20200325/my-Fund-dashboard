@@ -4,7 +4,8 @@
 > 轉錄處的取捨：只收 FACT 與其量測、R1 核證、Gate 差額；測試輸出照錄。
 > 所有量測為本機 Chromium 對 CI fixture 的實測（Preview FAKE，DPR 1）。
 > **NOT VERIFIED：Cloud `ui_v3` URL、部署 SHA、真機（iOS／Android／WebView）、系統字級放大、不同 CJK 字型、CI 四項 check、第二組獨立稽核。**
-> 基準 main `b103e99c`；本批 commit `b35e7f95`（後續若有修正 commit，以 GitHub 為準）。
+> 基準 main `b103e99c`。**SHA 綁定**：量測表（§2）與截圖取自 commit `b35e7f95`（程式改動本體；之後的 commit 只動測試與本報告，不動 `ui_v3/` 程式與量測）；§6 測試輸出取自 head `fd852bfe`（`28c7af35` 之上新增之測試補強 commit）。以 GitHub PR 上的實際 head 與 exact-head CI 為準。
+> 非作者 QA（1 組，與作者共享派工來源）：Must-Fix 1（SHA 綁定，已於此處修）、Should-Fix 4、Nit 4；S2／S3／N1–N4 已於 `fd852bfe` 修（測試補強），S1 已改寫於 §2，S4 見 §6 的 `git diff --name-only`。補強後**未再送 QA 複驗**。
 
 ## 1. 改動（程式與測試共 4 檔）
 
@@ -42,7 +43,7 @@
 | 768、1280 | 1×5→1×5 | 無→無 | 無→無 | 165→165（tw_missing 167.9→167.9） |
 
 - 三個展開列的摘要（觸控目標）在三寬度皆 38px 高，前後相同，低於站內 48px（候選 A，被 Gate 擋下）。
-- 殘留瑕疵：390 兩行時第二行開頭可能出現「｜」（分隔符是字樣模板本身，CSS 無法黏到上一行行尾）；改前同樣有。總管目視 `after_390_status.png`／`before_390_status.png` 確認：改後無字中折斷（「資／料日」「2026-11-／02」已消除），行首「｜」仍在多列出現。
+- **取捨（據實；S1）**：390px 下以「消除字中折斷」換「行首分隔符變多」。改前：字中折斷在台股（「資／料日」）、VIX（「2026-11-／02」）、美10Y 與美2Y（「資料／日」）4 列，行首「｜」只有 S&P 500 列（1／5）；改後：字中折斷 0 列，行首「｜」出現在台股、VIX、美10Y、美2Y 4 列（4／5），S&P 500 列則改為第一行以「來源」結尾、第二行以來源值開頭。分隔符「｜」是字樣模板本身的一部分，CSS 無法黏到上一行行尾；要消除行首「｜」須改結構（候選 D，屬版面異動，須線框先行）。以上為總管目視 `before_390_status.png`／`after_390_status.png`（QA 同見）；**是否接受此取捨由客戶／總管決定，本批預設採用現況**。
 - 做法取捨（390 實測）：只加 `text-wrap:balance` 無效（否決）；純 CSS（keep-all＋balance，不包 span）日期這次剛好沒折斷但取決於行寬（備案）；來源與日期設 `nowrap` 版面最乾淨但來源名稱比整行寬會橫向溢出（否決）；狀態列字級 16→13px 3 列變一行但更小（否決）。**採用** `inline-block` 單位＋keep-all＋balance＋`overflow-wrap:anywhere` 兜底。
 
 ## 3. R1 逐項核證（`git grep` font-size／12px 後逐項判讀）
@@ -90,18 +91,27 @@
 
 環境：scratchpad venv（streamlit 1.59.2）、`UI_V2_CHROMIUM=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`、`-p no:cacheprovider`。
 
-`pytest tests/ui_v3 -q -p no:cacheprovider`（2026-11-20T10:59:27Z→11:05:17Z）：
+**head `fd852bfe`**（測試補強後；2026-11-20T11:16:30Z→11:24:09Z）：
+
+`pytest tests/ui_v3 -q -p no:cacheprovider`：
 
 ```
-3109 passed, 769 warnings in 348.07s (0:05:48)
+3115 passed, 769 warnings in 367.14s (0:06:07)
 exit 0
 ```
 
 `pytest tests/test_canonical_rule_consistency.py tests/test_doc_counters.py tests/test_constitution_file_refs.py -q -p no:cacheprovider`：
 
 ```
-113 passed in 92.41s (0:01:32)
+113 passed in 88.92s (0:01:28)
+exit 0
 ```
+
+（補強前於 `b35e7f95`：`tests/ui_v3` 3109 passed；三支治理守衛 113 passed。）
+
+`fd852bfe` 對測試的補強：折行測試補 390 的 `us_failed`、`both_missing`；新增與字型無關的合成探針（容器寬度＝固定墊片＋該詞現量寬度的一部分，剩餘空間必然放不下整詞）及其負控；真實頁行數上限放寬為 390 ≤3 行、≥768 ≤2 行；量測失敗（找不到日期節點、行高取不到、行數量測失敗）一律報錯而非靜默通過；移除 `slice(0,60)` 截斷；檔頭舊基線改註為歷史數字。新探針在 CI 字型下是否誤紅**只在本機 Chromium 驗過**。
+
+`git diff --name-only origin/main..HEAD`（實作組回報原文）：18 張 PNG＋`measure_*.json` 3 檔＋`report.md`（皆在 `docs/evidence/mkt_visual_batch2_2026_11_20/`），以及 `tests/ui_v3/test_ui_v3_market_page_browser.py`、`tests/ui_v3/test_ui_v3_navigation_shell.py`、`ui_v3/pages/mkt.py`、`ui_v3/shell/nav.py`。
 
 pre-commit 本機未安裝，實作組以 `git diff --cached --check` 與檔尾換行、檔案大小手動核對；CI 為裁判。
 
