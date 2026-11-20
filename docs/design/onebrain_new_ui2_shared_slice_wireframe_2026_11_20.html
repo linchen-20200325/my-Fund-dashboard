@@ -142,7 +142,7 @@ details.fold .body{padding:0 12px 12px}
 <li>對應 BL-0561 R3／BL-0560</li>
 </ul>
 <div class="callout warn"><strong>這不是已實作的畫面。</strong>不接任何資料源、不掛載、不改 registry；框內數值一律用 <code>‹佔位›</code>，沒有任何範例結論、百分比或 AI 文字。基準 main <code>8ebb5290</code>，2026-11-20。</div>
-<p class="s">怎麼看：先看資料流，再看五頁各一組「桌機 1280／手機 390」畫面。每頁只在框內示意單一「OneBrain｜本頁解釋」位置（預設收合、未啟用）；虛線底線 <span class="pend">像這樣</span> ＝ 新字樣，待客戶定字（清單見 README）。虛線藍框＝文件層註記，不是產品元件。</p>
+<p class="s">怎麼看：先看資料流，再看五頁各一組「桌機 1280／手機 390」畫面。🌍💼🔍 每頁只在框內示意單一「OneBrain｜本頁解釋」位置（預設收合、未啟用）；虛線底線 <span class="pend">像這樣</span> ＝ 新字樣，待客戶定字（清單見 README）。虛線藍框＝文件層註記，不是產品元件。</p>
 </header>
 <section class="sec" id="flow">
 <h2>資料流與 OneBrain 位置</h2>
@@ -183,8 +183,9 @@ details.fold .body{padding:0 12px 12px}
 <li class="off"><b class="pend">各頁 slice</b><span>同一份快照</span>
 </li>
 </ol>
-<div class="slices"><span class="slice">🌍 本頁解釋</span><span class="slice">💼 本頁解釋</span><span class="slice">🔍 本頁解釋</span><span class="slice x">🤖 全站綜合（Phase 7）</span><span class="slice x">⚙️ 只有規則說明，無 slice</span>
+<div class="slices"><span class="slice">🌍 本頁解釋</span><span class="slice">💼 本頁解釋</span><span class="slice">🔍 本頁解釋</span><span class="slice x">🤖 全站綜合（Phase 7）</span>
 </div>
+<p class="s">圖外註記：⚙️ 不在 slice 列內；它只有規則產生的說明句，沒有 OneBrain 位置。</p>
 <p class="s pend">翻頁只是看同一份快照的不同 slice，不各自重跑 AI。</p>
 </div>
 </div>
@@ -218,7 +219,7 @@ details.fold .body{padding:0 12px 12px}
 <h3>框外註記（文件層，不是產品畫面）</h3>
 <ul>
 <li>保留的 UI 證據：Primary 圖卡與其基準日／頻率／缺值不補／資料日／來源、Secondary 卡、Missing／新鮮度／來源提醒（BL-0540 搬遷前一項都不刪）。</li>
-<li>OneBrain 預留位置：主內容之後、預設收合的單一「本頁解釋」；不在首屏（44 之十八其二：桌機第一屏至多 1 個 AI 入口）。</li>
+<li>OneBrain 預留位置：DOM 順序在必要揭露之後（手機單欄在主內容之後）、預設收合的單一「本頁解釋」。實測：桌機框（1280×800）與手機 🔍 框（390×844）落在首屏內，手機 🌍／💼 在首屏外；與 44 之十八其二（桌機第一屏至多 1 個 AI 入口）的關係待 Gate（G2）。</li>
 </ul>
 </div>
 <div class="pair">
@@ -280,7 +281,7 @@ details.fold .body{padding:0 12px 12px}
 <div>
 <div class="card">
 <h2>🌍 市場與趨勢</h2>
-<p class="kv"><span class="chip t-grey">⬜ 暫無完整市場綜合判定</span>
+<p class="kv"><span class="chip t-grey"><span class="pend">⬜ 暫無完整市場綜合判定</span></span>
 </p>
 <p class="s">（缺正式 aggregation rule）</p>
 </div>
@@ -315,7 +316,8 @@ details.fold .body{padding:0 12px 12px}
 </div>
 <div class="card req">
 <h2 class="pend" style="font-size:15px">必要揭露（保留在頁內）</h2>
-<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> 尚未取得 ‹N› 項（名單收合，一項不刪）</p>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> <span class="pend">尚未取得 ‹N› 項（名單收合，一項不刪）</span>
+</p>
 <p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 門檻待裁示</span>
 </p>
 <p class="kv"><span class="lb pend">來源</span>‹來源名›（逐序列，沿用既有 ▸ 來源與限制）</p>
@@ -389,7 +391,7 @@ details.fold .body{padding:0 12px 12px}
 </div>
 <div class="card">
 <h2>🌍 市場與趨勢</h2>
-<p class="kv"><span class="chip t-grey">⬜ 暫無完整市場綜合判定</span>
+<p class="kv"><span class="chip t-grey"><span class="pend">⬜ 暫無完整市場綜合判定</span></span>
 </p>
 <p class="s">（缺正式 aggregation rule）</p>
 </div>
@@ -422,7 +424,8 @@ details.fold .body{padding:0 12px 12px}
 </div>
 <div class="card req">
 <h2 class="pend" style="font-size:15px">必要揭露（保留在頁內）</h2>
-<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> 尚未取得 ‹N› 項（名單收合，一項不刪）</p>
+<p class="kv"><span class="lb pend">Missing</span><span class="chip t-grey">◇ 資料未備</span> <span class="pend">尚未取得 ‹N› 項（名單收合，一項不刪）</span>
+</p>
 <p class="kv"><span class="lb pend">新鮮度</span><span class="chip t-grey">⬜ 門檻待裁示</span>
 </p>
 <p class="kv"><span class="lb pend">來源</span>‹來源名›（逐序列，沿用既有 ▸ 來源與限制）</p>
@@ -753,7 +756,7 @@ details.fold .body{padding:0 12px 12px}
 <h3>查一檔基金</h3>
 <div class="field pend">MoneyDJ 基金代碼或 ISIN</div>
 <p class="s">ISIN：尚未啟用</p><span class="btn">查詢</span>
-<p class="kv" style="margin-top:8px"><span class="lb">基金身份</span><span class="chip t-grey">◇ 尚未確認</span>
+<p class="kv" style="margin-top:8px"><span class="lb">基金身份</span><span class="chip t-grey"><span class="pend">◇ 尚未確認</span></span>
 </p>
 <p class="s">結果三態要分開：有資料／<span class="chip t-grey"><span class="pend">查無此代碼</span></span>／<span class="chip t-red">⛔ 取數失敗</span>（查無 ≠ 取數失敗）</p>
 </div>
@@ -843,7 +846,7 @@ details.fold .body{padding:0 12px 12px}
 <h3>查一檔基金</h3>
 <div class="field pend">MoneyDJ 基金代碼或 ISIN</div>
 <p class="s">ISIN：尚未啟用</p><span class="btn">查詢</span>
-<p class="kv" style="margin-top:8px"><span class="lb">基金身份</span><span class="chip t-grey">◇ 尚未確認</span>
+<p class="kv" style="margin-top:8px"><span class="lb">基金身份</span><span class="chip t-grey"><span class="pend">◇ 尚未確認</span></span>
 </p>
 <p class="s">結果三態要分開：有資料／<span class="chip t-grey"><span class="pend">查無此代碼</span></span>／<span class="chip t-red">⛔ 取數失敗</span>（查無 ≠ 取數失敗）</p>
 </div>
@@ -1048,7 +1051,8 @@ details.fold .body{padding:0 12px 12px}
 <h3>框外註記（文件層，不是產品畫面）</h3>
 <ul>
 <li>保留的 UI 證據：完整資料健康度三層（UI-B）。</li>
-<li>OneBrain 預留位置：無。只有 deterministic「缺資料會限制 AI 判讀」說明；67 §6.1 只批准 🌍／💼／🔍，不加第 4 個 local summary。</li>
+<li>OneBrain 預留位置：無。畫面框內只有規則產生的「缺資料會限制分析判讀」說明（deterministic，不是 OneBrain 輸出、框內不出現 OneBrain 字樣）；67 §6.1 只批准 🌍／💼／🔍，不加第 4 個 local summary。</li>
+<li>命名差異：UI-B（#1297）把同一塊命名為「OneBrain｜資料限制說明」，本稿改為「資料限制說明」，兩者不同；以客戶裁示為準（BL-0560 (a)）。</li>
 </ul>
 </div>
 <div class="pair">
@@ -1133,10 +1137,10 @@ details.fold .body{padding:0 12px 12px}
 </div>
 <div>
 <div class="card">
-<h2 class="pend" style="font-size:15px">資料限制說明 <span class="chip t-grey"><span class="pend">規則產生，非 AI</span></span>
+<h2 class="pend" style="font-size:15px">資料限制說明 <span class="chip t-grey"><span class="pend">規則產生</span></span>
 </h2>
-<p class="pend">缺資料會限制 AI 判讀：下列類別目前未取得，啟用 AI 後相關判讀會因此受限。</p><span class="slot">未取得：‹類別清單（由資料狀態逐項列出）›</span>
-<p class="s pend">這是 deterministic 的說明句，不是 OneBrain 輸出；本頁沒有 OneBrain 位置。</p>
+<p class="pend">缺資料會限制分析判讀：下列類別目前未取得，分析啟用後相關判讀會因此受限。</p><span class="slot">未取得：‹類別清單（由資料狀態逐項列出）›</span>
+<p class="s pend">這是規則產生的說明句，不是分析結果。</p>
 </div>
 <div class="card req">
 <h2 class="pend" style="font-size:15px">必要揭露（本頁即完整資料健康度所在）</h2>
@@ -1227,10 +1231,10 @@ details.fold .body{padding:0 12px 12px}
 </details>
 </div>
 <div class="card">
-<h2 class="pend" style="font-size:15px">資料限制說明 <span class="chip t-grey"><span class="pend">規則產生，非 AI</span></span>
+<h2 class="pend" style="font-size:15px">資料限制說明 <span class="chip t-grey"><span class="pend">規則產生</span></span>
 </h2>
-<p class="pend">缺資料會限制 AI 判讀：下列類別目前未取得，啟用 AI 後相關判讀會因此受限。</p><span class="slot">未取得：‹類別清單（由資料狀態逐項列出）›</span>
-<p class="s pend">這是 deterministic 的說明句，不是 OneBrain 輸出；本頁沒有 OneBrain 位置。</p>
+<p class="pend">缺資料會限制分析判讀：下列類別目前未取得，分析啟用後相關判讀會因此受限。</p><span class="slot">未取得：‹類別清單（由資料狀態逐項列出）›</span>
+<p class="s pend">這是規則產生的說明句，不是分析結果。</p>
 </div>
 <div class="card req">
 <h2 class="pend" style="font-size:15px">必要揭露（本頁即完整資料健康度所在）</h2>

@@ -13,7 +13,9 @@
 - 最小字級：可見文字節點的 computed font-size（未展開的 `<details>` 內容不計）。
 - 觸控：`summary`、頁首五格、側欄項、輸入欄、按鈕、pill、入口列、OneBrain slice pill 的高度。
 - 手機頁首五格：每個手機框的 `.topnav` 是 5 格、每格高 >= 60px、position 不是 sticky／fixed。
-另量「全部 <details> 展開」後的溢出與字級。截圖＝整頁，存成調色盤 PNG（為了單檔 < 400KB）。
+另量「全部 <details> 展開」後的溢出與字級。
+- 首屏位置：每個 OneBrain 位置（`details.ob > summary`）相對其所在框（`.fr`）頂端的位移，與視窗高度（桌機 1280×800、手機 390×844）比較；
+  「框頂＝使用者開啟該頁時的視窗頂」，故位移小於視窗高度＝該位置落在首屏。截圖＝整頁，存成調色盤 PNG（為了單檔 < 400KB）。
 """
 import os
 import sys
@@ -65,6 +67,17 @@ JS = """
 """
 
 
+FIRST_JS = """
+(vh) => [...document.querySelectorAll('details.ob')].map(d => {
+  const f = d.closest('.fr'), s = d.querySelector('summary');
+  const fr = f.getBoundingClientRect(), sr = s.getBoundingClientRect();
+  const page = f.closest('section').id;
+  return {page, frame: f.classList.contains('mob') ? 'mob' : 'desk', summaryTopInFramePx: Math.round(sr.top - fr.top),
+          summaryBottomInFramePx: Math.round(sr.bottom - fr.top), viewportH: vh, inFirstScreen: (sr.top - fr.top) < vh};
+})
+"""
+
+
 def main():
     from PIL import Image
     from playwright.sync_api import sync_playwright
@@ -72,11 +85,14 @@ def main():
     with sync_playwright() as p:
         browser = p.chromium.launch(executable_path=EXE, args=["--no-sandbox"])
         for width in (390, 1280):
-            page = browser.new_context(viewport={"width": width, "height": 900}, device_scale_factor=1).new_page()
+            vh = 800 if width == 1280 else 844
+            page = browser.new_context(viewport={"width": width, "height": vh}, device_scale_factor=1).new_page()
             page.goto("file://" + str(HTML))
             page.wait_for_timeout(300)
             print(f"== viewport {width}")
             print("default (all <details> closed):", page.evaluate(JS))
+            for row in page.evaluate(FIRST_JS, vh):
+                print("first-screen:", row)
             page.evaluate("document.querySelectorAll('details').forEach(d => d.open = true)")
             page.wait_for_timeout(100)
             print("all <details> open:", page.evaluate(JS))
