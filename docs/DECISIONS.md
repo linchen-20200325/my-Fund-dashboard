@@ -3635,6 +3635,22 @@
 | supersedes／amends | 不 supersede 任何既有 DEC；不改任何既有 DEC 條文語意。 |
 | provenance | 要點轉述；ChatGPT 總管轉達〔待核〕，非逐字，repo 內無逐字存檔，QA 無法核對（NOT VERIFIED）。區分欄 3 為執行組判讀，不是客戶裁示。本 DEC 條文待 PR 階段治理稽核與 CI（治理規則，依 `DEC-2026-10-16-05` 至少一組真正獨立稽核）。不得偽稱全文為客戶原話。 |
 
+### DEC-2026-11-20-01｜OB-B 最小離線切片：使用者本人確認 Q-OB1 A、Q-OB2 A（逐字）——授權範圍以原文為準；開工前置未滿足，尚不得開程式 PR
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-20；**客戶本人**（使用者）。確認方式：使用者 2026-11-20 在 ChatGPT 對話親自確認，經使用者訊息轉交 Claude Code 存檔。 |
+| 決策內容摘要（要點） | Q-OB1 採 A、Q-OB2 採 A，由使用者本人確認；授權 OB-B 最小離線切片＝Provider-neutral 型別與介面、離線 Fake Provider、結構化錯誤與降級狀態、注入式及無網路測試，限 `services/onebrain/` 的四個新增程式檔與三個新增測試檔（計法與測試位置見下列註；Q-OB1 A／Q-OB2 A 所指內容見 Gate 卡 `docs/evidence/obb_bc_gate_and_offline_application_2026_11_19.md` §2）。授權範圍以逐字存檔原文為準；本欄為要點，與原文不符以原文為準。 |
+| 適用範圍 | 向前生效；範圍同原文。登記不構成動工授權（`CLAUDE.md` §-1）；原文自述仍需獨立治理稽核、白名單與 CI 驗證後才能開始程式 PR。 |
+| 與既有 DEC 的關係 | 對 `DEC-2026-10-31-03`：依原文為離線 Fake Provider 階段限縮裁示。對 `DEC-2026-11-08-02`：原文自述不屬其禁止的正式 Provider／Phase 7／Claude API runtime、不受 BL-0527／0528 或完整 D2 尚未完成阻擋——此句為原文自述，本筆照錄、不另行擴張。不改上述兩筆及其他舊 DEC 本文。 |
+| 尚未滿足的開工前置（登記；非授權） | 來源標註：(1) 獨立治理稽核、(3) 白名單（含 Gate 卡核對）、CI 出自使用者原文；「本 docs PR 合併」「Model／Mode／Effort Change Gate」「非作者 QA」為執行組依 `DEC-2026-11-18-03` E6／Gate 卡 §5 補列，**非原文**。(1) 獨立治理稽核，報告入 repo，Must-Fix 清零（稽核紀錄見 `docs/evidence/audit_record_2026_11_20_obb_authorization.md`）。(2) 本 docs PR 合併。(3) Gate 卡 §3 的七檔白名單、型別欄位、依賴方向、FAKE 隔離、無網路守衛逐項核對。(4) Model／Mode／Effort Change Gate。(5) 程式 PR 須非作者 QA＋全部 CI 成功。以上任一未完成，不得開程式 PR。 |
+| 不授權範圍（清單，皆不授權） | 真實 Provider、LLM runtime、不得使用 SDK（含 import、安裝、`requirements.txt` 變更）、金鑰或環境變數、prompt、Digest、Phase 7、UI（含任何渲染與掛載）、Risk Cap、投資行動；FAKE 輸出進正式頁面或 production 路徑；本筆原文未列的任何其他未決事項。不追認過去未授權事項。 |
+| 計法與待確認註（S2／S5） | 「四個新增程式檔」依 Gate 卡 §3-2 計為 `__init__.py`＋`provider_types.py`＋`provider_interface.py`＋`fake_provider.py`（4）＋3 個 `tests/test_onebrain_*.py`（3）＝7。原文「限 `services/onebrain/` 的…三個新增測試檔」對測試位置字面有歧義，Gate 卡建議放 `tests/`，須在白名單核對時由使用者／總管確認，程式 PR 不得單方決定。Gate 卡 §3 的型別欄位、守衛清單、Fake 輸出規格仍為「候選，未經使用者逐項核准」。 |
+| 影響範圍／可逆性 | 純文件、可逆。BACKLOG／HANDOFF 同批最小同步。 |
+| evidence／source | `docs/evidence/decisions/2026-11-20_obb_offline_slice_user_verbatim_authorization.md`（逐字原文、sha256 見該檔）；`docs/evidence/obb_bc_gate_and_offline_application_2026_11_19.md`；`docs/evidence/audit_record_2026_11_20_obb_authorization.md`（獨立治理稽核紀錄）；`DEC-2026-10-31-03`；`DEC-2026-11-08-02`；`DEC-2026-11-18-03`；`DEC-2026-11-19-10`；`DEC-2026-10-16-05`。 |
+| supersedes／amends | 不 supersede 任何既有 DEC。與 `DEC-2026-11-18-03` 為**關聯登記**：該筆「建議（待客戶確認）轉為離線最小切片」之待確認欄 (b)(c)，本筆提供使用者本人可存檔的確認；是否完全解決各待確認欄，以兩筆原文對照為準，本筆不改 `DEC-2026-11-18-03` 本文。 |
+| provenance | **逐字，由使用者本人親自確認**；原文存於 `docs/evidence/decisions/2026-11-20_obb_offline_slice_user_verbatim_authorization.md`（圍欄內文 773 bytes，sha256 `c2ce8efa83fa6cd9b15da6dee121d51e19e8f03a41a7353adbd983ef89e68071`）。本表其餘欄位為執行組整理，非客戶原話。本 DEC 條文待 PR 階段獨立治理稽核與 CI（AI 行為邊界，依 `DEC-2026-10-16-05` 至少一組真正獨立稽核）。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
