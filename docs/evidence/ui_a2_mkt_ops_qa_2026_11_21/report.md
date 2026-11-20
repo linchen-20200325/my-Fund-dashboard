@@ -37,17 +37,25 @@
 
 `st.title(..., anchor=False)`；三個產生點的 `<h3>`／`<h4>` 改為 `<div class="uv3-hd uv3-hd3|4" role="heading" aria-level="3|4">`，CSS 以同值復刻（字級、行高、字距、內距）。未動色票、資料語意、公式、來源、stHeader、導覽、registry、`app_preview`、`.streamlit/`、`.github/`、frozen docs。
 
-幾何前後對照（9 組情境×寬度、每組 65–69 個元素，`measure.json`）：h1 與主圖標題逐值相同；首屏露出量不變；每個 4 級標題高 42.3→42px（次像素；原因：改前錨點圖示撐高行盒），故首屏以下最大位移 390 為 1.6px、768／1280 為 0.7px。**此為已揭露的次像素差，非零差。**
+**computed style 全套比對（真 Chromium；base `bf3d61b2` 對本分支；normal／tw_missing×390／768／1280 共 6 組，每組 1 個 h1、1 個 3 級、5 個 4 級標題；22 個屬性，清單與逐組結果見 `measure.json` 的 `computed_style_base_vs_head`）**：
+- 屬性含 font-size／weight／family／style、line-height、**letter-spacing**、color、四邊 margin 與 padding、display、text-align、text-transform、word-break、overflow-wrap、white-space、height。
+- 第一次比對發現兩處差異：`word-break` 原為 `break-word`、新 div 為 `normal`（已補 `word-break:break-word`，重跑後消失）；4 級標題 `height` 42.3125px→42px（**未消除、據實保留**：原因 INFERENCE 為改前錨點圖示撐高行盒，未另行證明）。
+- letter-spacing：3 級 `-0.096px` 前後相同；4 級原為 `normal`，`.uv3-hd4` 同為 `normal`，無差異，不需補。
+- 修補後唯一殘餘差異＝4 級標題高度 0.3125px（6 組皆同一對值 42.3125→42，非逐標題量測）。
+
+首屏／位置（`geom_before`／`geom_after` 同一腳本前後各量一次；以下為主圖 SVG 的 y 與高，前後逐值相同）：normal 390＝644.2／237.3、768＝594.6／480、1280＝533.6／480；tw_missing 390＝714.8／237.3、768＝645.3／480、1280＝584.3／480；both_missing 無主圖。故主圖位置與尺寸前後相同（首屏露出量另由 `_FOLD_BASELINE` 守衛通過，見 §5）。首屏以下元素有次像素位移：每個 4 級標題高 0.3125px 累積，量測所得整頁最大 y 位移 390 為 1.6px、768／1280 為 0.7px（每情境一個最大值，非逐標題）。**此為已揭露的次像素差，非零差。**
 
 測試：`test_ui_v3_mkt_heading_anchor_guard.py`（靜態，含負控）；瀏覽器檔新增 `test_no_heading_anchor_links_and_no_keyboard_stop_on_them`（三寬度；真 Tab 走訪 40 次）、`test_mutation_injected_heading_anchor_…`、`test_mutation_missing_heading_levels_…`；既有 h3／h4 選擇器改為 `role="heading"`。變異負控：把 production `anchor=False` 拿掉 → 靜態 1 條與瀏覽器 3 條轉紅（4 failed），還原後綠。
 
 ## 5. 測試輸出（原文）
 
-`pytest tests/ui_v3/test_ui_v3_market_page_browser.py -q -p no:cacheprovider`：`123 passed in 247.91s (0:04:07)`
+`pytest tests/ui_v3/test_ui_v3_market_page_browser.py -q -p no:cacheprovider`：`123 passed in 247.91s (0:04:07)（補 `word-break` 前）`
 
-`pytest tests/ui_v3 -q -p no:cacheprovider`（2026-11-20T23:12:14Z→23:18:28Z）：`3147 passed, 769 warnings in 372.52s (0:06:12)`
+`pytest tests/ui_v3 -q -p no:cacheprovider`（2026-11-20T23:12:14Z→23:18:28Z，**補 `word-break` 之前**）：`3147 passed, 769 warnings in 372.52s (0:06:12)`；補 `word-break` 後只重跑下一行兩檔，`tests/ui_v3` 全量**未重跑**。
 
-`pytest tests/test_canonical_rule_consistency.py tests/test_doc_counters.py tests/test_constitution_file_refs.py tests/test_retired_exception_ids.py -q -p no:cacheprovider`：`120 passed in 77.65s (0:01:17)`
+補 `word-break:break-word` 後 `pytest tests/ui_v3/test_ui_v3_market_page_browser.py tests/ui_v3/test_ui_v3_mkt_heading_anchor_guard.py -q -p no:cacheprovider`：`133 passed in 240.30s (0:04:00)`
+
+`pytest tests/test_canonical_rule_consistency.py tests/test_doc_counters.py tests/test_constitution_file_refs.py tests/test_retired_exception_ids.py -q -p no:cacheprovider`：`120 passed in 77.65s (0:01:17)`（補 `word-break` 後重跑：`120 passed in 74.09s (0:01:14)`）
 
 環境：scratchpad venv（streamlit 1.59.2）、`UI_V2_CHROMIUM=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`。pre-commit 本機未安裝。
 

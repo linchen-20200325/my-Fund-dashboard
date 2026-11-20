@@ -69,7 +69,7 @@ def _css() -> str:
 .block-container,.stMainBlockContainer{{padding-top:3.4rem !important}}
 .block-container{{max-width:1100px;padding-left:{gutter};padding-right:{gutter};padding-top:3.4rem}}
 h1{{font-size:{page} !important;padding:.2rem 0 !important}}
-.uv3-hd{{display:block;color:inherit;font-weight:600}}
+.uv3-hd{{display:block;color:inherit;font-weight:600;word-break:break-word}}
 .uv3-hd3{{font-size:{section};line-height:1.2;letter-spacing:-.005em;margin:0;padding:0 0 1rem}}
 .uv3-hd4{{font-size:{body};line-height:1.2;margin:0 0 4px 0;padding:.5rem 0 1rem}}
 .uv3-pending{{border-bottom:1px dashed {border}}}

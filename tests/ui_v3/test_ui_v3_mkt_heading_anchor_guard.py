@@ -47,3 +47,8 @@ def test_negative_control_title_anchor_checker_turns_red(src):
 @pytest.mark.parametrize("snippet", ["<h3>x</h3>", "<H4 id=a>x</H4>", "<h1\n>x</h1>"])
 def test_negative_control_heading_tag_checker_turns_red(snippet):
     assert HEADING_TAG.search("md('" + snippet + "')")
+
+
+def test_mkt_heading_css_keeps_the_streamlit_heading_word_break():
+    """改成 role=heading 的 div 後，仍須與原 h3／h4 同為 `word-break:break-word`（真瀏覽器 computed style 比對發現的唯一非預期差異）。"""
+    assert re.search(r"\.uv3-hd\{\{[^}]*word-break:break-word", _SRC)

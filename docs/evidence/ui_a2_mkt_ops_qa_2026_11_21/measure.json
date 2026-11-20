@@ -488,5 +488,50 @@
    ],
    "max_abs_y_shift_px": 0.7000000000000455
   }
+ },
+ "computed_style_base_vs_head": {
+  "base": "bf3d61b2",
+  "head": "本 commit 後工作樹",
+  "props": [
+   "fontSize",
+   "fontWeight",
+   "lineHeight",
+   "letterSpacing",
+   "fontFamily",
+   "color",
+   "marginTop",
+   "marginRight",
+   "marginBottom",
+   "marginLeft",
+   "paddingTop",
+   "paddingRight",
+   "paddingBottom",
+   "paddingLeft",
+   "display",
+   "textAlign",
+   "fontStyle",
+   "textTransform",
+   "wordBreak",
+   "overflowWrap",
+   "whiteSpace",
+   "height"
+  ],
+  "groups_compared": 6,
+  "headings_per_group": [
+   7,
+   7,
+   7,
+   7,
+   7,
+   7
+  ],
+  "differences": {
+   "level4.height": [
+    [
+     "42.3125px",
+     "42px"
+    ]
+   ]
+  }
  }
 }
