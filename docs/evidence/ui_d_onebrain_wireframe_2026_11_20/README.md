@@ -15,6 +15,9 @@
    - **驗收方向**：僅換頁→證據相同；僅改上游拒收／略過→同畫面仍可分辨（NOT RUN；設計層，本稿未驗任何實作）。
    - 不新增產品欄位、不造數字、不發明 schema；`skipped_holdings`／`skipped_tabs` 為 QA 文案內既有識別名，本組未再核對其程式定義。
 
+6. **OB-B／Fake Provider 揭露的位置**：HTML 資料流區底部「OB-B 現況揭露」callout 是**文件層揭露**，不是畫面框內文字；五頁的畫面框內沒有任何 Fake Provider 字樣。
+7. **共用註記的標示**：HTML 註記標題含「CURRENT 限制；NOT VERIFIED」，正文中「持倉只轉交…」前亦標「CURRENT 限制、真實影響 NOT VERIFIED」（QA 逐字文案因此多插一個括號，其餘字句未動），避免單獨被引用成已確認事實；🌍／💼／🔍／⚙️ 的框外註記皆指回 `#shared-note`。
+
 ## 1. 檔案
 | 路徑 | 說明 |
 |---|---|
@@ -23,7 +26,7 @@
 | `docs/evidence/ui_d_onebrain_wireframe_2026_11_20/measure.py` | 量測＋截圖腳本（可重現；§6 的輸出原文即它的 stdout） |
 | 本 README | 說明、對照表、衝突與建議、PendingWording、最小 Gate、量測、測試輸出 |
 
-**截圖說明**：整頁（390 寬 12,187px 高；1280 寬 9,713px 高）。為符合單檔 < 400KB，以 Pillow 轉調色盤 PNG（無抖色）：390 為 64 色（358,335 bytes）、1280 為 12 色（368,607 bytes），**不是原始全彩輸出**，細緻色階（例如淡色底）會被合併。截圖內的 `⬜` 顯示成方框：截圖環境的字型沒有該字形，屬截圖環境問題，不是線框內容。390 視窗下桌機框（比視窗寬）放在自己的橫向捲動容器內，截圖只看得到它的左側一段。
+**截圖說明**：整頁（390 寬 12,362px 高；1280 寬 9,761px 高）。為符合單檔 < 400KB，以 Pillow 轉調色盤 PNG（無抖色）：390 為 64 色（368,620 bytes）、1280 為 12 色（376,978 bytes），**不是原始全彩輸出**，細緻色階（例如淡色底）會被合併。截圖內的 `⬜` 顯示成方框：截圖環境的字型沒有該字形，屬截圖環境問題，不是線框內容。390 視窗下桌機框（比視窗寬）放在自己的橫向捲動容器內，截圖只看得到它的左側一段。
 
 **版面說明**：390 與 1280 兩個畫面因寬度不同無法在 1280 視窗內左右並排，故上下堆疊（桌機框在上、手機框在下）；桌機框固定為桌機版型（深色左側欄＋淺色主區），不隨視窗寬度改變。
 
@@ -60,6 +63,7 @@
 - 🤖：示意：Phase 7 後；「現況：導覽項標「尚未開放」、不可點、不註冊頁面。」；主要證據；最強反證；未確認；Evidence trace；全站綜合；「🤖 是唯一的全站綜合頁；🌍／💼／🔍 的「本頁解釋」是同一份快照的 slice，不在此重複。」；（空）。
 - ⚙️：資料限制說明；規則產生；「缺資料會限制分析判讀：下列類別目前未取得，分析啟用後相關判讀會因此受限。」；「未取得：‹類別清單›」；「這是規則產生的說明句，不是分析結果。」；必要揭露（本頁即完整資料健康度所在）；① 全站資料取得摘要、② 逐來源／序列明細、③ 開發者診斷（預設收合）（沿用 UI-B 的新字樣，仍未核准）。
 - 共用註記（文件層，但字樣待核）：同一畫面不等於同一上游證據；「同一快照換頁、收合診斷或隱藏卡片，完整證據及 Missing 集合應保持一致。…設定讀取失敗須與確實未設定分開。」（全文見 §0-5）；「持倉兩組轉交」「CURRENT 限制」「NOT VERIFIED」「BL-0545 BLOCKED」。
+- 各頁示意區塊標題（畫面內；沿用既有線框的區塊、標題為本稿示意，未核准）：近期事件／配息（位置示意）；摘要四項（缺值仍保留位置，不顯示 0）；缺 ‹N› 項（四項摘要不因缺值消失）；依條件篩選；查一檔基金；持股明細（預設收合）。
 - 資料流圖與位置標籤（畫面示意；名稱沿用既有概念、欄位未定）：Decision Digest；單一 OneBrain；各頁 slice；未來（未啟用）：給 OneBrain 讀；不可用狀態（位置不變，內容不顯示）；💼 的「頁級狀態」（作為列名；β 階梯語意沿用既有）。
 - 各頁共用：必要揭露（保留在頁內）；Missing／新鮮度／來源（作為列名）；「尚未取得 ‹N› 項（名單收合，一項不刪）」。
 - 🔍：查無此代碼；「結果三態要分開：有資料／查無此代碼／⛔ 取數失敗（查無 ≠ 取數失敗）」（說明句）。
@@ -93,25 +97,25 @@
 **stdout 原文**（只算「目前可見」的元素；未展開的 `<details>` 內容不計；視窗高 1280×800／390×844；`touchTargets` ＝ `summary`、頁首五格／側欄項、輸入欄、按鈕、pill、入口列、slice pill；`first-screen` 列＝OneBrain 位置的首屏位置）：
 ```
 == viewport 390
-default (all <details> closed): {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 12187, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 5, 'mobFrames': 5, 'mobFrameMaxWidthPx': 358, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': True, 'obSlots': 6}
+default (all <details> closed): {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 12362, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 5, 'mobFrames': 5, 'mobFrameMaxWidthPx': 358, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': True, 'obSlots': 6}
 first-screen: {'page': 'p-mkt', 'frame': 'desk', 'summaryTopInFramePx': 707, 'summaryBottomInFramePx': 768, 'viewportH': 844, 'inFirstScreen': True}
 first-screen: {'page': 'p-mkt', 'frame': 'mob', 'summaryTopInFramePx': 1062, 'summaryBottomInFramePx': 1122, 'viewportH': 844, 'inFirstScreen': False}
 first-screen: {'page': 'p-ast', 'frame': 'desk', 'summaryTopInFramePx': 482, 'summaryBottomInFramePx': 542, 'viewportH': 844, 'inFirstScreen': True}
 first-screen: {'page': 'p-ast', 'frame': 'mob', 'summaryTopInFramePx': 979, 'summaryBottomInFramePx': 1039, 'viewportH': 844, 'inFirstScreen': False}
 first-screen: {'page': 'p-exp', 'frame': 'desk', 'summaryTopInFramePx': 292, 'summaryBottomInFramePx': 352, 'viewportH': 844, 'inFirstScreen': True}
 first-screen: {'page': 'p-exp', 'frame': 'mob', 'summaryTopInFramePx': 729, 'summaryBottomInFramePx': 789, 'viewportH': 844, 'inFirstScreen': True}
-all <details> open: {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 14186, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 5, 'mobFrames': 5, 'mobFrameMaxWidthPx': 358, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': False, 'obSlots': 6}
-screenshot shot_390.png: 390x12187px, 64 colors, 358335 bytes
+all <details> open: {'scrollWidth': 390, 'clientWidth': 390, 'fullHeight': 14361, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 5, 'mobFrames': 5, 'mobFrameMaxWidthPx': 358, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': False, 'obSlots': 6}
+screenshot shot_390.png: 390x12362px, 64 colors, 368620 bytes
 == viewport 1280
-default (all <details> closed): {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 9713, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 0, 'mobFrames': 5, 'mobFrameMaxWidthPx': 390, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': True, 'obSlots': 6}
+default (all <details> closed): {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 9761, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 0, 'mobFrames': 5, 'mobFrameMaxWidthPx': 390, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': True, 'obSlots': 6}
 first-screen: {'page': 'p-mkt', 'frame': 'desk', 'summaryTopInFramePx': 665, 'summaryBottomInFramePx': 725, 'viewportH': 800, 'inFirstScreen': True}
 first-screen: {'page': 'p-mkt', 'frame': 'mob', 'summaryTopInFramePx': 1019, 'summaryBottomInFramePx': 1080, 'viewportH': 800, 'inFirstScreen': False}
 first-screen: {'page': 'p-ast', 'frame': 'desk', 'summaryTopInFramePx': 439, 'summaryBottomInFramePx': 499, 'viewportH': 800, 'inFirstScreen': True}
 first-screen: {'page': 'p-ast', 'frame': 'mob', 'summaryTopInFramePx': 979, 'summaryBottomInFramePx': 1039, 'viewportH': 800, 'inFirstScreen': False}
 first-screen: {'page': 'p-exp', 'frame': 'desk', 'summaryTopInFramePx': 248, 'summaryBottomInFramePx': 309, 'viewportH': 800, 'inFirstScreen': True}
 first-screen: {'page': 'p-exp', 'frame': 'mob', 'summaryTopInFramePx': 729, 'summaryBottomInFramePx': 789, 'viewportH': 800, 'inFirstScreen': True}
-all <details> open: {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 11572, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 0, 'mobFrames': 5, 'mobFrameMaxWidthPx': 390, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': False, 'obSlots': 6}
-screenshot shot_1280.png: 1280x9713px, 12 colors, 368607 bytes
+all <details> open: {'scrollWidth': 1280, 'clientWidth': 1280, 'fullHeight': 11619, 'minFontPx': 13, 'textNodesUnder13px': 0, 'touchTargets': 88, 'touchMinHeightPx': 48, 'touchUnder48': 0, 'chipsVisible': 63, 'chipsWithoutText': 0, 'overflowElementsOutsideDeskWrap': 0, 'deskWraps': 5, 'deskWrapScrolls': 0, 'mobFrames': 5, 'mobFrameMaxWidthPx': 390, 'mobFramesScrollingInside': 0, 'mobTopnavCells': '5,5,5,5,5', 'mobTopnavMinCellHeightPx': 60.1875, 'mobTopnavPositions': 'static', 'deskFrames': 5, 'deskTopnavHidden': True, 'mobSideHidden': True, 'obSlotsClosedByDefault': False, 'obSlots': 6}
+screenshot shot_1280.png: 1280x9761px, 12 colors, 376978 bytes
 ```
 **讀法**
 - 文件溢出：兩個視窗、預設與「全部 `<details>` 展開」後，`scrollWidth` ＝ `clientWidth`（390／1280），`overflowElementsOutsideDeskWrap` ＝ 0。
@@ -132,7 +136,7 @@ screenshot shot_1280.png: 1280x9713px, 12 colors, 368607 bytes
 python -m pytest tests/test_canonical_rule_consistency.py tests/test_doc_counters.py tests/test_constitution_file_refs.py -q -p no:cacheprovider
 ........................................................................ [ 63%]
 .........................................                                [100%]
-113 passed in 94.70s (0:01:34)
+113 passed in 86.55s (0:01:26)
 ```
 
 **S3：新增的 `measure.py` 不會被守衛掃到（讀碼＋實跑）**

@@ -190,8 +190,8 @@ details.fold .body{padding:0 12px 12px}
 </div>
 </div>
 <div class="note" id="shared-note">
-<h3>共用註記（文件層）：同一畫面不等於同一上游證據</h3>
-<p class="pend">同一快照換頁、收合診斷或隱藏卡片，完整證據及 Missing 集合應保持一致。即使顯示相同，持倉只轉交 skipped_holdings／skipped_tabs，其他略過組未涵蓋，件數未知不能寫成零；NAV 須保留來源、資料日、取回時間及 stale／失敗／拒收原因；缺 FX 的幣別及未估值部位仍須保留；設定讀取失敗須與確實未設定分開。</p>
+<h3>共用註記（文件層）：同一畫面不等於同一上游證據（含 CURRENT 限制；NOT VERIFIED）</h3>
+<p class="pend">同一快照換頁、收合診斷或隱藏卡片，完整證據及 Missing 集合應保持一致。即使顯示相同，（CURRENT 限制、真實影響 NOT VERIFIED）持倉只轉交 skipped_holdings／skipped_tabs，其他略過組未涵蓋，件數未知不能寫成零；NAV 須保留來源、資料日、取回時間及 stale／失敗／拒收原因；缺 FX 的幣別及未估值部位仍須保留；設定讀取失敗須與確實未設定分開。</p>
 <ul>
 <li>「持倉兩組轉交」是 CURRENT 限制；真實持倉的影響 NOT VERIFIED；BL-0545 BLOCKED。不得把它寫成「資料斷線」。</li>
 <li>本註記不新增產品欄位、不造數字、不定義 schema；只是證據一致性的設計方向。</li>
@@ -226,6 +226,7 @@ details.fold .body{padding:0 12px 12px}
 <div class="note">
 <h3>框外註記（文件層，不是產品畫面）</h3>
 <ul>
+<li>共用註記：換頁、收合或隱藏卡片時完整證據與 Missing 集合須保持一致，見資料流圖旁「共用註記」（#shared-note）。</li>
 <li>保留的 UI 證據：Primary 圖卡與其基準日／頻率／缺值不補／資料日／來源、Secondary 卡、Missing／新鮮度／來源提醒（BL-0540 搬遷前一項都不刪）。</li>
 <li>OneBrain 預留位置：DOM 順序在必要揭露之後（手機單欄在主內容之後）、預設收合的單一「本頁解釋」。實測：桌機框（1280×800）與手機 🔍 框（390×844）落在首屏內，手機 🌍／💼 在首屏外；與 44 之十八其二（桌機第一屏至多 1 個 AI 入口）的關係待 Gate（G2）。</li>
 </ul>
@@ -699,6 +700,7 @@ details.fold .body{padding:0 12px 12px}
 <div class="note">
 <h3>框外註記（文件層，不是產品畫面）</h3>
 <ul>
+<li>共用註記：查詢結果的三態（有資料／查無／取數失敗）須可分辨，見資料流圖旁「共用註記」（#shared-note）。</li>
 <li>保留的 UI 證據：查詢三態（有資料／查無／取數失敗）、基金身份、不排名、來源／資料日。</li>
 <li>OneBrain 預留位置：同上，單一收合位。</li>
 </ul>
