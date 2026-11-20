@@ -69,7 +69,9 @@ def _css() -> str:
 .block-container,.stMainBlockContainer{{padding-top:3.4rem !important}}
 .block-container{{max-width:1100px;padding-left:{gutter};padding-right:{gutter};padding-top:3.4rem}}
 h1{{font-size:{page} !important;padding:.2rem 0 !important}}
-h3{{font-size:{section} !important}}
+.uv3-hd{{display:block;color:inherit;font-weight:600}}
+.uv3-hd3{{font-size:{section};line-height:1.2;letter-spacing:-.005em;margin:0;padding:0 0 1rem}}
+.uv3-hd4{{font-size:{body};line-height:1.2;margin:0 0 4px 0;padding:.5rem 0 1rem}}
 .uv3-pending{{border-bottom:1px dashed {border}}}
 {theme.tone_css()}
 {theme.pill_css()}
@@ -83,13 +85,11 @@ h3{{font-size:{section} !important}}
 {theme.card_css(".uv3-card")}
 {theme.card_css('[class*="st-key-uv3-card-"]', margin_bottom="0")}
 [class*="st-key-uv3-card-"] > [data-testid="stElementContainer"]:last-child [data-testid="stMarkdownContainer"]{{margin-bottom:0}}
-.uv3-card h4,.uv3-card-in h4{{margin:0 0 4px 0;font-size:{body}}}
 .uv3-metric{{font-size:{metric};margin:2px 0}}
 .uv3-chart{{width:100%;max-width:720px;height:auto;display:block}}
 @media (min-width:{nav.MOBILE_MAX_PX + 1}px){{
   .uv3-chart{{margin-left:auto;margin-right:auto}}
 }}
-[class*="st-key-uv3-card-chart"] h3{{padding-top:0}}
 @media (max-width:{nav.MOBILE_MAX_PX}px){{
   .uv3-chart{{width:calc(100% + 2 * {pad_x});margin-left:-{pad_x}}}
 }}
@@ -326,7 +326,7 @@ def _secondary_parts(card: SecondaryCard, title_key: str, sub_label_key: Optiona
     """Secondary 卡的 `(標題 h4, 內容)` 兩段 HTML（不含外框；外框由具名容器給）。"""
     title = W.span(title_key)
     sub = f"{W.span('separator')}{W.span(sub_label_key)}" if sub_label_key else ""
-    head = f"<h4>{title}{sub}</h4>"
+    head = f'<div class="uv3-hd uv3-hd4" role="heading" aria-level="4">{title}{sub}</div>'
     label_key = sub_label_key or "series_vix"
     if card.status != STATUS_OK:
         return head, status_html(card.status, card.reason_code, label_key)
@@ -404,13 +404,13 @@ def _render(model: MarketPageModel) -> None:
 
     md = lambda html: st.markdown(html, unsafe_allow_html=True)  # noqa: E731
     md(CSS)
-    st.title(PAGE_TITLE)
+    st.title(PAGE_TITLE, anchor=False)   # 不產生標題錨點連結（與 assets／nas_diag 一致；避免多出看不見、名稱為英文的 Tab 停駐點）
     with st.container(key=KEY_CARD_SUMMARY):          # card.summary：首屏狀態卡（只是容器；內容與順序同 81）
         md(summary_html(model))
 
     card = model.primary_card
     with st.container(key=KEY_CARD_CHART):            # card.chart：Primary 圖卡（原生控制項在卡內，widget key 不變）
-        md(f'<h3>{W.span("title_compare") if model.view == VIEW_COMPARE else escape(card.title)}</h3>')
+        md(f'<div class="uv3-hd uv3-hd3" role="heading" aria-level="3">{W.span("title_compare") if model.view == VIEW_COMPARE else escape(card.title)}</div>')
         st.radio(W.text("view_label"), PRIMARY_VIEWS, key=KEY_VIEW, horizontal=True,
                  format_func=lambda v: W.text(_VIEW_LABEL_KEY[v]))
         st.radio(W.text("period_label"), PERIODS, key=KEY_PERIOD, horizontal=True)
@@ -444,7 +444,7 @@ def _render(model: MarketPageModel) -> None:
     md(f'<div class="uv3-note">{W.span("evidence_no_rule_note")}</div>')
     for column, evidence in zip(st.columns(len(model.evidence_cards)), model.evidence_cards):
         with column:
-            md(f'<div class="uv3-card" data-card="{escape(evidence.code)}"><h4>{W.span(evidence.title_key)}</h4>'
+            md(f'<div class="uv3-card" data-card="{escape(evidence.code)}"><div class="uv3-hd uv3-hd4" role="heading" aria-level="4">{W.span(evidence.title_key)}</div>'
                + "".join(fact_html(f) for f in evidence.facts) + "</div>")
     with st.expander(W.text("missing_group_title", n=len(model.missing))):
         md("".join(f'<div class="uv3-row">{escape(W.text(m.label_key))} {status_html(m.status, m.reason_code, m.label_key)}</div>'

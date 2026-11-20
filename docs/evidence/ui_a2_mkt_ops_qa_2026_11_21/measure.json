@@ -1,0 +1,492 @@
+{
+ "measured": "2026-11-21 local Chromium, CI fixture, Preview FAKE",
+ "tabwalk_before": {
+  "390": {
+   "tab_stops_one_cycle": 17,
+   "heading_anchor_stops": 7,
+   "overflow": {
+    "doc": 390,
+    "vw": 390
+   },
+   "order": [
+    [
+     "BUTTON",
+     "Deploy"
+    ],
+    [
+     "BUTTON",
+     "Main menu"
+    ],
+    [
+     "SECTION",
+     "🌍 市場 💼 資產 開發"
+    ],
+    [
+     "A",
+     "🌍 市場"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "INPUT",
+     "2"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ]
+   ]
+  },
+  "768": {
+   "tab_stops_one_cycle": 17,
+   "heading_anchor_stops": 7,
+   "overflow": {
+    "doc": 768,
+    "vw": 768
+   },
+   "order": [
+    [
+     "BUTTON",
+     "Deploy"
+    ],
+    [
+     "BUTTON",
+     "Main menu"
+    ],
+    [
+     "SECTION",
+     "🌍 市場 💼 資產 開發"
+    ],
+    [
+     "A",
+     "🌍 市場"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "INPUT",
+     "2"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ]
+   ]
+  },
+  "1280": {
+   "tab_stops_one_cycle": 17,
+   "heading_anchor_stops": 7,
+   "overflow": {
+    "doc": 1280,
+    "vw": 1280
+   },
+   "order": [
+    [
+     "A",
+     "🌍 市場與趨勢"
+    ],
+    [
+     "BUTTON",
+     "Deploy"
+    ],
+    [
+     "BUTTON",
+     "Main menu"
+    ],
+    [
+     "SECTION",
+     "PREVIEW 更新：1"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "INPUT",
+     "2"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "A",
+     "Link to heading"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ]
+   ]
+  }
+ },
+ "tabwalk_after": {
+  "390": {
+   "tab_stops_one_cycle": 10,
+   "heading_anchor_stops": 0,
+   "overflow": {
+    "doc": 390,
+    "vw": 390
+   },
+   "order": [
+    [
+     "BUTTON",
+     "Deploy"
+    ],
+    [
+     "BUTTON",
+     "Main menu"
+    ],
+    [
+     "SECTION",
+     "🌍 市場 💼 資產 開發"
+    ],
+    [
+     "A",
+     "🌍 市場"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "INPUT",
+     "2"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ]
+   ]
+  },
+  "768": {
+   "tab_stops_one_cycle": 10,
+   "heading_anchor_stops": 0,
+   "overflow": {
+    "doc": 768,
+    "vw": 768
+   },
+   "order": [
+    [
+     "BUTTON",
+     "Deploy"
+    ],
+    [
+     "BUTTON",
+     "Main menu"
+    ],
+    [
+     "SECTION",
+     "🌍 市場 💼 資產 開發"
+    ],
+    [
+     "A",
+     "🌍 市場"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "INPUT",
+     "2"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ]
+   ]
+  },
+  "1280": {
+   "tab_stops_one_cycle": 10,
+   "heading_anchor_stops": 0,
+   "overflow": {
+    "doc": 1280,
+    "vw": 1280
+   },
+   "order": [
+    [
+     "A",
+     "🌍 市場與趨勢"
+    ],
+    [
+     "BUTTON",
+     "Deploy"
+    ],
+    [
+     "BUTTON",
+     "Main menu"
+    ],
+    [
+     "SECTION",
+     "PREVIEW 更新：1"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "INPUT",
+     "2"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "INPUT",
+     "0"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ],
+    [
+     "SUMMARY",
+     "keyboard_arr"
+    ]
+   ]
+  }
+ },
+ "geometry_before_after": {
+  "normal@390": {
+   "heading_count": 7,
+   "h1_h3_identical": true,
+   "h4_height_before_after": [
+    [
+     42.3,
+     42
+    ]
+   ],
+   "max_abs_y_shift_px": 1.599999999999909
+  },
+  "normal@768": {
+   "heading_count": 7,
+   "h1_h3_identical": true,
+   "h4_height_before_after": [
+    [
+     42.3,
+     42
+    ]
+   ],
+   "max_abs_y_shift_px": 0.7000000000000455
+  },
+  "normal@1280": {
+   "heading_count": 7,
+   "h1_h3_identical": true,
+   "h4_height_before_after": [
+    [
+     42.3,
+     42
+    ]
+   ],
+   "max_abs_y_shift_px": 0.7000000000000455
+  },
+  "tw_missing@390": {
+   "heading_count": 7,
+   "h1_h3_identical": true,
+   "h4_height_before_after": [
+    [
+     42.3,
+     42
+    ]
+   ],
+   "max_abs_y_shift_px": 1.6000000000003638
+  },
+  "tw_missing@768": {
+   "heading_count": 7,
+   "h1_h3_identical": true,
+   "h4_height_before_after": [
+    [
+     42.3,
+     42
+    ]
+   ],
+   "max_abs_y_shift_px": 0.7000000000000455
+  },
+  "tw_missing@1280": {
+   "heading_count": 7,
+   "h1_h3_identical": true,
+   "h4_height_before_after": [
+    [
+     42.3,
+     42
+    ]
+   ],
+   "max_abs_y_shift_px": 0.7000000000000455
+  },
+  "both_missing@390": {
+   "heading_count": 7,
+   "h1_h3_identical": true,
+   "h4_height_before_after": [
+    [
+     42.3,
+     42
+    ]
+   ],
+   "max_abs_y_shift_px": 1.6000000000001364
+  },
+  "both_missing@768": {
+   "heading_count": 7,
+   "h1_h3_identical": true,
+   "h4_height_before_after": [
+    [
+     42.3,
+     42
+    ]
+   ],
+   "max_abs_y_shift_px": 0.7000000000000455
+  },
+  "both_missing@1280": {
+   "heading_count": 7,
+   "h1_h3_identical": true,
+   "h4_height_before_after": [
+    [
+     42.3,
+     42
+    ]
+   ],
+   "max_abs_y_shift_px": 0.7000000000000455
+  }
+ }
+}
