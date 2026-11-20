@@ -286,6 +286,53 @@ def test_css_switches_between_sidebar_and_top_nav_at_one_breakpoint():
     assert "overflow" not in css.split("<style>")[1].split('[data-testid="stSidebarCollapseButton"]')[0]
 
 
+# ── 🌍 視覺批 2（`DEC-2026-11-11-02` V2）：非主導覽格的輔助字 12→13px（`type.caption`）；主導覽格 12px 不動 ──────────────────
+_AUX_SELECTORS = (".uv3-statusbar", ".uv3-footer", ".uv3-cta-note", ".uv3-nav-disabled .uv3-nav-soon")
+
+
+def _rule_body(css, selector):
+    """取 `selector{...}` 的內容（CSS 內 `{{`／`}}` 已展開成單層）；找不到 → AssertionError（不猜）。"""
+    m = re.search(r"(?:^|\n)" + re.escape(selector) + r"\{([^}]*)\}", css)
+    assert m, f"CSS 找不到規則 {selector}"
+    return m.group(1)
+
+
+def _aux_font_violations(css):
+    from ui_v3.design import theme
+
+    want = f"font-size:{theme.v('type.caption')}"
+    bad = [sel for sel in _AUX_SELECTORS if want not in _rule_body(css, sel)]
+    base = css.partition(f"@media (max-width:{nav.MOBILE_MAX_PX}px)")[0]
+    bad += [f"非導覽規則殘留 12px：{m}" for m in re.findall(r"[^{}\n]+\{[^}]*font-size:12px[^}]*\}", base)]
+    if "line-height:18px" not in _rule_body(css, ".uv3-statusbar"):
+        bad.append("Status Bar 行高不是 18px（13px 字改 1.5 倍行高會多占首屏）")
+    return bad
+
+
+def test_shell_aux_text_is_caption_13px_and_no_12px_remains_outside_the_mobile_top_nav():
+    css = nav.shell_css()
+    assert _aux_font_violations(css) == []
+    from ui_v3.design import theme
+
+    assert theme.v("type.caption") == "13px"
+    # 負控（記憶體內現編）：任一輔助字退回 12px／行高改 1.5 倍，都要被報
+    for sel in _AUX_SELECTORS:
+        body = _rule_body(css, sel)
+        mutated = css.replace(body, body.replace("font-size:13px", "font-size:12px"), 1)
+        assert _aux_font_violations(mutated), sel
+    assert _aux_font_violations(css.replace("line-height:18px", "line-height:1.5", 1))
+
+
+def test_mobile_top_nav_text_and_touch_sizes_are_unchanged_by_the_aux_batch():
+    """主導覽格（≤768 頁首五格）不動：頁名／未掛載格 12px、圖示 20px、「開發中」10px、最小高 60px、觸控下限 48px。"""
+    css = nav.shell_css()
+    mobile = css.partition(f"@media (max-width:{nav.MOBILE_MAX_PX}px)")[2]
+    assert mobile.count("font-size:12px") == 3 and "font-size:12px !important" in mobile       # NavLink 本體、其 <p>、未掛載格
+    assert ".uv3-tn-icon{font-size:20px;line-height:1}" in mobile and ".uv3-tn-soon{font-size:10px}" in mobile
+    assert f"min-height:{nav.TOP_NAV_HEIGHT_PX}px" in mobile and nav.TOP_NAV_HEIGHT_PX == 60 and nav.TOUCH_MIN_PX == 48
+    assert "font-size:13px" not in mobile
+
+
 def test_top_nav_is_not_a_second_router_and_uses_all_five_approved_labels():
     from ui_v3.pages import chrome
     import inspect
@@ -401,3 +448,31 @@ def test_shell_visible_text_has_no_engineering_leak(monkeypatch):
             assert leaks(visible) == [], (kw, leaks(visible))
         for b in at.sidebar.button:
             assert leaks(b.label) == []
+
+
+# ───────────────────────────── 🌍 狀態列標記（視覺批 2；與 Shell 同批鎖） ─────────────────────────────
+
+def test_status_row_markup_keeps_wording_and_wraps_source_and_date_as_units():
+    """`▸ 各項資料狀態` 每列：字樣與順序不變（逐字等於規則／字樣查表的結果）、暫時字樣標記仍在；來源與資料日各包成不拆開的單位。"""
+    import html as _html
+
+    import market_stubs as ms
+    from ui_v3.adapters import market_page as adapter
+    from ui_v3.pages import mkt
+
+    model = adapter.build_market_page(ms.view(), ms.table(), period="1Y")
+    ok_rows = [r for r in model.statuses if r.status == "ok"]
+    assert ok_rows, "fixture 應至少有一列已取得"
+    for row in ok_rows:
+        out = mkt.status_row_html(row)
+        plain = _html.unescape(re.sub(r"<[^>]+>", "", out))
+        assert plain == W.text("status_ok_row", label=W.text(row.label_key), source=row.source or "—", date=row.as_of or "—")
+        assert out.startswith('<div class="uv3-row uv3-status-row">') and 'data-pending-wording="status_ok_row"' in out
+        assert out.count('<span class="uv3-unit">') == 2 and f'<span class="uv3-unit">{_html.escape(row.as_of)}</span>' in out
+    non_ok = [r for r in model.statuses if r.status != "ok"]
+    for row in non_ok:
+        assert mkt.status_row_html(row).startswith('<div class="uv3-row uv3-status-row">')
+    css = mkt.CSS
+    assert ".uv3-status-row{word-break:keep-all;overflow-wrap:anywhere;text-wrap:balance}" in css
+    assert ".uv3-unit{display:inline-block;max-width:100%}" in css
+    assert "white-space:nowrap" not in css      # 不用 nowrap：比一整行寬的來源名稱要能折，不得橫向溢出

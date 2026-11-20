@@ -1,0 +1,2743 @@
+{
+ "normal_390": {
+  "vw": 390,
+  "vh": 844,
+  "docScrollW": 390,
+  "foldPx": 199.8,
+  "chart": {
+   "x": 17,
+   "y": 644.2,
+   "w": 356,
+   "h": 237.3
+  },
+  "statusBar": {
+   "x": 16,
+   "y": 147.4,
+   "w": 358,
+   "h": 20,
+   "fontSize": "13px",
+   "lineHeight": "18px",
+   "scrollW": 358,
+   "clientW": 358,
+   "lines": 1,
+   "tagFs": {
+    "fontSize": "13px",
+    "lineHeight": "18px"
+   },
+   "childRects": [
+    {
+     "x": 16,
+     "y": 147.4,
+     "w": 69.1,
+     "h": 20
+    },
+    {
+     "x": 95.1,
+     "y": 148.4,
+     "w": 100.6,
+     "h": 18
+    }
+   ]
+  },
+  "footer": {
+   "x": 16,
+   "y": 2081.1,
+   "w": 358,
+   "h": 41.6,
+   "fontSize": "13px",
+   "lineHeight": "20.8px",
+   "lines": 2
+  },
+  "sideNavSoon": null,
+  "ctaNote": null,
+  "sideBlock": null,
+  "topNavP": {
+   "fontSize": "12px",
+   "lineHeight": "14.4px"
+  },
+  "topNavDisabled": {
+   "fontSize": "12px",
+   "lineHeight": "14.4px"
+  },
+  "topNavSoon": {
+   "fontSize": "10px",
+   "lineHeight": "12px"
+  },
+  "sideNavRows": [],
+  "topNavCells": [
+   {
+    "x": 16,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 87.6,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 159.2,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 230.8,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 302.4,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   }
+  ],
+  "topNavBox": {
+   "x": 16,
+   "y": 70.4,
+   "w": 358,
+   "h": 61
+  },
+  "fontSizes": {
+   "14.0": {
+    "count": 28,
+    "samples": [
+     "SPAN:Deploy",
+     "uv3-chip uv3-tone-grey:⬜ 無法判定",
+     "uv3-chip uv3-tone-grey:⬜ 無法判定",
+     "uv3-chip uv3-tone-grey:⬜ 門檻待裁示"
+    ]
+   },
+   "14.4": {
+    "count": 1,
+    "samples": [
+     "st-emotion-cache-hdmkwy ewh6ko:🌍"
+    ]
+   },
+   "12.0": {
+    "count": 5,
+    "samples": [
+     "P:市場",
+     "SPAN:資產",
+     "SPAN:找基金",
+     "SPAN:AI"
+    ]
+   },
+   "20.0": {
+    "count": 6,
+    "samples": [
+     "uv3-tn-icon:💼",
+     "uv3-tn-icon:🔍",
+     "uv3-tn-icon:🤖",
+     "uv3-tn-icon:⚙️"
+    ]
+   },
+   "10.0": {
+    "count": 4,
+    "samples": [
+     "uv3-tn-soon:開發中",
+     "uv3-tn-soon:開發中",
+     "uv3-tn-soon:尚未開放",
+     "uv3-tn-soon:開發中"
+    ]
+   },
+   "13.0": {
+    "count": 25,
+    "samples": [
+     "uv3-tag:PREVIEW",
+     "SPAN:更新：11-03 14:00",
+     "uv3-label:市場狀態",
+     "uv3-label:是否需注意"
+    ]
+   },
+   "27.2": {
+    "count": 1,
+    "samples": [
+     "SPAN:🌍 市場與趨勢"
+    ]
+   },
+   "16.0": {
+    "count": 44,
+    "samples": [
+     "SPAN:暫無完整市場綜合判定（尚未建",
+     "uv3-pending:台股",
+     "uv3-pending:近1Y +3.52%",
+     "uv3-pending:｜"
+    ]
+   },
+   "19.2": {
+    "count": 1,
+    "samples": [
+     "uv3-pending:台股 vs S&P 500（"
+    ]
+   },
+   "15.0": {
+    "count": 7,
+    "samples": [
+     "uv3-pending:風險｜VIX",
+     "uv3-pending:利率與信用",
+     "uv3-pending:｜",
+     "uv3-pending:期限利差"
+    ]
+   }
+  },
+  "svgText": [
+   {
+    "fs": "11",
+    "scale": 0.989,
+    "px": 10.88
+   },
+   {
+    "fs": "11",
+    "scale": 0.989,
+    "px": 10.88
+   },
+   {
+    "fs": "11",
+    "scale": 0.989,
+    "px": 10.88
+   },
+   {
+    "fs": "11",
+    "scale": 0.989,
+    "px": 10.88
+   },
+   {
+    "fs": "11",
+    "scale": 0.989,
+    "px": 10.88
+   },
+   {
+    "fs": "12",
+    "scale": 0.989,
+    "px": 11.87
+   },
+   {
+    "fs": "12",
+    "scale": 0.989,
+    "px": 11.87
+   }
+  ],
+  "expanders": [
+   {
+    "title": "keyboard_arrow_down\n\n▸ 來源與限制",
+    "open": true,
+    "summary": {
+     "x": 30,
+     "y": -932.9,
+     "w": 330,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 30,
+     "y": -894.9,
+     "w": 330,
+     "h": 231.1,
+     "scrollW": 330,
+     "clientW": 330
+    },
+    "rows": []
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 尚未取得（7 項）",
+    "open": true,
+    "summary": {
+     "x": 17,
+     "y": 285.1,
+     "w": 356,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 17,
+     "y": 323.1,
+     "w": 356,
+     "h": 242.8,
+     "scrollW": 356,
+     "clientW": 356
+    },
+    "rows": [
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "台股成交量 ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "市場統計 ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "NASDAQ ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI World ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI EM ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "EPS×PE 情境 ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "implied trailing 盈餘 ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     }
+    ]
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 各項資料狀態",
+    "open": true,
+    "summary": {
+     "x": 17,
+     "y": 583.9,
+     "w": 356,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 17,
+     "y": 621.9,
+     "w": 356,
+     "h": 289,
+     "scrollW": 356,
+     "clientW": 356
+    },
+    "rows": [
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "台股：取得 ｜ 來源 Yahoo Finance (^TWII) ｜ 資料日 2026-11-02",
+      "h": 49.6,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 2,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "S&P 500：取得 ｜ 來源 Yahoo Finance (^GSPC) ｜ 資料日 2026-11-02",
+      "h": 49.6,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 2,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "VIX：取得 ｜ 來源 Yahoo:^VIX ｜ 資料日 2026-11-02",
+      "h": 49.6,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 2,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美10Y：取得 ｜ 來源 FRED (DGS10) ｜ 資料日 2026-11-02",
+      "h": 49.6,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 2,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美2Y：取得 ｜ 來源 FRED (DGS2) ｜ 資料日 2026-11-02",
+      "h": 49.6,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 2,
+      "scrollW": 324,
+      "clientW": 324
+     }
+    ]
+   }
+  ],
+  "docScrollW_afterOpen": 390
+ },
+ "normal_768": {
+  "vw": 768,
+  "vh": 844,
+  "docScrollW": 768,
+  "foldPx": 249.4,
+  "chart": {
+   "x": 17,
+   "y": 594.6,
+   "w": 720,
+   "h": 480
+  },
+  "statusBar": {
+   "x": 16,
+   "y": 147.4,
+   "w": 736,
+   "h": 20,
+   "fontSize": "13px",
+   "lineHeight": "18px",
+   "scrollW": 736,
+   "clientW": 736,
+   "lines": 1,
+   "tagFs": {
+    "fontSize": "13px",
+    "lineHeight": "18px"
+   },
+   "childRects": [
+    {
+     "x": 16,
+     "y": 147.4,
+     "w": 69.1,
+     "h": 20
+    },
+    {
+     "x": 95.1,
+     "y": 148.4,
+     "w": 100.6,
+     "h": 18
+    }
+   ]
+  },
+  "footer": {
+   "x": 16,
+   "y": 1816.1,
+   "w": 736,
+   "h": 20.8,
+   "fontSize": "13px",
+   "lineHeight": "20.8px",
+   "lines": 1
+  },
+  "sideNavSoon": null,
+  "ctaNote": null,
+  "sideBlock": null,
+  "topNavP": {
+   "fontSize": "12px",
+   "lineHeight": "14.4px"
+  },
+  "topNavDisabled": {
+   "fontSize": "12px",
+   "lineHeight": "14.4px"
+  },
+  "topNavSoon": {
+   "fontSize": "10px",
+   "lineHeight": "12px"
+  },
+  "sideNavRows": [],
+  "topNavCells": [
+   {
+    "x": 16,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 163.2,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 310.4,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 457.6,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 604.8,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   }
+  ],
+  "topNavBox": {
+   "x": 16,
+   "y": 70.4,
+   "w": 736,
+   "h": 61
+  },
+  "fontSizes": {
+   "14.0": {
+    "count": 28,
+    "samples": [
+     "SPAN:Deploy",
+     "uv3-chip uv3-tone-grey:⬜ 無法判定",
+     "uv3-chip uv3-tone-grey:⬜ 無法判定",
+     "uv3-chip uv3-tone-grey:⬜ 門檻待裁示"
+    ]
+   },
+   "14.4": {
+    "count": 1,
+    "samples": [
+     "st-emotion-cache-hdmkwy ewh6ko:🌍"
+    ]
+   },
+   "12.0": {
+    "count": 5,
+    "samples": [
+     "P:市場",
+     "SPAN:資產",
+     "SPAN:找基金",
+     "SPAN:AI"
+    ]
+   },
+   "20.0": {
+    "count": 6,
+    "samples": [
+     "uv3-tn-icon:💼",
+     "uv3-tn-icon:🔍",
+     "uv3-tn-icon:🤖",
+     "uv3-tn-icon:⚙️"
+    ]
+   },
+   "10.0": {
+    "count": 4,
+    "samples": [
+     "uv3-tn-soon:開發中",
+     "uv3-tn-soon:開發中",
+     "uv3-tn-soon:尚未開放",
+     "uv3-tn-soon:開發中"
+    ]
+   },
+   "13.0": {
+    "count": 25,
+    "samples": [
+     "uv3-tag:PREVIEW",
+     "SPAN:更新：11-03 14:00",
+     "uv3-label:市場狀態",
+     "uv3-label:是否需注意"
+    ]
+   },
+   "27.2": {
+    "count": 1,
+    "samples": [
+     "SPAN:🌍 市場與趨勢"
+    ]
+   },
+   "16.0": {
+    "count": 44,
+    "samples": [
+     "SPAN:暫無完整市場綜合判定（尚未建",
+     "uv3-pending:台股",
+     "uv3-pending:近1Y +3.52%",
+     "uv3-pending:｜"
+    ]
+   },
+   "19.2": {
+    "count": 1,
+    "samples": [
+     "uv3-pending:台股 vs S&P 500（"
+    ]
+   },
+   "15.0": {
+    "count": 7,
+    "samples": [
+     "uv3-pending:風險｜VIX",
+     "uv3-pending:利率與信用",
+     "uv3-pending:｜",
+     "uv3-pending:期限利差"
+    ]
+   }
+  },
+  "svgText": [
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "12",
+    "scale": 2,
+    "px": 24
+   },
+   {
+    "fs": "12",
+    "scale": 2,
+    "px": 24
+   }
+  ],
+  "expanders": [
+   {
+    "title": "keyboard_arrow_down\n\n▸ 來源與限制",
+    "open": true,
+    "summary": {
+     "x": 30,
+     "y": -394.8,
+     "w": 708,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 30,
+     "y": -356.8,
+     "w": 708,
+     "h": 172.6,
+     "scrollW": 708,
+     "clientW": 708
+    },
+    "rows": []
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 尚未取得（7 項）",
+    "open": true,
+    "summary": {
+     "x": 17,
+     "y": 306.5,
+     "w": 734,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 17,
+     "y": 344.5,
+     "w": 734,
+     "h": 242.8,
+     "scrollW": 734,
+     "clientW": 734
+    },
+    "rows": [
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "台股成交量 ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "市場統計 ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "NASDAQ ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI World ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI EM ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "EPS×PE 情境 ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "implied trailing 盈餘 ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     }
+    ]
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 各項資料狀態",
+    "open": true,
+    "summary": {
+     "x": 17,
+     "y": 605.3,
+     "w": 734,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 17,
+     "y": 643.3,
+     "w": 734,
+     "h": 165,
+     "scrollW": 734,
+     "clientW": 734
+    },
+    "rows": [
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "台股：取得 ｜ 來源 Yahoo Finance (^TWII) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "S&P 500：取得 ｜ 來源 Yahoo Finance (^GSPC) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "VIX：取得 ｜ 來源 Yahoo:^VIX ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美10Y：取得 ｜ 來源 FRED (DGS10) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美2Y：取得 ｜ 來源 FRED (DGS2) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     }
+    ]
+   }
+  ],
+  "docScrollW_afterOpen": 768
+ },
+ "normal_1280": {
+  "vw": 1280,
+  "vh": 800,
+  "docScrollW": 1280,
+  "foldPx": 266.4,
+  "chart": {
+   "x": 430,
+   "y": 533.6,
+   "w": 720,
+   "h": 480
+  },
+  "statusBar": {
+   "x": 316,
+   "y": 86.4,
+   "w": 948,
+   "h": 20,
+   "fontSize": "13px",
+   "lineHeight": "18px",
+   "scrollW": 948,
+   "clientW": 948,
+   "lines": 1,
+   "tagFs": {
+    "fontSize": "13px",
+    "lineHeight": "18px"
+   },
+   "childRects": [
+    {
+     "x": 316,
+     "y": 86.4,
+     "w": 69.1,
+     "h": 20
+    },
+    {
+     "x": 395.1,
+     "y": 87.4,
+     "w": 100.6,
+     "h": 18
+    }
+   ]
+  },
+  "footer": {
+   "x": 316,
+   "y": 1746.4,
+   "w": 948,
+   "h": 20.8,
+   "fontSize": "13px",
+   "lineHeight": "20.8px",
+   "lines": 1
+  },
+  "sideNavSoon": {
+   "x": 204,
+   "y": 116.3,
+   "w": 53,
+   "h": 22.8,
+   "fontSize": "13px",
+   "lineHeight": "20.8px"
+  },
+  "ctaNote": {
+   "x": 30,
+   "y": 431.4,
+   "w": 239,
+   "h": 20.8,
+   "fontSize": "13px",
+   "lineHeight": "20.8px"
+  },
+  "sideBlock": {
+   "x": 30,
+   "y": 308.5,
+   "w": 239,
+   "h": 58.9,
+   "fontSize": "13px",
+   "lineHeight": "20.15px"
+  },
+  "topNavP": null,
+  "topNavDisabled": null,
+  "topNavSoon": null,
+  "sideNavRows": [
+   {
+    "t": "link",
+    "x": 30,
+    "y": 43.7,
+    "w": 239,
+    "h": 48
+   },
+   {
+    "t": "disabled",
+    "x": 30,
+    "y": 103.7,
+    "w": 239,
+    "h": 48
+   },
+   {
+    "t": "disabled",
+    "x": 30,
+    "y": 151.7,
+    "w": 239,
+    "h": 48
+   },
+   {
+    "t": "disabled",
+    "x": 30,
+    "y": 199.7,
+    "w": 239,
+    "h": 48
+   },
+   {
+    "t": "disabled",
+    "x": 30,
+    "y": 247.7,
+    "w": 239,
+    "h": 48
+   }
+  ],
+  "topNavCells": null,
+  "topNavBox": null,
+  "fontSizes": {
+   "17.0": {
+    "count": 1,
+    "samples": [
+     "uv3-brand:基金投資儀表板"
+    ]
+   },
+   "14.4": {
+    "count": 1,
+    "samples": [
+     "st-emotion-cache-1c6luob ewh6k:🌍"
+    ]
+   },
+   "14.0": {
+    "count": 30,
+    "samples": [
+     "P:市場與趨勢",
+     "P:更新資料",
+     "SPAN:Deploy",
+     "uv3-chip uv3-tone-grey:⬜ 無法判定"
+    ]
+   },
+   "15.0": {
+    "count": 15,
+    "samples": [
+     "SPAN:💼",
+     "SPAN:我的資產",
+     "SPAN:🔍",
+     "SPAN:找基金"
+    ]
+   },
+   "13.0": {
+    "count": 34,
+    "samples": [
+     "uv3-nav-soon:開發中",
+     "uv3-nav-soon:開發中",
+     "uv3-nav-soon:尚未開放",
+     "uv3-nav-soon:開發中"
+    ]
+   },
+   "27.2": {
+    "count": 1,
+    "samples": [
+     "SPAN:🌍 市場與趨勢"
+    ]
+   },
+   "16.0": {
+    "count": 44,
+    "samples": [
+     "SPAN:暫無完整市場綜合判定（尚未建",
+     "uv3-pending:台股",
+     "uv3-pending:近1Y +3.52%",
+     "uv3-pending:｜"
+    ]
+   },
+   "19.2": {
+    "count": 1,
+    "samples": [
+     "uv3-pending:台股 vs S&P 500（"
+    ]
+   },
+   "20.0": {
+    "count": 2,
+    "samples": [
+     "uv3-metric:21.23",
+     "uv3-metric:0.87pp"
+    ]
+   }
+  },
+  "svgText": [
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "12",
+    "scale": 2,
+    "px": 24
+   },
+   {
+    "fs": "12",
+    "scale": 2,
+    "px": 24
+   }
+  ],
+  "expanders": [
+   {
+    "title": "keyboard_arrow_down\n\n▸ 來源與限制",
+    "open": true,
+    "summary": {
+     "x": 330,
+     "y": -430.8,
+     "w": 920,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 330,
+     "y": -392.8,
+     "w": 920,
+     "h": 172.6,
+     "scrollW": 920,
+     "clientW": 920
+    },
+    "rows": []
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 尚未取得（7 項）",
+    "open": true,
+    "summary": {
+     "x": 317,
+     "y": 261.9,
+     "w": 946,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 317,
+     "y": 299.9,
+     "w": 946,
+     "h": 242.8,
+     "scrollW": 946,
+     "clientW": 946
+    },
+    "rows": [
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "台股成交量 ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "市場統計 ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "NASDAQ ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI World ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI EM ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "EPS×PE 情境 ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "implied trailing 盈餘 ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     }
+    ]
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 各項資料狀態",
+    "open": true,
+    "summary": {
+     "x": 317,
+     "y": 560.7,
+     "w": 946,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 317,
+     "y": 598.7,
+     "w": 946,
+     "h": 165,
+     "scrollW": 946,
+     "clientW": 946
+    },
+    "rows": [
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "台股：取得 ｜ 來源 Yahoo Finance (^TWII) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "S&P 500：取得 ｜ 來源 Yahoo Finance (^GSPC) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "VIX：取得 ｜ 來源 Yahoo:^VIX ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美10Y：取得 ｜ 來源 FRED (DGS10) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美2Y：取得 ｜ 來源 FRED (DGS2) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     }
+    ]
+   }
+  ],
+  "docScrollW_afterOpen": 1280
+ },
+ "tw_missing_390": {
+  "vw": 390,
+  "vh": 844,
+  "docScrollW": 390,
+  "foldPx": 129.2,
+  "chart": {
+   "x": 17,
+   "y": 714.8,
+   "w": 356,
+   "h": 237.3
+  },
+  "statusBar": {
+   "x": 16,
+   "y": 147.4,
+   "w": 358,
+   "h": 40,
+   "fontSize": "13px",
+   "lineHeight": "18px",
+   "scrollW": 358,
+   "clientW": 358,
+   "lines": 2,
+   "tagFs": {
+    "fontSize": "13px",
+    "lineHeight": "18px"
+   },
+   "childRects": [
+    {
+     "x": 16,
+     "y": 147.4,
+     "w": 69.1,
+     "h": 20
+    },
+    {
+     "x": 95.1,
+     "y": 148.4,
+     "w": 213.1,
+     "h": 18
+    },
+    {
+     "x": 16,
+     "y": 169.4,
+     "w": 100.6,
+     "h": 18
+    }
+   ]
+  },
+  "footer": {
+   "x": 16,
+   "y": 2151.8,
+   "w": 358,
+   "h": 41.6,
+   "fontSize": "13px",
+   "lineHeight": "20.8px",
+   "lines": 2
+  },
+  "sideNavSoon": null,
+  "ctaNote": null,
+  "sideBlock": null,
+  "topNavP": {
+   "fontSize": "12px",
+   "lineHeight": "14.4px"
+  },
+  "topNavDisabled": {
+   "fontSize": "12px",
+   "lineHeight": "14.4px"
+  },
+  "topNavSoon": {
+   "fontSize": "10px",
+   "lineHeight": "12px"
+  },
+  "sideNavRows": [],
+  "topNavCells": [
+   {
+    "x": 16,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 87.6,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 159.2,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 230.8,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   },
+   {
+    "x": 302.4,
+    "y": 70.4,
+    "w": 71.6,
+    "h": 60
+   }
+  ],
+  "topNavBox": {
+   "x": 16,
+   "y": 70.4,
+   "w": 358,
+   "h": 61
+  },
+  "fontSizes": {
+   "14.0": {
+    "count": 30,
+    "samples": [
+     "SPAN:Deploy",
+     "uv3-chip uv3-tone-grey:⬜ 無法判定",
+     "uv3-chip uv3-tone-grey:⬜ 無法判定",
+     "uv3-chip uv3-tone-grey:◇ 資料未備"
+    ]
+   },
+   "14.4": {
+    "count": 1,
+    "samples": [
+     "st-emotion-cache-hdmkwy ewh6ko:🌍"
+    ]
+   },
+   "12.0": {
+    "count": 5,
+    "samples": [
+     "P:市場",
+     "SPAN:資產",
+     "SPAN:找基金",
+     "SPAN:AI"
+    ]
+   },
+   "20.0": {
+    "count": 6,
+    "samples": [
+     "uv3-tn-icon:💼",
+     "uv3-tn-icon:🔍",
+     "uv3-tn-icon:🤖",
+     "uv3-tn-icon:⚙️"
+    ]
+   },
+   "10.0": {
+    "count": 4,
+    "samples": [
+     "uv3-tn-soon:開發中",
+     "uv3-tn-soon:開發中",
+     "uv3-tn-soon:尚未開放",
+     "uv3-tn-soon:開發中"
+    ]
+   },
+   "13.0": {
+    "count": 30,
+    "samples": [
+     "uv3-tag:PREVIEW",
+     "SPAN:◇ 部分資料未取得（4／5 ",
+     "SPAN:更新：11-03 14:00",
+     "uv3-label:市場狀態"
+    ]
+   },
+   "27.2": {
+    "count": 1,
+    "samples": [
+     "SPAN:🌍 市場與趨勢"
+    ]
+   },
+   "16.0": {
+    "count": 40,
+    "samples": [
+     "SPAN:暫無完整市場綜合判定（尚未建",
+     "uv3-evidence:台股",
+     "uv3-pending:｜",
+     "uv3-pending:S&P 500"
+    ]
+   },
+   "19.2": {
+    "count": 1,
+    "samples": [
+     "uv3-pending:台股 vs S&P 500（"
+    ]
+   },
+   "15.0": {
+    "count": 7,
+    "samples": [
+     "uv3-pending:風險｜VIX",
+     "uv3-pending:利率與信用",
+     "uv3-pending:｜",
+     "uv3-pending:期限利差"
+    ]
+   }
+  },
+  "svgText": [
+   {
+    "fs": "11",
+    "scale": 0.989,
+    "px": 10.88
+   },
+   {
+    "fs": "11",
+    "scale": 0.989,
+    "px": 10.88
+   },
+   {
+    "fs": "11",
+    "scale": 0.989,
+    "px": 10.88
+   },
+   {
+    "fs": "11",
+    "scale": 0.989,
+    "px": 10.88
+   },
+   {
+    "fs": "11",
+    "scale": 0.989,
+    "px": 10.88
+   },
+   {
+    "fs": "12",
+    "scale": 0.989,
+    "px": 11.87
+   }
+  ],
+  "expanders": [
+   {
+    "title": "keyboard_arrow_down\n\n▸ 來源與限制",
+    "open": true,
+    "summary": {
+     "x": 30,
+     "y": -910.2,
+     "w": 330,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 30,
+     "y": -872.2,
+     "w": 330,
+     "h": 209.2,
+     "scrollW": 330,
+     "clientW": 330
+    },
+    "rows": []
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 尚未取得（7 項）",
+    "open": true,
+    "summary": {
+     "x": 17,
+     "y": 285.9,
+     "w": 356,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 17,
+     "y": 323.9,
+     "w": 356,
+     "h": 242.8,
+     "scrollW": 356,
+     "clientW": 356
+    },
+    "rows": [
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "台股成交量 ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "市場統計 ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "NASDAQ ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI World ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI EM ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "EPS×PE 情境 ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "implied trailing 盈餘 ◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     }
+    ]
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 各項資料狀態",
+    "open": true,
+    "summary": {
+     "x": 17,
+     "y": 584.7,
+     "w": 356,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 17,
+     "y": 622.7,
+     "w": 356,
+     "h": 267.1,
+     "scrollW": 356,
+     "clientW": 356
+    },
+    "rows": [
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "台股：◇ 資料未備",
+      "h": 27.7,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "S&P 500：取得 ｜ 來源 Yahoo Finance (^GSPC) ｜ 資料日 2026-11-02",
+      "h": 49.6,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 2,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "VIX：取得 ｜ 來源 Yahoo:^VIX ｜ 資料日 2026-11-02",
+      "h": 49.6,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 2,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美10Y：取得 ｜ 來源 FRED (DGS10) ｜ 資料日 2026-11-02",
+      "h": 49.6,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 2,
+      "scrollW": 324,
+      "clientW": 324
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美2Y：取得 ｜ 來源 FRED (DGS2) ｜ 資料日 2026-11-02",
+      "h": 49.6,
+      "w": 324,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 2,
+      "scrollW": 324,
+      "clientW": 324
+     }
+    ]
+   }
+  ],
+  "docScrollW_afterOpen": 390
+ },
+ "tw_missing_768": {
+  "vw": 768,
+  "vh": 844,
+  "docScrollW": 768,
+  "foldPx": 198.8,
+  "chart": {
+   "x": 17,
+   "y": 645.3,
+   "w": 720,
+   "h": 480
+  },
+  "statusBar": {
+   "x": 16,
+   "y": 147.4,
+   "w": 736,
+   "h": 20,
+   "fontSize": "13px",
+   "lineHeight": "18px",
+   "scrollW": 736,
+   "clientW": 736,
+   "lines": 1,
+   "tagFs": {
+    "fontSize": "13px",
+    "lineHeight": "18px"
+   },
+   "childRects": [
+    {
+     "x": 16,
+     "y": 147.4,
+     "w": 69.1,
+     "h": 20
+    },
+    {
+     "x": 95.1,
+     "y": 148.4,
+     "w": 213.1,
+     "h": 18
+    },
+    {
+     "x": 318.3,
+     "y": 148.4,
+     "w": 100.6,
+     "h": 18
+    }
+   ]
+  },
+  "footer": {
+   "x": 16,
+   "y": 1866.8,
+   "w": 736,
+   "h": 20.8,
+   "fontSize": "13px",
+   "lineHeight": "20.8px",
+   "lines": 1
+  },
+  "sideNavSoon": null,
+  "ctaNote": null,
+  "sideBlock": null,
+  "topNavP": {
+   "fontSize": "12px",
+   "lineHeight": "14.4px"
+  },
+  "topNavDisabled": {
+   "fontSize": "12px",
+   "lineHeight": "14.4px"
+  },
+  "topNavSoon": {
+   "fontSize": "10px",
+   "lineHeight": "12px"
+  },
+  "sideNavRows": [],
+  "topNavCells": [
+   {
+    "x": 16,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 163.2,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 310.4,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 457.6,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   },
+   {
+    "x": 604.8,
+    "y": 70.4,
+    "w": 147.2,
+    "h": 60
+   }
+  ],
+  "topNavBox": {
+   "x": 16,
+   "y": 70.4,
+   "w": 736,
+   "h": 61
+  },
+  "fontSizes": {
+   "14.0": {
+    "count": 30,
+    "samples": [
+     "SPAN:Deploy",
+     "uv3-chip uv3-tone-grey:⬜ 無法判定",
+     "uv3-chip uv3-tone-grey:⬜ 無法判定",
+     "uv3-chip uv3-tone-grey:◇ 資料未備"
+    ]
+   },
+   "14.4": {
+    "count": 1,
+    "samples": [
+     "st-emotion-cache-hdmkwy ewh6ko:🌍"
+    ]
+   },
+   "12.0": {
+    "count": 5,
+    "samples": [
+     "P:市場",
+     "SPAN:資產",
+     "SPAN:找基金",
+     "SPAN:AI"
+    ]
+   },
+   "20.0": {
+    "count": 6,
+    "samples": [
+     "uv3-tn-icon:💼",
+     "uv3-tn-icon:🔍",
+     "uv3-tn-icon:🤖",
+     "uv3-tn-icon:⚙️"
+    ]
+   },
+   "10.0": {
+    "count": 4,
+    "samples": [
+     "uv3-tn-soon:開發中",
+     "uv3-tn-soon:開發中",
+     "uv3-tn-soon:尚未開放",
+     "uv3-tn-soon:開發中"
+    ]
+   },
+   "13.0": {
+    "count": 30,
+    "samples": [
+     "uv3-tag:PREVIEW",
+     "SPAN:◇ 部分資料未取得（4／5 ",
+     "SPAN:更新：11-03 14:00",
+     "uv3-label:市場狀態"
+    ]
+   },
+   "27.2": {
+    "count": 1,
+    "samples": [
+     "SPAN:🌍 市場與趨勢"
+    ]
+   },
+   "16.0": {
+    "count": 40,
+    "samples": [
+     "SPAN:暫無完整市場綜合判定（尚未建",
+     "uv3-evidence:台股",
+     "uv3-pending:｜",
+     "uv3-pending:S&P 500"
+    ]
+   },
+   "19.2": {
+    "count": 1,
+    "samples": [
+     "uv3-pending:台股 vs S&P 500（"
+    ]
+   },
+   "15.0": {
+    "count": 7,
+    "samples": [
+     "uv3-pending:風險｜VIX",
+     "uv3-pending:利率與信用",
+     "uv3-pending:｜",
+     "uv3-pending:期限利差"
+    ]
+   }
+  },
+  "svgText": [
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "12",
+    "scale": 2,
+    "px": 24
+   }
+  ],
+  "expanders": [
+   {
+    "title": "keyboard_arrow_down\n\n▸ 來源與限制",
+    "open": true,
+    "summary": {
+     "x": 30,
+     "y": -373.2,
+     "w": 708,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 30,
+     "y": -335.2,
+     "w": 708,
+     "h": 150.7,
+     "scrollW": 708,
+     "clientW": 708
+    },
+    "rows": []
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 尚未取得（7 項）",
+    "open": true,
+    "summary": {
+     "x": 17,
+     "y": 306.3,
+     "w": 734,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 17,
+     "y": 344.3,
+     "w": 734,
+     "h": 242.8,
+     "scrollW": 734,
+     "clientW": 734
+    },
+    "rows": [
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "台股成交量 ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "市場統計 ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "NASDAQ ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI World ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI EM ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "EPS×PE 情境 ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "implied trailing 盈餘 ◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     }
+    ]
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 各項資料狀態",
+    "open": true,
+    "summary": {
+     "x": 17,
+     "y": 605.1,
+     "w": 734,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 17,
+     "y": 643.1,
+     "w": 734,
+     "h": 167.9,
+     "scrollW": 734,
+     "clientW": 734
+    },
+    "rows": [
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "台股：◇ 資料未備",
+      "h": 27.7,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "S&P 500：取得 ｜ 來源 Yahoo Finance (^GSPC) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "VIX：取得 ｜ 來源 Yahoo:^VIX ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美10Y：取得 ｜ 來源 FRED (DGS10) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美2Y：取得 ｜ 來源 FRED (DGS2) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 702,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 702,
+      "clientW": 702
+     }
+    ]
+   }
+  ],
+  "docScrollW_afterOpen": 768
+ },
+ "tw_missing_1280": {
+  "vw": 1280,
+  "vh": 800,
+  "docScrollW": 1280,
+  "foldPx": 215.8,
+  "chart": {
+   "x": 430,
+   "y": 584.3,
+   "w": 720,
+   "h": 480
+  },
+  "statusBar": {
+   "x": 316,
+   "y": 86.4,
+   "w": 948,
+   "h": 20,
+   "fontSize": "13px",
+   "lineHeight": "18px",
+   "scrollW": 948,
+   "clientW": 948,
+   "lines": 1,
+   "tagFs": {
+    "fontSize": "13px",
+    "lineHeight": "18px"
+   },
+   "childRects": [
+    {
+     "x": 316,
+     "y": 86.4,
+     "w": 69.1,
+     "h": 20
+    },
+    {
+     "x": 395.1,
+     "y": 87.4,
+     "w": 213.1,
+     "h": 18
+    },
+    {
+     "x": 618.3,
+     "y": 87.4,
+     "w": 100.6,
+     "h": 18
+    }
+   ]
+  },
+  "footer": {
+   "x": 316,
+   "y": 1797.1,
+   "w": 948,
+   "h": 20.8,
+   "fontSize": "13px",
+   "lineHeight": "20.8px",
+   "lines": 1
+  },
+  "sideNavSoon": {
+   "x": 204,
+   "y": 116.3,
+   "w": 53,
+   "h": 22.8,
+   "fontSize": "13px",
+   "lineHeight": "20.8px"
+  },
+  "ctaNote": {
+   "x": 30,
+   "y": 455.5,
+   "w": 239,
+   "h": 20.8,
+   "fontSize": "13px",
+   "lineHeight": "20.8px"
+  },
+  "sideBlock": {
+   "x": 30,
+   "y": 308.5,
+   "w": 239,
+   "h": 83,
+   "fontSize": "13px",
+   "lineHeight": "20.15px"
+  },
+  "topNavP": null,
+  "topNavDisabled": null,
+  "topNavSoon": null,
+  "sideNavRows": [
+   {
+    "t": "link",
+    "x": 30,
+    "y": 43.7,
+    "w": 239,
+    "h": 48
+   },
+   {
+    "t": "disabled",
+    "x": 30,
+    "y": 103.7,
+    "w": 239,
+    "h": 48
+   },
+   {
+    "t": "disabled",
+    "x": 30,
+    "y": 151.7,
+    "w": 239,
+    "h": 48
+   },
+   {
+    "t": "disabled",
+    "x": 30,
+    "y": 199.7,
+    "w": 239,
+    "h": 48
+   },
+   {
+    "t": "disabled",
+    "x": 30,
+    "y": 247.7,
+    "w": 239,
+    "h": 48
+   }
+  ],
+  "topNavCells": null,
+  "topNavBox": null,
+  "fontSizes": {
+   "17.0": {
+    "count": 1,
+    "samples": [
+     "uv3-brand:基金投資儀表板"
+    ]
+   },
+   "14.4": {
+    "count": 1,
+    "samples": [
+     "st-emotion-cache-1c6luob ewh6k:🌍"
+    ]
+   },
+   "14.0": {
+    "count": 32,
+    "samples": [
+     "P:市場與趨勢",
+     "P:更新資料",
+     "SPAN:Deploy",
+     "uv3-chip uv3-tone-grey:⬜ 無法判定"
+    ]
+   },
+   "15.0": {
+    "count": 15,
+    "samples": [
+     "SPAN:💼",
+     "SPAN:我的資產",
+     "SPAN:🔍",
+     "SPAN:找基金"
+    ]
+   },
+   "13.0": {
+    "count": 40,
+    "samples": [
+     "uv3-nav-soon:開發中",
+     "uv3-nav-soon:開發中",
+     "uv3-nav-soon:尚未開放",
+     "uv3-nav-soon:開發中"
+    ]
+   },
+   "27.2": {
+    "count": 1,
+    "samples": [
+     "SPAN:🌍 市場與趨勢"
+    ]
+   },
+   "16.0": {
+    "count": 40,
+    "samples": [
+     "SPAN:暫無完整市場綜合判定（尚未建",
+     "uv3-evidence:台股",
+     "uv3-pending:｜",
+     "uv3-pending:S&P 500"
+    ]
+   },
+   "19.2": {
+    "count": 1,
+    "samples": [
+     "uv3-pending:台股 vs S&P 500（"
+    ]
+   },
+   "20.0": {
+    "count": 2,
+    "samples": [
+     "uv3-metric:21.23",
+     "uv3-metric:0.87pp"
+    ]
+   }
+  },
+  "svgText": [
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "11",
+    "scale": 2,
+    "px": 22
+   },
+   {
+    "fs": "12",
+    "scale": 2,
+    "px": 24
+   }
+  ],
+  "expanders": [
+   {
+    "title": "keyboard_arrow_down\n\n▸ 來源與限制",
+    "open": true,
+    "summary": {
+     "x": 330,
+     "y": -408.2,
+     "w": 920,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 330,
+     "y": -370.2,
+     "w": 920,
+     "h": 150.7,
+     "scrollW": 920,
+     "clientW": 920
+    },
+    "rows": []
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 尚未取得（7 項）",
+    "open": true,
+    "summary": {
+     "x": 317,
+     "y": 262.6,
+     "w": 946,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 317,
+     "y": 300.6,
+     "w": 946,
+     "h": 242.8,
+     "scrollW": 946,
+     "clientW": 946
+    },
+    "rows": [
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "台股成交量 ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "市場統計 ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "NASDAQ ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI World ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "MSCI EM ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "EPS×PE 情境 ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "implied trailing 盈餘 ◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 14,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     }
+    ]
+   },
+   {
+    "title": "keyboard_arrow_down\n\n▸ 各項資料狀態",
+    "open": true,
+    "summary": {
+     "x": 317,
+     "y": 561.5,
+     "w": 946,
+     "h": 38,
+     "fontSize": "16px"
+    },
+    "details": {
+     "x": 317,
+     "y": 599.5,
+     "w": 946,
+     "h": 167.9,
+     "scrollW": 946,
+     "clientW": 946
+    },
+    "rows": [
+     {
+      "dateSplit": null,
+      "labelSplit": null,
+      "srcSplit": null,
+      "text": "台股：◇ 資料未備",
+      "h": 27.7,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "S&P 500：取得 ｜ 來源 Yahoo Finance (^GSPC) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "VIX：取得 ｜ 來源 Yahoo:^VIX ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美10Y：取得 ｜ 來源 FRED (DGS10) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     },
+     {
+      "dateSplit": false,
+      "labelSplit": false,
+      "srcSplit": false,
+      "text": "美2Y：取得 ｜ 來源 FRED (DGS2) ｜ 資料日 2026-11-02",
+      "h": 24.8,
+      "w": 914,
+      "fontSize": "16px",
+      "innerFs": 16,
+      "lineHeight": "24.8px",
+      "lines": 1,
+      "scrollW": 914,
+      "clientW": 914
+     }
+    ]
+   }
+  ],
+  "docScrollW_afterOpen": 1280
+ }
+}

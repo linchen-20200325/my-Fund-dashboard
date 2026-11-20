@@ -1,0 +1,572 @@
+{
+ "base_390": {
+  "fold": 199.8,
+  "navBox": {
+   "y": 70.4,
+   "w": 358,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   71.6,
+   71.6,
+   71.6,
+   71.6,
+   71.6
+  ],
+  "docH": 844,
+  "docW": 390,
+  "vw": 390,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 644.2,
+   "w": 356,
+   "h": 237.3
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 26.3
+ },
+ "base_768": {
+  "fold": 249.4,
+  "navBox": {
+   "y": 70.4,
+   "w": 736,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   147.2,
+   147.2,
+   147.2,
+   147.2,
+   147.2
+  ],
+  "docH": 844,
+  "docW": 768,
+  "vw": 768,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 594.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 35.8
+ },
+ "base_1280": {
+  "fold": 266.4,
+  "navBox": null,
+  "cellH": null,
+  "cellW": null,
+  "docH": 800,
+  "docW": 1280,
+  "vw": 1280,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 533.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 448.8
+ },
+ "cand_nav_label_13_390": {
+  "fold": 199.8,
+  "navBox": {
+   "y": 70.4,
+   "w": 358,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   71.6,
+   71.6,
+   71.6,
+   71.6,
+   71.6
+  ],
+  "docH": 844,
+  "docW": 390,
+  "vw": 390,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 644.2,
+   "w": 356,
+   "h": 237.3
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 26.3
+ },
+ "cand_nav_label_13_768": {
+  "fold": 249.4,
+  "navBox": {
+   "y": 70.4,
+   "w": 736,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   147.2,
+   147.2,
+   147.2,
+   147.2,
+   147.2
+  ],
+  "docH": 844,
+  "docW": 768,
+  "vw": 768,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 594.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 35.8
+ },
+ "cand_nav_label_13_1280": {
+  "fold": 266.4,
+  "navBox": null,
+  "cellH": null,
+  "cellW": null,
+  "docH": 800,
+  "docW": 1280,
+  "vw": 1280,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 533.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 448.8
+ },
+ "cand_nav_soon_12_390": {
+  "fold": 199.8,
+  "navBox": {
+   "y": 70.4,
+   "w": 358,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   71.6,
+   71.6,
+   71.6,
+   71.6,
+   71.6
+  ],
+  "docH": 844,
+  "docW": 390,
+  "vw": 390,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 644.2,
+   "w": 356,
+   "h": 237.3
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 26.3
+ },
+ "cand_nav_soon_12_768": {
+  "fold": 249.4,
+  "navBox": {
+   "y": 70.4,
+   "w": 736,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   147.2,
+   147.2,
+   147.2,
+   147.2,
+   147.2
+  ],
+  "docH": 844,
+  "docW": 768,
+  "vw": 768,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 594.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 35.8
+ },
+ "cand_nav_soon_12_1280": {
+  "fold": 266.4,
+  "navBox": null,
+  "cellH": null,
+  "cellW": null,
+  "docH": 800,
+  "docW": 1280,
+  "vw": 1280,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 533.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 448.8
+ },
+ "cand_nav_label_13_soon_12_390": {
+  "fold": 199.8,
+  "navBox": {
+   "y": 70.4,
+   "w": 358,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   71.6,
+   71.6,
+   71.6,
+   71.6,
+   71.6
+  ],
+  "docH": 844,
+  "docW": 390,
+  "vw": 390,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 644.2,
+   "w": 356,
+   "h": 237.3
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 26.3
+ },
+ "cand_nav_label_13_soon_12_768": {
+  "fold": 249.4,
+  "navBox": {
+   "y": 70.4,
+   "w": 736,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   147.2,
+   147.2,
+   147.2,
+   147.2,
+   147.2
+  ],
+  "docH": 844,
+  "docW": 768,
+  "vw": 768,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 594.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 35.8
+ },
+ "cand_nav_label_13_soon_12_1280": {
+  "fold": 266.4,
+  "navBox": null,
+  "cellH": null,
+  "cellW": null,
+  "docH": 800,
+  "docW": 1280,
+  "vw": 1280,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 533.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 448.8
+ },
+ "cand_expander_48_390": {
+  "fold": 199.8,
+  "navBox": {
+   "y": 70.4,
+   "w": 358,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   71.6,
+   71.6,
+   71.6,
+   71.6,
+   71.6
+  ],
+  "docH": 844,
+  "docW": 390,
+  "vw": 390,
+  "expSummaryH": [
+   48,
+   48,
+   48
+  ],
+  "chart": {
+   "y": 644.2,
+   "w": 356,
+   "h": 237.3
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 26.3
+ },
+ "cand_expander_48_768": {
+  "fold": 249.4,
+  "navBox": {
+   "y": 70.4,
+   "w": 736,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   147.2,
+   147.2,
+   147.2,
+   147.2,
+   147.2
+  ],
+  "docH": 844,
+  "docW": 768,
+  "vw": 768,
+  "expSummaryH": [
+   48,
+   48,
+   48
+  ],
+  "chart": {
+   "y": 594.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 35.8
+ },
+ "cand_expander_48_1280": {
+  "fold": 266.4,
+  "navBox": null,
+  "cellH": null,
+  "cellW": null,
+  "docH": 800,
+  "docW": 1280,
+  "vw": 1280,
+  "expSummaryH": [
+   48,
+   48,
+   48
+  ],
+  "chart": {
+   "y": 533.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 448.8
+ },
+ "cand_svg_text_13_390": {
+  "fold": 199.8,
+  "navBox": {
+   "y": 70.4,
+   "w": 358,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   71.6,
+   71.6,
+   71.6,
+   71.6,
+   71.6
+  ],
+  "docH": 844,
+  "docW": 390,
+  "vw": 390,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 644.2,
+   "w": 356,
+   "h": 237.3
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 21.7
+ },
+ "cand_svg_text_13_768": {
+  "fold": 249.4,
+  "navBox": {
+   "y": 70.4,
+   "w": 736,
+   "h": 61
+  },
+  "cellH": [
+   60,
+   60,
+   60,
+   60,
+   60
+  ],
+  "cellW": [
+   147.2,
+   147.2,
+   147.2,
+   147.2,
+   147.2
+  ],
+  "docH": 844,
+  "docW": 768,
+  "vw": 768,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 594.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 26.4
+ },
+ "cand_svg_text_13_1280": {
+  "fold": 266.4,
+  "navBox": null,
+  "cellH": null,
+  "cellW": null,
+  "docH": 800,
+  "docW": 1280,
+  "vw": 1280,
+  "expSummaryH": [
+   38,
+   38,
+   38
+  ],
+  "chart": {
+   "y": 533.6,
+   "w": 720,
+   "h": 480
+  },
+  "svgTextCount": 7,
+  "svgTextMinLeft": 439.4
+ }
+}
