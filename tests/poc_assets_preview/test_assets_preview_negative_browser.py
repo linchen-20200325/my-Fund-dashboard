@@ -131,7 +131,7 @@ def test_no_cost_value_or_share_number_in_the_rendered_dom(doms, sid):
 def test_summary_cells_are_missing_wording_never_zero(doms, sid):
     d = doms[sid]
     assert d["a20Missing"] == 4, (sid, d["a20Missing"])
-    assert d["a20Text"].count(MISSING.replace("◇ ", "").strip()) >= 4 or d["a20Text"].count(MISSING) >= 4, sid
+    assert d["a20Text"].count(MISSING) == 4, (sid, d["a20Text"])
     assert not re.search(r"(?<![\d.])0(?![\d.])", re.sub(r"\s+", "", d["a20Text"])), (sid, d["a20Text"])
 
 
@@ -152,7 +152,7 @@ def test_the_card_itself_carries_no_fake_marker_only_the_harness_banner_does(dom
     """已知落差（D5，如實鎖住）：卡片本體沒有 FAKE 標記，FAKE 辨識只靠頁頂 harness 橫幅。掛載後（無 harness）此保證消失，屬 Gate G1。"""
     d = doms["multi_currency"]
     card = re.sub(r"\s+", "", d["text"]).replace(re.sub(r"\s+", "", BANNER), "")
-    assert "測試資料" not in card and "示範" not in card
+    assert "測試資料" not in card and "示範" not in card, "缺口若已補好，請更新 docs/evidence/open_items_ledger_2026_11_20.md C-13 列與 Gate G1，並同步調整本鎖，不得單純改綠"
 
 
 def test_different_upstream_different_screen(doms):

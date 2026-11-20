@@ -18,6 +18,7 @@ import copy
 import html
 import json
 import re
+import secrets
 
 import pytest
 
@@ -115,12 +116,22 @@ def test_known_gap_nav_stale_and_fx_missing_are_invisible_to_the_page():
     """⚠️ 已知落差（如實鎖住，不是核准）：頁面沒有逐檔 NAV／匯率面向，列上 nav=stale、fx=missing、value 缺，畫面與正常列**逐字相同**。
     不會畫出假數字（金額欄全不進畫面、四格恆為缺值），但使用者**看不到『為什麼沒有金額』的逐檔原因**。
     日後若加了逐檔 NAV／匯率的缺項呈現（需線框與字樣核准），此條應轉紅，屆時改寫為『stale／missing 要如實標示』。"""
-    assert visible(_row_page("nav_stale_fx_missing")) == visible(_row_page("valued_with_sentinels"))
+    assert visible(_row_page("nav_stale_fx_missing")) == visible(_row_page("valued_with_sentinels")), "缺口若已補好，請更新 docs/evidence/open_items_ledger_2026_11_20.md C-13 列與 Gate G1，並同步調整本鎖，不得單純改綠"
+
+
+def test_negative_control_the_leak_forms_detector_fires_on_an_injected_sentinel():
+    """注入正控：執行時隨機產生的哨兵注入文字後，`_forms` 產生的任一形態都必須命中；乾淨輸入 0 命中。"""
+    token = float(secrets.randbelow(10**9) + 10**9) + 0.5
+    forms = _forms(token)
+    assert forms, "哨兵必須至少產生一個可比對形態"
+    injected = visible(f"<p>x {token:,.2f} y</p>")
+    assert any(f in injected for f in forms)
+    assert not any(f in visible("<p>x 1 y</p>") for f in forms)
 
 
 def test_basis_value_shown_is_exactly_what_the_evidence_says_never_invented():
     """基準字樣只來自證據的設定；改證據就改畫面（差分），未設定時不顯示值（不編一個預設）。"""
-    token = "ZZ-BASIS-" + "7f3q"   # 現編的獨立哨兵，僅在記憶體內
+    token = "ZZ-BASIS-" + secrets.token_hex(6)   # 每次執行隨機產生的哨兵，不寫死、不入庫
     shown = visible(page_of(sup.fake_result(evidence=sup.fake_evidence(holdings=[sup.fake_holding(1)], basis_value=token))))
     assert token in shown
     unset = visible(page_of(sup.fake_result(evidence=sup.fake_evidence(holdings=[sup.fake_holding(1)], basis_status="unset"))))
@@ -290,16 +301,16 @@ def test_known_gap_c13_other_skip_groups_leave_evidence_identical_to_a_clean_ups
     dirty = C13_OTHER_GROUPS[name]()
     clean = _clean()
     assert dirty != clean   # 上游確實不同（差分的前提；若相同，這條測試沒有意義）
-    assert json.dumps(_load(dirty).to_primitive(), sort_keys=True) == json.dumps(_load(clean).to_primitive(), sort_keys=True), name
-    assert _coverage(_load(dirty)) == ("complete", ())
+    assert json.dumps(_load(dirty).to_primitive(), sort_keys=True) == json.dumps(_load(clean).to_primitive(), sort_keys=True), (name, "缺口若已補好，請更新 docs/evidence/open_items_ledger_2026_11_20.md C-13 列與 Gate G1，並同步調整本鎖，不得單純改綠")
+    assert _coverage(_load(dirty)) == ("complete", ()), (name, "缺口若已補好，請更新 docs/evidence/open_items_ledger_2026_11_20.md C-13 列與 Gate G1，並同步調整本鎖，不得單純改綠")
 
 
 def test_known_gap_c13_the_user_sees_the_same_complete_page_for_clean_and_other_group_skips():
     clean_page = page_of(_load(_clean()).to_primitive())
     for name, build in C13_OTHER_GROUPS.items():
         dirty_page = page_of(_load(build()).to_primitive())
-        assert dirty_page == clean_page, name
-        assert state_of(dirty_page) == "complete", name
+        assert dirty_page == clean_page, (name, "缺口若已補好，請更新 docs/evidence/open_items_ledger_2026_11_20.md C-13 列與 Gate G1，並同步調整本鎖，不得單純改綠")
+        assert state_of(dirty_page) == "complete", (name, "缺口若已補好，請更新 docs/evidence/open_items_ledger_2026_11_20.md C-13 列與 Gate G1，並同步調整本鎖，不得單純改綠")
 
 
 def test_c13_other_groups_do_not_hide_the_two_groups_that_are_forwarded():
