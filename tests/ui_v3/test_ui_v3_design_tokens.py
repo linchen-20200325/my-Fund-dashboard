@@ -48,6 +48,10 @@ APPROVED_SCALARS = {
     "color.primary": "#1a5fd0", "color.card.border": "#7f8ca6",
     "color.sidebar.bg": "#101a33", "color.sidebar.bg2": "#18254a", "color.sidebar.text": "#e6edf3",
     "color.sidebar.text2": "#aab6cf", "color.sidebar.accent": "#5fd3d0", "color.sidebar.border": "#34466e",
+    # 🌍 視覺批 1（ChatGPT 總管／客戶 2026-11-20 授權）：單選 pill。色沿用上列色票同一組值（不新增新色）；
+    # 圓角 999px＝膠囊；48px＝觸控下限（同頁首五格 TOUCH_MIN_PX）。
+    "color.pill.bg": "#ffffff", "color.pill.border": "#7f8ca6", "color.pill.selected.bg": "#1a5fd0",
+    "color.pill.selected.text": "#ffffff", "color.pill.focus": "#1a5fd0", "radius.pill": "999px", "size.touch.min": "48px",
 }
 APPROVED_TONES = {
     "neutral": {"text": "#172033", "background": "#e6eaf3", "border": "#7f8ca6"},
@@ -72,6 +76,34 @@ def test_only_approved_tokens_have_values_and_the_values_are_the_approved_ones()
         assert dict(tokens.TOKENS[name].value) == APPROVED_CARD, name
     for kind in components.CHIP_KINDS:
         assert dict(tokens.TOKENS[f"chip.{kind}"].value) == APPROVED_CHIP, kind
+
+
+def test_pill_tokens_are_exactly_the_approved_palette_values_and_touch_size_matches_nav():
+    """pill 色不得是新色：逐一等式對到 G3 已核准色票的指定 token（改任何一邊都要同步改這裡）；48px 與頁首五格觸控下限同值。"""
+    from ui_v3.shell import nav
+    equal = {"color.pill.bg": "color.surface", "color.pill.border": "color.card.border", "color.pill.selected.bg": "color.primary",
+             "color.pill.focus": "color.primary", "color.pill.selected.text": "color.surface"}
+    for pill, base in equal.items():
+        assert tokens.value(pill) == tokens.value(base), (pill, base)
+    assert tokens.value("size.touch.min") == f"{nav.TOUCH_MIN_PX}px"
+    assert tokens.value("radius.pill") == "999px"
+
+
+def test_pill_rules_live_only_in_the_market_page_css_not_in_shared_app_css():
+    """S2：pill 只作用於市場頁——共用的 `theme.app_css()`（assets／nas_diag／poc 預覽／shell 都用它）不得含 pill 規則；`mkt.CSS` 必含。
+    並鎖「焦點環兩條規則各自獨立」（不可合成一個選擇器清單：不支援 :has() 的瀏覽器會讓整個清單失效）。"""
+    from ui_v3.design import theme
+    from ui_v3.pages import mkt
+    from ui_v3.shell import nav
+    # 只列 pill 專屬的標記（`min-height:48px`／`font-weight:700` 頁首導覽也有，不能當判別）
+    markers = ("999px", 'data-focus-visible="true"', "input:focus-visible", '[data-testid="stRadio"]{display:flex')
+    for label, css in (("theme.app_css", theme.app_css()), ("nav.shell_css", nav.shell_css())):
+        assert not [m for m in markers if m in css], (label, [m for m in markers if m in css])
+    assert all(m in mkt.CSS for m in markers), [m for m in markers if m not in mkt.CSS]
+    assert "min-height:48px" in mkt.CSS
+    rules = [r for r in mkt.CSS.replace("}", "}\n").splitlines() if "outline:2px solid" in r]
+    assert len(rules) == 2 and any('[data-focus-visible="true"]' in r and ":has(" not in r for r in rules) \
+        and any(":has(input:focus-visible)" in r and "data-focus-visible" not in r for r in rules), rules
 
 
 def test_tokens_outside_g3_scope_stay_unvalued():

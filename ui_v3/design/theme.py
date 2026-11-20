@@ -59,6 +59,41 @@ def tone_css() -> str:
     return "\n".join(rows)
 
 
+def pill_css() -> str:
+    """原生單選（`st.radio`）→ segmented／pill（🌍 視覺批 1；純 CSS，不換 widget 型別，`key` 與狀態契約不變）。
+
+    **只由 `pages/mkt.py` 的 `CSS` 注入**（不在共用的 `app_css()` 內）：assets／nas_diag／其他預覽頁的 CSS 輸出不含本段，行為不變
+    （它們用 `app_css()` 內原有的圓點規則）。
+
+    - 選項＝48px 高膠囊（`size.touch.min`）、圓點隱藏（原生 `input[type=radio]` 仍在 DOM、仍可 Tab 與方向鍵）；
+    - 選取＝填 `color.pill.selected.bg`＋粗體（顏色不是唯一訊息：粗體與填色同時出現）；文字色取 `color.pill.selected.text`；
+    - 鍵盤焦點＝2px `color.pill.focus` 外框。兩條**各自獨立**的規則（不可合併成一個選擇器清單：不支援 `:has()` 的瀏覽器會讓整個清單失效）：
+      (1) `label[data-focus-visible="true"]`——Streamlit 1.59.2（react-aria）在鍵盤聚焦時加在 label 上的屬性（實測：鍵盤 Tab 後出現，滑鼠點擊後不出現；
+          另一個隔離預覽的主題 CSS 有同款屬性先例）；(2) `label:has(input:focus-visible)`——標準偽類。任一生效即出環；
+    - 「檢視／期間／…」標籤與選項同列（標籤 `type.caption`、無額外上下距）。
+    ⚠️ 依賴 Streamlit 內部 `data-testid`／`data-selected`／`data-focus-visible`（80 §17.1 已知限制）；升版若改 DOM，
+    `test_ui_v3_market_page_browser.py` 的 pill 與焦點環守衛會轉紅。"""
+    caption, s1, s2, s3 = v("type.caption"), v("space.1"), v("space.2"), v("space.3")
+    radius, touch = v("radius.pill"), v("size.touch.min")
+    bg, border = v("color.pill.bg"), v("color.pill.border")
+    sel_bg, sel_text, focus = v("color.pill.selected.bg"), v("color.pill.selected.text"), v("color.pill.focus")
+    r = '[data-testid="stMain"] [data-testid="stRadio"]'
+    opt = '[data-testid="stMain"] label[data-testid="stRadioOption"]'
+    return f"""/* 單選 pill（🌍 視覺批 1；說明見 theme.pill_css） */
+{r}{{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:{s1} {s2}}}
+{r} [data-testid="stWidgetLabel"]{{min-height:0;margin:0;padding:0;width:auto}}
+{r} [data-testid="stWidgetLabel"] p{{font-size:{caption};margin:0}}
+[data-testid="stMain"] [data-testid="stRadioGroup"]{{gap:{s1} {s2};flex-wrap:wrap}}
+{opt}{{margin:0;min-height:{touch};min-width:{touch};padding:0 {s3};display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;
+  border:1px solid {border};border-radius:{radius};background:{bg};cursor:pointer}}
+{opt} > div > div > div:first-child{{display:none !important}}
+{opt} p{{margin:0}}
+{opt}[data-selected="true"]{{background:{sel_bg};border-color:{sel_bg}}}
+{opt}[data-selected="true"],{opt}[data-selected="true"] *{{color:{sel_text};font-weight:700}}
+{opt}[data-focus-visible="true"]{{outline:2px solid {focus};outline-offset:2px}}
+{opt}:has(input:focus-visible){{outline:2px solid {focus};outline-offset:2px}}"""
+
+
 def app_css() -> str:
     """覆寫 Streamlit theme 色（只在 ui_v3 頁面；理由見檔頭）：主內容淺色、側欄深藍；primary 單選點；expander 邊線。"""
     page, text, primary = v("color.page.bg"), v("color.text.primary"), v("color.primary")

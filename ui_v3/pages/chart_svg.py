@@ -21,7 +21,9 @@ WIDTH = 360
 HEIGHT = 240
 _PAD_LEFT, _PAD_RIGHT, _PAD_TOP, _PAD_BOTTOM = 40, 84, 14, 26
 _LABEL_GAP = 14  # 末點標籤最小垂直間距（px）
-SPARK_WIDTH, SPARK_HEIGHT = 160, 40
+# 迷你圖 viewBox 320×40（8:1）：CSS 讓它撐滿卡內寬、高度依比例（`height:auto`），**不**用 preserveAspectRatio="none"
+# （那會讓末點圓變橢圓）；座標由 `spark_svg` 依 viewBox 重算，所以線與末點在任何卡寬都是等比縮放。
+SPARK_WIDTH, SPARK_HEIGHT = 320, 40
 
 
 @dataclass(frozen=True)
