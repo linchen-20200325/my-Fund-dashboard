@@ -62,14 +62,14 @@ def tone_css() -> str:
 def pill_css() -> str:
     """原生單選（`st.radio`）→ segmented／pill（🌍 視覺批 1；純 CSS，不換 widget 型別，`key` 與狀態契約不變）。
 
-    **只由 `pages/mkt.py` 的 `CSS` 注入**（不在共用的 `app_css()` 內）：assets／nas_diag／poc 預覽等其他頁的 CSS 輸出不含本段，行為不變
+    **只由 `pages/mkt.py` 的 `CSS` 注入**（不在共用的 `app_css()` 內）：assets／nas_diag／其他預覽頁的 CSS 輸出不含本段，行為不變
     （它們用 `app_css()` 內原有的圓點規則）。
 
     - 選項＝48px 高膠囊（`size.touch.min`）、圓點隱藏（原生 `input[type=radio]` 仍在 DOM、仍可 Tab 與方向鍵）；
     - 選取＝填 `color.pill.selected.bg`＋粗體（顏色不是唯一訊息：粗體與填色同時出現）；文字色取 `color.pill.selected.text`；
     - 鍵盤焦點＝2px `color.pill.focus` 外框。兩條**各自獨立**的規則（不可合併成一個選擇器清單：不支援 `:has()` 的瀏覽器會讓整個清單失效）：
       (1) `label[data-focus-visible="true"]`——Streamlit 1.59.2（react-aria）在鍵盤聚焦時加在 label 上的屬性（實測：鍵盤 Tab 後出現，滑鼠點擊後不出現；
-          poc/dual_theme_isolated 有同款先例）；(2) `label:has(input:focus-visible)`——標準偽類。任一生效即出環；
+          另一個隔離預覽的主題 CSS 有同款屬性先例）；(2) `label:has(input:focus-visible)`——標準偽類。任一生效即出環；
     - 「檢視／期間／…」標籤與選項同列（標籤 `type.caption`、無額外上下距）。
     ⚠️ 依賴 Streamlit 內部 `data-testid`／`data-selected`／`data-focus-visible`（80 §17.1 已知限制）；升版若改 DOM，
     `test_ui_v3_market_page_browser.py` 的 pill 與焦點環守衛會轉紅。"""
