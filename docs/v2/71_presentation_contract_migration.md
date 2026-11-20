@@ -379,13 +379,15 @@
 | 既有截圖 | repo 內零張 `.png`（`git ls-tree -r --name-only 02615e41` 篩 `.png` 為 0，【執】2026-10-29 重跑） | 沒有 baseline、沒有驗收截圖存放處 | 【碼】【執抽查】 |
 | production-like 頁面 | B 線 Streamlit Cloud 預覽站（入口 `ui_v2/app_preview.py`） | URL 不在 repo；真資料要該 app 的 Secrets | 【碼】 |
 
+> 📌 **2026-11-20 註（有意識的更正，不是漏刪；決策者：總管）**：上表「production-like 頁面」＝**B 線（`ui_v2/app_preview.py`）預覽站**（≠ `PROJECT_RULES.md` 第 13.6 節的 `app.py` `[新]` 並行預覽頁），不是 `ui_v3`。`ui_v3`（入口 `ui_v3/app_preview.py`，目前只有 🌍 市場頁掛入）的 production-like Cloud URL、部署 SHA 與 Cloud 像素驗收**尚未登記，NOT VERIFIED**；不得拿 B 線預覽站或下方 7.1 登記的 URL 當 `ui_v3` 的 Cloud 驗收入口。
+
 **落地路徑（Batch A 第 3 項）**：(1) **正式確認**：總管或客戶提供 B 線預覽站 URL、放行該網域的網路存取，以 Node playwright＋Chromium 截桌機與 390；這是操作前提，不是新的產品 Gate。(2) **自動安全網**：CI 加一支 deterministic screenshot 步驟（固定測試資料）並上傳 artifact；slow lane 的 `continue-on-error` 是否要對這一支收緊，屬 CI 設定，由實作批判斷並寫進 PR。在正式確認做完之前，UI PR 寫「Visual Fidelity Gate 未執行」，不寫通過。
 
 ### 7.1 Batch A 落地現況（2026-10-29；`DEC-2026-10-29-07`）
 
 | 項 | 落地 | 驗過的是什麼 |
 |---|---|---|
-| Cloud Preview URL | 登記在 `tests/visual_fidelity/vf_config.py::CLOUD_PREVIEW_URL`（程式可讀的單一位置；公開網址，不含 credential）。守衛：同檔單元測試釘住「只在這一處」 | 單元測試（本機與 CI） |
+| Cloud Preview URL | 登記在 `tests/visual_fidelity/vf_config.py::CLOUD_PREVIEW_URL`（程式可讀的單一位置；公開網址，不含 credential）。守衛：同檔單元測試釘住「只在這一處」。〔2026-11-20 註：此 URL＝B 線（ui_v2）預覽站；ui_v3 的 Cloud URL／部署 SHA 尚未登記，NOT VERIFIED〕 | 單元測試（本機與 CI） |
 | 兩層標示 | `config.CI_FIXTURE_LABEL`＝「CI fixture screenshot ≠ production-like Cloud screenshot」；CI 截圖檔名前綴 `ci-fixture`、artifact 名 `ci-fixture-screenshots-NOT-production-cloud`、報告第一行都帶標示；Cloud 截圖前綴 `cloud-preview`，兩層不混用 | 單元測試與 workflow 解析測試 |
 | A. CI deterministic screenshot | `tests/visual_fidelity/test_ci_fixture_screenshots.py`（Playwright／Chromium、固定 fixtures、不打外部網路、desktop 1280x800 與 390x844、每畫面截兩次比對決定性、基本 layout 檢查 V1～V8）＋ `.github/workflows/pr-check.yml` 新 job `visual-fidelity-safety-net`（`actions/upload-artifact@v4`）。**非阻擋**（`continue-on-error: true`）：hard 檢查（例外、程式碼區塊外露、水平溢出）會轉紅，契約缺口（圖在首屏、chips 數）只寫進報告，因為今天的頁面尚未套用呈現契約，那是 Batch C～F 的工作；新建的 primitives 展示頁則全部檢查都是 hard | 本機以 Python playwright 與本機 Chromium 實跑過六個情境的截圖與檢查；CI job 本身待 PR 的 CI 結果 |
 | B. Streamlit Cloud screenshot | `tests/visual_fidelity/cloud_capture.py`（參數化 URL、desktop 與 390px；預設不在 CI 跑，只在手動 `workflow_dispatch` 時嘗試）。只有明確的網路層錯誤（`net::ERR_*`）才輸出並寫入「production-like Cloud capture blocked by current environment network policy」、exit 0；`Timeout`／`403` 輸出「無法判定（not determinable）」、exit 3；休眠頁或找不到 app 容器輸出「未擷取」、exit 4；擷取成功前會檢查頁面確實是 app 內容（Community Cloud 的 app 在 iframe 內，逐框架找） | 本機實跑：目前執行環境連不到該網域（`curl` 回 000；playwright 回 `net::ERR_TUNNEL_CONNECTION_FAILED`），腳本走到 blocked 分支。**尚未取得任何 production-like 截圖** |

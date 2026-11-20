@@ -35,7 +35,7 @@
 | #1163 | **merged=true**；**歷史 merge SHA `025922382ef3921fc7b6858cb733084935fbf066`**（是 #1164 之前的 commit，不是當前 main HEAD） | [PR #1163](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1163)；B／S1 設計文件已進 main |
 | Open PR | 2026-11-13 開本批（Batch 3 PR-2）前 GitHub 觀測 Open PR 為 0（#1217、#1218、#1219、#1229、#1230、#1231 均已 merged）；#1171 已於 2026-11-08 merge（`5d8050df`）；#1166 merge `b227ae5c`、#1168 merge `b34dd2eb`、#1167 merge `861add40` 均已完成 | [#1171](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1171)（merged）；不把此列視為即時狀態，使用前重查 |
 | #1164 已合併 head CI | [run 42359253829](https://github.com/linchen-20200325/my-Fund-dashboard/actions/runs/42359253829)：Fast／Schema／Slow／Visual **success** | 最後 head `4f045c26` 的結論；**不是 merge commit 的 main CI** |
-| Code | ≤768px 五格同列頁首／無橫滑／≥48px；769px+ 原側欄；僅 🌍 可進、🤖 不開放；無效 sticky 已修 | #1164 **已 merged 到 main**，但 Preview-only ≠ Cloud 正式上線 |
+| Code | ≤768px 五格同列頁首／無橫滑／≥48px；769px+ 原側欄；僅 🌍 可進、🤖 不開放；無效 sticky 已修 | #1164 **已 merged 到 main**，但 Preview-only ≠ Cloud 正式上線（2026-11-20：UI 來源適用性見 `PROJECT_RULES.md` §0.4「UI 來源與設計適用性」；B 線預覽 URL＝ui_v2 B 線預覽〔≠ PROJECT_RULES 13.6 的 app.py [新] 預覽頁〕，不用於 ui_v3 驗收，ui_v3 Cloud URL／部署 SHA NOT VERIFIED） |
 | 視覺證據 | #1164 已合入 Chromium 合成 fixture 的 374／375／390／768／769／1280 及 190% 模擬 JSON／PNG | `docs/evidence/bl0544_s1_chromium_fixture_2026_11_07/`；**不代表**正式 Cloud／真機／WebView |
 | QA／review | #1164 0 unresolved threads；GitHub 3 則 `COMMENTED` review 並非明確非作者 QA 核准；最新 head 完整 QA 證據 **NOT VERIFIED** | **已 merge ≠ QA 自動 PASS**；留下事後稽核缺口，不得否認合併事實 |
 | main CI | #1168 merge 的 main push CI 逐 job 結論本次 NOT VERIFIED；PR head 四項 success 不能替代 main CI | 必須依最新 SHA 重新查 |
