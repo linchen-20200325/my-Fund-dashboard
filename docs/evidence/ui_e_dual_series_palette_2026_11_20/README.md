@@ -123,16 +123,16 @@ viewport 1280: {'chart': 2, 'labels': ['台股 102.0', 'S&P 500 104.6'], 'labelL
 
 ## 測試輸出
 
-跑在 head `eafae515`（本次修改 commit 之前的 head；修改後的 SHA 見該 commit），**本機 scratchpad venv，非 CI**；未跑全套與 CI 四項 check。
+**歷次紀錄**：第一次（`eafae515`）與第二次（`a2f35630`）各跑過同樣兩組，皆全綠（113 passed／116 passed）。**以下是在 head `54ebb3a3`（本次修改的 commit）重跑的原文**；本 README 此段之後另有一個只改本段的 commit，其 SHA 以 `git log` 為準。環境：本機 scratchpad venv，**非 CI**；未跑全套與 CI 四項 check。
 
 ```
 $ python -m pytest tests/test_canonical_rule_consistency.py tests/test_doc_counters.py tests/test_constitution_file_refs.py -q -p no:cacheprovider
 ........................................................................ [ 63%]
 .........................................                                [100%]
-113 passed in 90.47s (0:01:30)
+113 passed in 88.97s (0:01:28)
 
 $ python -m pytest tests/test_services_purity_contract.py tests/ui_v3/test_ui_v3_fixtures_are_fake_guard.py tests/ui_v3/test_ui_v3_import_guard.py -q -p no:cacheprovider
 ........................................................................ [ 62%]
 ............................................                             [100%]
-116 passed in 8.81s
+116 passed in 9.02s
 ```
