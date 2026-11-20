@@ -96,6 +96,58 @@ def test_no_horizontal_overflow(measures, width, sid):
 
 
 @pytest.mark.parametrize("sid", IDS)
+@pytest.mark.parametrize("width", WIDTHS)
+def test_no_streamlit_heading_anchor_tab_stops(measures, width, sid):
+    assert lib.anchor_violations(measures[width][sid]) == []
+
+
+@pytest.mark.parametrize("sid", IDS)
+@pytest.mark.parametrize("width", WIDTHS)
+def test_a10_title_keeps_heading_role_and_level_and_page_has_no_h4(measures, width, sid):
+    assert lib.a10_title_violations(measures[width][sid]) == []
+
+
+_POSITIVE_CONTROL_APP = (
+    "import streamlit as st\n"
+    "st.title('x')\n"                       # 預設會產生錨點
+    "st.markdown('<h4>y</h4>', unsafe_allow_html=True)\n"
+)
+
+
+def test_positive_control_detectors_fire_on_a_real_streamlit_page_that_renders_anchors(server_and_browser, tmp_path):
+    """正控：用一支極小的暫時 Streamlit 腳本（st.title 不帶 anchor=False、另有 markdown h4）在真實頁面渲染，
+    偵測器必須在真正由 Streamlit 產生的錨點上報（不是只注入合成 <a>）；h4 偵測也必須報。"""
+    app = tmp_path / "anchor_positive_control_app.py"
+    app.write_text(_POSITIVE_CONTROL_APP, encoding="utf-8")
+    _, browser = server_and_browser
+    with _ui_v2_chromium.streamlit_server(app) as base:
+        ctx = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-TW")
+        page = ctx.new_page()
+        try:
+            page.goto(base, wait_until="networkidle")
+            page.wait_for_selector("h1", timeout=60000)
+            page.wait_for_function("document.querySelectorAll('a[aria-label=\"Link to heading\"]').length >= 1", timeout=30000)
+            m = page.evaluate(lib.MEASURE_JS)
+        finally:
+            ctx.close()
+    kinds = " ".join(v[0] for v in lib.anchor_violations(m))
+    assert m["headingAnchors"] >= 1 and m["headingActionElements"] >= 1 and m["headingWrapperLinks"] >= 1, m
+    assert "a[aria-label]" in kinds and "stHeaderActionElements" in kinds and "stHeadingWithActionElements" in kinds
+    assert m["h4Count"] >= 1 and any("h4" in v[0] for v in lib.a10_title_violations(m))   # 無 A10 區塊＋有 h4：兩項都報
+
+
+def test_mutation_a10_title_role_stripped_is_flagged(server_and_browser):
+    js = "document.querySelector('[data-block=\"a10\"] [role=\"heading\"]').removeAttribute('role')"
+    assert lib.a10_title_violations(_mutated(server_and_browser, IDS[0], js=js))
+
+
+def test_mutation_injected_heading_anchor_is_flagged(server_and_browser):
+    js = ("document.querySelector('h1').insertAdjacentHTML('beforeend', "
+          "'<a href=\"#x\" aria-label=\"Link to heading\"></a>')")
+    assert lib.anchor_violations(_mutated(server_and_browser, IDS[0], js=js))
+
+
+@pytest.mark.parametrize("sid", IDS)
 def test_390_first_screen_marks_equal_model_count_and_are_all_visible_in_the_fold(measures, sid, record_property):
     m = measures[390][sid]
     assert EXPECTED[sid] == 5

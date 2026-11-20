@@ -23,7 +23,12 @@ MEASURE_JS = r"""
           blocks: [...document.querySelectorAll('[data-block]')].map(e => e.dataset.block),
           overflowing: body.filter(e => e.getBoundingClientRect().right > vw + 0.5).map(e => e.tagName + '.' + (e.className || '')).slice(0, 5),
           state: (document.querySelector('[data-source-state]') || {dataset: {}}).dataset.sourceState || null,
-          hasBanner: !!document.querySelector('[data-harness="true"]')};
+          hasBanner: !!document.querySelector('[data-harness="true"]'),
+          headingAnchors: document.querySelectorAll('a[aria-label="Link to heading"]').length,
+          headingActionElements: document.querySelectorAll('[data-testid="stHeaderActionElements"]').length,
+          headingWrapperLinks: document.querySelectorAll('[data-testid="stHeadingWithActionElements"] a').length,
+          h4Count: document.querySelectorAll('h4').length,
+          a10RoleHeadings: document.querySelectorAll('[data-block="a10"] [role="heading"][aria-level="4"]').length};
 }
 """
 
@@ -36,6 +41,26 @@ def overflow_violations(m):
         bad.append(("主內容橫向溢出", m["mainScrollW"], m["mainClientW"]))
     if m["overflowing"]:
         bad.append(("頁本體元素超出視窗右緣", m["overflowing"]))
+    return bad
+
+
+def anchor_violations(m):
+    """Streamlit 自動標題錨點（16×16、平時不可見、卻是 Tab 停駐點）不得出現。三組獨立選擇器：錨點連結本身、錨點容器 testid、標題包裝內的任何連結。"""
+    bad = []
+    for key, label in (("headingAnchors", "標題錨點連結 a[aria-label]"), ("headingActionElements", "標題錨點容器 stHeaderActionElements"),
+                       ("headingWrapperLinks", "stHeadingWithActionElements 內的連結")):
+        if m[key]:
+            bad.append((f"頁面出現{label}（多餘的 Tab 停駐點）", m[key]))
+    return bad
+
+
+def a10_title_violations(m):
+    """A10 標題必須保留 heading 語意（role=heading＋aria-level=4，Streamlit sanitizer 沒有剝掉），且整頁沒有 h4（h4 會被 Streamlit 加錨點）。"""
+    bad = []
+    if m["a10RoleHeadings"] != 1:
+        bad.append(("A10 區塊內 [role=heading][aria-level=4] 不是恰 1 個", m["a10RoleHeadings"]))
+    if m["h4Count"]:
+        bad.append(("頁面有 h4", m["h4Count"]))
     return bad
 
 

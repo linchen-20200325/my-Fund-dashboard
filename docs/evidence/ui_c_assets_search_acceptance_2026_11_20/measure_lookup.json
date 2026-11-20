@@ -1,0 +1,3210 @@
+{
+  "app": "fund_lookup",
+  "widths": {
+    "390": {
+      "idle": {
+        "measure": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 3,
+            "14": 3,
+            "15": 1,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": null,
+              "label": "MoneyDJ 基金代碼或 ISIN",
+              "w": 356,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "button",
+              "type": "submit",
+              "role": null,
+              "label": "查詢",
+              "w": 54,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "演示來源（harness）",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "isin-note",
+            "lookup-idle"
+          ],
+          "details": [],
+          "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+          "title": "Streamlit"
+        },
+        "blocks": {
+          "blocks": {
+            "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+            "lookup-idle[idle]": "尚未查詢"
+          },
+          "states": [
+            "lookup-idle:idle"
+          ],
+          "reasons": [],
+          "outcome": [],
+          "counts": null,
+          "conditions": null,
+          "checkboxes": [],
+          "htmlHasScript": false
+        },
+        "screenshot": [
+          "fund_lookup_idle_390.png",
+          51617
+        ]
+      },
+      "queries": {
+        "FAKE-OK01": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 10,
+              "14": 3,
+              "15": 6,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[result]": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼FAKE-OK01 基金名稱FAKE 範例基金甲 配息方式配息型 成立日期2000-01-02 經理費率此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-OK01 基金名稱FAKE 範例基金甲 配息方式配息型 成立日期2000-01-02 經理費率此欄尚無可顯示的值"
+            },
+            "states": [
+              "lookup-result:result"
+            ],
+            "reasons": [],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_lookup_q_FAKE-OK01_390.png",
+            78559
+          ]
+        },
+        "FAKE-OK02": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 10,
+              "14": 3,
+              "15": 6,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[result]": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼FAKE-OK02 基金名稱FAKE 範例基金甲 配息方式累積型 成立日期此欄尚無可顯示的值 經理費率此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-OK02 基金名稱FAKE 範例基金甲 配息方式累積型 成立日期此欄尚無可顯示的值 經理費率此欄尚無可顯示的值"
+            },
+            "states": [
+              "lookup-result:result"
+            ],
+            "reasons": [],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-OK03": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 10,
+              "14": 3,
+              "15": 6,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[result]": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼FAKE-OK03 基金名稱FAKE 範例基金甲 配息方式此欄尚無可顯示的值 成立日期此欄尚無可顯示的值 經理費率此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-OK03 基金名稱FAKE 範例基金甲 配息方式此欄尚無可顯示的值 成立日期此欄尚無可顯示的值 經理費率此欄尚無可顯示的值"
+            },
+            "states": [
+              "lookup-result:result"
+            ],
+            "reasons": [],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_lookup_q_FAKE-OK03_390.png",
+            79482
+          ]
+        },
+        "FAKE-FAIL1": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[failed]": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金的欄位 來源回報取數失敗 這不是對基金身份的判斷 輸入代碼FAKE-FAIL1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-FAIL1"
+            },
+            "states": [
+              "lookup-result:failed"
+            ],
+            "reasons": [
+              "source_failed"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_lookup_q_FAKE-FAIL1_390.png",
+            73597
+          ]
+        },
+        "FAKE-COOL1": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[failed]": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金的欄位 來源剛失敗，暫時冷卻中，請稍後再查 這不是對基金身份的判斷 輸入代碼FAKE-COOL1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-COOL1"
+            },
+            "states": [
+              "lookup-result:failed"
+            ],
+            "reasons": [
+              "source_cooling"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-IOERR": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[failed]": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金的欄位 取數連線失敗 這不是對基金身份的判斷 輸入代碼FAKE-IOERR 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-IOERR"
+            },
+            "states": [
+              "lookup-result:failed"
+            ],
+            "reasons": [
+              "loader_io_error"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-PAGE1": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[unmatched]": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 頁面格式無法辨識 這不是對基金身份的判斷 輸入代碼FAKE-PAGE1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-PAGE1"
+            },
+            "states": [
+              "lookup-result:unmatched"
+            ],
+            "reasons": [
+              "unrecognized_page"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-PAGE2": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[unmatched]": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 找不到對應頁面 這不是對基金身份的判斷 輸入代碼FAKE-PAGE2 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-PAGE2"
+            },
+            "states": [
+              "lookup-result:unmatched"
+            ],
+            "reasons": [
+              "no_page"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-PAGE3": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[unmatched]": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 來源沒有列出這一檔 這不是對基金身份的判斷 輸入代碼FAKE-PAGE3 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-PAGE3"
+            },
+            "states": [
+              "lookup-result:unmatched"
+            ],
+            "reasons": [
+              "source_not_listed"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_lookup_q_FAKE-PAGE3_390.png",
+            76014
+          ]
+        },
+        "FAKE-NAME1": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[unmatched]": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 頁面上的基金名稱無法確認 這不是對基金身份的判斷 輸入代碼FAKE-NAME1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-NAME1"
+            },
+            "states": [
+              "lookup-result:unmatched"
+            ],
+            "reasons": [
+              "name_unconfirmed"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-REJ1": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 7,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[blocked]": "FAKE 模擬 輸入未通過檢查，未發出查詢 這個代碼無法用於查詢 輸入代碼FAKE-REJ1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-REJ1"
+            },
+            "states": [
+              "lookup-result:blocked"
+            ],
+            "reasons": [
+              "key_rejected"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_lookup_q_FAKE-REJ1_390.png",
+            70718
+          ]
+        },
+        "FAKE-NOPE9": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[unmatched]": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 找不到對應頁面 這不是對基金身份的判斷 輸入代碼FAKE-NOPE9 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-NOPE9"
+            },
+            "states": [
+              "lookup-result:unmatched"
+            ],
+            "reasons": [
+              "no_page"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "US0378331005": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 7,
+              "14": 3,
+              "15": 1,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[blocked]": "FAKE 模擬 輸入未通過檢查，未發出查詢 ISIN 目前未啟用 未用 ISIN 取數、未猜測任何代碼 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+            },
+            "states": [
+              "lookup-result:blocked"
+            ],
+            "reasons": [
+              "isin_shape"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "<script>alert(1)</script>": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 6,
+              "14": 3,
+              "15": 1,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[blocked]": "FAKE 模擬 輸入未通過檢查，未發出查詢 請輸入基金代碼，不要貼網址 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+            },
+            "states": [
+              "lookup-result:blocked"
+            ],
+            "reasons": [
+              "url_shape"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "(empty)": {
+          "measure": {
+            "vw": 390,
+            "vh": 844,
+            "docScrollW": 390,
+            "docClientW": 390,
+            "mainScrollW": 390,
+            "mainClientW": 390,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 6,
+              "14": 3,
+              "15": 1,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 356,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 324,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[blocked]": "FAKE 模擬 輸入未通過檢查，未發出查詢 請先輸入基金代碼 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+            },
+            "states": [
+              "lookup-result:blocked"
+            ],
+            "reasons": [
+              "blank"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        }
+      },
+      "conflict_mode": {
+        "measure": {
+          "vw": 390,
+          "vh": 844,
+          "docScrollW": 390,
+          "docClientW": 390,
+          "mainScrollW": 390,
+          "mainClientW": 390,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 10,
+            "14": 3,
+            "15": 6,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": null,
+              "label": "MoneyDJ 基金代碼或 ISIN",
+              "w": 356,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "button",
+              "type": "submit",
+              "role": null,
+              "label": "查詢",
+              "w": 54,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "演示來源（harness）",
+              "w": 324,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [
+            {
+              "el": "input.st-emotion-cache-bak9i.e152jjix1",
+              "sw": 467,
+              "cw": 324,
+              "ox": "clip"
+            }
+          ],
+          "clippedCount": 1,
+          "dataBlocks": [
+            "isin-note",
+            "lookup-result",
+            "rows"
+          ],
+          "details": [],
+          "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+          "title": "Streamlit"
+        },
+        "blocks": {
+          "blocks": {
+            "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+            "lookup-result[result]": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼FAKE-CNFL1 基金名稱FAKE 範例基金甲 配息方式此欄的來源值不一致，未選用任何一個 成立日期此欄的來源值不一致，未選用任何一個 經理費率此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+            "rows": "輸入代碼FAKE-CNFL1 基金名稱FAKE 範例基金甲 配息方式此欄的來源值不一致，未選用任何一個 成立日期此欄的來源值不一致，未選用任何一個 經理費率此欄尚無可顯示的值"
+          },
+          "states": [
+            "lookup-result:result"
+          ],
+          "reasons": [],
+          "outcome": [],
+          "counts": null,
+          "conditions": null,
+          "checkboxes": [],
+          "htmlHasScript": false
+        },
+        "screenshot": [
+          "fund_lookup_conflict_390.png",
+          81940
+        ]
+      }
+    },
+    "1280": {
+      "idle": {
+        "measure": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 3,
+            "14": 3,
+            "15": 1,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": null,
+              "label": "MoneyDJ 基金代碼或 ISIN",
+              "w": 686,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "button",
+              "type": "submit",
+              "role": null,
+              "label": "查詢",
+              "w": 54,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "演示來源（harness）",
+              "w": 654,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "isin-note",
+            "lookup-idle"
+          ],
+          "details": [],
+          "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+          "title": "Streamlit"
+        },
+        "blocks": {
+          "blocks": {
+            "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+            "lookup-idle[idle]": "尚未查詢"
+          },
+          "states": [
+            "lookup-idle:idle"
+          ],
+          "reasons": [],
+          "outcome": [],
+          "counts": null,
+          "conditions": null,
+          "checkboxes": [],
+          "htmlHasScript": false
+        },
+        "screenshot": [
+          "fund_lookup_idle_1280.png",
+          56712
+        ]
+      },
+      "queries": {
+        "FAKE-OK01": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 10,
+              "14": 3,
+              "15": 6,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[result]": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼FAKE-OK01 基金名稱FAKE 範例基金甲 配息方式配息型 成立日期2000-01-02 經理費率此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-OK01 基金名稱FAKE 範例基金甲 配息方式配息型 成立日期2000-01-02 經理費率此欄尚無可顯示的值"
+            },
+            "states": [
+              "lookup-result:result"
+            ],
+            "reasons": [],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_lookup_q_FAKE-OK01_1280.png",
+            87130
+          ]
+        },
+        "FAKE-OK02": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 10,
+              "14": 3,
+              "15": 6,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[result]": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼FAKE-OK02 基金名稱FAKE 範例基金甲 配息方式累積型 成立日期此欄尚無可顯示的值 經理費率此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-OK02 基金名稱FAKE 範例基金甲 配息方式累積型 成立日期此欄尚無可顯示的值 經理費率此欄尚無可顯示的值"
+            },
+            "states": [
+              "lookup-result:result"
+            ],
+            "reasons": [],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-OK03": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 10,
+              "14": 3,
+              "15": 6,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[result]": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼FAKE-OK03 基金名稱FAKE 範例基金甲 配息方式此欄尚無可顯示的值 成立日期此欄尚無可顯示的值 經理費率此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-OK03 基金名稱FAKE 範例基金甲 配息方式此欄尚無可顯示的值 成立日期此欄尚無可顯示的值 經理費率此欄尚無可顯示的值"
+            },
+            "states": [
+              "lookup-result:result"
+            ],
+            "reasons": [],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_lookup_q_FAKE-OK03_1280.png",
+            91226
+          ]
+        },
+        "FAKE-FAIL1": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[failed]": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金的欄位 來源回報取數失敗 這不是對基金身份的判斷 輸入代碼FAKE-FAIL1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-FAIL1"
+            },
+            "states": [
+              "lookup-result:failed"
+            ],
+            "reasons": [
+              "source_failed"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_lookup_q_FAKE-FAIL1_1280.png",
+            80897
+          ]
+        },
+        "FAKE-COOL1": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[failed]": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金的欄位 來源剛失敗，暫時冷卻中，請稍後再查 這不是對基金身份的判斷 輸入代碼FAKE-COOL1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-COOL1"
+            },
+            "states": [
+              "lookup-result:failed"
+            ],
+            "reasons": [
+              "source_cooling"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-IOERR": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[failed]": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金的欄位 取數連線失敗 這不是對基金身份的判斷 輸入代碼FAKE-IOERR 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-IOERR"
+            },
+            "states": [
+              "lookup-result:failed"
+            ],
+            "reasons": [
+              "loader_io_error"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-PAGE1": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[unmatched]": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 頁面格式無法辨識 這不是對基金身份的判斷 輸入代碼FAKE-PAGE1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-PAGE1"
+            },
+            "states": [
+              "lookup-result:unmatched"
+            ],
+            "reasons": [
+              "unrecognized_page"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-PAGE2": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[unmatched]": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 找不到對應頁面 這不是對基金身份的判斷 輸入代碼FAKE-PAGE2 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-PAGE2"
+            },
+            "states": [
+              "lookup-result:unmatched"
+            ],
+            "reasons": [
+              "no_page"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-PAGE3": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[unmatched]": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 來源沒有列出這一檔 這不是對基金身份的判斷 輸入代碼FAKE-PAGE3 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-PAGE3"
+            },
+            "states": [
+              "lookup-result:unmatched"
+            ],
+            "reasons": [
+              "source_not_listed"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_lookup_q_FAKE-PAGE3_1280.png",
+            87664
+          ]
+        },
+        "FAKE-NAME1": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[unmatched]": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 頁面上的基金名稱無法確認 這不是對基金身份的判斷 輸入代碼FAKE-NAME1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-NAME1"
+            },
+            "states": [
+              "lookup-result:unmatched"
+            ],
+            "reasons": [
+              "name_unconfirmed"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "FAKE-REJ1": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 7,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[blocked]": "FAKE 模擬 輸入未通過檢查，未發出查詢 這個代碼無法用於查詢 輸入代碼FAKE-REJ1 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-REJ1"
+            },
+            "states": [
+              "lookup-result:blocked"
+            ],
+            "reasons": [
+              "key_rejected"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          },
+          "screenshot": [
+            "fund_lookup_q_FAKE-REJ1_1280.png",
+            79839
+          ]
+        },
+        "FAKE-NOPE9": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 9,
+              "14": 3,
+              "15": 2,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result",
+              "rows"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[unmatched]": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 找不到對應頁面 這不是對基金身份的判斷 輸入代碼FAKE-NOPE9 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+              "rows": "輸入代碼FAKE-NOPE9"
+            },
+            "states": [
+              "lookup-result:unmatched"
+            ],
+            "reasons": [
+              "no_page"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "US0378331005": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 7,
+              "14": 3,
+              "15": 1,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[blocked]": "FAKE 模擬 輸入未通過檢查，未發出查詢 ISIN 目前未啟用 未用 ISIN 取數、未猜測任何代碼 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+            },
+            "states": [
+              "lookup-result:blocked"
+            ],
+            "reasons": [
+              "isin_shape"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "<script>alert(1)</script>": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 6,
+              "14": 3,
+              "15": 1,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[blocked]": "FAKE 模擬 輸入未通過檢查，未發出查詢 請輸入基金代碼，不要貼網址 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+            },
+            "states": [
+              "lookup-result:blocked"
+            ],
+            "reasons": [
+              "url_shape"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        },
+        "(empty)": {
+          "measure": {
+            "vw": 1280,
+            "vh": 800,
+            "docScrollW": 1280,
+            "docClientW": 1280,
+            "mainScrollW": 1280,
+            "mainClientW": 1280,
+            "fontMinPx": 13,
+            "fontHistogram": {
+              "13": 6,
+              "14": 3,
+              "15": 1,
+              "27.2": 1
+            },
+            "smallText": [],
+            "smallTextCount": 0,
+            "targets": [
+              {
+                "tag": "input",
+                "type": "text",
+                "role": null,
+                "label": "MoneyDJ 基金代碼或 ISIN",
+                "w": 686,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "button",
+                "type": "submit",
+                "role": null,
+                "label": "查詢",
+                "w": 54,
+                "h": 48,
+                "harness": false
+              },
+              {
+                "tag": "input",
+                "type": "text",
+                "role": "combobox",
+                "label": "演示來源（harness）",
+                "w": 654,
+                "h": 38,
+                "harness": true
+              },
+              {
+                "tag": "button",
+                "type": "button",
+                "role": null,
+                "label": "Open",
+                "w": 32,
+                "h": 38,
+                "harness": true
+              }
+            ],
+            "overRight": [],
+            "overCount": 0,
+            "clippedX": [],
+            "clippedCount": 0,
+            "dataBlocks": [
+              "isin-note",
+              "lookup-result"
+            ],
+            "details": [],
+            "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+            "title": "Streamlit"
+          },
+          "blocks": {
+            "blocks": {
+              "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+              "lookup-result[blocked]": "FAKE 模擬 輸入未通過檢查，未發出查詢 請先輸入基金代碼 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+            },
+            "states": [
+              "lookup-result:blocked"
+            ],
+            "reasons": [
+              "blank"
+            ],
+            "outcome": [],
+            "counts": null,
+            "conditions": null,
+            "checkboxes": [],
+            "htmlHasScript": false
+          }
+        }
+      },
+      "conflict_mode": {
+        "measure": {
+          "vw": 1280,
+          "vh": 800,
+          "docScrollW": 1280,
+          "docClientW": 1280,
+          "mainScrollW": 1280,
+          "mainClientW": 1280,
+          "fontMinPx": 13,
+          "fontHistogram": {
+            "13": 10,
+            "14": 3,
+            "15": 6,
+            "27.2": 1
+          },
+          "smallText": [],
+          "smallTextCount": 0,
+          "targets": [
+            {
+              "tag": "input",
+              "type": "text",
+              "role": null,
+              "label": "MoneyDJ 基金代碼或 ISIN",
+              "w": 686,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "button",
+              "type": "submit",
+              "role": null,
+              "label": "查詢",
+              "w": 54,
+              "h": 48,
+              "harness": false
+            },
+            {
+              "tag": "input",
+              "type": "text",
+              "role": "combobox",
+              "label": "演示來源（harness）",
+              "w": 654,
+              "h": 38,
+              "harness": true
+            },
+            {
+              "tag": "button",
+              "type": "button",
+              "role": null,
+              "label": "Open",
+              "w": 32,
+              "h": 38,
+              "harness": true
+            }
+          ],
+          "overRight": [],
+          "overCount": 0,
+          "clippedX": [],
+          "clippedCount": 0,
+          "dataBlocks": [
+            "isin-note",
+            "lookup-result",
+            "rows"
+          ],
+          "details": [],
+          "harnessBanner": "FAKE／測試資料（離線注入，未執行任何真實請求）\nFAKE 示範代碼：FAKE-OK01、FAKE-OK02、FAKE-OK03、FAKE-FAIL1、FAKE-COOL1、FAKE-IOERR、FAKE-PAGE1、FAKE-PAGE2、FAKE-PAGE3、FAKE-NAME1、FAKE-REJ1；其他合法格式的代碼＝找不到對應頁面；ISIN 形、網址形、空白等會在入口被攔截",
+          "title": "Streamlit"
+        },
+        "blocks": {
+          "blocks": {
+            "isin-note": "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）",
+            "lookup-result[result]": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼FAKE-CNFL1 基金名稱FAKE 範例基金甲 配息方式此欄的來源值不一致，未選用任何一個 成立日期此欄的來源值不一致，未選用任何一個 經理費率此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）",
+            "rows": "輸入代碼FAKE-CNFL1 基金名稱FAKE 範例基金甲 配息方式此欄的來源值不一致，未選用任何一個 成立日期此欄的來源值不一致，未選用任何一個 經理費率此欄尚無可顯示的值"
+          },
+          "states": [
+            "lookup-result:result"
+          ],
+          "reasons": [],
+          "outcome": [],
+          "counts": null,
+          "conditions": null,
+          "checkboxes": [],
+          "htmlHasScript": false
+        },
+        "screenshot": [
+          "fund_lookup_conflict_1280.png",
+          98019
+        ]
+      }
+    }
+  },
+  "keyboard": {
+    "390": {
+      "focus_walk_idle": [
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "Deploy",
+          "x": 283.03125,
+          "y": 16,
+          "w": 56.96875,
+          "h": 28,
+          "docY": 16,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 0
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "Main menu",
+          "text": "",
+          "x": 344,
+          "y": 15.5,
+          "w": 28,
+          "h": 28,
+          "docY": 15.5,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 1
+        },
+        {
+          "tag": "section",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "FAKE／測試資料（離線注入，未執行任何真實請求） FA",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 844,
+          "docY": 0,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": false,
+          "i": 2
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "role": null,
+          "aria": "MoneyDJ 基金代碼或 ISIN",
+          "text": "",
+          "x": 17,
+          "y": 282.1875,
+          "w": 356,
+          "h": 48,
+          "docY": 282.1875,
+          "chrome": false,
+          "outline": "solid 2px",
+          "focusPixelsChanged": true,
+          "i": 3
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "查詢",
+          "x": 16,
+          "y": 370.46875,
+          "w": 54,
+          "h": 48,
+          "docY": 370.46875,
+          "chrome": false,
+          "outline": "solid 2px",
+          "focusPixelsChanged": true,
+          "i": 4
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "role": "combobox",
+          "aria": "演示來源（harness）",
+          "text": "輸入代碼 → FakeLoader → adapter",
+          "x": 17,
+          "y": 528.71875,
+          "w": 324,
+          "h": 38,
+          "docY": 528.71875,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 5
+        },
+        {
+          "i": 6,
+          "note": "focus left document"
+        }
+      ]
+    },
+    "1280": {
+      "focus_walk_idle": [
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "Deploy",
+          "x": 1173.03125,
+          "y": 16,
+          "w": 56.96875,
+          "h": 28,
+          "docY": 16,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 0
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "Main menu",
+          "text": "",
+          "x": 1234,
+          "y": 15.5,
+          "w": 28,
+          "h": 28,
+          "docY": 15.5,
+          "chrome": true,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 1
+        },
+        {
+          "tag": "section",
+          "type": null,
+          "role": null,
+          "aria": null,
+          "text": "FAKE／測試資料（離線注入，未執行任何真實請求） FA",
+          "x": 0,
+          "y": 0,
+          "w": 1280,
+          "h": 800,
+          "docY": 0,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": false,
+          "i": 2
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "role": null,
+          "aria": "MoneyDJ 基金代碼或 ISIN",
+          "text": "",
+          "x": 297,
+          "y": 240.59375,
+          "w": 686,
+          "h": 48,
+          "docY": 240.59375,
+          "chrome": false,
+          "outline": "solid 2px",
+          "focusPixelsChanged": true,
+          "i": 3
+        },
+        {
+          "tag": "button",
+          "type": "submit",
+          "role": null,
+          "aria": "",
+          "text": "查詢",
+          "x": 296,
+          "y": 328.875,
+          "w": 54,
+          "h": 48,
+          "docY": 328.875,
+          "chrome": false,
+          "outline": "solid 2px",
+          "focusPixelsChanged": true,
+          "i": 4
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "role": "combobox",
+          "aria": "演示來源（harness）",
+          "text": "輸入代碼 → FakeLoader → adapter",
+          "x": 297,
+          "y": 487.125,
+          "w": 654,
+          "h": 38,
+          "docY": 487.125,
+          "chrome": false,
+          "outline": "none 3px",
+          "focusPixelsChanged": true,
+          "i": 5
+        },
+        {
+          "i": 6,
+          "note": "focus left document"
+        }
+      ]
+    }
+  },
+  "network_non_local_requests": [],
+  "page_errors": []
+}
