@@ -52,6 +52,8 @@ APPROVED_SCALARS = {
     # 圓角 999px＝膠囊；48px＝觸控下限（同頁首五格 TOUCH_MIN_PX）。
     "color.pill.bg": "#ffffff", "color.pill.border": "#7f8ca6", "color.pill.selected.bg": "#1a5fd0",
     "color.pill.selected.text": "#ffffff", "color.pill.focus": "#1a5fd0", "radius.pill": "999px", "size.touch.min": "48px",
+    # 🌍 比較圖雙系列色票方案 A（客戶 2026-11-21 正式裁示 #1296 comment 7057582576）：逐字等式，改色必須明確改這裡
+    "chart.series.1": "#0a3f86", "chart.series.2": "#d06a00",
 }
 APPROVED_TONES = {
     "neutral": {"text": "#172033", "background": "#e6eaf3", "border": "#7f8ca6"},
@@ -108,6 +110,8 @@ def test_pill_rules_live_only_in_the_market_page_css_not_in_shared_app_css():
 
 def test_tokens_outside_g3_scope_stay_unvalued():
     for name in tokens.TOKEN_NAMES:
+        if name in ("chart.series.1", "chart.series.2"):   # 客戶 2026-11-21 核准（方案 A）；值由 APPROVED_SCALARS 逐字鎖
+            continue
         if name.startswith(("chart.", "state.", "cta.", "nav.", "meta.", "color.status.")):
             assert tokens.TOKENS[name].value is None, name
     for name in ("meta.asof", "meta.source", "meta.freshness"):   # #1204 §A.5：type.caption 含 meta.*，只指向、不另給值

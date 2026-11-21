@@ -3,7 +3,7 @@
 
 - **值只有客戶核准的才有**：客戶對 G3 的裁示（經總管轉達；要點轉述，非逐字）＝**候選 B 的色票 ＋ 候選 A 的尺寸**
   （候選表見 `docs/evidence/fund_newui2_market_token_and_wireframe_proposal_2026_11_10.md` §A.5）。核准範圍內的 token 才有 `value`；
-  其餘（`chart.*`、`state.*`、`cta.*`、`nav.*`，以及只指向別的 token 的 `color.status.*`（指向 tone）與 `meta.*`（指向 `type.caption`））仍為 None（`UNVALUED_BY_DESIGN`，測試鎖）。
+  其餘（`chart.*`（`chart.series.1／2` 已由客戶 2026-11-21 核准為值，見 `_SRC_CHART_A`）、`state.*`、`cta.*`、`nav.*`，以及只指向別的 token 的 `color.status.*`（指向 tone）與 `meta.*`（指向 `type.caption`））仍為 None（`UNVALUED_BY_DESIGN`，測試鎖）。
   80 第 5 節的建議尺度原樣留在 `proposed`（`type.caption`：80 建議 12、核准值 13；`type.page`／`type.section`：80 建議 22／17、核准值
   現值 1.7rem／1.2rem —— 都是客戶核准的偏離，不改 `proposed`）。
 - **唯一真相源**：`ui_v3/pages/mkt.py` 與 `ui_v3/shell/nav.py` 的 CSS 一律由本表經 `design/theme.py` 取值，不得另寫色碼或尺寸；
@@ -25,6 +25,9 @@ _SRC_80_5 = "80 §5 Design Contract"
 _SRC_G3 = "G3 核准值（候選 B 色票＋候選 A 尺寸；evidence #1204 §A.5；客戶經總管轉達）"
 _SRC_MKT_B1 = ("🌍 視覺批 1（ChatGPT 總管／客戶 2026-11-20 授權；docs/evidence/mkt_page_visual_gap_analysis_2026_11_19.md §4 第 1／3／4 項）："
                "單選改 pill（segmented）；色取既有色票、圓角與觸控高度為本批新 token")
+_SRC_CHART_A = ("🌍 市場比較圖雙系列色票方案 A（客戶 2026-11-21 正式裁示，#1296 comment 7057582576；候選證據見 main 上 #1302 的 "
+                "docs/design/ui_v3_market_dual_series_palette_review_2026_11_20.html）：只用於比較圖的兩條系列識別；"
+                "顏色只分辨「哪一條」，不代表漲跌、好壞或警示；非顏色辨識（實／虛線＋末點標籤）照舊")
 _SRC_NG4 = "NG-4 A（DEC-2026-11-02-05：沿用狀態符號、語意色名、字樣規範；版面／元件／spacing／typography 重建）"
 
 
@@ -139,6 +142,9 @@ _TOKEN_LIST: Tuple[Token, ...] = (
     _t("chart.height.primary"),
     _t("chart.height.secondary"),
     _t("chart.period"),
+    # 比較圖雙系列色票（方案 A）：第一系列實線深藍、第二系列虛線橙；其餘 chart.* 仍無核准值
+    _t("chart.series.1", source=_SRC_CHART_A, value="#0a3f86"),
+    _t("chart.series.2", source=_SRC_CHART_A, value="#d06a00"),
     # empty／error／loading（80 §5「state.empty.*」：四空狀態沿用 44 —— 未設定／資料未備／取數失敗／無資料；
     # 後綴英文名屬內部命名）
     _t("state.empty.unconfigured"),

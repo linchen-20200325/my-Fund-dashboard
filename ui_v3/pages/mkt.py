@@ -18,7 +18,7 @@ from html import escape
 from typing import Optional
 
 from shared.ui_semantics import rules
-from ui_v3.design import theme
+from ui_v3.design import theme, tokens
 from ui_v3.pages import chart_svg
 from ui_v3.shell import nav
 from ui_v3.shell.registry import IA_PAGES
@@ -226,7 +226,9 @@ def primary_chart_html(model: MarketPageModel) -> Optional[str]:
             continue
         last = [v for _d, v in points if v is not None][-1]
         text = f"{series.label} {last:.1f}" if card.normalized else f"{series.label} {fmt_value(last, model.primary_unit)}"
-        lines.append(chart_svg.Line(points, dashed=index % 2 == 1, end_label=text))
+        # 雙系列色（客戶核准方案 A）：只給「歸一化比較」圖的前兩條；單序列檢視（VIX／美債）維持 currentColor
+        color = tokens.value(f"chart.series.{index + 1}") if card.normalized and index < 2 else None
+        lines.append(chart_svg.Line(points, dashed=index % 2 == 1, end_label=text, color=color))
     if not lines:
         return None
     return chart_svg.line_chart_svg(lines, aria_label=W.text("chart_aria", title=card.title, period=model.period))

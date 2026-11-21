@@ -85,3 +85,42 @@ def test_spark_is_axisless_and_breaks_at_gaps():
     html = svg.spark_svg([("2026-01-01", 1.0), ("2026-01-02", None), ("2026-01-03", 2.0), ("2026-01-04", 3.0)], aria_label="t")
     assert "<text" not in html and "<line" not in html
     assert _paths(html)[0].count("M") == 2
+
+
+# ───────── 比較圖雙系列色票方案 A（客戶 2026-11-21 正式裁示；Line.color 只接受 #rrggbb，預設 currentColor）─────────
+
+def test_line_color_default_is_current_color_for_path_and_end_dot():
+    html = svg.line_chart_svg([_line([("2026-01-01", 1.0), ("2026-01-02", 2.0)])], aria_label="t")
+    assert 'stroke="currentColor"' in html and '<circle' in html and 'fill="currentColor" class="uv3-dot"/>' in html
+
+
+def test_line_color_applies_to_path_and_end_dot_but_never_to_label_text_or_axes():
+    a = svg.Line((("2026-01-01", 1.0), ("2026-01-02", 2.0)), False, "台股 2.0", "#0a3f86")
+    b = svg.Line((("2026-01-01", 1.0), ("2026-01-02", 3.0)), True, "S&P 500 3.0", "#d06a00")
+    html = svg.line_chart_svg([a, b], aria_label="t")
+    paths = re.findall(r"<path [^>]*>", html)
+    assert 'stroke="#0a3f86"' in paths[0] and "stroke-dasharray" not in paths[0]
+    assert 'stroke="#d06a00"' in paths[1] and 'stroke-dasharray="6 4"' in paths[1]
+    assert 'fill="#0a3f86"' in html and 'fill="#d06a00"' in html            # 末點圓
+    for label in re.findall(r"<text [^>]*>[^<]*(?:台股|S&amp;P)[^<]*</text>", html):
+        assert 'fill="currentColor"' in label, label                        # 文字標籤不上色（橙對白僅 3.66:1，不足文字 4.5:1）
+    assert 'stroke="currentColor" opacity="0.35"' in html                    # x 軸線不上色
+
+
+@pytest.mark.parametrize("bad", ["red", "#fff", "#12345g", "#0a3f86; fill:red", 'x" onload="y'])
+def test_line_color_rejects_anything_but_hex6(bad):
+    with pytest.raises(ValueError):
+        svg.line_chart_svg([svg.Line((("2026-01-01", 1.0), ("2026-01-02", 2.0)), False, "L", bad)], aria_label="t")
+
+
+def test_series_tokens_are_exactly_the_approved_values_and_other_chart_tokens_stay_unvalued():
+    from ui_v3.design import tokens
+    assert tokens.value("chart.series.1") == "#0a3f86" and tokens.value("chart.series.2") == "#d06a00"
+    for name in ("chart.height.primary", "chart.height.secondary", "chart.period"):
+        assert tokens.TOKENS[name].value is None, name
+
+
+def test_forced_colors_fallback_style_present_only_when_a_series_colour_is_given():
+    plain = svg.line_chart_svg([_line([("2026-01-01", 1.0), ("2026-01-02", 2.0)])], aria_label="t")
+    coloured = svg.line_chart_svg([svg.Line((("2026-01-01", 1.0), ("2026-01-02", 2.0)), False, "L", "#0a3f86")], aria_label="t")
+    assert "forced-colors" not in plain and "forced-colors" in coloured and "CanvasText" in coloured
