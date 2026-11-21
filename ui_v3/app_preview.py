@@ -40,6 +40,7 @@ def _render_mkt() -> None:
     from ui_v3.viewmodels import settings_health
 
     period, view, rates_key = mkt.selected_controls()
+    st.session_state.pop(settings_health.SNAPSHOT_KEY, None)   # 這次若取數失敗，不得留下上一次的快照給 ⚙️ 當成「當次」
     market_view, table = adapter.load([st.secrets, os.environ])
     model = adapter.build_market_page(market_view, table, period=period, primary_view=view, rates_key=rates_key)
     status = shell_status.from_market_model(model)

@@ -147,9 +147,19 @@ def test_market_then_settings_uses_the_same_snapshot_and_adds_no_loader_call(mon
     assert not at.exception and env.calls == 1                                 # 設定頁沒有再取數
     rows = health_rows(at)
     assert [r["health-key"] for r in rows] == [r.key for r in snap.statuses]
+    expected_state = {STATUS_OK: "ok", STATUS_MISSING: "missing", STATUS_UNDETERMINED: "undetermined"}
     for row, src in zip(rows, snap.statuses):
+        want = expected_state.get(src.status) or ("not_configured" if src.reason_code == "not_configured" else "failed")
         assert (row["health-state"], row["reason"], row["as-of"], row["fetched-at"]) == (
-            "ok" if src.status == STATUS_OK else row["health-state"], src.reason_code or "", src.as_of or "", src.fetched_at or "")
+            want, src.reason_code or "", src.as_of or "", src.fetched_at or "")
+
+
+def _check_scope(at):
+    text = md(at)
+    assert "市場與利率" in text and "不是全站" in text, "範圍揭露"      # 逐字字面值，不由字樣常數自我比對
+    assert W.text("health_scope_note") in text
+    assert 'data-covered="market,rates"' in text
+    assert not re.search(r"全站(正常|健康)|整體(正常|健康)|資料齊全", text)
 
 
 def test_scope_says_market_and_rates_only_and_not_site_wide_and_has_no_overall_light(monkeypatch):
@@ -157,20 +167,24 @@ def test_scope_says_market_and_rates_only_and_not_site_wide_and_has_no_overall_l
     at = env.session()
     env.visit(at, "mkt")
     env.visit(at, "set")
-    text = md(at)
-    assert W.text("health_scope", n=5) in text and "市場與利率" in text and "不是全站" in text
-    assert W.text("health_scope_note") in text
-    assert 'data-covered="market,rates"' in text
-    assert not re.search(r"全站(正常|健康)|整體(正常|健康)|資料齊全", text)
+    _check_scope(at)
+
+
+def test_mutation_dropping_the_scope_disclosure_is_caught(monkeypatch):
+    mutated = dict(W.PREVIEW_PENDING_WORDING)
+    mutated["health_scope"] = dataclasses.replace(mutated["health_scope"], text="資料健康度（本次 {n} 項）")
+    monkeypatch.setattr(W, "PREVIEW_PENDING_WORDING", mutated)
+    env = Env(monkeypatch)
+    at = env.session()
+    env.visit(at, "mkt")
+    env.visit(at, "set")
+    with pytest.raises(AssertionError, match="範圍揭露"):
+        _check_scope(at)
 
 
 # ── 3. 四列固定輸入：失敗／未評估／未設定／缺值 ──────────────────────────────────────
 
-def test_four_fixed_rows_keep_failed_undetermined_not_configured_distinct_and_never_fill_dates(monkeypatch):
-    env = Env(monkeypatch, rows=FOUR_ROWS)
-    at = env.session()
-    env.visit(at, "mkt")
-    env.visit(at, "set")
+def _check_four_rows(at):
     rows = {r["health-key"]: r for r in health_rows(at)}
     assert {k: v["health-state"] for k, v in rows.items()} == {
         "taiex": "ok", "sp500": "failed", "vix": "undetermined", "us2y": "not_configured"}
@@ -185,6 +199,14 @@ def test_four_fixed_rows_keep_failed_undetermined_not_configured_distinct_and_ne
     assert rows["taiex"]["as-of"] == "2026-11-02" and "2026-11-03 14:00" in rows["taiex"]["html"]  # 取得時間顯示為台北時間
     tally = re.search(r'data-health="tally">(.*?)</div>', md(at), re.S).group(1)
     assert W.text("health_tally", ok=1, gone=0, fail=1, unset=1, undet=1) in tally              # 取得1／缺資料0／失敗1／尚未設定1／尚未評估1
+
+
+def test_four_fixed_rows_keep_failed_undetermined_not_configured_distinct_and_never_fill_dates(monkeypatch):
+    env = Env(monkeypatch, rows=FOUR_ROWS)
+    at = env.session()
+    env.visit(at, "mkt")
+    env.visit(at, "set")
+    _check_four_rows(at)
 
 
 def test_one_failed_source_does_not_pollute_the_others(monkeypatch):
@@ -225,18 +247,22 @@ def test_round_trip_keeps_rows_identical_and_settings_visits_never_load(monkeypa
     assert env.calls == calls_after_first_settings + 1                         # 唯一的新增取數來自「回市場」，設定頁 0 次
 
 
-def test_snapshot_is_per_session_and_never_leaks(monkeypatch):
-    env = Env(monkeypatch, rows=FOUR_ROWS)
-    a, b = env.session(), env.session()
+def _check_isolation(env, source=None):
+    a, b = env.session(source), env.session(source)
     env.visit(a, "mkt")
     env.visit(b, "set")                        # b 沒有到過市場
-    assert 'data-health="no-snapshot"' in md(b) and not health_rows(b) and vm.SNAPSHOT_KEY not in b.session_state
+    assert 'data-health="no-snapshot"' in md(b) and not health_rows(b) and vm.SNAPSHOT_KEY not in b.session_state, "快照跨 session 洩漏"
     env.visit(a, "set")
     assert len(health_rows(a)) == 4            # a 的快照不受 b 影響
-    other = Env(monkeypatch, rows=(OK_ROW,) + (DomainStatus("us10y", "series_us10y", STATUS_MISSING, "missing", None, None, None),))
-    c = other.session()
-    other.visit(c, "mkt")
-    assert len(snapshot_of(c).statuses) == 2 and len(snapshot_of(a).statuses) == 4   # 兩個 session 各自一份
+
+
+def test_snapshot_is_per_session_and_never_leaks(monkeypatch):
+    env = Env(monkeypatch, rows=FOUR_ROWS)
+    _check_isolation(env)
+    c, d = env.session(), env.session()
+    env.visit(c, "mkt")
+    env.visit(d, "mkt")
+    assert snapshot_of(c) == snapshot_of(d) and snapshot_of(c) is not snapshot_of(d)   # 各自一份（值相同、不是同一個物件）
 
 
 def test_no_global_cache_is_used_for_the_snapshot():
@@ -382,29 +408,35 @@ def test_mutation_failed_rendered_as_ok_is_caught(monkeypatch):
     at = env.session()
     env.visit(at, "mkt")
     env.visit(at, "set")
-    assert 'data-status-key="fetch_failed"' not in next(r["html"] for r in health_rows(at) if r["health-key"] == "sp500")   # 變異生效
-    with pytest.raises(AssertionError):                                       # 真實守衛（四列測試的 fetch_failed 斷言）會抓到
-        assert 'data-status-key="fetch_failed"' in next(r["html"] for r in health_rows(at) if r["health-key"] == "sp500")
+    with pytest.raises(AssertionError):
+        _check_four_rows(at)                   # 真實守衛函式本身（與四列測試同一個）必須轉紅
 
 
 def test_mutation_leaking_snapshot_through_process_global_is_caught(monkeypatch):
-    """變異：把快照另存到行程層全域（所有 session 共用）→ 沒到過市場的第二個 session 直接進設定頁也會看到別人的列。"""
-    glob = "import sys, types; _G = sys.modules.setdefault('uv3_leak', types.SimpleNamespace(snap=None))\n"
+    """變異：把快照另存到行程層全域（所有 session 共用）→ 真實隔離檢查必須轉紅。"""
+    glob = "    import sys, types; _G = sys.modules.setdefault('uv3_leak', types.SimpleNamespace(snap=None))"
     store = _mutant("    chrome.render_status(status)   # Status Bar",
-                    "    " + glob.replace("\n", "") + "; _G.snap = st.session_state[settings_health.SNAPSHOT_KEY]\n    chrome.render_status(status)   # Status Bar")
+                    glob + "; _G.snap = st.session_state[settings_health.SNAPSHOT_KEY]\n    chrome.render_status(status)   # Status Bar")
     leaky = store.replace("    snapshot = st.session_state.get(settings_health.SNAPSHOT_KEY)\n",
                           "    import sys\n    _g = sys.modules.get('uv3_leak')\n    snapshot = st.session_state.get(settings_health.SNAPSHOT_KEY) or (_g.snap if _g else None)\n")
     assert leaky != store
     monkeypatch.delitem(__import__("sys").modules, "uv3_leak", raising=False)
     env = Env(monkeypatch, rows=FOUR_ROWS)
-    a, b = env.session(leaky), env.session(leaky)
-    env.visit(a, "mkt")
-    env.visit(b, "set")                          # b 沒到過市場
-    assert health_rows(b), "變異未生效"
-    with pytest.raises(AssertionError):          # 真實守衛的斷言：此變異下必然失敗（b 不得有任何列）
-        assert 'data-health="no-snapshot"' in md(b) and not health_rows(b)
-    clean_env = Env(monkeypatch, rows=FOUR_ROWS)
-    a2, b2 = clean_env.session(), clean_env.session()
-    clean_env.visit(a2, "mkt")
-    clean_env.visit(b2, "set")
-    assert 'data-health="no-snapshot"' in md(b2) and not health_rows(b2)      # 真實實作：同一組動作，b 沒有任何列
+    with pytest.raises(AssertionError, match="跨 session 洩漏"):
+        _check_isolation(env, leaky)
+    monkeypatch.delitem(__import__("sys").modules, "uv3_leak", raising=False)
+    _check_isolation(Env(monkeypatch, rows=FOUR_ROWS))          # 真實實作：同一個檢查通過
+
+
+# ── 舊快照不得殘留（稽核 F）──────────────────────────────────────────────────
+
+def test_failed_market_load_does_not_leave_a_stale_snapshot(monkeypatch):
+    env = Env(monkeypatch, rows=FOUR_ROWS)
+    at = env.session()
+    env.visit(at, "mkt")
+    assert vm.SNAPSHOT_KEY in at.session_state
+    monkeypatch.setattr(adapter, "load", lambda sources: (_ for _ in ()).throw(RuntimeError("fake upstream down")))
+    env.visit(at, "mkt")
+    assert at.exception and vm.SNAPSHOT_KEY not in at.session_state      # 這次沒取到 → 不留上一次的快照
+    env.visit(at, "set")
+    assert 'data-health="no-snapshot"' in md(at) and not health_rows(at)

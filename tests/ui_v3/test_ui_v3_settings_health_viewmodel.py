@@ -222,7 +222,7 @@ def test_unknown_status_is_rejected_not_defaulted():
     for name, value in dict(key="taiex", label_key="series_taiex", status="stale", reason_code=None,
                             source=None, as_of=None, fetched_at=None).items():
         object.__setattr__(fake, name, value)
-    with pytest.raises(ValueError, match="無法對映"):
+    with pytest.raises(ValueError, match="status 必須在|無法對映"):   # 未知 status 在 DomainStatus 重建或 _state_of 任一處被拒，皆為 fail-closed
         build([fake])
 
 
@@ -307,11 +307,17 @@ def _bad_state_of(mutation):
     return bad
 
 
-@pytest.mark.parametrize("mutation", ["undetermined_as_ok", "undetermined_as_failed",
-                                      "not_configured_as_failed", "failed_as_missing"])
-def test_mutated_state_mapping_is_caught(monkeypatch, mutation):
+@pytest.mark.parametrize("mutation", ["undetermined_as_ok", "undetermined_as_failed", "failed_as_missing"])
+def test_mutated_state_mapping_is_caught_by_semantic_check(monkeypatch, mutation):
     monkeypatch.setattr(sh, "_state_of", _bad_state_of(mutation))
-    with pytest.raises((AssertionError, ValueError)):
+    with pytest.raises(AssertionError):            # 必須是語意斷言抓到，不是建構錯誤
+        check_semantics()
+
+
+def test_mutated_not_configured_as_failed_is_caught_by_the_row_invariant(monkeypatch):
+    """尚未設定被算成取數失敗：由 `HealthRow` 的「not_configured 狀態與原因碼必須同時成立」不變量在建構時擋下（另一道獨立防線）。"""
+    monkeypatch.setattr(sh, "_state_of", _bad_state_of("not_configured_as_failed"))
+    with pytest.raises(ValueError, match="尚未設定 ≠ 取數失敗"):
         check_semantics()
 
 
@@ -336,3 +342,10 @@ def test_mutated_gap_detection_is_caught(monkeypatch):
     partial = DomainStatus("taiex", "series_taiex", STATUS_OK, None, "Yahoo FAKE", None, None)
     with pytest.raises(ValueError, match="gaps 必須如實"):
         build([partial])
+
+
+def test_blank_string_fields_are_treated_as_missing_not_crashing_the_page():
+    blank = DomainStatus("taiex", "series_taiex", STATUS_OK, None, "", "  ", STAMP)
+    row = build([blank]).rows[0]
+    assert (row.source, row.as_of, row.fetched_at) == (None, None, STAMP)
+    assert row.gaps == ("source", "as_of")                       # 缺口如實列出，不補值

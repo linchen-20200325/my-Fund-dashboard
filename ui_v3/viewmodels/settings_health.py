@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, Tuple
 
@@ -86,6 +87,10 @@ class HealthSnapshot:
 def build_from_snapshot(snapshot: HealthSnapshot) -> "SettingsHealthModel":
     """快照 → 健康度模型（純函式；同快照同輸出）。"""
     return build_settings_health(snapshot.statuses, row_category=DEFAULT_ROW_CATEGORY, coverage=PHASE_1A_COVERAGE)
+
+
+def _blank_to_none(value: Optional[str]) -> Optional[str]:
+    return None if value is None or not str(value).strip() else value
 
 
 def _state_of(row: DomainStatus) -> str:
@@ -252,6 +257,9 @@ def build_settings_health(
             raise ValueError(f"資料列 {status.key!r} 的類別 {category!r} 不在 {HEALTH_CATEGORY_KEYS}")
         if coverage[category] != COVERAGE_COVERED:
             raise ValueError(f"資料列 {status.key!r} 屬於非 covered 的類別 {category!r}（覆蓋宣告與資料互相矛盾）")
+        # 空字串／全空白＝沒有值（缺值），一律視為 None；不補值、不讓空字串讓整頁崩潰。
+        status = dataclasses.replace(status, source=_blank_to_none(status.source), as_of=_blank_to_none(status.as_of),
+                                     fetched_at=_blank_to_none(status.fetched_at))
         state = _state_of(status)
         rows.append(HealthRow(status.key, category, status.label_key, state, status.reason_code, status.source,
                               status.as_of, status.fetched_at, _gaps_of(status, state)))
