@@ -86,6 +86,23 @@ def _changed_top_keys(a, b):
     return sorted(k for k in a if a[k] != b[k])
 
 
+def _fact_diff(a, b, path=""):
+    """逐路徑列出兩份域事實的差異（被測的比較函式；dict 逐鍵、list 逐位、純量比值）。相同回 []。"""
+    if isinstance(a, dict) and isinstance(b, dict):
+        out = []
+        for k in sorted(set(a) | set(b), key=str):
+            if k not in a or k not in b:
+                out.append(f"{path}/{k}")
+            else:
+                out.extend(_fact_diff(a[k], b[k], f"{path}/{k}"))
+        return out
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        if len(a) != len(b):
+            return [f"{path}#len"]
+        return [d for i, (x, y) in enumerate(zip(a, b)) for d in _fact_diff(x, y, f"{path}[{i}]")]
+    return [] if (type(a) is type(b) and a == b) else [path]
+
+
 def _unknown_as_zero(prim):
     """未知被當成 0 的違規：status 不是 valued 的持倉，value_twd 必須是 None；分母 None 時不得有數字。"""
     bad = [h["fund_code"] for h in prim["holdings"] if h["value_status"] != "valued" and h["value_twd"] is not None]
@@ -191,17 +208,48 @@ def test_negative_control_unknown_as_zero_detector_fires_on_a_zero_filled_mutant
     assert _unknown_as_zero(mutant) == ["A"]
 
 
-def test_negative_control_sensitivity_detector_fires_when_a_fact_is_hidden():
+def test_negative_control_fact_diff_reports_each_real_mutation_and_only_those():
+    """變異負控：對真 evidence 做三種真實變異（隱藏原因、丟失欄位、未知改 0），比較函式必須各自報出該路徑；未變異則為空。"""
     base = _prim(_mv(fx=()))
+    assert _fact_diff(base, copy.deepcopy(base)) == []
     hidden = copy.deepcopy(base)
-    hidden["holdings"][0]["reason"] = None             # 假想的「原因被投影丟失」
-    assert base != hidden and _by_code(hidden, "A")["reason"] is None
+    _by_code(hidden, "A")["reason"] = None
+    dropped = copy.deepcopy(base)
+    del _by_code(dropped, "A")["nav_state"]
+    zeroed = copy.deepcopy(base)
+    _by_code(zeroed, "A")["value_twd"] = 0.0
+    idx = [h["fund_code"] for h in base["holdings"]].index("A")
+    assert _fact_diff(base, hidden) == [f"/holdings[{idx}]/reason"]
+    assert _fact_diff(base, dropped) == [f"/holdings[{idx}]/nav_state"]
+    assert _fact_diff(base, zeroed) == [f"/holdings[{idx}]/value_twd"], "None 與 0.0 必須被視為不同事實"
 
 
-def test_negative_control_order_canonicalizer_does_not_mask_a_real_fact_change():
+def test_negative_control_cause_distinction_check_fails_when_reason_is_projected_away():
+    """變異負控：兩種缺值原因的區分檢查，在『原因被投影丟失』的變異下必須失敗。"""
+    def distinguishes(stale, fxmiss):
+        return _by_code(stale, "A")["reason"] != _by_code(fxmiss, "A")["reason"]
+
+    stale = _prim(_mv(nav=(NAV_B,), nnr=NNR(["A"], days=10, last={"A": "2026-09-01"})))
+    fxmiss = _prim(_mv(fx=()))
+    assert distinguishes(stale, fxmiss) is True
+    for prim in (stale, fxmiss):
+        _by_code(prim, "A")["reason"] = None          # 變異：兩邊原因都被丟掉
+    assert distinguishes(stale, fxmiss) is False, "原因丟失後檢查必須失敗，否則區分檢查是空的"
+
+
+def test_negative_control_canonical_diff_ignores_pure_reorder_but_catches_fact_mutation_after_reorder():
     fwd = _prim(_mv())
+    rev = _prim(_mv(holdings=list(reversed(_holdings()))))
+    assert _fact_diff(fwd, rev) != [], "未正規化時順序差異可見（控制：比較函式本身對順序敏感）"
+    assert _fact_diff(_canonical(fwd), _canonical(rev)) == []
+    mutated = copy.deepcopy(rev)
+    _by_code(mutated, "A")["value_twd"] = 0.0
+    mutated["categories"][0]["value_twd"] = None
+    diffs = _fact_diff(_canonical(fwd), _canonical(mutated))
+    assert any(d.endswith("/value_twd") and d.startswith("/holdings") for d in diffs)
+    assert any(d.startswith("/categories") for d in diffs)
     changed = _prim(_mv(fx=()))
-    assert _canonical(fwd) != _canonical(changed)
+    assert _fact_diff(_canonical(fwd), _canonical(changed)) != []
 
 
 # ═══════════════════ 2. 離線 producer（v2_tables）→ Evidence ═══════════════════
@@ -287,8 +335,9 @@ def test_known_gap_c13_current_boundary_nav_and_fx_side_inputs_are_dropped_at_ho
     stage = M.settings_stage(M.SettingsOutcome("loaded", X.settings_rows(), ()))
     tables = dict(X.two_fund_tables(), nav=[NAV_A], market_indicator=[FX_USD], nav_not_ready=NNR(["A"], 10, {"A": "2026-09-01"}))
     out_tables, source_state = M.holding_stage_inputs(M.HoldingOutcome("loaded", tables=tables), stage, mask=X.mask)
-    assert set(out_tables) == {"holding"}
-    assert not ({"nav", "market_indicator", "nav_not_ready"} & set(source_state))
+    assert set(out_tables) == {"holding"}, f"C-13 現況邊界被改動：須先過 {GATE}（{LEDGER}）；實際 {sorted(out_tables)}"
+    leaked = {"nav", "market_indicator", "nav_not_ready"} & set(source_state)
+    assert not leaked, f"C-13 現況邊界被改動：source_state 新增 {sorted(leaked)}；須先過 {GATE}（{LEDGER}）"
 
 
 def test_known_gap_c13_market_basis_is_blocked_so_nav_fx_cause_cannot_reach_evidence():
@@ -296,11 +345,12 @@ def test_known_gap_c13_market_basis_is_blocked_so_nav_fx_cause_cannot_reach_evid
     X, M, _P = _ui_modules()
     stage = M.settings_stage(M.SettingsOutcome("loaded", X.settings_rows(basis=MV), ()))
     res = M.evaluate(stage, None, mask=X.mask, fx_key_of=lambda c: c, fx_rule_verified=True)
-    assert res.status == M.STATUS_BLOCKED and res.evidence is None
-    assert res.chart_claim == M.CHART_CLAIM_WITHHELD, "不得宣稱圖表可比"
+    assert res.status == M.STATUS_BLOCKED and res.evidence is None, (
+        f"C-13 現況邊界被改動：市值基準不再 blocked（status={res.status}）；須先過 {GATE}（{LEDGER}）")
+    assert res.chart_claim == M.CHART_CLAIM_WITHHELD, f"不得宣稱圖表可比；{GATE}（{LEDGER}）"
 
 
-@pytest.mark.xfail(strict=True, reason=f"C-13 known-gap：NAV stale／FX missing 差異目前不穿透 UI 轉接層；修復屬 Evidence 契約變更，須先經 {GATE}（{LEDGER}）")
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=f"C-13 known-gap：NAV stale／FX missing 差異目前不穿透 UI 轉接層；修復屬 Evidence 契約變更，須先經 {GATE}（{LEDGER}）")
 def test_expected_fail_c13_nav_fx_difference_would_reach_ui_page_model():
     """【期望行為，目前 XFAIL】同一組可見持倉、只改 NAV／FX 事實 → 頁面事實應不同。現況：兩者逐欄相同。"""
     X, _M, _P = _ui_modules()
