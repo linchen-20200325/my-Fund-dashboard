@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import copy
 import dataclasses
 import math
 
@@ -106,7 +107,8 @@ def test_negative_control_contaminated_model_is_detected():
     assert "healthy_series_metadata_changed" in _violations(dataclasses.replace(model, primary_notes=shifted), "sp500", "taiex", _TW_REF)
     # 變異：失敗序列塞回健康序列的點 → failed_series_has_points
     series = {s.label: s for s in model.primary_card.series}
-    other = dataclasses.replace(series["S&P 500"], points=series["台股"].points)
+    other = copy.copy(series["S&P 500"])
+    object.__setattr__(other, "points", series["台股"].points)   # viewmodel 建構子本身會擋「失敗序列帶點」，故繞過 __post_init__ 注入變異
     card = dataclasses.replace(model.primary_card, series=(series["台股"], other))
     assert "failed_series_has_points" in _violations(dataclasses.replace(model, primary_card=card), "sp500", "taiex", _TW_REF)
     # 變異：健康序列的點被補成 0 → zero_filled
