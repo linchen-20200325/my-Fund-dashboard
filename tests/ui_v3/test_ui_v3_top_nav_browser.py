@@ -7,7 +7,7 @@ AppTest 不載入 CSS，靜態 CSS 字串檢查也量不到實際版面；這一
 
 資料：`market_stubs` 的**合成 fixture**（不是市場資料；不打任何網路）。量到的是 Shell 版面，與資料值無關。
 每格驗：在視窗內、寬與高都 ≥ 48、五格等寬（±1px）且不重疊；整頁與頁首都不橫向溢出；≥769 頁首不顯示、側欄在；
-未掛載四項 `aria-disabled="true"` 且沒有 href；🌍 選取態不只靠顏色（粗體＋底線）；Tab 可聚焦 🌍、不可聚焦未掛載項且焦點外框可見；
+未掛載三項（💼／🔍／🤖）`aria-disabled="true"` 且沒有 href；🌍 選取態不只靠顏色（粗體＋底線）；Tab 可聚焦 🌍、⚙️（BL-0540 Phase 1A 起可進）、不可聚焦未掛載項且焦點外框可見；
 ≤768 沒有任何貼底（fixed）元素；字放大 190%（以放大 rem 與頁首字級模擬 Android textZoom）五格仍全部可見、不裁字、不橫捲。
 """
 
@@ -142,15 +142,16 @@ def test_mobile_top_nav_states_and_aria(base_and_browser):
             page.keyboard.press("Tab")
     finally:
         ctx.close()
-    now, *soon = m["cells"]
+    now, ast, exp, ai, settings = m["cells"]       # 五頁順序：🌍 → 💼 → 🔍 → 🤖 → ⚙️；可進的是 🌍 與 ⚙️（BL-0540 Phase 1A，#7056447977）
     assert now["href"] is not None and now["ariaDisabled"] is None
     assert int(now["fw"]) >= 600 and now["deco"] == "underline" and float(now["bb"].replace("px", "")) >= 2, ("選取態不能只靠顏色", now)
-    for cell, name in zip(soon, _NAMES[1:]):
+    assert settings["href"] is not None and settings["ariaDisabled"] is None, ("⚙️ 是真連結", settings)
+    for cell, name in zip((ast, exp, ai), _NAMES[1:4]):
         assert cell["ariaDisabled"] == "true" and cell["href"] is None, cell
         assert _SOON[name] in cell["text"], cell
     in_nav = [f for f in focus_path if f and f["inNav"]]
-    assert len(in_nav) == 1 and "市場" in in_nav[0]["text"], ("頁首只有 🌍 可聚焦、未掛載項不可聚焦", focus_path)
-    assert in_nav[0]["visible"] and in_nav[0]["outline"].startswith("solid"), ("焦點外框必須可見", in_nav[0])
+    assert len(in_nav) == 2 and "市場" in in_nav[0]["text"] and "設定" in in_nav[1]["text"], ("頁首只有 🌍、⚙️ 可聚焦、未掛載項不可聚焦", focus_path)
+    assert all(f["visible"] and f["outline"].startswith("solid") for f in in_nav), ("焦點外框必須可見", in_nav)
 
 
 @pytest.mark.parametrize("width", [769, 1280])

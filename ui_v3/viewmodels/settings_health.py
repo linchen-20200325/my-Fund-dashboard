@@ -29,8 +29,10 @@ from ui_v3.viewmodels.common import (
     require_key,
 )
 from ui_v3.viewmodels.market_page import DomainStatus
+from ui_v3.viewmodels.shell import ShellStatus
 
 __all__ = (
+    "SNAPSHOT_KEY", "HealthSnapshot", "DEFAULT_ROW_CATEGORY", "PHASE_1A_COVERAGE", "build_from_snapshot",
     "HEALTH_CATEGORY_KEYS", "COVERAGE_KINDS", "COVERAGE_COVERED", "COVERAGE_NOT_WIRED",
     "COVERAGE_NOT_EVALUATED", "COVERAGE_PENDING_RULING", "HEALTH_STATES",
     "STATE_OK", "STATE_MISSING", "STATE_FAILED", "STATE_NOT_CONFIGURED", "STATE_UNDETERMINED",
@@ -55,6 +57,35 @@ HEALTH_STATES = (STATE_OK, STATE_MISSING, STATE_FAILED, STATE_NOT_CONFIGURED, ST
 
 # ok 列理應帶的證據欄位；缺哪個就如實列出（不補值、不以其他欄位代替）。
 GAP_FIELDS = ("source", "as_of", "fetched_at")
+
+
+# ── Phase 1A（客戶 2026-11-21 裁示 #7056447977）：同一 session 的市場／利率快照 ─────────────────
+SNAPSHOT_KEY = "uv3_health_snapshot"   # st.session_state 的鍵：每個使用者 session 各自一份，不進全域 cache
+
+# 🌍 五條序列 → 類別的暫用對映（線框讀法；客戶只授權「市場與利率」，不是全站）。
+DEFAULT_ROW_CATEGORY = {"taiex": "market", "sp500": "market", "vix": "market", "us10y": "rates", "us2y": "rates"}
+# 本頁只評估市場與利率；其餘六類「本頁尚未評估」——這是本頁範圍的事實，不宣稱它們是否接線。
+PHASE_1A_COVERAGE = {k: (COVERAGE_COVERED if k in ("market", "rates") else COVERAGE_NOT_EVALUATED)
+                     for k in HEALTH_CATEGORY_KEYS}
+
+
+@dataclass(frozen=True)
+class HealthSnapshot:
+    """市場頁**已產生**的一份狀態快照（唯讀；設定頁只讀它、不取數）。不含時間戳以外的任何衍生值；不補現在時間。"""
+
+    statuses: Tuple[DomainStatus, ...]
+    shell_status: ShellStatus
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.statuses, tuple) or not self.statuses or not all(isinstance(r, DomainStatus) for r in self.statuses):
+            raise TypeError("statuses 必須是非空的 DomainStatus tuple")
+        if not isinstance(self.shell_status, ShellStatus):
+            raise TypeError("shell_status 必須是 ShellStatus")
+
+
+def build_from_snapshot(snapshot: HealthSnapshot) -> "SettingsHealthModel":
+    """快照 → 健康度模型（純函式；同快照同輸出）。"""
+    return build_settings_health(snapshot.statuses, row_category=DEFAULT_ROW_CATEGORY, coverage=PHASE_1A_COVERAGE)
 
 
 def _state_of(row: DomainStatus) -> str:

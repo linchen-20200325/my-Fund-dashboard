@@ -107,6 +107,16 @@ _LIST = (
     _w("status_ok_row", "{label}：取得 ｜ 來源 {source} ｜ 資料日 {date}", _SRC_EXEC),
     # 全站 Navigation Shell 的字樣已於客戶 2026-11-03 裁示（`DEC-2026-11-03-11`）全數核准，住 `rules.APPROVED_WORDING`（`shell_*` 鍵）；
     # 這裡不再留任何 Shell 字樣（不建立第二套字樣表）。
+    # ⚙️ 設定→資料健康度（BL-0540 Phase 1A；客戶 2026-11-21 裁示 #7056447977）。全部是執行組暫擬，待客戶定字；狀態字樣取規則表。
+    _w("health_title", "資料健康度", _SRC_EXEC),
+    _w("health_scope", "涵蓋範圍：市場與利率（本次 {n} 項）。不是全站資料健康度。", _SRC_EXEC),
+    _w("health_scope_note", "「取得」不代表資料可用或齊全；其餘類別本頁尚未評估。", _SRC_EXEC),
+    _w("health_tally", "取得 {ok} ｜ 缺資料 {gone} ｜ 取數失敗 {fail} ｜ 尚未設定 {unset} ｜ 尚未評估 {undet}", _SRC_EXEC),
+    _w("health_state_ok", "取得", _SRC_EXEC),
+    _w("health_field_source", "來源", _SRC_EXEC),
+    _w("health_field_as_of", "資料日", _SRC_EXEC),
+    _w("health_field_fetched", "取得時間（台北時間）", _SRC_EXEC),
+    _w("health_no_snapshot", "尚未評估：這次開啟還沒有市場與利率的資料可看。請先到市場頁；本頁不會自行取數。", _SRC_EXEC),
     # 頁級
     _w("preview_banner", "Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字", _SRC_EXEC),
 )
