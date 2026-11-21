@@ -25,8 +25,8 @@ _SRC_80_5 = "80 §5 Design Contract"
 _SRC_G3 = "G3 核准值（候選 B 色票＋候選 A 尺寸；evidence #1204 §A.5；客戶經總管轉達）"
 _SRC_MKT_B1 = ("🌍 視覺批 1（ChatGPT 總管／客戶 2026-11-20 授權；docs/evidence/mkt_page_visual_gap_analysis_2026_11_19.md §4 第 1／3／4 項）："
                "單選改 pill（segmented）；色取既有色票、圓角與觸控高度為本批新 token")
-_SRC_CHART_A = ("🌍 市場比較圖雙系列色票方案 A（客戶 2026-11-21 正式裁示，#1296 comment 7057582576；候選見 "
-                "docs/evidence/ui_a6_palette_recompute_2026_11_21/report.md）：只用於比較圖的兩條系列識別；"
+_SRC_CHART_A = ("🌍 市場比較圖雙系列色票方案 A（客戶 2026-11-21 正式裁示，#1296 comment 7057582576；候選證據見 main 上 #1302 的 "
+                "docs/design/ui_v3_market_dual_series_palette_review_2026_11_20.html）：只用於比較圖的兩條系列識別；"
                 "顏色只分辨「哪一條」，不代表漲跌、好壞或警示；非顏色辨識（實／虛線＋末點標籤）照舊")
 _SRC_NG4 = "NG-4 A（DEC-2026-11-02-05：沿用狀態符號、語意色名、字樣規範；版面／元件／spacing／typography 重建）"
 
