@@ -185,7 +185,8 @@ _FOCUS_JS = r"""
   const s = getComputedStyle(a);
   const idx = [...document.querySelectorAll('a[data-testid="stPageLink-NavLink"]')].indexOf(a);
   return {tag: a.tagName, idx, fv: a.matches(':focus-visible'), outlineStyle: s.outlineStyle, outlineWidth: s.outlineWidth,
-          boxShadow: s.boxShadow, bg: s.backgroundColor, deco: s.textDecorationLine}; }
+          boxShadow: s.boxShadow, bg: s.backgroundColor, deco: s.textDecorationLine,
+          inSidebar: !!a.closest('[data-testid="stSidebar"]')}; }
 """
 
 
@@ -269,6 +270,7 @@ def test_mobile_top_nav_link_shows_visible_focus_indicator(base_and_browser):
 
 def test_desktop_sidebar_nav_link_shows_visible_focus_indicator(base_and_browser):
     unfocused, focused = _nav_focus(base_and_browser, 1280)
+    assert focused and focused["inSidebar"], "1280 下被聚焦的導覽連結必須在側欄內"
     assert not focus_indicator_violations(unfocused, focused), (focus_indicator_violations(unfocused, focused), unfocused, focused)
 
 
@@ -303,6 +305,7 @@ def test_mutation_deleting_only_the_mobile_outline_rule_is_flagged(base_and_brow
 @pytest.mark.parametrize("ctx_kw", [dict(), dict(color_scheme="dark"), dict(forced_colors="active")], ids=["normal", "dark", "forced-colors"])
 def test_desktop_sidebar_focus_visible_in_normal_dark_and_forced_colors(base_and_browser, ctx_kw):
     unfocused, focused = _nav_focus(base_and_browser, 1280, **ctx_kw)
+    assert focused and focused["inSidebar"], "1280 下被聚焦的導覽連結必須在側欄內"
     assert not focus_indicator_violations(unfocused, focused), (focus_indicator_violations(unfocused, focused), unfocused, focused)
 
 
