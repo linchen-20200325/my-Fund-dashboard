@@ -229,5 +229,8 @@
       }
     }
   ],
-  "conclusion": "LOCAL_PREVIEW_VERIFIED"
+  "conclusion": "LOCAL_PREVIEW_VERIFIED",
+  "base_commit_note": "量測基準＝origin/main c5c54c3b（量測當下 worktree HEAD）；測試 head＝本 PR（#1314）分支最新 commit，以 git 紀錄為準",
+  "measured_at": "2026-11-21（量測腳本於當日執行；未記錄精確時刻）",
+  "script_note": "量測腳本（Playwright＋合成 fixture 包住 app_preview）在 scratchpad，未入庫，本檔無法由 repo 內指令重跑；repo 內可重跑的只有 tests/ui_v3/test_ui_v3_market_source_separation.py 與既有 browser 測試"
 }

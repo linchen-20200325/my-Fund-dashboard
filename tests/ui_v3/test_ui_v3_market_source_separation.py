@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""🌍 頁同快照資料來源分離負控：一條序列失敗／缺資料，其他序列仍各自保有值、source、as_of、fetched_at。
+"""🌍 頁同快照資料來源分離負控：一條序列失敗／缺資料，其他（健康）序列仍各自保有值、source、as_of、fetched_at；失敗序列不帶資料日／取得時間／點。
+判定函式 `_violations` 檢查：失敗序列的日期與點、健康序列的 source／as_of／fetched_at 與「不補 0」；不檢查失敗序列自身的 source 標籤。
 
 只用測試端替身（`market_stubs`）與真的 L2 形狀；不接任何真資料。⚠️ 數值與日期是人造的。
 """
@@ -69,7 +70,7 @@ def test_us_series_down_does_not_touch_taiex(state):
     assert _violations(model, "sp500", "taiex", _TW_REF) == []
     n = _notes(model)["sp500"]
     assert n.status == (STATUS_FAILED if state == "error" else STATUS_MISSING)
-    base = _build()
+    base = _build()   # 注意：跨模式比對 period_change 依賴兩次建構的基準日相同（同一組固定日期的合成資料）；改動日期參數時須一併檢視
     keep = {c.key: c.period_change for c in base.evidence_changes}["taiex"]
     now = {c.key: c.period_change for c in model.evidence_changes}
     assert math.isclose(now["taiex"], keep) and now["sp500"] is None   # 缺值不補 0、不變成 0.0
@@ -103,3 +104,12 @@ def test_negative_control_contaminated_model_is_detected():
     assert "failed_series_has_dates" in _violations(dataclasses.replace(model, primary_notes=polluted), "sp500", "taiex", _TW_REF)
     shifted = tuple(dataclasses.replace(n, as_of=US_LAST) if n.key == "taiex" else n for n in model.primary_notes)
     assert "healthy_series_metadata_changed" in _violations(dataclasses.replace(model, primary_notes=shifted), "sp500", "taiex", _TW_REF)
+    # 變異：失敗序列塞回健康序列的點 → failed_series_has_points
+    series = {s.label: s for s in model.primary_card.series}
+    other = dataclasses.replace(series["S&P 500"], points=series["台股"].points)
+    card = dataclasses.replace(model.primary_card, series=(series["台股"], other))
+    assert "failed_series_has_points" in _violations(dataclasses.replace(model, primary_card=card), "sp500", "taiex", _TW_REF)
+    # 變異：健康序列的點被補成 0 → zero_filled
+    zeroed = dataclasses.replace(series["台股"], points=tuple(dataclasses.replace(pt, value=0.0) for pt in series["台股"].points))
+    card0 = dataclasses.replace(model.primary_card, series=(zeroed, series["S&P 500"]))
+    assert "zero_filled" in _violations(dataclasses.replace(model, primary_card=card0), "sp500", "taiex", _TW_REF)
