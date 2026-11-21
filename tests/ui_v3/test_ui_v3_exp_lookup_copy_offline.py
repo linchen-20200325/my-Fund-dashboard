@@ -147,20 +147,31 @@ PAGE_ALLOWED = ("ui_v3.design", "ui_v3.viewmodels.fund_lookup", "ui_v3.viewmodel
 WORD_ALLOWED = ("shared.ui_semantics", "ui_v3.viewmodels.preview_wording", "html", "types", "typing", "__future__")
 
 
+def _imports_with_scope(tree: ast.AST):
+    """依執行作用域走訪：回傳 (節點, 是否在函式／lambda 內)。函式本體在 def 時不執行；
+    其餘（模組直下、if／try／except／finally／else／with／for／while／match 區塊、class 本體）都在模組載入時執行。"""
+    stack = [(tree, False)]
+    while stack:
+        node, in_func = stack.pop()
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            yield node, in_func
+        inner = in_func or isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
+        for child in ast.iter_child_nodes(node):
+            stack.append((child, inner))
+
+
 def import_violations(src: str, allowed: tuple, streamlit_ok: bool) -> list:
     out = []
-    tree = ast.parse(src)
-    top_level = {id(n) for n in tree.body}
-    for node in ast.walk(tree):
+    for node, in_func in _imports_with_scope(ast.parse(src)):
         names = []
         if isinstance(node, ast.Import):
             names = [a.name for a in node.names]
-        elif isinstance(node, ast.ImportFrom):
+        else:
             base = (node.module or "") if node.level == 0 else "<relative>"
             names = [base + "." + a.name for a in node.names] if base in ("ui_v3.viewmodels", "ui_v3") else [base]
         for m in names:
             if m.split(".")[0] == "streamlit":
-                if not streamlit_ok or id(node) in top_level:
+                if not streamlit_ok or not in_func:
                     out.append(f"streamlit 不得於此（或不得於模組層）：{m}")
             elif not any(m == a or m.startswith(a + ".") for a in allowed):
                 out.append(f"不在白名單：{m}")
@@ -184,6 +195,35 @@ def test_negative_control_import_checker_turns_red(src):
 def test_negative_control_module_level_streamlit_turns_red():
     assert import_violations("import streamlit as st\n", PAGE_ALLOWED, True)
     assert not import_violations("def f():\n    import streamlit as st\n", PAGE_ALLOWED, True)
+
+
+@pytest.mark.parametrize("src", [
+    "if True:\n    import streamlit as st\n",
+    "try:\n    import streamlit as st\nexcept ImportError:\n    st = None\n",
+    "try:\n    pass\nexcept ImportError:\n    import streamlit as st\n",
+    "try:\n    pass\nfinally:\n    import streamlit as st\n",
+    "if False:\n    pass\nelse:\n    from streamlit import write\n",
+    "with open_ctx():\n    import streamlit as st\n",
+    "for _ in ():\n    import streamlit as st\n",
+    "class C:\n    import streamlit as st\n",
+    "import sys\nif sys.version_info:\n    if True:\n        import streamlit as st\n",
+], ids=["if_true", "try_body", "except_handler", "finally", "else_branch", "with", "for", "class_body", "nested_if"])
+def test_negative_control_streamlit_in_module_scope_blocks_turns_red(src):
+    """模組載入時就會執行的區塊（if／try／except／finally／else／with／for／class 本體）內的 streamlit import 不是延後 import。"""
+    assert any("模組層" in v for v in import_violations(src, PAGE_ALLOWED, True)), src
+
+
+@pytest.mark.parametrize("src", [
+    "def f():\n    import streamlit as st\n",
+    "def f():\n    if True:\n        import streamlit as st\n",
+    "def f():\n    try:\n        import streamlit as st\n    except ImportError:\n        pass\n",
+    "async def f():\n    import streamlit as st\n",
+    "class C:\n    def m(self):\n        import streamlit as st\n",
+    "if True:\n    def f():\n        import streamlit as st\n",
+], ids=["func", "func_if", "func_try", "async_func", "method", "def_inside_if"])
+def test_function_scoped_streamlit_import_still_passes(src):
+    assert import_violations(src, PAGE_ALLOWED, True) == [], src
+    assert import_violations(src, WORD_ALLOWED, False)      # 非 streamlit 檔案：任何位置都不得
 
 
 @pytest.mark.parametrize("path", FILES, ids=lambda p: p.name)
