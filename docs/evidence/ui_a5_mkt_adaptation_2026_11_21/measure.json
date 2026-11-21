@@ -1,0 +1,2328 @@
+{
+ "textspacing/normal/390": {
+  "before": {
+   "docScrollW": 390,
+   "vw": 390,
+   "mainScrollW": 390,
+   "mainClientW": 390,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 821
+  },
+  "after": {
+   "docScrollW": 390,
+   "vw": 390,
+   "mainScrollW": 390,
+   "mainClientW": 390,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 821
+  }
+ },
+ "textspacing/normal/1280": {
+  "before": {
+   "docScrollW": 1280,
+   "vw": 1280,
+   "mainScrollW": 980,
+   "mainClientW": 980,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 771
+  },
+  "after": {
+   "docScrollW": 1280,
+   "vw": 1280,
+   "mainScrollW": 980,
+   "mainClientW": 980,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 771
+  }
+ },
+ "textspacing/us_failed/390": {
+  "before": {
+   "docScrollW": 390,
+   "vw": 390,
+   "mainScrollW": 390,
+   "mainClientW": 390,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 881
+  },
+  "after": {
+   "docScrollW": 390,
+   "vw": 390,
+   "mainScrollW": 390,
+   "mainClientW": 390,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 881
+  }
+ },
+ "textspacing/us_failed/1280": {
+  "before": {
+   "docScrollW": 1280,
+   "vw": 1280,
+   "mainScrollW": 980,
+   "mainClientW": 980,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 831
+  },
+  "after": {
+   "docScrollW": 1280,
+   "vw": 1280,
+   "mainScrollW": 980,
+   "mainClientW": 980,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 24,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 831
+  }
+ },
+ "forced_colors/390": {
+  "layout": {
+   "docScrollW": 390,
+   "vw": 390,
+   "mainScrollW": 390,
+   "mainClientW": 390,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 821
+  },
+  "chart": {
+   "paths": [
+    {
+     "stroke": "rgb(0, 0, 0)",
+     "dash": "none",
+     "w": "2px"
+    },
+    {
+     "stroke": "rgb(0, 0, 0)",
+     "dash": "6px, 4px",
+     "w": "2px"
+    }
+   ],
+   "mainBg": "rgba(255, 255, 255, 0)"
+  }
+ },
+ "forced_colors/1280": {
+  "layout": {
+   "docScrollW": 1280,
+   "vw": 1280,
+   "mainScrollW": 980,
+   "mainClientW": 980,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 771
+  },
+  "chart": {
+   "paths": [
+    {
+     "stroke": "rgb(0, 0, 0)",
+     "dash": "none",
+     "w": "2px"
+    },
+    {
+     "stroke": "rgb(0, 0, 0)",
+     "dash": "6px, 4px",
+     "w": "2px"
+    }
+   ],
+   "mainBg": "rgba(255, 255, 255, 0)"
+  }
+ },
+ "reduced_motion/390": {
+  "layout": {
+   "docScrollW": 390,
+   "vw": 390,
+   "mainScrollW": 390,
+   "mainClientW": 390,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 821
+  },
+  "chart": {
+   "paths": [
+    {
+     "stroke": "rgb(23, 32, 51)",
+     "dash": "none",
+     "w": "2px"
+    },
+    {
+     "stroke": "rgb(23, 32, 51)",
+     "dash": "6px, 4px",
+     "w": "2px"
+    }
+   ],
+   "mainBg": "rgba(0, 0, 0, 0)"
+  }
+ },
+ "reduced_motion/1280": {
+  "layout": {
+   "docScrollW": 1280,
+   "vw": 1280,
+   "mainScrollW": 980,
+   "mainClientW": 980,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 771
+  },
+  "chart": {
+   "paths": [
+    {
+     "stroke": "rgb(23, 32, 51)",
+     "dash": "none",
+     "w": "2px"
+    },
+    {
+     "stroke": "rgb(23, 32, 51)",
+     "dash": "6px, 4px",
+     "w": "2px"
+    }
+   ],
+   "mainBg": "rgba(0, 0, 0, 0)"
+  }
+ },
+ "dark_scheme/390": {
+  "layout": {
+   "docScrollW": 390,
+   "vw": 390,
+   "mainScrollW": 390,
+   "mainClientW": 390,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 821
+  },
+  "chart": {
+   "paths": [
+    {
+     "stroke": "rgb(23, 32, 51)",
+     "dash": "none",
+     "w": "2px"
+    },
+    {
+     "stroke": "rgb(23, 32, 51)",
+     "dash": "6px, 4px",
+     "w": "2px"
+    }
+   ],
+   "mainBg": "rgba(0, 0, 0, 0)"
+  }
+ },
+ "dark_scheme/1280": {
+  "layout": {
+   "docScrollW": 1280,
+   "vw": 1280,
+   "mainScrollW": 980,
+   "mainClientW": 980,
+   "clipped": [
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    },
+    {
+     "t": "SPAN",
+     "cls": "",
+     "clipY": true,
+     "clipX": true,
+     "sh": 26,
+     "ch": 1,
+     "sw": 13,
+     "cw": 1
+    }
+   ],
+   "nClipped": 11,
+   "text": 771
+  },
+  "chart": {
+   "paths": [
+    {
+     "stroke": "rgb(23, 32, 51)",
+     "dash": "none",
+     "w": "2px"
+    },
+    {
+     "stroke": "rgb(23, 32, 51)",
+     "dash": "6px, 4px",
+     "w": "2px"
+    }
+   ],
+   "mainBg": "rgba(0, 0, 0, 0)"
+  }
+ },
+ "tab/390": {
+  "fwd": [
+   {
+    "tag": "BUTTON",
+    "label": "Deploy",
+    "role": null,
+    "x": 283,
+    "y": 16,
+    "w": 57,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Main menu",
+    "role": null,
+    "x": 344,
+    "y": 16,
+    "w": 28,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "SECTION",
+    "label": "\ud83c\udf0d\n\n\u5e02\u5834\n\n\ud83d\udcbc\n\u8cc7\u7522\n\u958b\u767c\u4e2d\n\ud83d\udd0d\n\u627e\u57fa\u91d1\n\u958b\u767c\u4e2d\n\ud83e",
+    "role": null,
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 844,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "A",
+    "label": "\ud83c\udf0d\n\n\u5e02\u5834",
+    "role": null,
+    "x": 16,
+    "y": 70,
+    "w": 72,
+    "h": 60,
+    "outline": "solid 2px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "0",
+    "role": null,
+    "x": 90,
+    "y": 509,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "2",
+    "role": null,
+    "x": 199,
+    "y": 573,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u4f86\u6e90\u8207\u9650\u5236",
+    "role": null,
+    "x": 30,
+    "y": 403,
+    "w": 330,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "0",
+    "role": null,
+    "x": 70,
+    "y": 753,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u5c1a\u672a\u53d6\u5f97\uff087",
+    "role": null,
+    "x": 17,
+    "y": 528,
+    "w": 356,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u5404\u9805\u8cc7\u6599\u72c0\u614b",
+    "role": null,
+    "x": 17,
+    "y": 584,
+    "w": 356,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   null,
+   {
+    "tag": "BUTTON",
+    "label": "Deploy",
+    "role": null,
+    "x": 283,
+    "y": 16,
+    "w": 57,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Main menu",
+    "role": null,
+    "x": 344,
+    "y": 16,
+    "w": 28,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "SECTION",
+    "label": "\ud83c\udf0d\n\n\u5e02\u5834\n\n\ud83d\udcbc\n\u8cc7\u7522\n\u958b\u767c\u4e2d\n\ud83d\udd0d\n\u627e\u57fa\u91d1\n\u958b\u767c\u4e2d\n\ud83e",
+    "role": null,
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 844,
+    "outline": "none 3px"
+   }
+  ],
+  "rev": [
+   {
+    "tag": "BUTTON",
+    "label": "Main menu",
+    "role": null,
+    "x": 344,
+    "y": 16,
+    "w": 28,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Deploy",
+    "role": null,
+    "x": 283,
+    "y": 16,
+    "w": 57,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u5404\u9805\u8cc7\u6599\u72c0\u614b",
+    "role": null,
+    "x": 17,
+    "y": 584,
+    "w": 356,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u5c1a\u672a\u53d6\u5f97\uff087",
+    "role": null,
+    "x": 17,
+    "y": 528,
+    "w": 356,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "0",
+    "role": null,
+    "x": 70,
+    "y": 416,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u4f86\u6e90\u8207\u9650\u5236",
+    "role": null,
+    "x": 30,
+    "y": 66,
+    "w": 330,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "2",
+    "role": null,
+    "x": 199,
+    "y": 415,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "0",
+    "role": null,
+    "x": 90,
+    "y": 351,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "A",
+    "label": "\ud83c\udf0d\n\n\u5e02\u5834",
+    "role": null,
+    "x": 16,
+    "y": 70,
+    "w": 72,
+    "h": 60,
+    "outline": "solid 2px"
+   },
+   {
+    "tag": "SECTION",
+    "label": "\ud83c\udf0d\n\n\u5e02\u5834\n\n\ud83d\udcbc\n\u8cc7\u7522\n\u958b\u767c\u4e2d\n\ud83d\udd0d\n\u627e\u57fa\u91d1\n\u958b\u767c\u4e2d\n\ud83e",
+    "role": null,
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 844,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Main menu",
+    "role": null,
+    "x": 344,
+    "y": 16,
+    "w": 28,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Deploy",
+    "role": null,
+    "x": 283,
+    "y": 16,
+    "w": 57,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   null,
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u5404\u9805\u8cc7\u6599\u72c0\u614b",
+    "role": null,
+    "x": 17,
+    "y": 584,
+    "w": 356,
+    "h": 38,
+    "outline": "none 3px"
+   }
+  ]
+ },
+ "tab/1280": {
+  "fwd": [
+   {
+    "tag": "A",
+    "label": "\ud83c\udf0d\n\n\u5e02\u5834\u8207\u8da8\u52e2",
+    "role": null,
+    "x": 30,
+    "y": 44,
+    "w": 239,
+    "h": 48,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Deploy",
+    "role": null,
+    "x": 1173,
+    "y": 16,
+    "w": 57,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Main menu",
+    "role": null,
+    "x": 1234,
+    "y": 16,
+    "w": 28,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "SECTION",
+    "label": "PREVIEW\n\u66f4\u65b0\uff1a11-03 14:00\n\ud83c\udf0d \u5e02\u5834\u8207\u8da8",
+    "role": null,
+    "x": 300,
+    "y": 0,
+    "w": 980,
+    "h": 800,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "0",
+    "role": null,
+    "x": 390,
+    "y": 399,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "2",
+    "role": null,
+    "x": 499,
+    "y": 463,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u4f86\u6e90\u8207\u9650\u5236",
+    "role": null,
+    "x": 330,
+    "y": 381,
+    "w": 920,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "0",
+    "role": null,
+    "x": 852,
+    "y": 522,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u5c1a\u672a\u53d6\u5f97\uff087",
+    "role": null,
+    "x": 317,
+    "y": 505,
+    "w": 946,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u5404\u9805\u8cc7\u6599\u72c0\u614b",
+    "role": null,
+    "x": 317,
+    "y": 561,
+    "w": 946,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   null,
+   {
+    "tag": "A",
+    "label": "\ud83c\udf0d\n\n\u5e02\u5834\u8207\u8da8\u52e2",
+    "role": null,
+    "x": 30,
+    "y": 44,
+    "w": 239,
+    "h": 48,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Deploy",
+    "role": null,
+    "x": 1173,
+    "y": 16,
+    "w": 57,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Main menu",
+    "role": null,
+    "x": 1234,
+    "y": 16,
+    "w": 28,
+    "h": 28,
+    "outline": "none 3px"
+   }
+  ],
+  "rev": [
+   {
+    "tag": "BUTTON",
+    "label": "Deploy",
+    "role": null,
+    "x": 1173,
+    "y": 16,
+    "w": 57,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "A",
+    "label": "\ud83c\udf0d\n\n\u5e02\u5834\u8207\u8da8\u52e2",
+    "role": null,
+    "x": 30,
+    "y": 44,
+    "w": 239,
+    "h": 48,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u5404\u9805\u8cc7\u6599\u72c0\u614b",
+    "role": null,
+    "x": 317,
+    "y": 561,
+    "w": 946,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u5c1a\u672a\u53d6\u5f97\uff087",
+    "role": null,
+    "x": 317,
+    "y": 505,
+    "w": 946,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "0",
+    "role": null,
+    "x": 852,
+    "y": 126,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u4f86\u6e90\u8207\u9650\u5236",
+    "role": null,
+    "x": 330,
+    "y": 0,
+    "w": 920,
+    "h": 38,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "2",
+    "role": null,
+    "x": 499,
+    "y": 394,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "INPUT",
+    "label": "0",
+    "role": null,
+    "x": 390,
+    "y": 330,
+    "w": 13,
+    "h": 13,
+    "outline": "auto 1px"
+   },
+   {
+    "tag": "SECTION",
+    "label": "PREVIEW\n\u66f4\u65b0\uff1a11-03 14:00\n\ud83c\udf0d \u5e02\u5834\u8207\u8da8",
+    "role": null,
+    "x": 300,
+    "y": 0,
+    "w": 980,
+    "h": 800,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Main menu",
+    "role": null,
+    "x": 1234,
+    "y": 16,
+    "w": 28,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "BUTTON",
+    "label": "Deploy",
+    "role": null,
+    "x": 1173,
+    "y": 16,
+    "w": 57,
+    "h": 28,
+    "outline": "none 3px"
+   },
+   {
+    "tag": "A",
+    "label": "\ud83c\udf0d\n\n\u5e02\u5834\u8207\u8da8\u52e2",
+    "role": null,
+    "x": 30,
+    "y": 44,
+    "w": 239,
+    "h": 48,
+    "outline": "none 3px"
+   },
+   null,
+   {
+    "tag": "SUMMARY",
+    "label": "keyboard_arrow_right\n\n\u25b8 \u5404\u9805\u8cc7\u6599\u72c0\u614b",
+    "role": null,
+    "x": 317,
+    "y": 561,
+    "w": 946,
+    "h": 38,
+    "outline": "none 3px"
+   }
+  ]
+ }
+}

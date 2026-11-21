@@ -691,4 +691,5 @@
   "both_missing@768": true,
   "both_missing@1280": true
  }
+  ,"geom_rev_note": "2026-11-21 補記（殘留 nit）：geom_before.rev／geom_after.rev 的『本分支 head』當時未填 SHA。PR #1309 最終 exact-head＝d29fb52c（git 可查證）；量測執行當下的分支 head 未記錄，不宣稱與 d29fb52c 相同。us_failed 的 foldPx 前後相同：390＝89.7、768＝198.8、1280＝215.8（geom_before／geom_after 皆同值）。"
 }
