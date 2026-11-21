@@ -105,13 +105,14 @@ def test_negative_control_contaminated_model_is_detected():
     assert "failed_series_has_dates" in _violations(dataclasses.replace(model, primary_notes=polluted), "sp500", "taiex", _TW_REF)
     shifted = tuple(dataclasses.replace(n, as_of=US_LAST) if n.key == "taiex" else n for n in model.primary_notes)
     assert "healthy_series_metadata_changed" in _violations(dataclasses.replace(model, primary_notes=shifted), "sp500", "taiex", _TW_REF)
+    # 以下兩個變異繞過 viewmodel 建構檢查（它本身會擋失敗序列帶點、畫線序列數不符），直接在深拷貝上改欄位
+    def mutated(fn):
+        m = copy.deepcopy(model)
+        fn({s.label: s for s in m.primary_card.series})
+        return m
     # 變異：失敗序列塞回健康序列的點 → failed_series_has_points
-    series = {s.label: s for s in model.primary_card.series}
-    other = copy.copy(series["S&P 500"])
-    object.__setattr__(other, "points", series["台股"].points)   # viewmodel 建構子本身會擋「失敗序列帶點」，故繞過 __post_init__ 注入變異
-    card = dataclasses.replace(model.primary_card, series=(series["台股"], other))
-    assert "failed_series_has_points" in _violations(dataclasses.replace(model, primary_card=card), "sp500", "taiex", _TW_REF)
+    m1 = mutated(lambda sr: object.__setattr__(sr["S&P 500"], "points", sr["台股"].points))
+    assert "failed_series_has_points" in _violations(m1, "sp500", "taiex", _TW_REF)
     # 變異：健康序列的點被補成 0 → zero_filled
-    zeroed = dataclasses.replace(series["台股"], points=tuple(dataclasses.replace(pt, value=0.0) for pt in series["台股"].points))
-    card0 = dataclasses.replace(model.primary_card, series=(zeroed, series["S&P 500"]))
-    assert "zero_filled" in _violations(dataclasses.replace(model, primary_card=card0), "sp500", "taiex", _TW_REF)
+    m2 = mutated(lambda sr: object.__setattr__(sr["台股"], "points", tuple(dataclasses.replace(pt, value=0.0) for pt in sr["台股"].points)))
+    assert "zero_filled" in _violations(m2, "sp500", "taiex", _TW_REF)
