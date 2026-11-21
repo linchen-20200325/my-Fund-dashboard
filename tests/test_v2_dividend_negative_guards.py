@@ -201,7 +201,8 @@ def test_d_舊路徑直呼rows_from_dividends_夾帶類別字樣_div_kind仍為u
 def test_d_契約擋掉未登記的類別值():
     row = dict(_rows(_div([_tcb_item()]))["rows"][0])
     assert contract.dividend_row_problems(row) == []
-    assert contract.dividend_row_problems(dict(row, div_kind="zz_mut"))      # 未登記值必有問題
+    problems = contract.dividend_row_problems(dict(row, div_kind="zz_mut"))
+    assert any(p.startswith("div_kind") for p in problems), problems          # 未登記值必有「div_kind」自己的問題，而非別欄連帶
 
 
 def test_d_變異負控_列被汙染成已知類別時_helper會紅(monkeypatch):
