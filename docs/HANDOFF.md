@@ -1,6 +1,6 @@
 # HANDOFF — 基金 New UI2 現行零記憶接手點
 
-> **CURRENT／GitHub-first；觀測日期：2026-11-20（Asia/Taipei；2026-11-17 起累計，下列 2026-11-17／11-18 各段保留作追溯；各逐則『main 最新觀測基準』已被最新狀態同步段取代，現行基準以最新同步段為準）**。本檔是「最後一次查到什麼」的**導航快照**，不是現在的 GitHub 查詢結果，更不是完成、CI 或獨立 QA 證明。任何新對話、長對話 compact、排程巡檢、Claude Code 接手、合併前都必須重新讀 GitHub。
+> **CURRENT／GitHub-first；觀測日期：~~2026-11-20~~ 2026-11-21（有意識的更正，不是漏刪；Asia/Taipei；**最新增補見 §0 前『已完成』條（本檔第 19 行）的 2026-11-21 區塊，main 觀測基準 `41647fdb`**；2026-11-17 起累計，下列 2026-11-17／11-18 各段保留作追溯；各逐則『main 最新觀測基準』已被最新狀態同步段取代，現行基準以最新同步段為準）**。本檔是「最後一次查到什麼」的**導航快照**，不是現在的 GitHub 查詢結果，更不是完成、CI 或獨立 QA 證明。任何新對話、長對話 compact、排程巡檢、Claude Code 接手、合併前都必須重新讀 GitHub。
 >
 > 舊版錯誤將 #1163 當 Draft 且否認 S1 Code 已動工。舊版原文逐字留存在 `docs/evidence/history/2026-11-07_handoff_before_cold_start_resync.md`（NOT CURRENT）；不可用舊版文件、對話記憶、PR body 或排程回報推翻即時 GitHub 證據。本檔 2026-11-12 瘦身前全文（含逐則更新鏈與被劃線舊句）逐字留存在 `docs/evidence/history/2026-11-12_handoff_before_slimming.md`（NOT CURRENT）。
 >
