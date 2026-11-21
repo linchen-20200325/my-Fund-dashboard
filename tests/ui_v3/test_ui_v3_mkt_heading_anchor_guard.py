@@ -49,6 +49,15 @@ def test_negative_control_heading_tag_checker_turns_red(snippet):
     assert HEADING_TAG.search("md('" + snippet + "')")
 
 
+WORD_BREAK_RULE = re.compile(r"\.uv3-hd\{\{[^}]*word-break:break-word")
+
+
 def test_mkt_heading_css_keeps_the_streamlit_heading_word_break():
     """改成 role=heading 的 div 後，仍須與原 h3／h4 同為 `word-break:break-word`（真瀏覽器 computed style 比對發現的唯一非預期差異）。"""
-    assert re.search(r"\.uv3-hd\{\{[^}]*word-break:break-word", _SRC)
+    assert WORD_BREAK_RULE.search(_SRC)
+
+
+@pytest.mark.parametrize("css", [".uv3-hd{{display:block;font-weight:600}}", ".uv3-hd{{display:block;word-break:normal}}",
+                                 ".uv3-hd{{display:block}} .x{{word-break:break-word}}", ".uv3-hd4{{word-break:break-word}}"])
+def test_negative_control_word_break_checker_turns_red(css):
+    assert not WORD_BREAK_RULE.search(css)

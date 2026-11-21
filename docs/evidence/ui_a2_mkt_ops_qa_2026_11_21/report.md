@@ -43,7 +43,7 @@
 - letter-spacing：3 級 `-0.096px` 前後相同；4 級原為 `normal`，`.uv3-hd4` 同為 `normal`，無差異，不需補。
 - 修補後唯一殘餘差異＝4 級標題高度 0.3125px（6 組皆同一對值 42.3125→42，非逐標題量測）。
 
-首屏／位置（`geom_before`／`geom_after` 同一腳本前後各量一次；以下為主圖 SVG 的 y 與高，前後逐值相同）：normal 390＝644.2／237.3、768＝594.6／480、1280＝533.6／480；tw_missing 390＝714.8／237.3、768＝645.3／480、1280＝584.3／480；both_missing 無主圖。故主圖位置與尺寸前後相同（首屏露出量另由 `_FOLD_BASELINE` 守衛通過，見 §5）。首屏以下元素有次像素位移：每個 4 級標題高 0.3125px 累積，量測所得整頁最大 y 位移 390 為 1.6px、768／1280 為 0.7px（每情境一個最大值，非逐標題）。**此為已揭露的次像素差，非零差。**
+首屏／位置：以真 Chromium 於 base `bf3d61b2` 與本分支各重量一次主圖 SVG（`measure.json` 的 `geom_before`／`geom_after`，4 情境×3 寬度；`geom_chart_identical` 全為 true）。y 含 stMain 捲動量、與高為前後逐值相同：normal 390＝644.2／237.3、768＝594.6／480、1280＝533.6／480；tw_missing 390＝714.8／237.3、768＝645.3／480、1280＝584.3／480；us_failed 390＝754.3／237.3、768 與 1280 同 tw_missing；both_missing 無主圖（`null`）。首屏露出（`foldPx`）前後相同：normal 199.8／249.4／266.4、tw_missing 129.2／198.8／215.8。首屏以下元素有次像素位移：每個 4 級標題高 0.3125px 累積，整頁最大 y 位移（`geom_before`／`geom_after` 之外，先前一次量測，每情境一個最大值，非逐標題）390 為 1.6px、768／1280 為 0.7px。**此為已揭露的次像素差，非零差。**
 
 測試：`test_ui_v3_mkt_heading_anchor_guard.py`（靜態，含負控）；瀏覽器檔新增 `test_no_heading_anchor_links_and_no_keyboard_stop_on_them`（三寬度；真 Tab 走訪 40 次）、`test_mutation_injected_heading_anchor_…`、`test_mutation_missing_heading_levels_…`；既有 h3／h4 選擇器改為 `role="heading"`。變異負控：把 production `anchor=False` 拿掉 → 靜態 1 條與瀏覽器 3 條轉紅（4 failed），還原後綠。
 
@@ -53,7 +53,7 @@
 
 `pytest tests/ui_v3 -q -p no:cacheprovider`（2026-11-20T23:12:14Z→23:18:28Z，**補 `word-break` 之前**）：`3147 passed, 769 warnings in 372.52s (0:06:12)`；補 `word-break` 後只重跑下一行兩檔，`tests/ui_v3` 全量**未重跑**。
 
-補 `word-break:break-word` 後 `pytest tests/ui_v3/test_ui_v3_market_page_browser.py tests/ui_v3/test_ui_v3_mkt_heading_anchor_guard.py -q -p no:cacheprovider`：`133 passed in 240.30s (0:04:00)`
+補 `word-break:break-word` 後 `pytest tests/ui_v3/test_ui_v3_market_page_browser.py tests/ui_v3/test_ui_v3_mkt_heading_anchor_guard.py -q -p no:cacheprovider`：`133 passed in 240.30s (0:04:00)`；補 word-break 參數化負控後再跑同兩檔：`137 passed in 240.04s (0:04:00)`；四支治理守衛再跑：`120 passed in 80.69s (0:01:20)`
 
 `pytest tests/test_canonical_rule_consistency.py tests/test_doc_counters.py tests/test_constitution_file_refs.py tests/test_retired_exception_ids.py -q -p no:cacheprovider`：`120 passed in 77.65s (0:01:17)`（補 `word-break` 後重跑：`120 passed in 74.09s (0:01:14)`）
 

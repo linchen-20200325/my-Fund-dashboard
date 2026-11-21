@@ -533,5 +533,162 @@
     ]
    ]
   }
+ },
+ "geom_before": {
+  "rev": "bf3d61b2",
+  "what": "svg.uv3-chart 的 y（含 stMain 捲動量）、高、x、寬、首屏露出 px；真 Chromium，視窗高 390/768=844、1280=800",
+  "values": {
+   "normal@390": {
+    "y": 644.2,
+    "h": 237.3,
+    "x": 17,
+    "w": 356,
+    "foldPx": 199.8
+   },
+   "normal@768": {
+    "y": 594.6,
+    "h": 480,
+    "x": 17,
+    "w": 720,
+    "foldPx": 249.4
+   },
+   "normal@1280": {
+    "y": 533.6,
+    "h": 480,
+    "x": 430,
+    "w": 720,
+    "foldPx": 266.4
+   },
+   "tw_missing@390": {
+    "y": 714.8,
+    "h": 237.3,
+    "x": 17,
+    "w": 356,
+    "foldPx": 129.2
+   },
+   "tw_missing@768": {
+    "y": 645.3,
+    "h": 480,
+    "x": 17,
+    "w": 720,
+    "foldPx": 198.8
+   },
+   "tw_missing@1280": {
+    "y": 584.3,
+    "h": 480,
+    "x": 430,
+    "w": 720,
+    "foldPx": 215.8
+   },
+   "us_failed@390": {
+    "y": 754.3,
+    "h": 237.3,
+    "x": 17,
+    "w": 356,
+    "foldPx": 89.7
+   },
+   "us_failed@768": {
+    "y": 645.3,
+    "h": 480,
+    "x": 17,
+    "w": 720,
+    "foldPx": 198.8
+   },
+   "us_failed@1280": {
+    "y": 584.3,
+    "h": 480,
+    "x": 430,
+    "w": 720,
+    "foldPx": 215.8
+   },
+   "both_missing@390": null,
+   "both_missing@768": null,
+   "both_missing@1280": null
+  }
+ },
+ "geom_after": {
+  "rev": "本分支 head",
+  "values": {
+   "normal@390": {
+    "y": 644.2,
+    "h": 237.3,
+    "x": 17,
+    "w": 356,
+    "foldPx": 199.8
+   },
+   "normal@768": {
+    "y": 594.6,
+    "h": 480,
+    "x": 17,
+    "w": 720,
+    "foldPx": 249.4
+   },
+   "normal@1280": {
+    "y": 533.6,
+    "h": 480,
+    "x": 430,
+    "w": 720,
+    "foldPx": 266.4
+   },
+   "tw_missing@390": {
+    "y": 714.8,
+    "h": 237.3,
+    "x": 17,
+    "w": 356,
+    "foldPx": 129.2
+   },
+   "tw_missing@768": {
+    "y": 645.3,
+    "h": 480,
+    "x": 17,
+    "w": 720,
+    "foldPx": 198.8
+   },
+   "tw_missing@1280": {
+    "y": 584.3,
+    "h": 480,
+    "x": 430,
+    "w": 720,
+    "foldPx": 215.8
+   },
+   "us_failed@390": {
+    "y": 754.3,
+    "h": 237.3,
+    "x": 17,
+    "w": 356,
+    "foldPx": 89.7
+   },
+   "us_failed@768": {
+    "y": 645.3,
+    "h": 480,
+    "x": 17,
+    "w": 720,
+    "foldPx": 198.8
+   },
+   "us_failed@1280": {
+    "y": 584.3,
+    "h": 480,
+    "x": 430,
+    "w": 720,
+    "foldPx": 215.8
+   },
+   "both_missing@390": null,
+   "both_missing@768": null,
+   "both_missing@1280": null
+  }
+ },
+ "geom_chart_identical": {
+  "normal@390": true,
+  "normal@768": true,
+  "normal@1280": true,
+  "tw_missing@390": true,
+  "tw_missing@768": true,
+  "tw_missing@1280": true,
+  "us_failed@390": true,
+  "us_failed@768": true,
+  "us_failed@1280": true,
+  "both_missing@390": true,
+  "both_missing@768": true,
+  "both_missing@1280": true
  }
 }
