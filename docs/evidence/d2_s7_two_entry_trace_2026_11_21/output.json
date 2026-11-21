@@ -1,0 +1,266 @@
+{
+ "0_resolver_current": [
+  {
+   "input": "ZZ9999",
+   "ok": true,
+   "full_key": "ZZ9999",
+   "portal": "",
+   "parsed_code": "ZZ9999",
+   "mapping_hit": false,
+   "error": null
+  },
+  {
+   "input": "ZZ9999-SFX01",
+   "ok": true,
+   "full_key": "ZZ9999-SFX01",
+   "portal": "",
+   "parsed_code": "ZZ9999-SFX01",
+   "mapping_hit": false,
+   "error": null
+  }
+ ],
+ "2_lookup_current": {
+  "ZZ9999": {
+   "screen_input": null,
+   "loader_calls": [
+    "ZZ9999"
+   ],
+   "L1_fetch_calls(source,full_key)": [
+    [
+     "MoneyDJ",
+     "ZZ9999"
+    ],
+    [
+     "TDCC",
+     "ZZ9999"
+    ],
+    [
+     "FundClear",
+     "ZZ9999"
+    ]
+   ],
+   "state": "LookupState.PAGE_UNMATCHED",
+   "reason": "no_page"
+  },
+  "ZZ9999-SFX01": {
+   "screen_input": null,
+   "loader_calls": [
+    "ZZ9999-SFX01"
+   ],
+   "L1_fetch_calls(source,full_key)": [
+    [
+     "MoneyDJ",
+     "ZZ9999-SFX01"
+    ],
+    [
+     "TDCC",
+     "ZZ9999-SFX01"
+    ],
+    [
+     "FundClear",
+     "ZZ9999-SFX01"
+    ]
+   ],
+   "state": "LookupState.PAGE_UNMATCHED",
+   "reason": "no_page"
+  }
+ },
+ "1a_assets_current": {
+  "ZZ9999": {
+   "status": "evaluated",
+   "blocked_reason": null,
+   "problems": [],
+   "holding_failure_code": null,
+   "evidence_nav_state": [
+    "not_required"
+   ],
+   "evidence_fund_codes": [
+    "ZZ9999"
+   ]
+  },
+  "ZZ9999-SFX01": {
+   "status": "evaluated",
+   "blocked_reason": null,
+   "problems": [],
+   "holding_failure_code": null,
+   "evidence_nav_state": [
+    "not_required"
+   ],
+   "evidence_fund_codes": [
+    "ZZ9999-SFX01"
+   ]
+  }
+ },
+ "1b_hld_chain_current(echo)": {
+  "key_ok": {
+   "ZZ9999": true,
+   "ZZ9999-SFX01": true
+  },
+  "key_failed_inputs": [],
+  "A_chain_calls(chain_code)": [
+   "ZZ9999",
+   "ZZ9999-SFX01"
+  ],
+  "nav_rows": [
+   [
+    "ZZ9999",
+    "2026-11-18",
+    10.0
+   ],
+   [
+    "ZZ9999",
+    "2026-11-19",
+    10.1
+   ],
+   [
+    "ZZ9999-SFX01",
+    "2026-11-18",
+    10.0
+   ],
+   [
+    "ZZ9999-SFX01",
+    "2026-11-19",
+    10.1
+   ]
+  ],
+  "nav_errors": {},
+  "nav_withheld": []
+ },
+ "1b_hld_chain_INFER(chain normalizes to base)": {
+  "key_ok": {
+   "ZZ9999": true,
+   "ZZ9999-SFX01": true
+  },
+  "key_failed_inputs": [],
+  "A_chain_calls(chain_code)": [
+   "ZZ9999",
+   "ZZ9999-SFX01"
+  ],
+  "nav_rows": [
+   [
+    "ZZ9999",
+    "2026-11-18",
+    10.0
+   ],
+   [
+    "ZZ9999",
+    "2026-11-19",
+    10.1
+   ]
+  ],
+  "nav_errors": {
+   "ZZ9999-SFX01": "A 鏈回傳的 full_key 'ZZ9999' 與代碼對照（fund_keys）的 full_key 'ZZ9999-SFX01' 不同；不猜哪一個對，這一檔的淨值不寫"
+  },
+  "nav_withheld": []
+ },
+ "SIM_A_block": {
+  "2_lookup": {
+   "screen_input": null,
+   "loader_calls": [
+    "ZZ9999-SFX01"
+   ],
+   "L1_fetch_calls(source,full_key)": [],
+   "state": "LookupState.BLOCKED",
+   "reason": "key_rejected"
+  },
+  "1b_hld": {
+   "key_ok": {
+    "ZZ9999": true,
+    "ZZ9999-SFX01": false
+   },
+   "key_failed_inputs": [
+    "ZZ9999-SFX01"
+   ],
+   "A_chain_calls(chain_code)": [
+    "ZZ9999"
+   ],
+   "nav_rows": [
+    [
+     "ZZ9999",
+     "2026-11-18",
+     10.0
+    ],
+    [
+     "ZZ9999",
+     "2026-11-19",
+     10.1
+    ]
+   ],
+   "nav_errors": {},
+   "nav_withheld": []
+  }
+ },
+ "SIM_A0_flag_only": {
+  "2_lookup": {
+   "screen_input": null,
+   "loader_calls": [
+    "ZZ9999-SFX01"
+   ],
+   "L1_fetch_calls(source,full_key)": [
+    [
+     "MoneyDJ",
+     "ZZ9999-SFX01"
+    ],
+    [
+     "TDCC",
+     "ZZ9999-SFX01"
+    ],
+    [
+     "FundClear",
+     "ZZ9999-SFX01"
+    ]
+   ],
+   "state": "LookupState.PAGE_UNMATCHED",
+   "reason": "no_page"
+  },
+  "1b_hld": {
+   "key_ok": {
+    "ZZ9999": true,
+    "ZZ9999-SFX01": true
+   },
+   "key_failed_inputs": [],
+   "A_chain_calls(chain_code)": [
+    "ZZ9999",
+    "ZZ9999-SFX01"
+   ],
+   "nav_rows": [
+    [
+     "ZZ9999",
+     "2026-11-18",
+     10.0
+    ],
+    [
+     "ZZ9999",
+     "2026-11-19",
+     10.1
+    ],
+    [
+     "ZZ9999-SFX01",
+     "2026-11-18",
+     10.0
+    ],
+    [
+     "ZZ9999-SFX01",
+     "2026-11-19",
+     10.1
+    ]
+   ],
+   "nav_errors": {},
+   "nav_withheld": []
+  }
+ },
+ "3_evidence_probe": {
+  "key_failed=[code]": {
+   "nav_state": "failed",
+   "value_twd": null,
+   "reason_code": "nav_absent",
+   "nav_cause.key_failed": true
+  },
+  "無 key_failed 標記（NAV 列缺）": {
+   "nav_state": "no_data",
+   "value_twd": null,
+   "reason_code": "nav_absent",
+   "nav_cause.key_failed": false
+  }
+ }
+}
