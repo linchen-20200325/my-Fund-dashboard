@@ -154,8 +154,11 @@ def test_status_expander_content_equals_per_row_html_regardless_of_other_rows_an
     assert first == expected
     assert _status_expander_markdown(at.run()) == expected         # 再跑一次（模擬 rerun）逐字不變
     reordered = _status_expander_markdown(_page(monkeypatch, list(reversed(rows))))
-    assert set(re.findall(r'<div class="uv3-row uv3-status-row">.*?</div>', reordered, re.S)) == \
-        set(re.findall(r'<div class="uv3-row uv3-status-row">.*?</div>', expected, re.S))      # 換順序，每列內容不變
+    pattern = r'<div class="uv3-row uv3-status-row">.*?</div>'
+    got, want = re.findall(pattern, reordered, re.S), re.findall(pattern, expected, re.S)
+    assert len(got) == len(want) == len(rows)                       # 列數相等
+    assert len(set(got)) == len(got) and len(set(want)) == len(want)    # 沒有重複列
+    assert sorted(got) == sorted(want)                               # 換順序，每列內容不變
 
 
 # 變異負控：把「未評估」算進成功、或不把失敗算進失敗數的壞計數函式，必須被 check_counts 抓到。

@@ -4,6 +4,7 @@
     "native_failed_A": {
       "A": {
         "echo": "FAKE-FAIL1",
+        "echo_raw": "FAKE-FAIL1",
         "failed_marker": true,
         "field_status": {
           "input-code": "value"
@@ -27,6 +28,7 @@
     "native_failed_B": {
       "B": {
         "echo": "FAKE-ERR1",
+        "echo_raw": "FAKE-ERR1",
         "failed_marker": true,
         "field_status": {},
         "loader_or_table_calls": 1,
@@ -48,6 +50,7 @@
     "native_partial_missing_A": {
       "A": {
         "echo": "FAKE-OK03",
+        "echo_raw": "FAKE-OK03",
         "failed_marker": false,
         "field_status": {
           "dividend-mode": "missing",
@@ -83,6 +86,7 @@
     "native_partial_missing_B": {
       "B": {
         "echo": "FAKE-LOW1",
+        "echo_raw": "FAKE-LOW1",
         "failed_marker": false,
         "field_status": {},
         "loader_or_table_calls": 1,
@@ -114,6 +118,7 @@
     "blank_empty": {
       "A": {
         "echo": null,
+        "echo_raw": null,
         "failed_marker": false,
         "field_status": {},
         "loader_or_table_calls": 0,
@@ -127,6 +132,7 @@
       },
       "B": {
         "echo": "⬜ 資料未備",
+        "echo_raw": "<span class=\"uv3-st uv3-st-grey uv3-pending\" data-kind=\"missing\" data-pending-wording=\"missing_demo\">⬜ 資料未備",
         "failed_marker": false,
         "field_status": {},
         "loader_or_table_calls": 0,
@@ -147,6 +153,7 @@
     "blank_spaces": {
       "A": {
         "echo": null,
+        "echo_raw": null,
         "failed_marker": false,
         "field_status": {},
         "loader_or_table_calls": 0,
@@ -160,6 +167,7 @@
       },
       "B": {
         "echo": "⬜ 資料未備",
+        "echo_raw": "<span class=\"uv3-st uv3-st-grey uv3-pending\" data-kind=\"missing\" data-pending-wording=\"missing_demo\">⬜ 資料未備",
         "failed_marker": false,
         "field_status": {},
         "loader_or_table_calls": 0,
@@ -180,6 +188,7 @@
     "fake_success": {
       "A": {
         "echo": "FAKE-OK01",
+        "echo_raw": "FAKE-OK01",
         "failed_marker": false,
         "field_status": {
           "dividend-mode": "value",
@@ -211,6 +220,7 @@
       },
       "B": {
         "echo": "FAKE-OK01",
+        "echo_raw": "FAKE-OK01",
         "failed_marker": false,
         "field_status": {},
         "loader_or_table_calls": 1,
@@ -239,6 +249,7 @@
     "isin_shape": {
       "A": {
         "echo": null,
+        "echo_raw": null,
         "failed_marker": false,
         "field_status": {},
         "loader_or_table_calls": 0,
@@ -252,6 +263,7 @@
       },
       "B": {
         "echo": null,
+        "echo_raw": null,
         "failed_marker": false,
         "field_status": {},
         "loader_or_table_calls": 0,
@@ -268,6 +280,7 @@
     "legit_unknown": {
       "A": {
         "echo": "ABC123",
+        "echo_raw": "ABC123",
         "failed_marker": false,
         "field_status": {
           "input-code": "value"
@@ -287,6 +300,7 @@
       },
       "B": {
         "echo": "ABC123",
+        "echo_raw": "ABC123",
         "failed_marker": false,
         "field_status": {},
         "loader_or_table_calls": 1,
@@ -307,6 +321,7 @@
     "padded_lower": {
       "A": {
         "echo": "fake-ok01",
+        "echo_raw": "fake-ok01",
         "failed_marker": false,
         "field_status": {
           "dividend-mode": "value",
@@ -338,6 +353,7 @@
       },
       "B": {
         "echo": "fake-ok01",
+        "echo_raw": " fake-ok01 ",
         "failed_marker": false,
         "field_status": {},
         "loader_or_table_calls": 1,
@@ -366,6 +382,7 @@
     "source_failed": {
       "A": {
         "echo": "FAKE-FAIL1",
+        "echo_raw": "FAKE-FAIL1",
         "failed_marker": true,
         "field_status": {
           "input-code": "value"
@@ -385,6 +402,7 @@
       },
       "B": {
         "echo": "FAKE-FAIL1",
+        "echo_raw": "FAKE-FAIL1",
         "failed_marker": true,
         "field_status": {},
         "loader_or_table_calls": 1,

@@ -46,6 +46,7 @@ import fund_search_logic as SL  # noqa: E402
 import fund_search_renderer as SR  # noqa: E402
 from ui_v3.adapters import fund_lookup as adapter  # noqa: E402
 from ui_v3.adapters.fund_lookup import lookup_fund  # noqa: E402
+from ui_v3.viewmodels.fund_lookup import LookupContractError  # noqa: E402
 
 EVIDENCE = ROOT / "docs" / "evidence" / "ui_b3_lookup_health_controls_2026_11_21" / "measure.json"
 FIVE_ROWS = ("input-code", "name", "dividend-mode", "inception", "mgmt-fee")
@@ -96,6 +97,12 @@ def _five_rows(markup: str) -> dict:
     return rows
 
 
+def _echo_raw(markup: str):
+    """輸入代碼列的值（不正規化空白、僅還原字元參照）；沒有該列 → None。"""
+    m = re.search(r'data-value="input-code">(.*?)</span>', markup, re.S)
+    return _html.unescape(m.group(1)) if m else None
+
+
 def _row_status(markup: str) -> dict:
     return dict(re.findall(r'data-row="(input-code|name|dividend-mode|inception|mgmt-fee)" data-field-status="([a-z]+)"', markup))
 
@@ -112,7 +119,7 @@ def measure_a(raw: str) -> dict:
     rows = _five_rows(markup)
     visible = _plain(markup)
     return {"state": view.state.name, "reason": view.reason_code, "loader_or_table_calls": len(loader.calls),
-            "echo": rows.get("input-code"), "rows_shown": [r for r in FIVE_ROWS if r in rows],
+            "echo": rows.get("input-code"), "echo_raw": _echo_raw(markup), "rows_shown": [r for r in FIVE_ROWS if r in rows],
             "row_texts": rows, "field_status": _row_status(markup), **_flags(visible), "visible_text": visible}
 
 
@@ -128,7 +135,7 @@ def measure_b(raw: str, *, inject_failed: bool = False) -> dict:
     rows = _five_rows(markup)
     visible = _plain(markup)
     return {"state": result.outcome, "reason": None, "loader_or_table_calls": fixtures.gets,
-            "echo": rows.get("input-code"), "rows_shown": [r for r in FIVE_ROWS if r in rows],
+            "echo": rows.get("input-code"), "echo_raw": _echo_raw(markup), "rows_shown": [r for r in FIVE_ROWS if r in rows],
             "row_texts": rows, "field_status": {}, **_flags(visible), "visible_text": visible}
 
 
@@ -204,11 +211,12 @@ def test_missing_cells_show_in_five_rows_only_when_result_or_found_and_wording_d
     assert all(b["row_texts"][r] == "⬜ 資料未備" for r in ("name", "dividend-mode", "inception", "mgmt-fee"))
 
 
-def test_padded_lowercase_success_is_echoed_differently():
+def test_padded_lowercase_success_echo_differs_in_whitespace_A_stripped_B_raw_preserved():
     t = measure()["shared_inputs"]["padded_lower"]
-    assert t["A"]["echo"] == "fake-ok01"          # A：只去 ASCII 空格、不轉大寫
-    assert t["B"]["echo"] == "fake-ok01"          # B：視覺文字經 _plain 正規化空白；原值含前後空格由 renderer escape 保留
-    assert SR.lookup_card_html(SL.classify_lookup(" fake-ok01 ", SF.LOOKUP_FIXTURES), SF.FAKE_FOUND_NAME).count(" fake-ok01 ") == 1
+    assert t["A"]["echo_raw"] == "fake-ok01"        # A：去掉前後 ASCII 空格後回顯（不轉大寫）
+    assert t["B"]["echo_raw"] == " fake-ok01 "      # B：原始值逐字保留前後空格（escape 後）
+    assert t["A"]["echo_raw"] != t["B"]["echo_raw"]
+    assert t["A"]["echo"] == t["B"]["echo"] == "fake-ok01"      # 視覺文字（空白正規化後）相同；差異只在原始空白
 
 
 def test_no_row_in_either_entry_renders_zero_for_a_missing_cell():
@@ -226,7 +234,7 @@ def test_mutation_removing_entry_a_interception_changes_the_measurement(monkeypa
     monkeypatch.setattr(adapter, "screen_input", lambda raw: None)
     try:
         got = measure_a("   ")
-    except Exception as exc:                      # 攔截被拿掉後，空白輸入可能直接觸發契約錯誤；那同樣證明守得到
+    except LookupContractError as exc:            # 只接預期的契約錯誤：攔截被拿掉後空白輸入會違反 adapter 契約；其他例外照常讓測試失敗
         got = {"raised": type(exc).__name__}
     assert got != baseline["shared_inputs"]["blank_spaces"]["A"]
 
