@@ -7,11 +7,13 @@
 規則（81 第 3.1、4 節；44 之十八其三）：
 - 單 Y 軸、不畫 threshold／band／目標價線／方向箭頭、**不另畫 100 基準線**、不畫格線；
 - x 軸依觀測日期等比例（休市與缺段如實留白）；缺值（None）處**斷線、不補、不畫零**；
-- 非顏色辨識：實線／虛線＋末點直接標籤（顏色全用 `currentColor`，不指定色碼）；
+- 非顏色辨識：實線／虛線＋末點直接標籤（預設顏色用 `currentColor`；只有呼叫端明確給 `Line.color`（客戶核准的 `chart.series.*`）時，
+  線與末點圓用該色；**末點文字標籤一律 `currentColor`**，顏色只分辨哪一條、不代表好壞）；
 - 每條線畫到**自己的**最後有效觀測日；末點標籤重疊時上下推開，**不縮字**。
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 from html import escape
@@ -33,6 +35,18 @@ class Line:
     points: Tuple[Tuple[str, Optional[float]], ...]
     dashed: bool
     end_label: str
+    color: Optional[str] = None   # None＝currentColor；否則須是 `#rrggbb`（客戶核准的 chart.series.* 值），不合法即 ValueError
+
+
+_HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _stroke_of(color: Optional[str]) -> str:
+    if color is None:
+        return "currentColor"
+    if not _HEX_COLOR.match(color):
+        raise ValueError(f"series 色必須是 #rrggbb：{color!r}")
+    return color
 
 
 def _ordinal(day: str) -> int:
@@ -108,6 +122,10 @@ def line_chart_svg(lines: Sequence[Line], *, aria_label: str, width: int = WIDTH
     out = [f'<svg class="uv3-chart" viewBox="0 0 {width} {height}" role="img" aria-label="{escape(aria_label, quote=True)}" '
            f'xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">',
            f'<title>{escape(aria_label)}</title>']
+    if any(ln.color is not None for ln in lines):
+        # 高對比（forced-colors）：系統會收掉 currentColor 但不會改寫明確色碼；深藍在黑底高對比主題上會看不見 → 回到系統文字色，
+        # 兩線改靠實線／虛線＋末點標籤分辨（非顏色辨識）
+        out.append("<style>@media (forced-colors:active){.uv3-ln{stroke:CanvasText !important}.uv3-dot{fill:CanvasText !important}}</style>")
     span = hi_val - lo_val
     for tick in (hi_val - pad, (hi_val + lo_val) / 2, lo_val + pad):
         y = y_of(tick)
@@ -123,14 +141,15 @@ def line_chart_svg(lines: Sequence[Line], *, aria_label: str, width: int = WIDTH
     for ln in lines:
         segments = _segments(ln.points, x_of, y_of)
         dash = ' stroke-dasharray="6 4"' if ln.dashed else ""
-        out.append(f'<path d="{_path(segments)}" fill="none" stroke="currentColor" stroke-width="2"{dash} '
-                   f'stroke-linejoin="round" stroke-linecap="round"/>')
+        stroke = _stroke_of(ln.color)
+        out.append(f'<path d="{_path(segments)}" fill="none" stroke="{stroke}" stroke-width="2"{dash} '
+                   f'stroke-linejoin="round" stroke-linecap="round" class="uv3-ln"/>')
         last_x, last_y = segments[-1][-1] if segments else (None, None)
-        ends.append((last_x, last_y, ln.end_label))
-    labelled = [(x, y, t) for x, y, t in ends if x is not None]
-    placed = _spread([y for _x, y, _t in labelled], top + 6, bottom - 4)
-    for (x, y, text), ly in zip(labelled, placed):
-        out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="currentColor"/>')
+        ends.append((last_x, last_y, ln.end_label, stroke))
+    labelled = [(x, y, t, c) for x, y, t, c in ends if x is not None]
+    placed = _spread([y for _x, y, _t, _c in labelled], top + 6, bottom - 4)
+    for (x, y, text, color), ly in zip(labelled, placed):
+        out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="{color}" class="uv3-dot"/>')
         out.append(f'<text x="{x + 6:.1f}" y="{ly + 4:.1f}" font-size="12" fill="currentColor">{escape(text)}</text>')
     out.append("</svg>")
     return "".join(out)
