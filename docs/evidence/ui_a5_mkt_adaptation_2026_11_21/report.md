@@ -2,7 +2,7 @@
 
 > Claude A 線（🌍 市場／UI 操作）單組執行 AI 產出，**未經第二組獨立複驗**。基準 main `41647fdb`（#1314 merge）。
 > 量測：本機 Chromium 153 ＋ `tests/ui_v3/market_stubs.py` 合成 fixture（Preview FAKE，人造數值；未連任何外部來源）。
-> **NOT VERIFIED：Cloud `ui_v3` URL、真機（iOS／Android／WebView）、系統字級、第二組複驗、CI 四項 check（本報告撰寫當下 PR 尚未跑 CI）。**
+> **NOT VERIFIED：Cloud `ui_v3` URL、真機（iOS／Android／WebView）、系統字級、第二組複驗、CI 四項 check（**撰寫當下**狀態；替代 PR #1319 head `512900bb` 的 Fast／Schema／Visual／Slow 事後皆 success，Slow 末行 `2014 passed, 16 skipped, 1 xfailed`，已 merge `8745bf2f`）。**
 > **本批不改任何 production 檔、token、registry、`app_preview`、導覽、色票、資料／公式／來源。** 僅新增測試 1 檔、證據 1 資料夾，並補 #1309／#1314 兩項殘留 nit 的註記。
 
 ## 1. 與既有證據的去重（先讀，不重做）
@@ -13,7 +13,7 @@
 | 頁自有文字 px 不隨根字級放大（Gate #2）、橫向手機 844×390 套桌機側欄（Gate #3） | 同上 §2 | **否**（仍為 Gate 差額，本批不碰 token 單位／導覽斷點） |
 | 同快照來源分離 | `docs/evidence/ui_a4_mkt_source_separation_2026_11_21/` | **否** |
 
-## 2. 本批新增且**無需新 Gate**的三項（已寫成可重跑測試）
+## 2. 本批新增且**無需新 Gate**的項目（共 4 列）（已寫成可重跑測試）
 
 `tests/ui_v3/test_ui_v3_market_adaptation_browser.py`（slow lane；（本 PR 修後共 20 條；下列 §2 敘述為替代 PR 當時狀態，桌機焦點項以 §9 為準））。
 

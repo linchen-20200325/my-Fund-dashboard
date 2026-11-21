@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """🌍 市場頁「使用者端調整」瀏覽器級守衛（slow lane；需要 streamlit 與 Chromium；只加測試，不改 production）。
 
-補 `test_ui_v3_market_page_browser.py`／`docs/evidence/ui_a2_mkt_ops_qa_2026_11_21/` 尚未覆蓋、且**不需要任何新 Gate** 就能量的三件事：
+補 `test_ui_v3_market_page_browser.py`／`docs/evidence/ui_a2_mkt_ops_qa_2026_11_21/` 尚未覆蓋、且**不需要任何新 Gate** 就能量的四件事（第 4 項見下）：
 1. **WCAG 1.4.12 文字間距覆寫**（行高 1.5、字距 .12em、詞距 .16em、段距 2em）：頁面不得出現橫向溢出，也不得多出被裁切的容器。
 2. **forced-colors（高對比）**：顏色全被系統收掉後，主圖兩條線仍須靠「實線／虛線」分辨（非顏色識別）。
 3. **鍵盤順序可逆**：Tab 走 N 站後 Shift+Tab 走回，須逐站為正向順序的鏡像（無單向陷阱、無跳站）。
