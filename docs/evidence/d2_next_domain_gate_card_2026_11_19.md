@@ -149,7 +149,7 @@ R-ID-1／R-NAV-1／2／4／5 契約文字（`-13-06`、`-14-07`、`-17-06`）｜
 | 來源回傳缺 `full_key` | 該檔 NAV 不寫（`TEXT_KEY_MISSING`） | [靜讀：`nav_dividend.py::_nav_from_chain`] |
 | 真實 A 鏈／真實來源實際回什麼 | **NV** | 需真取數（BL-0545／BL-0551 Gate） |
 **要點**：這是**下游依賴 `full_key` 的現有守衛**，A0 沒有改它；契約若要把它寫成 R-ID-2 條款，是把一個 NAV 域行為提升為身份域文字（見 7-5）。**證據邊界（依 Work QA #7062763480；逐條分列，不混用）**：
-1. **已驗 ALO 路徑（離線，Work）**：把後綴碼、基本碼與 resolver 拒絕的 `?` 一併交 A 鏈替身；回基本碼後**該檔 NAV 略過、有 NAV 錯誤文字**，基本碼對照仍有 NAV。再把同份結果交 `ui_v2/alo/live.py` 的 `assemble_nav`，`notes.key_failed` **只含被 resolver 拒絕的 `?`**（`key_failed` ＝ `results[].ok is False` 的輸入，[靜讀：`live.py`]）。**因此這條路徑上「回傳 key 不符」不會變成 Evidence 的 resolver `key_failed`**；它只以取數錯誤文字呈現。
+1. **已驗 ALO 路徑（離線，Work）**：後綴碼、基本碼與 `?` 先交 resolver。只有通過解析的後綴碼與基本碼會進入 A 鏈替身；`?` 在 resolver 被拒絕，隨後由 `ui_v2/alo/live.py` 的 `assemble_nav` 列入 `notes.key_failed`。A 鏈替身回基本碼後**該檔 NAV 略過、有 NAV 錯誤文字**，基本碼對照仍有 NAV；`notes.key_failed` **只含被 resolver 拒絕的 `?`**（`key_failed` ＝ `results[].ok is False` 的輸入，[靜讀：`live.py`]）。**因此這條路徑上「回傳 key 不符」不會變成 Evidence 的 resolver `key_failed`**；它只以取數錯誤文字呈現。
 2. **#1323 `3_evidence_probe`（直接注入）**：把 `key_failed=[code]` 直接交給 `build_allocation_evidence`，得 `nav_state=failed`、`nav_cause.key_failed=true`；未標則 `no_data`。這是**另一條證據**（生產者的輸入語意），**不是**「key 不符會產生 `key_failed`」的證據，也未證明真實來源或其他路徑。
 3. **配息（三層分列）**：(a) **源碼靜讀**：`nav_dividend.py::_div_from_chain` 缺 key 或不符回錯誤並拒收 items；A0 客戶裁示只涵蓋 NAV，配息是既有守衛的觀察。(b) **離線實跑**：既有測試 `tests/test_v2_tables_dividend_chain.py` 的配息 key 不符測項 1 passed（作者與 Work 各跑）；Work 另用非空替身 payload 驗匹配 key 保留 items、不符／缺 key 經建列器得零列與錯誤。(c) **真實來源：NOT RUN**。
 4. **真實 A 鏈／真實來源對後綴碼的支援：NOT VERIFIED。**
