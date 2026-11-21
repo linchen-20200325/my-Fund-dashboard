@@ -83,6 +83,8 @@ def shell_css() -> str:
 /* 目前頁：除了顏色，還有粗體＋左側色條（不只靠顏色） */
 [class*="st-key-uv3-nav-now-side"] a[data-testid="stPageLink-NavLink"]{{font-weight:700;border-left:4px solid {accent};background:{sb_bg2}}}
 [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]{{min-height:{touch}px}}
+/* 鍵盤焦點：桌機側欄沿用手機頁首同一組可見焦點（2px 實線、currentColor）；只在 :focus-visible，不改 hover／active、尺寸、色票 */
+[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:focus-visible{{outline:2px solid currentColor;outline-offset:-3px}}
 /* Top／Status Bar：極薄一行（Shell 的一部分，不是頁級狀態 chip）。視覺批 2：非主導覽的輔助字 12→13px（type.caption）；Status Bar 行高固定 18px（＝原 12px×1.5），首屏露出量不變 */
 .uv3-statusbar{{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:{caption};line-height:18px;color:{text2};margin:0 0 .25rem 0}}
 .uv3-statusbar .uv3-tag{{font-weight:700;letter-spacing:.06em;border:1px solid currentColor;border-radius:4px;padding:0 5px;cursor:help}}
