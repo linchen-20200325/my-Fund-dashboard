@@ -13,7 +13,7 @@
 |---|---|---|---|
 | 原始輸入保留 | `fund_code` 原值進 `resolve_full_keys` | `fund_code` 原值進 `holding_row`，通過 `contract.holding_row_problems`（`problems=[]`） | `screen_input` 放行（純代碼格式允許一個 `-`＋2–20 碼後綴），`loader` 以原字串呼叫 |
 | resolver（`fund_keys`） | `ok=True`、`full_key`＝`ZZ9999-SFX01`、`mapping_hit=False`，**無任何違反標記** [實測] | **不經 resolver**（`assets_source` 不 import `fund_keys`）[靜讀＋實測：基本碼與後綴碼結果同形] | 同左：`ok=True`、`full_key` 原樣 [實測] |
-| 下一步 | A 鏈以 `chain_code＝ZZ9999-SFX01`、`full_key＝ZZ9999-SFX01` 呼叫 [實測，替身] | 成本基準：`nav_state=not_required`；市價基準由設計 `blocked`（不呼叫生產者）[靜讀＋實測] | 三來源 L1 皆以 `ZZ9999-SFX01` 呼叫 [實測，替身] |
+| 下一步 | A 鏈以 `chain_code＝ZZ9999-SFX01`、`full_key＝ZZ9999-SFX01` 呼叫 [實測，替身] | 成本基準：`nav_state=not_required` [實測]；市價基準由設計 `blocked`、不呼叫生產者 [靜讀：`assets_source.py` 檔頭，本腳本未跑市價基準] | 三來源 L1 皆以 `ZZ9999-SFX01` 呼叫 [實測，替身] |
 | NAV／Evidence | 淨值列兩檔各寫出（替身序列）；`nav_errors={}` [實測，替身] | `status=evaluated`，Evidence 的 `fund_code` 為原值 [實測] | 無 NAV；替身回「查無」→ `page_unmatched／no_page`（與基本碼相同）[實測] |
 | **實際最早中止點** | **程式碼內沒有**：帶後綴碼一路通到取數層。唯一可能的中止在真實取數端（NV）；以及 F11 核對——若真實 A 鏈回傳的 `full_key` 與 resolver 的不同則該檔淨值不寫（見下列推演） | **沒有**（後綴碼未被察覺，也不影響成本基準的任何輸出） | **程式碼內沒有**；中止只在來源端（NV） |
 
