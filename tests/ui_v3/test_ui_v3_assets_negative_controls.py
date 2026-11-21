@@ -60,6 +60,11 @@ def _forms(x: float) -> list[str]:
     return sorted((f for f in out if len(f) >= 5 or "." in f), key=len, reverse=True)   # 太短的整數形態（33）太容易誤中，不當證據
 
 
+def _leaked_forms(text: str) -> list[str]:
+    """回傳 `text` 內命中的哨兵形態（正式洩漏迴圈；注入正控與真實頁面斷言共用同一函式）。"""
+    return [form for s in SENTINELS for form in _forms(s) if form in text]
+
+
 def _stale_fx_missing_row(n=1):
     return sup.fake_holding(n, nav={"status": "stale"}, nav_state="stale", fx={"status": "missing"}, value_status="missing",
                             value_twd=None, valued=False, errors=["nav_stale", "fx_missing"])
@@ -89,9 +94,7 @@ def _row_page(variant: str, n_rows: int = 2) -> str:
 @pytest.mark.parametrize("variant", sorted(ROW_VARIANTS))
 def test_no_cost_value_or_share_number_ever_reaches_the_page_whatever_the_row_says(variant):
     text = visible(_row_page(variant))
-    for s in SENTINELS:
-        for form in _forms(s):
-            assert form not in text, (variant, form)
+    assert _leaked_forms(text) == [], variant
     for bad in ("NaN", "None", "null", "inf", "undefined"):
         assert bad not in text, (variant, bad)
     assert "%" not in text and "NT$" not in text and "$" not in text, variant   # 沒有比例、沒有貨幣符號
@@ -102,7 +105,7 @@ def test_the_four_summary_cells_stay_missing_never_zero_even_when_rows_carry_zer
     h = _row_page(variant)
     a20 = h[h.index('data-block="a20"'):h.index('data-block="a50"')] if 'data-block="a50"' in h else h[h.index('data-block="a20"'):]
     assert a20.count('data-status-key="missing"') == 4, variant
-    assert visible(a20).count(MISSING) >= 4, variant
+    assert visible(a20).count(MISSING) == 4, variant
     assert not re.search(r">\s*0(\.0+)?\s*<", a20), variant   # 四格沒有任何一個以 0 代替缺值
 
 
@@ -127,6 +130,9 @@ def test_negative_control_the_leak_forms_detector_fires_on_an_injected_sentinel(
     injected = visible(f"<p>x {token:,.2f} y</p>")
     assert any(f in injected for f in forms)
     assert not any(f in visible("<p>x 1 y</p>") for f in forms)
+    # 正式洩漏迴圈本身也要能被注入觸發（拿掉迴圈比對就會轉綠→此行轉紅）；乾淨文字 0 命中
+    assert _leaked_forms(visible(f"<p>x {sup.SENTINEL_COST_TWD:,.2f} y</p>")) != []
+    assert _leaked_forms(visible("<p>x 1 y</p>")) == []
 
 
 def test_basis_value_shown_is_exactly_what_the_evidence_says_never_invented():
