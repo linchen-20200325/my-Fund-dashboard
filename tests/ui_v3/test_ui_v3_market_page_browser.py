@@ -81,7 +81,7 @@ _MEASURE = r"""
   const rect = e => { const b = e.getBoundingClientRect(); return {x: b.x, y: b.y, r: b.right, b: b.bottom, w: b.width, h: b.height}; };
   const out = {vw, vh, docScrollW: document.documentElement.scrollWidth, mainScrollW: main.scrollWidth, mainClientW: main.clientWidth};
   // 頁本體元素水平邊界
-  out.bodyBoxes = [...main.querySelectorAll('.uv3-card, [class*="st-key-uv3-card-"], svg.uv3-chart, .uv3-row, .uv3-note, h1, h3, [data-testid="stRadio"], [data-testid="stExpander"]')]
+  out.bodyBoxes = [...main.querySelectorAll('.uv3-card, [class*="st-key-uv3-card-"], svg.uv3-chart, .uv3-row, .uv3-note, h1, [role="heading"][aria-level="3"], [data-testid="stRadio"], [data-testid="stExpander"]')]
     .filter(vis).map(e => ({t: e.tagName + (e.dataset.card ? '#' + e.dataset.card : ''), ...rect(e)}));
   // 主圖
   const svg = main.querySelector('svg.uv3-chart');
@@ -97,7 +97,7 @@ _MEASURE = r"""
   const marks = {h1: q('h1'), market_state: q('[data-field="market_state"]'), attention: q('[data-field="attention"]'),
     evidence_row: (q('.uv3-evidence') || {closest: () => null}).closest('.uv3-row'),
     freshness: (q('[data-status-key="threshold_pending"]') || {closest: () => null}).closest('.uv3-row'),
-    primary: q('h3'), chart: svg, source_limits: exp[0], vix: q('[data-card="vix"]'), rates: q('[data-card$="_pct"]'),
+    primary: q('[role="heading"][aria-level="3"]'), chart: svg, source_limits: exp[0], vix: q('[data-card="vix"]'), rates: q('[data-card$="_pct"]'),
     'MKT-1': q('[data-card="MKT-1"]'), 'MKT-2': q('[data-card="MKT-2"]'), 'MKT-3': q('[data-card="MKT-3"]'),
     missing_group: exp[1], status_group: exp[2]};
   const present = Object.entries(marks).filter(([, e]) => e);
@@ -135,7 +135,7 @@ _MEASURE = r"""
   const radioIn = key => { const r = radios.find(x => x.querySelector('[data-testid="stRadioGroup"]').getAttribute('aria-label') === key); return r || null; };
   out.containment = {
     summaryRows: ['market_state', 'attention'].every(k => inside(q('[data-field="' + k + '"]'), F.summary)) && inside(marks.freshness, F.summary),
-    chartInChartFrame: inside(svg, F.chart), h3InChartFrame: inside(q('h3'), F.chart),
+    chartInChartFrame: inside(svg, F.chart), h3InChartFrame: inside(q('[role="heading"][aria-level="3"]'), F.chart),
     viewRadioInChartFrame: inside(radioIn('檢視'), F.chart), periodRadioInChartFrame: inside(radioIn('期間'), F.chart),
     chartExpanderInChartFrame: inside(exp[0], F.chart),
     ratesRadioInRatesFrame: inside(radioIn('利率與信用'), F.rates), ratesHeadInRatesFrame: inside(q('[data-card$="_pct"]'), F.rates),
@@ -795,21 +795,21 @@ def test_native_radio_controls_inside_cards_are_operable_and_keep_state(base_and
         assert "1Y" in aria()
         _radio_option(page, "期間", "3M").click()
         page.wait_for_function("() => document.querySelector('[data-testid=\"stMain\"] svg.uv3-chart').getAttribute('aria-label').includes('3M')", timeout=20000)
-        h3_before = page.locator('[data-testid="stMain"] h3').first.inner_text()
+        h3_before = page.locator('[data-testid="stMain"] [role="heading"][aria-level="3"]').first.inner_text()
         _radio_option(page, "檢視", "VIX").click()
-        page.wait_for_function("(t) => document.querySelector('[data-testid=\"stMain\"] h3').innerText !== t", arg=h3_before, timeout=20000)
+        page.wait_for_function("(t) => document.querySelector('[data-testid=\"stMain\"] [role=\"heading\"][aria-level=\"3\"]').innerText !== t", arg=h3_before, timeout=20000)
         assert "3M" in aria(), "切換檢視後，期間選擇應保留（狀態跨重跑）"
         rates = page.locator('[data-testid="stMain"] .st-key-uv3-card-sec-rates')
         _radio_option(page, "利率與信用", "信用利差").click()
-        page.wait_for_function("() => document.querySelector('[data-testid=\"stMain\"] .st-key-uv3-card-sec-rates h4').innerText.includes('信用利差')", timeout=20000)
+        page.wait_for_function("() => document.querySelector('[data-testid=\"stMain\"] .st-key-uv3-card-sec-rates [role=\"heading\"][aria-level=\"4\"]').innerText.includes('信用利差')", timeout=20000)
         assert rates.locator('[data-testid="stRadioGroup"][aria-label="利率與信用"]').count() == 1, "切換後利率單選仍在利率卡內"
         # 鍵盤：焦點在利率單選的已選項時，方向鍵右移到下一項（原生可及性行為不因入卡而失效）
         rates.locator('input[type="radio"]:checked').focus()
         page.keyboard.press("ArrowRight")
-        page.wait_for_function("() => document.querySelector('[data-testid=\"stMain\"] .st-key-uv3-card-sec-rates h4').innerText.includes('政策利率')", timeout=20000)
+        page.wait_for_function("() => document.querySelector('[data-testid=\"stMain\"] .st-key-uv3-card-sec-rates [role=\"heading\"][aria-level=\"4\"]').innerText.includes('政策利率')", timeout=20000)
         # 切回「比較」後（D1：Secondary 不複製 Primary，VIX 檢視時 VIX 卡本來就不出現），整頁容器／溢出／token 仍然成立
         _radio_option(page, "檢視", "比較").click()
-        page.wait_for_function("(t) => document.querySelector('[data-testid=\"stMain\"] h3').innerText === t", arg=h3_before, timeout=20000)
+        page.wait_for_function("(t) => document.querySelector('[data-testid=\"stMain\"] [role=\"heading\"][aria-level=\"3\"]').innerText === t", arg=h3_before, timeout=20000)
         page.wait_for_selector('.st-key-uv3-card-sec-vix', timeout=20000)
         m = page.evaluate(_MEASURE)
         assert not container_violations(m) and not overflow_violations(m) and not token_violations(m), (
@@ -915,7 +915,7 @@ def test_mutation_unequal_five_cells_nav_is_flagged(base_and_browser):
 
 def test_mutation_reordered_blocks_are_flagged(base_and_browser):
     js = """() => { const box = e => e.closest('[data-testid="stElementContainer"]') || e;
-      const vix = document.querySelector('.st-key-uv3-card-sec-vix'), h3 = document.querySelector('[data-testid="stMain"] h3');
+      const vix = document.querySelector('.st-key-uv3-card-sec-vix'), h3 = document.querySelector('[data-testid="stMain"] [role="heading"][aria-level="3"]');
       box(h3).before(box(vix)); }"""
     m = _mutated(base_and_browser, "normal", 390, js=js)
     assert any("區塊順序" in v[0] for v in order_violations(m))
@@ -1091,3 +1091,71 @@ def test_status_row_violations_flag_measurement_failures_instead_of_passing_sile
     assert synth_wrap_violations(dict(dW=0, lW=10, dateSplit=False, labelSplit=False))
     assert synth_wrap_violations(dict(dW=50, lW=30, dateSplit=None, labelSplit=False))
     assert synth_wrap_violations(dict(dW=50, lW=30, dateSplit=False, labelSplit=False)) == []
+
+
+# ───────────────────────── A2 實際操作 QA：標題錨點不得成為鍵盤停駐點 ─────────────────────────
+
+_HEADING_ANCHORS = r"""() => {
+  const main = document.querySelector('[data-testid="stMain"]');
+  const inHeading = [...main.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]')].flatMap(h => [...h.querySelectorAll('a')]);
+  const named = [...document.querySelectorAll('a[aria-label="Link to heading"]')];
+  return {inHeading: inHeading.length, named: named.length,
+          levels: [...main.querySelectorAll('h1,[role="heading"]')].map(e => (e.tagName === 'H1' ? 1 : Number(e.getAttribute('aria-level'))))};
+}"""
+
+_TAB_WALK = r"""() => { const e = document.activeElement; if (!e || e === document.body) return null;
+  return {tag: e.tagName, label: e.getAttribute('aria-label'), inHeading: !!e.closest('h1,h2,h3,h4,h5,h6,[role="heading"]')}; }"""
+
+
+def heading_anchor_violations(a, walk):
+    """頁本體標題不得帶錨點連結；鍵盤走完整頁不得停在任何標題錨點（看不見、名稱為英文 `Link to heading`）。
+    標題語意要留：1 個 h1、1 個 aria-level=3、至少 5 個 aria-level=4（改成 `role="heading"` 後不得消失）。"""
+    bad = []
+    if a["inHeading"] or a["named"]:
+        bad.append(("標題內有錨點連結", a["inHeading"], a["named"]))
+    stops = [w for w in walk if w and w["tag"] == "A" and (w["inHeading"] or w["label"] == "Link to heading")]
+    if stops:
+        bad.append(("鍵盤停在標題錨點", len(stops)))
+    lv = a["levels"]
+    if lv.count(1) != 1 or lv.count(3) != 1 or lv.count(4) < 5:
+        bad.append(("標題語意層級不符（要 1 個 h1、1 個 3 級、≥5 個 4 級）", lv))
+    return bad
+
+
+def _walk_tabs(page, n=40):
+    page.keyboard.press("Tab")
+    out = []
+    for _ in range(n):
+        out.append(page.evaluate(_TAB_WALK))
+        page.keyboard.press("Tab")
+    return out
+
+
+@pytest.mark.parametrize("width", _WIDTHS)
+def test_no_heading_anchor_links_and_no_keyboard_stop_on_them(base_and_browser, width):
+    base, browser, _ = base_and_browser
+    ctx, page = _open(browser, base, "normal", width)
+    try:
+        a, walk = page.evaluate(_HEADING_ANCHORS), _walk_tabs(page)
+    finally:
+        ctx.close()
+    assert not heading_anchor_violations(a, walk), (heading_anchor_violations(a, walk), a)
+
+
+def test_mutation_injected_heading_anchor_is_flagged_by_dom_and_keyboard_walk(base_and_browser):
+    """負控（測試內現編）：往標題塞一個可聚焦錨點 → DOM 判定與鍵盤走訪判定都要報，證明守衛不是空掃。"""
+    base, browser, _ = base_and_browser
+    ctx, page = _open(browser, base, "normal", 390)
+    try:
+        page.evaluate("""() => { const h = document.querySelector('[data-testid="stMain"] [role="heading"][aria-level="3"]');
+            const a = document.createElement('a'); a.href = '#x'; a.setAttribute('aria-label', 'Link to heading'); a.textContent = 'x'; h.appendChild(a); }""")
+        a, walk = page.evaluate(_HEADING_ANCHORS), _walk_tabs(page)
+    finally:
+        ctx.close()
+    msgs = [v[0] for v in heading_anchor_violations(a, walk)]
+    assert "標題內有錨點連結" in msgs and "鍵盤停在標題錨點" in msgs, msgs
+
+
+def test_mutation_missing_heading_levels_are_flagged():
+    assert any("標題語意層級" in v[0] for v in heading_anchor_violations(dict(inHeading=0, named=0, levels=[1, 3]), []))
+    assert heading_anchor_violations(dict(inHeading=0, named=0, levels=[1, 3, 4, 4, 4, 4, 4]), []) == []

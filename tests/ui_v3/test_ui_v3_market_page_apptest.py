@@ -60,7 +60,7 @@ def test_normal_page_renders_four_first_screen_answers_and_no_exception(monkeypa
     summary = plain(html.split('data-card')[0])
     assert re.search(r"台股 近1Y [+-]\d+\.\d\d%", summary) and re.search(r"S&P 500 近1Y [+-]\d+\.\d\d%", summary)
     # 首屏摘要沒有日期、沒有「延遲 N 日」（Q4 A、Q5 B、D3 (i)）
-    first = plain(html[: html.index("<h3>")])
+    first = plain(html[: html.index('<div class="uv3-hd uv3-hd3"')])
     assert not re.search(r"\d{4}-\d{2}-\d{2}", first) and "延遲" not in first and "經過" not in first
     assert "◷" not in html and "◆" not in html           # 沒有正式規則／門檻 → 不判舊、不判注意
 

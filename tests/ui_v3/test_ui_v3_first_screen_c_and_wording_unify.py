@@ -67,8 +67,8 @@ SCENARIOS = {
 
 # ───────────── 1. 首屏採 C ─────────────
 def _first_screen(html: str) -> str:
-    """首屏摘要區＝第一個 `<h3>`（Primary 標題）之前。"""
-    return html[: html.index("<h3>")]
+    """首屏摘要區＝第一個 Primary 標題（`role="heading" aria-level="3"`）之前。"""
+    return html[: html.index('<div class="uv3-hd uv3-hd3"')]
 
 
 def test_first_screen_has_two_separate_labelled_rows_each_with_its_own_chip(monkeypatch):
@@ -92,7 +92,7 @@ def test_base_date_is_plain_text_near_the_chart_not_a_chip_and_wording_is_unchan
     line = re.search(r'<div class="uv3-note" data-disclosure="base-frequency">(.*?)</div>', html, flags=re.S)
     assert line is not None and "uv3-chip" not in line.group(1)
     assert re.fullmatch(r"基準日 \d{4}-\d{2}-\d{2}＝100；頻率：日｜缺值不補、斷線", _plain(line.group(1)))
-    assert html.index("<h3>") < html.index('data-disclosure="base-frequency"') < html.index('class="uv3-chart"')   # 在圖表附近（圖前）
+    assert html.index('<div class="uv3-hd uv3-hd3"') < html.index('data-disclosure="base-frequency"') < html.index('class="uv3-chart"')   # 在圖表附近（圖前）
     assert "neutral" not in re.findall(r'data-status-key="([a-z_]+)"', html)                                      # 沒有基準日 chip
 
 
