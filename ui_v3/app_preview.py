@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""ui_v3（New UI2）獨立 **Preview App** 入口 —— 目前只有 🌍 市場與趨勢（BL-0536 rendering 批；客戶 2026-11-03 授權只進 Preview）。
+"""ui_v3（New UI2）獨立 **Preview App** 入口 —— 目前有 🌍 市場與趨勢（BL-0536 rendering 批；客戶 2026-11-03 授權只進 Preview）
+與 ⚙️ 設定→資料健康度第一階段（BL-0540 Phase 1A；客戶 2026-11-21 裁示，僅本地 Preview、唯讀、僅市場與利率）。
 
 ⛔ 這**不是**正式入口：不切正式 Streamlit entrypoint、不 cutover、Old UI 與 `ui_v2` 不在這裡、也不在這裡暴露；
    preview ≠ 正式 App（`DEC-2026-11-02-06`、`DEC-2026-11-03-04`）。本檔不得被 `app.py`、`ui/`、`ui_v2/` 引用
@@ -36,13 +37,38 @@ def _render_mkt() -> None:
     from ui_v3.adapters import market_page as adapter
     from ui_v3.adapters import shell_status
     from ui_v3.pages import chrome, mkt
+    from ui_v3.viewmodels import settings_health
 
     period, view, rates_key = mkt.selected_controls()
+    st.session_state.pop(settings_health.SNAPSHOT_KEY, None)   # 這次若取數失敗，不得留下上一次的快照給 ⚙️ 當成「當次」
     market_view, table = adapter.load([st.secrets, os.environ])
     model = adapter.build_market_page(market_view, table, period=period, primary_view=view, rates_key=rates_key)
-    chrome.render_status(shell_status.from_market_model(model))   # Status Bar＋側欄資料狀態區＋更新資料 CTA（來源：既有 health）
+    status = shell_status.from_market_model(model)
+    # 同一 session 的快照：只存**這次已產生**的逐列狀態（frozen），給 ⚙️ 唯讀讀取；st.session_state 每個使用者 session 各自一份，不進全域 cache。
+    st.session_state[settings_health.SNAPSHOT_KEY] = settings_health.HealthSnapshot(tuple(model.statuses), status)
+    chrome.render_status(status)   # Status Bar＋側欄資料狀態區＋更新資料 CTA（來源：既有 health）
     mkt.render(model)
     chrome.render_footer()
+
+
+def _render_set(pages: dict) -> None:
+    """⚙️ 頁：只讀同 session 已有的快照（`_render_mkt` 留下的）；**不呼叫 `adapter.load`、不取數**。沒有快照 → 如實顯示尚未評估＋市場入口。"""
+    import streamlit as st
+
+    from ui_v3.pages import chrome
+    from ui_v3.pages import settings_health as page
+    from ui_v3.viewmodels import settings_health
+
+    snapshot = st.session_state.get(settings_health.SNAPSHOT_KEY)
+    if snapshot is not None and not isinstance(snapshot, settings_health.HealthSnapshot):
+        raise TypeError(f"session 快照型別錯誤：{type(snapshot).__name__}（不猜、不忽略）")
+    if snapshot is not None:
+        chrome.render_status(snapshot.shell_status)
+    page.render(None if snapshot is None else settings_health.build_from_snapshot(snapshot), market_page=pages.get("mkt"))
+
+
+def _holder_renderer(fn, pages: dict):
+    return lambda: fn(pages)
 
 
 def main() -> None:
@@ -53,14 +79,15 @@ def main() -> None:
     from ui_v3.shell.registry import assert_preview_ready
 
     pages = assert_preview_ready()
-    renderers = {"mkt": _render_mkt}
+    st_pages: dict = {}   # `_render_set` 要連回 🌍 的 st.Page；頁建好後才填，執行時才讀
+    renderers = {"mkt": _render_mkt, "set": _holder_renderer(_render_set, st_pages)}
     missing = [p.slug for p in pages if p.slug not in renderers]
     if missing:
         raise NotImplementedError(f"已掛載的頁沒有 renderer：{missing}（不畫空殼）")
     from ui_v3.pages import chrome
 
     st.set_page_config(page_title=pages[0].title, page_icon="🌍", layout="wide", initial_sidebar_state="expanded")
-    st_pages = {p.slug: st.Page(renderers[p.slug], title=p.title, url_path=p.slug, default=i == 0) for i, p in enumerate(pages)}
+    st_pages.update({p.slug: st.Page(renderers[p.slug], title=p.title, url_path=p.slug, default=i == 0) for i, p in enumerate(pages)})
     navigation = st.navigation(list(st_pages.values()), position="hidden")   # routing 只用 Streamlit；導覽畫面由 Shell 自畫
     chrome.render_navigation(st_pages, next((p.slug for p in pages if p.title == navigation.title), None))   # 五頁導覽（側欄＋手機頁首 S1 五格）；未掛載的頁可見但不可進，不建空殼
     navigation.run()

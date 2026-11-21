@@ -1,0 +1,260 @@
+{
+ "head": "f511994c2b23b807da116ff887c8cf0afd494d36",
+ "worktree_clean_before_run": true,
+ "fixture": "tests/ui_v3/market_stubs.py 合成資料（view(us='error')）",
+ "scope": "本地 Chromium 1280×900＋本地 streamlit；非 Cloud、非真機",
+ "steps": [
+  {
+   "key": "Tab",
+   "n": 1,
+   "focus": {
+    "text": "🌍 市場與趨勢",
+    "inSidebar": true,
+    "inMain": false,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "solid 2px rgb(230, 237, 243)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 2,
+   "focus": {
+    "text": "⚙️ 設定",
+    "inSidebar": true,
+    "inMain": false,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "solid 2px rgb(230, 237, 243)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 3,
+   "focus": {
+    "text": "Deploy",
+    "inSidebar": false,
+    "inMain": false,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "none 3px rgb(23, 32, 51)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 4,
+   "focus": {
+    "text": "",
+    "inSidebar": false,
+    "inMain": false,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "none 3px rgb(23, 32, 51)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 5,
+   "focus": {
+    "text": "PREVIEW ◇ 部分資料未取得（4／5 項已取得）（其中 1 項取數失敗） 更新：11-03 14:00 🌍 市場與趨勢 市場狀態⬜ 無法判定暫無完整市場綜合判定（尚未建立正式綜合判定規則） 是否需注意⬜ 無法判定 重要依據台股 近1Y +3.52% ｜ S&P 500 ⛔ S&P 500 取數失敗 只含這一條序列自身的視窗，未與另一條比較 資料新鮮度⬜ 門檻待裁示 台股 vs S&P 500（歸一化） 檢視 比較 VIX 美10Y 美2Y 期間 3M 6M 1Y 3Y 基準日 2025-11-03＝100；頻率：日｜缺值不補、斷線 目前僅顯示可用序列；另一序列取數失敗，暫不進行比較。 103.5 99.8 96.1 2025-11-03 2026-11-02 台股 103.5 S&P 500⛔ S&P 500 取數失敗 台股 資料日 2026-11-02（經過 1 日） keyboard_arrow_right ▸ 來源與限制 風險｜VIX 21.23 VIX 資料日 2026-11-02（經過 1 日） 近 1Y 走勢 利率與信用 ｜ 期限利差 期限利差 信用利差 政策利率 0.87pp 期限利差 資料日 2026-11-02（經過 1 日） 近 1Y 走勢 僅列已取得的觀測值，沒有正式規則可判定 MKT-1 風險情緒 波動度指數 18.5 2026-11-02 高收益信用利差 3.67pp 2026-11-02 MKT-2 景氣位置 領先指標 ◇ 資料未備 同時指標 ◇ 資料未備 MKT-3 資金與匯率 政策利率 4.57% 2026-11-02 新臺幣對美元匯率 ◇ 資料未備 keyboard_arrow_right ▸ 尚未取得（7 項） keyboard_arrow_right ▸ 各項資料狀態 Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "none 3px rgb(23, 32, 51)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 6,
+   "focus": {
+    "text": "",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "auto 1px rgb(16, 16, 16)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 7,
+   "focus": {
+    "text": "",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "auto 1px rgb(16, 16, 16)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 8,
+   "focus": {
+    "text": "keyboard_arrow_right ▸ 來源與限制",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "none 3px rgb(23, 32, 51)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 9,
+   "focus": {
+    "text": "",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "auto 1px rgb(16, 16, 16)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 10,
+   "focus": {
+    "text": "keyboard_arrow_right ▸ 尚未取得（7 項）",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "none 3px rgb(23, 32, 51)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 11,
+   "focus": {
+    "text": "keyboard_arrow_right ▸ 各項資料狀態",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "none 3px rgb(23, 32, 51)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 12,
+   "focus": null
+  },
+  {
+   "key": "Tab",
+   "n": 13,
+   "focus": {
+    "text": "🌍 市場與趨勢",
+    "inSidebar": true,
+    "inMain": false,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "solid 2px rgb(230, 237, 243)"
+   }
+  },
+  {
+   "key": "Tab",
+   "n": 14,
+   "focus": {
+    "text": "⚙️ 設定",
+    "inSidebar": true,
+    "inMain": false,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "solid 2px rgb(230, 237, 243)"
+   }
+  },
+  {
+   "key": "Shift+Tab",
+   "n": 1,
+   "focus": {
+    "text": "🌍 市場與趨勢",
+    "inSidebar": true,
+    "inMain": false,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "solid 2px rgb(230, 237, 243)"
+   }
+  },
+  {
+   "key": "Shift+Tab",
+   "n": 2,
+   "focus": {
+    "text": "keyboard_arrow_right ▸ 各項資料狀態",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "none 3px rgb(23, 32, 51)"
+   }
+  },
+  {
+   "key": "Shift+Tab",
+   "n": 3,
+   "focus": {
+    "text": "keyboard_arrow_right ▸ 尚未取得（7 項）",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "none 3px rgb(23, 32, 51)"
+   }
+  },
+  {
+   "key": "Shift+Tab",
+   "n": 4,
+   "focus": {
+    "text": "",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "auto 1px rgb(16, 16, 16)"
+   }
+  },
+  {
+   "key": "Shift+Tab",
+   "n": 5,
+   "focus": {
+    "text": "keyboard_arrow_right ▸ 來源與限制",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "none 3px rgb(23, 32, 51)"
+   }
+  },
+  {
+   "key": "Shift+Tab",
+   "n": 6,
+   "focus": {
+    "text": "",
+    "inSidebar": false,
+    "inMain": true,
+    "ariaDisabled": false,
+    "focusVisible": true,
+    "outline": "auto 1px rgb(16, 16, 16)"
+   }
+  }
+ ],
+ "disabled_entries": [
+  {
+   "nav": "ast",
+   "ariaDisabled": "true",
+   "href": null
+  },
+  {
+   "nav": "exp",
+   "ariaDisabled": "true",
+   "href": null
+  },
+  {
+   "nav": "ai",
+   "ariaDisabled": "true",
+   "href": null
+  }
+ ],
+ "after_enter_on_settings": "⚙️ 設定",
+ "after_back_to_market": "🌍 市場與趨勢"
+}

@@ -237,4 +237,6 @@ def test_nothing_in_ui_v3_references_the_adapter_so_no_page_is_wired():
 def test_registry_has_no_new_page_and_preview_renderers_are_unchanged():
     from ui_v3.shell import registry
     registered = [p.slug for p in registry.IA_PAGES if p.registered]
-    assert registered == ["mkt"], registered      # 本批沒有新增任何已掛載的頁（接頁需要線框草稿與客戶核准）
+    # 本批沒有新增 💼／🔍／🤖 的掛載（接頁需要線框草稿與客戶核准）。2026-11-21 起 ⚙️ 因 BL-0540 Phase 1A 客戶裁示（#7056447977）成為第二個已掛載頁。
+    assert registered == ["mkt", "set"], registered
+    assert not {"ast", "exp", "ai"} & set(registered)

@@ -1,0 +1,120 @@
+{
+ "head": "4bff3ccef2310fa7c8b7ecc3395a92a78424da90",
+ "worktree_clean_before_run": true,
+ "fixture": "tests/ui_v3/market_stubs.py 合成資料（view(us='error')）",
+ "scope": "本地 Chromium＋本地 streamlit；非 Cloud、非真機",
+ "runs": [
+  {
+   "width": 390,
+   "view": "after market (snapshot)",
+   "rows": [
+    {
+     "key": "taiex",
+     "state": "ok",
+     "reason": "",
+     "asOf": "2026-11-02",
+     "fetched": "2026-11-03T06:00:00+00:00"
+    },
+    {
+     "key": "sp500",
+     "state": "failed",
+     "reason": "fetch_failed",
+     "asOf": "",
+     "fetched": ""
+    },
+    {
+     "key": "vix",
+     "state": "ok",
+     "reason": "",
+     "asOf": "2026-11-02",
+     "fetched": "2026-11-03T06:00:00+00:00"
+    },
+    {
+     "key": "us10y",
+     "state": "ok",
+     "reason": "",
+     "asOf": "2026-11-02",
+     "fetched": "2026-11-03T06:00:00+00:00"
+    },
+    {
+     "key": "us2y",
+     "state": "ok",
+     "reason": "",
+     "asOf": "2026-11-02",
+     "fetched": "2026-11-03T06:00:00+00:00"
+    }
+   ],
+   "vw": 390,
+   "docScrollW": 390,
+   "mainScrollW": 390,
+   "mainClientW": 390,
+   "backHeight": 48
+  },
+  {
+   "width": 390,
+   "view": "fresh session (no snapshot)",
+   "rows": [],
+   "vw": 390,
+   "docScrollW": 390,
+   "mainScrollW": 390,
+   "mainClientW": 390,
+   "backHeight": 48
+  },
+  {
+   "width": 1280,
+   "view": "after market (snapshot)",
+   "rows": [
+    {
+     "key": "taiex",
+     "state": "ok",
+     "reason": "",
+     "asOf": "2026-11-02",
+     "fetched": "2026-11-03T06:00:00+00:00"
+    },
+    {
+     "key": "sp500",
+     "state": "failed",
+     "reason": "fetch_failed",
+     "asOf": "",
+     "fetched": ""
+    },
+    {
+     "key": "vix",
+     "state": "ok",
+     "reason": "",
+     "asOf": "2026-11-02",
+     "fetched": "2026-11-03T06:00:00+00:00"
+    },
+    {
+     "key": "us10y",
+     "state": "ok",
+     "reason": "",
+     "asOf": "2026-11-02",
+     "fetched": "2026-11-03T06:00:00+00:00"
+    },
+    {
+     "key": "us2y",
+     "state": "ok",
+     "reason": "",
+     "asOf": "2026-11-02",
+     "fetched": "2026-11-03T06:00:00+00:00"
+    }
+   ],
+   "vw": 1280,
+   "docScrollW": 1280,
+   "mainScrollW": 980,
+   "mainClientW": 980,
+   "backHeight": 48
+  },
+  {
+   "width": 1280,
+   "view": "fresh session (no snapshot)",
+   "rows": [],
+   "vw": 1280,
+   "docScrollW": 1280,
+   "mainScrollW": 980,
+   "mainClientW": 980,
+   "backHeight": 48
+  }
+ ]
+}
