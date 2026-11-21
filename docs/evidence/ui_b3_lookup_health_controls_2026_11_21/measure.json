@@ -1,0 +1,424 @@
+{
+  "_note": "A=lookup_fund(注入 FakeLoader)；B=classify_lookup(SpyFixtures)；loader_or_table_calls：A=loader 呼叫次數、B=fixtures.get 次數",
+  "native": {
+    "native_failed_A": {
+      "A": {
+        "echo": "FAKE-FAIL1",
+        "echo_raw": "FAKE-FAIL1",
+        "failed_marker": true,
+        "field_status": {
+          "input-code": "value"
+        },
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 0,
+        "reason": "source_failed",
+        "row_texts": {
+          "input-code": "FAKE-FAIL1"
+        },
+        "rows_shown": [
+          "input-code"
+        ],
+        "state": "SOURCE_FAILED",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金的欄位 來源回報取數失敗 這不是對基金身份的判斷 輸入代碼 FAKE-FAIL1 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "input": "FAKE-FAIL1",
+      "side": "A"
+    },
+    "native_failed_B": {
+      "B": {
+        "echo": "FAKE-ERR1",
+        "echo_raw": "FAKE-ERR1",
+        "failed_marker": true,
+        "field_status": {},
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 0,
+        "reason": null,
+        "row_texts": {
+          "input-code": "FAKE-ERR1"
+        },
+        "rows_shown": [
+          "input-code"
+        ],
+        "state": "failed",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金 這次取數失敗，不是對基金身份的判斷 輸入代碼 FAKE-ERR1 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "input": "FAKE-ERR1",
+      "side": "B"
+    },
+    "native_partial_missing_A": {
+      "A": {
+        "echo": "FAKE-OK03",
+        "echo_raw": "FAKE-OK03",
+        "failed_marker": false,
+        "field_status": {
+          "dividend-mode": "missing",
+          "inception": "missing",
+          "input-code": "value",
+          "mgmt-fee": "missing",
+          "name": "value"
+        },
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 3,
+        "reason": null,
+        "row_texts": {
+          "dividend-mode": "此欄尚無可顯示的值",
+          "inception": "此欄尚無可顯示的值",
+          "input-code": "FAKE-OK03",
+          "mgmt-fee": "此欄尚無可顯示的值",
+          "name": "FAKE 範例基金甲"
+        },
+        "rows_shown": [
+          "input-code",
+          "name",
+          "dividend-mode",
+          "inception",
+          "mgmt-fee"
+        ],
+        "state": "RESULT",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼 FAKE-OK03 基金名稱 FAKE 範例基金甲 配息方式 此欄尚無可顯示的值 成立日期 此欄尚無可顯示的值 經理費率 此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "input": "FAKE-OK03",
+      "side": "A"
+    },
+    "native_partial_missing_B": {
+      "B": {
+        "echo": "FAKE-LOW1",
+        "echo_raw": "FAKE-LOW1",
+        "failed_marker": false,
+        "field_status": {},
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 4,
+        "reason": null,
+        "row_texts": {
+          "dividend-mode": "⬜ 資料未備",
+          "inception": "⬜ 資料未備",
+          "input-code": "FAKE-LOW1",
+          "mgmt-fee": "⬜ 資料未備",
+          "name": "⬜ 資料未備"
+        },
+        "rows_shown": [
+          "input-code",
+          "name",
+          "dividend-mode",
+          "inception",
+          "mgmt-fee"
+        ],
+        "state": "insufficient",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 資料不足 輸入代碼 FAKE-LOW1 基金名稱 ⬜ 資料未備 配息方式 ⬜ 資料未備 成立日期 ⬜ 資料未備 經理費率 ⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "input": "FAKE-LOW1",
+      "side": "B"
+    }
+  },
+  "shared_inputs": {
+    "blank_empty": {
+      "A": {
+        "echo": null,
+        "echo_raw": null,
+        "failed_marker": false,
+        "field_status": {},
+        "loader_or_table_calls": 0,
+        "missing_marker_count": 0,
+        "reason": "blank",
+        "row_texts": {},
+        "rows_shown": [],
+        "state": "BLOCKED",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 輸入未通過檢查，未發出查詢 請先輸入基金代碼 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "B": {
+        "echo": "⬜ 資料未備",
+        "echo_raw": "<span class=\"uv3-st uv3-st-grey uv3-pending\" data-kind=\"missing\" data-pending-wording=\"missing_demo\">⬜ 資料未備",
+        "failed_marker": false,
+        "field_status": {},
+        "loader_or_table_calls": 0,
+        "missing_marker_count": 1,
+        "reason": null,
+        "row_texts": {
+          "input-code": "⬜ 資料未備"
+        },
+        "rows_shown": [
+          "input-code"
+        ],
+        "state": "unrecognized",
+        "undetermined_marker": true,
+        "visible_text": "FAKE 模擬 ⬜ 無法判定 （無法辨識格式） 輸入代碼 ⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "input": ""
+    },
+    "blank_spaces": {
+      "A": {
+        "echo": null,
+        "echo_raw": null,
+        "failed_marker": false,
+        "field_status": {},
+        "loader_or_table_calls": 0,
+        "missing_marker_count": 0,
+        "reason": "blank",
+        "row_texts": {},
+        "rows_shown": [],
+        "state": "BLOCKED",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 輸入未通過檢查，未發出查詢 請先輸入基金代碼 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "B": {
+        "echo": "⬜ 資料未備",
+        "echo_raw": "<span class=\"uv3-st uv3-st-grey uv3-pending\" data-kind=\"missing\" data-pending-wording=\"missing_demo\">⬜ 資料未備",
+        "failed_marker": false,
+        "field_status": {},
+        "loader_or_table_calls": 0,
+        "missing_marker_count": 1,
+        "reason": null,
+        "row_texts": {
+          "input-code": "⬜ 資料未備"
+        },
+        "rows_shown": [
+          "input-code"
+        ],
+        "state": "unrecognized",
+        "undetermined_marker": true,
+        "visible_text": "FAKE 模擬 ⬜ 無法判定 （無法辨識格式） 輸入代碼 ⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "input": "   "
+    },
+    "fake_success": {
+      "A": {
+        "echo": "FAKE-OK01",
+        "echo_raw": "FAKE-OK01",
+        "failed_marker": false,
+        "field_status": {
+          "dividend-mode": "value",
+          "inception": "value",
+          "input-code": "value",
+          "mgmt-fee": "missing",
+          "name": "value"
+        },
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 1,
+        "reason": null,
+        "row_texts": {
+          "dividend-mode": "配息型",
+          "inception": "2000-01-02",
+          "input-code": "FAKE-OK01",
+          "mgmt-fee": "此欄尚無可顯示的值",
+          "name": "FAKE 範例基金甲"
+        },
+        "rows_shown": [
+          "input-code",
+          "name",
+          "dividend-mode",
+          "inception",
+          "mgmt-fee"
+        ],
+        "state": "RESULT",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼 FAKE-OK01 基金名稱 FAKE 範例基金甲 配息方式 配息型 成立日期 2000-01-02 經理費率 此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "B": {
+        "echo": "FAKE-OK01",
+        "echo_raw": "FAKE-OK01",
+        "failed_marker": false,
+        "field_status": {},
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 2,
+        "reason": null,
+        "row_texts": {
+          "dividend-mode": "配息型",
+          "inception": "⬜ 資料未備",
+          "input-code": "FAKE-OK01",
+          "mgmt-fee": "⬜ 資料未備",
+          "name": "FAKE 模擬基金（非正式名稱）"
+        },
+        "rows_shown": [
+          "input-code",
+          "name",
+          "dividend-mode",
+          "inception",
+          "mgmt-fee"
+        ],
+        "state": "found",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 找到模擬項目（FAKE） 輸入代碼 FAKE-OK01 基金名稱 FAKE 模擬基金（非正式名稱） 配息方式 配息型 成立日期 ⬜ 資料未備 經理費率 ⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "input": "FAKE-OK01"
+    },
+    "isin_shape": {
+      "A": {
+        "echo": null,
+        "echo_raw": null,
+        "failed_marker": false,
+        "field_status": {},
+        "loader_or_table_calls": 0,
+        "missing_marker_count": 0,
+        "reason": "isin_shape",
+        "row_texts": {},
+        "rows_shown": [],
+        "state": "BLOCKED",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 輸入未通過檢查，未發出查詢 ISIN 目前未啟用 未用 ISIN 取數、未猜測任何代碼 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "B": {
+        "echo": null,
+        "echo_raw": null,
+        "failed_marker": false,
+        "field_status": {},
+        "loader_or_table_calls": 0,
+        "missing_marker_count": 0,
+        "reason": null,
+        "row_texts": {},
+        "rows_shown": [],
+        "state": "isin",
+        "undetermined_marker": false,
+        "visible_text": "ISIN 目前未啟用 未用 ISIN 取數、未猜測任何代碼"
+      },
+      "input": "LU0000000001"
+    },
+    "legit_unknown": {
+      "A": {
+        "echo": "ABC123",
+        "echo_raw": "ABC123",
+        "failed_marker": false,
+        "field_status": {
+          "input-code": "value"
+        },
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 0,
+        "reason": "no_page",
+        "row_texts": {
+          "input-code": "ABC123"
+        },
+        "rows_shown": [
+          "input-code"
+        ],
+        "state": "PAGE_UNMATCHED",
+        "undetermined_marker": true,
+        "visible_text": "FAKE 模擬 ⬜ 無法判定 頁面無法確認是這一檔，不顯示任何欄位 找不到對應頁面 這不是對基金身份的判斷 輸入代碼 ABC123 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "B": {
+        "echo": "ABC123",
+        "echo_raw": "ABC123",
+        "failed_marker": false,
+        "field_status": {},
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 0,
+        "reason": null,
+        "row_texts": {
+          "input-code": "ABC123"
+        },
+        "rows_shown": [
+          "input-code"
+        ],
+        "state": "no_fixture",
+        "undetermined_marker": true,
+        "visible_text": "FAKE 模擬 ⬜ 無法判定 （離線預覽沒有這個代碼的模擬資料） 輸入代碼 ABC123 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "input": "ABC123"
+    },
+    "padded_lower": {
+      "A": {
+        "echo": "fake-ok01",
+        "echo_raw": "fake-ok01",
+        "failed_marker": false,
+        "field_status": {
+          "dividend-mode": "value",
+          "inception": "value",
+          "input-code": "value",
+          "mgmt-fee": "missing",
+          "name": "value"
+        },
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 1,
+        "reason": null,
+        "row_texts": {
+          "dividend-mode": "配息型",
+          "inception": "2000-01-02",
+          "input-code": "fake-ok01",
+          "mgmt-fee": "此欄尚無可顯示的值",
+          "name": "FAKE 範例基金甲"
+        },
+        "rows_shown": [
+          "input-code",
+          "name",
+          "dividend-mode",
+          "inception",
+          "mgmt-fee"
+        ],
+        "state": "RESULT",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 查詢結果（模擬資料） 輸入代碼 fake-ok01 基金名稱 FAKE 範例基金甲 配息方式 配息型 成立日期 2000-01-02 經理費率 此欄尚無可顯示的值 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "B": {
+        "echo": "fake-ok01",
+        "echo_raw": " fake-ok01 ",
+        "failed_marker": false,
+        "field_status": {},
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 2,
+        "reason": null,
+        "row_texts": {
+          "dividend-mode": "配息型",
+          "inception": "⬜ 資料未備",
+          "input-code": "fake-ok01",
+          "mgmt-fee": "⬜ 資料未備",
+          "name": "FAKE 模擬基金（非正式名稱）"
+        },
+        "rows_shown": [
+          "input-code",
+          "name",
+          "dividend-mode",
+          "inception",
+          "mgmt-fee"
+        ],
+        "state": "found",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 找到模擬項目（FAKE） 輸入代碼 fake-ok01 基金名稱 FAKE 模擬基金（非正式名稱） 配息方式 配息型 成立日期 ⬜ 資料未備 經理費率 ⬜ 資料未備 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "input": " fake-ok01 "
+    },
+    "source_failed": {
+      "A": {
+        "echo": "FAKE-FAIL1",
+        "echo_raw": "FAKE-FAIL1",
+        "failed_marker": true,
+        "field_status": {
+          "input-code": "value"
+        },
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 0,
+        "reason": "source_failed",
+        "row_texts": {
+          "input-code": "FAKE-FAIL1"
+        },
+        "rows_shown": [
+          "input-code"
+        ],
+        "state": "SOURCE_FAILED",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金的欄位 來源回報取數失敗 這不是對基金身份的判斷 輸入代碼 FAKE-FAIL1 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "B": {
+        "echo": "FAKE-FAIL1",
+        "echo_raw": "FAKE-FAIL1",
+        "failed_marker": true,
+        "field_status": {},
+        "loader_or_table_calls": 1,
+        "missing_marker_count": 0,
+        "reason": null,
+        "row_texts": {
+          "input-code": "FAKE-FAIL1"
+        },
+        "rows_shown": [
+          "input-code"
+        ],
+        "state": "failed",
+        "undetermined_marker": false,
+        "visible_text": "FAKE 模擬 ⛔ 取數失敗 無法顯示這檔基金 這次取數失敗，不是對基金身份的判斷 輸入代碼 FAKE-FAIL1 單檔查詢結果（唯讀；不會加入選股池或任何清單）"
+      },
+      "input": "FAKE-FAIL1"
+    }
+  }
+}
