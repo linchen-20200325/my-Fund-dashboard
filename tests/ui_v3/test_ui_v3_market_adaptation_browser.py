@@ -10,7 +10,8 @@
 **不是** Cloud 部署或真機（iOS／Android／系統字級）驗證。
 
 4. **導覽連結的可見焦點指示**（WCAG 2.4.7）：≤768 頁首五格有 2px 實線環（正向守衛）；**≥769 側欄導覽連結目前沒有任何可見焦點指示**
-   （outline／box-shadow／背景皆與未聚焦相同）——以 `xfail(strict=True)` 鎖成 known-gap（修了會轉紅，提醒移除標記），**本批不修**（改導覽樣式需 Gate）。
+   ——已由 `ui_v3/shell/nav.py` 一行 `:focus-visible` 規則修好（總管裁示 #1296 comment 7056635038；僅 CSS，不改 hover／尺寸／斷點／色票），
+   原 known-gap 的 `xfail(strict)` 已改為真 PASS；另驗 dark／forced-colors、Shift+Tab、未掛載項不可聚焦。
 
 **刻意不斷言的事（只在 `docs/evidence/ui_a5_mkt_adaptation_2026_11_21/report.md` 以 FACT 記錄）**
 - 暗色（`prefers-color-scheme: dark`）：頁面維持淺色、文字可讀；這是現況，不在任何核准規格內，故不鎖。
@@ -200,9 +201,9 @@ def focus_indicator_violations(unfocused, focused):
     return [] if (ring or shadow or changed) else [("導覽連結聚焦後沒有任何可見焦點指示", unfocused, focused)]
 
 
-def _nav_focus(base_and_browser, width, *, css=None):
+def _nav_focus(base_and_browser, width, *, css=None, **ctx_kw):
     base, browser = base_and_browser
-    ctx, page = _open(browser, base, "normal", width)
+    ctx, page = _open(browser, base, "normal", width, **ctx_kw)
     try:
         if css:
             page.add_style_tag(content=css)
@@ -266,9 +267,7 @@ def test_mobile_top_nav_link_shows_visible_focus_indicator(base_and_browser):
     assert not focus_indicator_violations(unfocused, focused), (focus_indicator_violations(unfocused, focused), unfocused, focused)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="KNOWN-GAP（未修，需導覽樣式 Gate）：≥769 側欄導覽連結聚焦後無任何可見焦點指示；"
-                                       "見 docs/evidence/ui_a5_mkt_adaptation_2026_11_21/report.md §4。修好後本測試會 XPASS(strict)→紅，屆時移除此標記。")
-def test_desktop_sidebar_nav_link_shows_visible_focus_indicator_known_gap(base_and_browser):
+def test_desktop_sidebar_nav_link_shows_visible_focus_indicator(base_and_browser):
     unfocused, focused = _nav_focus(base_and_browser, 1280)
     assert not focus_indicator_violations(unfocused, focused), (focus_indicator_violations(unfocused, focused), unfocused, focused)
 
@@ -306,3 +305,37 @@ def test_mutation_deleting_only_the_mobile_outline_rule_is_flagged(base_and_brow
     unfocused, focused = _nav_focus(base_and_browser, 390,
                                     css='a[data-testid="stPageLink-NavLink"]:focus-visible{outline:none !important}')
     assert focus_indicator_violations(unfocused, focused), (unfocused, focused)
+
+
+@pytest.mark.parametrize("ctx_kw", [dict(), dict(color_scheme="dark"), dict(forced_colors="active")], ids=["normal", "dark", "forced-colors"])
+def test_desktop_sidebar_focus_visible_in_normal_dark_and_forced_colors(base_and_browser, ctx_kw):
+    unfocused, focused = _nav_focus(base_and_browser, 1280, **ctx_kw)
+    assert not focus_indicator_violations(unfocused, focused), (focus_indicator_violations(unfocused, focused), unfocused, focused)
+
+
+def test_desktop_sidebar_focus_returns_visible_with_shift_tab_and_disabled_items_never_take_focus(base_and_browser):
+    base, browser = base_and_browser
+    ctx, page = _open(browser, base, "normal", 1280)
+    try:
+        base_styles = page.evaluate(_BASELINE_JS)
+        seen_disabled = False
+        for _ in range(_N_STOPS):
+            page.keyboard.press("Tab")
+            seen_disabled |= page.evaluate("() => !!document.activeElement.closest('.uv3-nav-disabled')")
+        assert not seen_disabled, "未掛載（開發中）項目不得成為鍵盤停駐點"
+        for _ in range(_N_STOPS):
+            page.keyboard.press("Shift+Tab")
+            f = page.evaluate(_FOCUS_JS)
+            if f and f["tag"] == "A" and f["idx"] >= 0:
+                assert not focus_indicator_violations(base_styles[f["idx"]], f), f
+                return
+        pytest.fail("Shift+Tab 走回途中從未落在導覽連結上")
+    finally:
+        ctx.close()
+
+
+def test_mutation_removing_sidebar_focus_rule_is_flagged_on_desktop(base_and_browser):
+    """真負控：在同一頁把桌機側欄 `:focus-visible` outline 拿掉 → 判定必須報（證明上面三個正向測試守得住這條規則）。"""
+    unfocused, focused = _nav_focus(base_and_browser, 1280,
+                                    css='[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:focus-visible{outline:none !important}')
+    assert focus_indicator_violations(unfocused, focused), focused

@@ -68,3 +68,9 @@
 
 本檔內容原在 Draft #1318（head `d1f8186a`）。#1318 的首個 commit 訊息含工具附加的共同作者行與 session 網址，違反倉庫衛生規則；**未重寫歷史、未 force push、原 commit 仍留在 #1318 與其遠端分支**，只是**不會被帶進 main**。本 PR 以 `origin/main`（`41647fdb`）為基底、重新提交同一組允許 diff（1 個測試檔、本資料夾、兩個既存 `measure.json` 註記）。
 桌機側欄焦點環（§4 第 3 項）依裁示另以最小獨立 PR 實作；實作後該 `xfail(strict)` 改為真 PASS。
+
+## 9. 桌機側欄焦點環已修（獨立最小 PR；總管裁示 #1296 comment 7056635038）
+
+`ui_v3/shell/nav.py` 新增一條規則：`[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:focus-visible{outline:2px solid currentColor;outline-offset:-3px}`（與手機頁首同一組焦點樣式；只在 `:focus-visible`；不改 hover／尺寸／斷點／色票／registry／`app_preview`）。
+`xfail(strict)` 已改為真 PASS；新增驗收：1280 normal／dark／forced-colors 聚焦可見、Shift+Tab 走回仍可見、「開發中」項目不可聚焦、拿掉規則的真負控會轉紅；手機頁首既有 `top_nav_browser` 等 226 條回歸測試全綠。
+本機：`test_ui_v3_market_adaptation_browser.py` → `20 passed in 61.78s`；`top_nav_browser／navigation_shell／token_contrast／design_tokens／preview_navigation_pages_guard／page_registry_guard／readonly_guard／import_guard` → `226 passed`（2026-11-21）。Cloud／真機／輔助科技仍 NOT VERIFIED。
