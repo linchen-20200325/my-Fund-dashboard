@@ -138,12 +138,9 @@ def test_keyboard_reaches_only_enabled_links_with_visible_focus_and_enter_return
         assert focused and not any(f["disabled"] for f in focused), ("焦點不得落在未掛載（aria-disabled）項目", focused)
         links = [f for f in focused if f["isLink"]]
         assert any("市場" in f["text"] for f in links) and any("設定" in f["text"] for f in links), ("🌍／⚙️ 連結可由鍵盤到達", links)
-        # 焦點外框：主區返回連結（本批 renderer）與手機頁首（既有守衛已鎖）必須可見。
-        # ⚠️ 桌機側欄導覽連結實測沒有焦點外框（outline none、無 box-shadow）——這是既有 Shell（`ui_v3/shell/nav.py`）行為、不在本批授權範圍，
-        #    不在此斷言也不在此修改；已登記於 PR 與 #1296（缺口，待總管指派 owner）。
-        checked = [f for f in links if f["inMain"] or f["inTop"]]
-        assert checked, links
-        assert all(f["visible"] and f["outline"].startswith("solid") for f in checked), (
+        # 焦點外框：主區返回連結、手機頁首、桌機側欄（#1320 已於 main 補上側欄 :focus-visible）一律必須可見。
+        checked = links
+        assert checked and all(f["visible"] and f["outline"].startswith("solid") for f in checked), (
             "焦點外框必須可見", [(f["text"], f["outline"], f["shadow"]) for f in checked if not (f["visible"] and f["outline"].startswith("solid"))])
         main_back = [f for f in focused if f["inMain"] and f["isLink"] and "市場與趨勢" in f["text"]]
         assert main_back, ("返回市場連結可由鍵盤到達", focused)
@@ -193,3 +190,66 @@ def test_fresh_session_on_settings_url_has_no_rows_and_other_sessions_never_leak
         assert len(owner.evaluate(_ROWS)) == 5                             # 原 session 不受影響
     finally:
         owner_ctx.close()
+
+
+_FOCUS = """() => { const e = document.activeElement; if (!e || e === document.body) return null; const s = getComputedStyle(e);
+  return {text: (e.innerText || '').replace(/\\s+/g, ' ').trim(), isLink: !!e.closest('a[data-testid="stPageLink-NavLink"]'),
+          inSide: !!e.closest('[data-testid="stSidebar"]'), inMain: !!e.closest('[data-testid="stMain"]'),
+          disabled: !!e.closest('[aria-disabled="true"]'), visible: e.matches(':focus-visible'), outline: s.outlineStyle + ' ' + s.outlineWidth}; }"""
+_DISABLED = """() => [...document.querySelectorAll('[data-testid="stSidebar"] [data-nav]')].map(e => ({nav: e.dataset.nav, aria: e.getAttribute('aria-disabled'),
+  href: e.getAttribute('href'), tabindex: e.getAttribute('tabindex')}))"""
+
+
+def test_desktop_1280_sidebar_keyboard_acceptance_with_integrated_main(base_and_browser):
+    """與 main 整合（含 #1320 側欄焦點）後的 1280px 鍵盤驗收：Tab／Shift+Tab 焦點可見且順序可逆；Enter 可進市場與設定；
+    設定可返回市場；💼／🔍／🤖 三個入口維持停用（aria-disabled、無 href、Tab 與 Shift+Tab 都落不上去）。"""
+    base, browser = base_and_browser
+    ctx, page = _new(browser, base, 1280)
+    try:
+        page.wait_for_selector(".uv3-statusbar", timeout=60000)
+        disabled = page.evaluate(_DISABLED)
+        assert sorted(d["nav"] for d in disabled) == ["ai", "ast", "exp"], disabled
+        assert all(d["aria"] == "true" and d["href"] is None for d in disabled), disabled
+        forward, backward = [], []
+        for _ in range(12):
+            page.keyboard.press("Tab")
+            forward.append(page.evaluate(_FOCUS))
+        for _ in range(12):
+            page.keyboard.press("Shift+Tab")
+            backward.append(page.evaluate(_FOCUS))
+        side_fwd = [f["text"] for f in forward if f and f["inSide"] and f["isLink"]]
+        side_bwd = [f["text"] for f in backward if f and f["inSide"] and f["isLink"]]
+        assert any("市場" in x for x in side_fwd) and any("設定" in x for x in side_fwd), forward
+        def order(texts):
+            seen = []
+            for x in texts:
+                key = "mkt" if "市場" in x else "set" if "設定" in x else None
+                if key and key not in seen:
+                    seen.append(key)
+            return seen
+        assert order(side_fwd) == ["mkt", "set"], ("Tab 順序＝🌍 → ⚙️", side_fwd)
+        assert order(side_bwd) == ["set", "mkt"], ("Shift+Tab 順序反向＝⚙️ → 🌍", side_bwd)
+        every = [f for f in forward + backward if f]
+        assert not any(f["disabled"] for f in every), ("焦點不得落在停用入口", [f for f in every if f["disabled"]])
+        sidebar_links = [f for f in every if f["inSide"] and f["isLink"]]
+        assert sidebar_links and all(f["visible"] and f["outline"].startswith("solid") for f in sidebar_links), ("側欄焦點外框必須可見", sidebar_links)
+        # Enter：側欄「設定」→ 設定頁；Enter：側欄「市場」→ 市場頁
+        page.locator('[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"][href$="set"]').first.focus()
+        page.keyboard.press("Enter")
+        page.wait_for_selector('[data-health="scope"]', timeout=60000)
+        assert page.evaluate("() => (document.querySelector('h1') || {}).innerText") == "⚙️ 設定"
+        page.locator('[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:not([href$="set"])').first.focus()
+        page.keyboard.press("Enter")
+        page.wait_for_selector(".uv3-statusbar", timeout=60000)
+        page.wait_for_timeout(800)
+        assert page.evaluate("() => (document.querySelector('h1') || {}).innerText") == "🌍 市場與趨勢"
+        # 設定 → 返回市場（主區連結）
+        _go_settings(page, 1280)
+        _back_to_market(page)
+        assert page.evaluate("() => (document.querySelector('h1') || {}).innerText") == "🌍 市場與趨勢"
+        # 停用入口：嘗試 focus() 也不得取得焦點
+        for nav in ("ast", "exp", "ai"):
+            page.evaluate(f"() => document.querySelector('[data-testid=\"stSidebar\"] [data-nav=\"{nav}\"]').focus()")
+            assert page.evaluate(_FOCUS) is None or not page.evaluate(_FOCUS)["disabled"], nav
+    finally:
+        ctx.close()
