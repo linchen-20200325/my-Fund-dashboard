@@ -117,3 +117,53 @@ R-ID-1／R-NAV-1／2／4／5 契約文字（`-13-06`、`-14-07`、`-17-06`）｜
 4. D2 17 列狀態取自候選檔／prep，未逐列重驗程式；未讀 `-19-06` 各條款逐字內容（僅確認其不涉 D2 列）。
 5. 「Required 升格」較嚴讀法、「終點線未定義」、批 α／β 切分、「延後域在 Digest 初版為 Missing」皆為推論，客戶原意可能不同。
 6. 方案風險等級為作者推論，未實作驗證；方案 4 的 D2／Digest 跨 Gate 歸屬須客戶確認，本組未判定。
+
+## 7. 2026-11-21 補：R-ID-2 `full_key`／R-ID-3 `ok` 候選契約文字（Sheet A0 裁示後；本節 append-only，§0～§6 一字未改）
+
+> **單組（C 線）草案，未經獨立複驗；候選文字，不是客戶核准、不是契約、不是施工授權**（`CLAUDE.md` §-1）。屬 data identity 等級，須至少 1 組獨立稽核（Work）與客戶逐字核准後才能成為契約。基準 main `33c0cae8c5204aba7cfc78b1aba1571d84498e6a`。標記：**[實測]**＝離線指令輸出；**[靜讀]**＝讀原始碼；**[推演]**＝模擬，非現況；**NV**＝NOT VERIFIED。
+> **為什麼補這一節**：客戶 2026-11-21 裁示 Sheet「基金代號」欄採 **A0**（#1296 comment 7060465421）：限該欄；帶通路後綴時標示、保留原始代碼、沿既有流程送 resolver 嘗試取數；沿用既有回傳 key 核對，若回傳基本碼而與請求 key 不符，仍略過該筆 NAV；真實來源對後綴的支援仍未驗。**該裁示明列不涵蓋**：找基金／選股池、共用 resolver 規則、R-ID-2／3、D2／C-13、Digest、Provider、Phase 7。故本節只把 A0 的**行為**寫成 R-ID-2／3 的**候選文字**，供下一個逐字核准 Gate 使用；§2-C 的 Q-ID 五案**不因本節改變**（本節的寫法接近方案 2，但**分入口**，且與 §2-C 方案 2 欄 (a) 的「契約內部矛盾」顧慮的關係見 7-4）。
+> 證據：[#1323](https://github.com/linchen-20200325/my-Fund-dashboard/pull/1323) 的 `docs/evidence/d2_s7_two_entry_trace_2026_11_21/`（合成碼 `ZZ9999`／`ZZ9999-SFX01`，離線替身）；Work A0 驗收矩陣（#1296 comment 7060505473）。
+
+### 7-1 三個必須分開的概念（候選契約的核心）
+| 概念 | 在系統裡是什麼 | 由誰決定 | **不等於** |
+|---|---|---|---|
+| **原碼保留** | 使用者／Sheet 給的原字串，原樣留在 `results[].input`（未 strip、未轉大寫）[靜讀：`fund_keys.py::_resolve_one` 的 `{"input": raw}`] | 輸入本身 | `full_key`（`full_key` 已經過 strip、大寫、別名表） |
+| **格式通過（`ok`）** | 該輸入通過 resolver 鏈：字串→strip→非空→ASCII→`upper`→`parse_moneydj_input`→別名表→最終 `_is_pure_code`，得到合格 `full_key` [靜讀＋實測] | `fund_keys.resolve_full_keys`（純函式，不取數） | **基金存在**、取得 NAV、後綴已被驗證 |
+| **基金存在／取得資料** | 來源（MoneyDJ／TDCC／FundClear／A 鏈）對該 `full_key` 有回應與資料；🔍 以 `ok／not_found／not_listed／unrecognized_page／failed` 表示 [靜讀] | 取數層與來源（本檔不判） | `ok=True`（`ok=True` 只代表「可以拿去問來源」） |
+實測（[#1323 輸出](https://github.com/linchen-20200325/my-Fund-dashboard/blob/841cb592bab04d82327b53fee249b8d50fbe5e5f/docs/evidence/d2_s7_two_entry_trace_2026_11_21/output.json)）：`ZZ9999-SFX01` → `ok=True`、`full_key=ZZ9999-SFX01`、`mapping_hit=False`；同一輸入在 🔍 替身回「查無」時為 `page_unmatched／no_page`——**`ok=True` 與「查無此基金」並存**，正是三概念必須分開的實例。
+
+### 7-2 兩列候選契約（逐字為候選，PendingWording；括號內為待核）
+| 列 | 候選契約文字（**草案**） | 適用入口 | 與現況的對照 | 待核邊界（Pending） |
+|---|---|---|---|---|
+| **R-ID-2 `full_key`** | (1) `full_key`＝送給取數層的 MoneyDJ 取數鍵：輸入經 strip、轉大寫、`parse_moneydj_input`、別名表（若命中取其 `public_code`）、最終純代碼格式檢查後的字串；**它不是原碼**，原碼另存於 `input`。(2) **別名表命中時 `full_key` 可與輸入完全不同**（僅 `mapping_source` 可追溯，`DEC-2026-11-09-01` D2-C＝B）。(3) **Sheet「基金代號」欄帶通路後綴（`-` 加 2–20 碼）時（A0）**：該列須**標示「帶後綴」、保留原始代碼、仍以其 `full_key` 嘗試取數**；`full_key` 照現行規則產出（不剝、不截、不改寫）。(4) **下游核對（現況描述，非新條款）**：取數層（A 鏈）回傳的 `full_key` 與請求的不同或缺失時，該檔 NAV（及配息）**不寫**，原因文字照實保留（不猜哪一個對）。(5) 本列**不**宣稱後綴碼語意、NAV 等價性、通路頁是否存在。 | **僅 Sheet「基金代號」欄的取數入口**：`ui_v2/hld/source.py`、`ui_v2/alo/source.py`、`services/v2_tables/settings_store.py::refetch_nav`（皆呼叫 `resolve_full_keys`，[靜讀]）。**不含**：🔍 找基金（路徑 B，`-19-02` Q2(4)(6) 另行）、選股池 EXP（命名空間另案，`-13-06` (4)）、💼 `assets_source`（**不呼叫 resolver**，[實測]）。 | (1)(2)(5)＝現行行為描述 [實測／靜讀]；(3) 的**標示**＝**尚未實作**（Sheet 入口目前對後綴「不說話」，`DG2_SHADOW_ENABLED=False`，[實測]）；(4)＝現行行為，已有測試釘住：`tests/test_v2_tables_nav_chain_handover.py::test_A鏈回的full_key與fund_keys不同_照實標缺_原因讀得懂`（本輪離線跑 157 passed 含該檔與 `test_v2_tables_fund_keys.py`）。配息同守衛 [靜讀：`nav_dividend.py::_div_from_chain`]。 | **P1**「標示」的承載（resolver 回傳新欄位＝介面／Schema 變更；`resolve_full_keys` 無 `input_source` 參數，如何只限 Sheet 欄＝設計題）— A0 實作 Gate。**P2** (4) 是否寫成規範性條款（見 7-5 待裁點）。**P3** 配息：A0 裁示字面只提 NAV，配息同守衛為 [靜讀]，是否納入待核。**P4** 真實來源／真實 A 鏈對後綴碼回什麼＝NV。**P5** 別名表跨部署非確定性（`mapping_source` 分不出 csv 缺檔與讀取失敗，S7 卡 F9）＝已知缺口，須明寫。 |
+| **R-ID-3 `ok`** | (1) `ok`＝「該輸入通過上述解析鏈並得到合格 `full_key`」的布林；**僅表示代碼格式可解析、可送交取數**。(2) **`ok=True` 不表示基金存在、不表示取得 NAV、不表示後綴已驗證**；`ok=False` 時 `full_key`／`portal` 為 None、`error` 為字串，**不得補預設鍵**、不截斷、不猜。(3) **A0：Sheet 欄帶後綴時 `ok` 仍為 `True`**（標示與 `ok` 是兩件事：標示不阻擋取數）；「基金存在」須由取數層另行判定。(4) 候選檔 K3 原述「區分沒取到與沒有這檔」**不準確**（`ok` 不取數），本列改述為「代碼可解析／不可解析」（S7 卡 N4）。 | 同 R-ID-2（Sheet 取數入口）。🔍 的 `ok` 語意僅路徑 B（`-19-02` Q2(4)：`ok` 只代表格式通過）；EXP 另案。 | (1)(2)(4)＝現行行為／描述修正 [靜讀＋實測]；(3)＝A0 後的**目標行為**，現況也是 `ok=True`（只是尚無標示）[實測]。 | **P6** 「基金存在」誰判、字樣為何＝Digest／呈現層，沿 `DEC-2026-11-08-04` Q4 既有「資料未備／無法判定」，**不新增正式詞**；本列只劃界、不給字樣。**P7** 與 R-ID-1 的關係：Sheet 欄帶後綴＝R-ID-1 視為「違反」並標示（A0），R-ID-3 仍視為「可解析」——兩者**不矛盾**的寫法是「標示 ≠ 阻擋」，須客戶確認此寫法（§2-C 方案 2 欄 (a) 的顧慮在 A0 下改為「標示＋保留取數」而非「靜默放行」）。 |
+
+### 7-3 key 不符時略過 NAV 的行為（A0 裁示明載；[實測／推演] 分列）
+| 情境（合成碼 `ZZ9999-SFX01`） | 結果 | 依據 |
+|---|---|---|
+| 來源／A 鏈回相同 key | 取數、寫 NAV 列 | [實測]：#1323 `1b_hld_chain_current(echo)`：兩檔各寫 2 列 NAV |
+| 來源／A 鏈回基本碼 `ZZ9999`（不同 key） | **該檔 NAV 不寫**，`nav_errors` 為「A 鏈回傳的 full_key 'ZZ9999' 與代碼對照（fund_keys）的 full_key 'ZZ9999-SFX01' 不同；不猜哪一個對，這一檔的淨值不寫」；基本碼檔照常寫入 | [實測，替身]：#1323 `1b_hld_chain_INFER`；既有測試釘住同一守衛 |
+| 來源回傳缺 `full_key` | 該檔 NAV 不寫（`TEXT_KEY_MISSING`） | [靜讀：`nav_dividend.py::_nav_from_chain`] |
+| 真實 A 鏈／真實來源實際回什麼 | **NV** | 需真取數（BL-0545／BL-0551 Gate） |
+**要點**：這是**下游依賴 `full_key` 的現有守衛**，A0 沒有改它；契約若要把它寫成 R-ID-2 條款，是把一個 NAV 域行為提升為身份域文字（見 7-5）。**Evidence 層**：該檔若被標 `key_failed`，Evidence 的 `nav_state=failed`、`nav_cause.key_failed=true`；若只是 NAV 列缺而無標記則 `no_data`（[實測]，#1323 `3_evidence_probe`）。注意：「key 不符略過 NAV」目前產生的是**取數錯誤文字**而非 `key_failed` 標記——兩者是否對映＝**NV／待核**，本節不替它們畫等號。
+
+### 7-4 與既有卡內容的關係
+- **沿用**：§2-C 的 Q-ID 五案、推薦與風險一字不改。A0 只回答 **Sheet 入口行為**，**不是** Q-ID 的答案；R-ID-2／3 仍 **Pending**。
+- **縮小**：本節把「方案 2 式的契約文字」改為**分入口**寫法——Sheet 取數入口適用 A0；🔍／EXP／💼 各標「另案／不經 resolver」，避免把 A0 外推到共用 resolver（A0 裁示明列不涵蓋共用 resolver 規則）。
+- **未解**：§1 缺口「Digest Identity 群無現存 resolution 來源」不因本節而關閉；C-13（`assets_source` 證據轉接）、NAV stale／FX missing 穿透維持原 Gate。
+- **實作面（另案，不在本節）**：A0 標示需新增承載欄位與入口維度（S7 卡 §i 最小 Gate 草稿的「A0 實作面成本」），屬 resolver 介面／Schema 變更，須另授權；`fund_keys` 的漂移鎖（`test_pure_code_pattern_matches_l1_source`）若改 pattern 須同步 L1，本節不改 pattern。
+
+### 7-5 一個待裁點（單題；總管送客戶前請 Work 獨立核對 7-1～7-3）
+**問題**：「取數層回傳 key 與請求 key 不符時，略過該檔 NAV」這條行為，要不要**寫進 R-ID-2 契約文字成為規範性條款**？
+| 方案 | 內容 | 優點 | 缺點 | 風險 |
+|---|---|---|---|---|
+| **Y（推薦）只描述現況、規範留 NAV 域** | R-ID-2 僅以「現況描述」記載該守衛並指向 NAV 域；規範性條款留給 NAV 域後續逐字 Gate（`T-NAV1` 之外的新增條款本來就須另經 Gate，§2-C 方案 2 欄註） | 不擴大 A0 裁示範圍（A0 只提 NAV、只限 Sheet 欄）；不預判 NAV 域契約；身份域可先收尾 | Digest 層若要引用「key 不符」原因，須等 NAV 域條款到位；契約短期內「描述」與「規範」分兩處 | 低 |
+| X 寫成 R-ID-2 規範性條款（NAV＋配息，Sheet 入口） | 把守衛升格為身份契約條款 | 契約自足；身份與 NAV 的耦合（§2-A）一處看齊 | 跨 NAV 域、超出 A0 字面（配息未獲裁）；須同批 Gate 與獨立稽核；與 `-11-13-06`／`-14-07` 已核 NAV 條款的整合未查 | 中 |
+**AI 推薦：Y**。**已知答案不重問**：A0 規則本身（#1296 comment 7060465421）；R-ID-1／`T-ID1`；`DEC-2026-11-09-01` D2-C＝B；S7 的 Sheet 欄行為已裁，**共用 resolver／🔍／EXP 未裁**。
+
+### 7-6 本節未查證與限制
+1. 單組、未經獨立複驗；候選文字為草案，**逐字另經最小 Decision Gate**（方向 ≠ 文字，`-19-05`）。
+2. 離線證據全為合成碼與替身；**真實來源／真實 A 鏈對後綴的行為＝NV**。
+3. 7-2 的入口清單取自 `git grep resolve_full_keys` 的靜讀，**不宣稱窮舉**（動態呼叫、其他分支不在內）。
+4. 「key 不符」守衛是否同時涵蓋所有 A 鏈回傳路徑、及其與 Evidence `key_failed` 的對映＝NV／待核（7-3）。
+5. 配息守衛為靜讀，本輪未另跑配息情境。
