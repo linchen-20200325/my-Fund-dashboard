@@ -1,0 +1,233 @@
+{
+  "main_sha": "c5c54c3b7dcdbc3f5a36130f8d1084b29eca404a",
+  "base_commit": "c5c54c3b7dcdbc3f5a36130f8d1084b29eca404a",
+  "browser": "Chromium 153.0.8010.12",
+  "data": "tests/ui_v3/market_stubs.py 合成 fixture（人造數值，非市場資料；未連任何外部來源）",
+  "steps": [
+    {
+      "step": "390/normal 圖表可見/無橫溢",
+      "ok": true,
+      "detail": {
+        "chart_visible": true,
+        "width": 356,
+        "paths": 2,
+        "h_overflow": false
+      }
+    },
+    {
+      "step": "390/normal 展開「來源與限制」後顯示各序列來源與資料日",
+      "ok": true,
+      "detail": {
+        "tw_source": true,
+        "sp_source": true,
+        "sp_asof": true,
+        "note": "來源在預設收合的 expander 內（既有設計）"
+      }
+    },
+    {
+      "step": "390/normal 期間切換後圖表仍可見",
+      "ok": true,
+      "detail": {
+        "options": [
+          "比較",
+          "VIX",
+          "美10Y",
+          "美2Y",
+          "3M",
+          "6M",
+          "1Y",
+          "3Y",
+          "期限利差",
+          "信用利差",
+          "政策利率"
+        ],
+        "clicked": [
+          [
+            "3M",
+            true
+          ],
+          [
+            "3Y",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "step": "390/us_failed 圖表可見/無橫溢",
+      "ok": true,
+      "detail": {
+        "chart_visible": true,
+        "width": 356,
+        "paths": 1,
+        "h_overflow": false
+      }
+    },
+    {
+      "step": "390/us_failed 缺值揭露不外漏原文",
+      "ok": true,
+      "detail": {
+        "mentions_failed_series": true,
+        "token_leak": false,
+        "failed_series_has_no_asof_line": true,
+        "healthy_series_keeps_asof": true,
+        "has_unavailable_marker": true
+      }
+    },
+    {
+      "step": "390/us_missing 圖表可見/無橫溢",
+      "ok": true,
+      "detail": {
+        "chart_visible": true,
+        "width": 356,
+        "paths": 1,
+        "h_overflow": false
+      }
+    },
+    {
+      "step": "390/us_missing 缺值揭露不外漏原文",
+      "ok": true,
+      "detail": {
+        "mentions_failed_series": true,
+        "token_leak": false,
+        "failed_series_has_no_asof_line": true,
+        "healthy_series_keeps_asof": true,
+        "has_unavailable_marker": true
+      }
+    },
+    {
+      "step": "390/tw_failed 圖表可見/無橫溢",
+      "ok": true,
+      "detail": {
+        "chart_visible": true,
+        "width": 356,
+        "paths": 1,
+        "h_overflow": false
+      }
+    },
+    {
+      "step": "390/tw_failed 缺值揭露不外漏原文",
+      "ok": true,
+      "detail": {
+        "mentions_failed_series": true,
+        "token_leak": false,
+        "failed_series_has_no_asof_line": true,
+        "healthy_series_keeps_asof": true,
+        "has_unavailable_marker": true
+      }
+    },
+    {
+      "step": "1280/normal 圖表可見/無橫溢",
+      "ok": true,
+      "detail": {
+        "chart_visible": true,
+        "width": 720,
+        "paths": 2,
+        "h_overflow": false
+      }
+    },
+    {
+      "step": "1280/normal 展開「來源與限制」後顯示各序列來源與資料日",
+      "ok": true,
+      "detail": {
+        "tw_source": true,
+        "sp_source": true,
+        "sp_asof": true,
+        "note": "來源在預設收合的 expander 內（既有設計）"
+      }
+    },
+    {
+      "step": "1280/normal 期間切換後圖表仍可見",
+      "ok": true,
+      "detail": {
+        "options": [
+          "比較",
+          "VIX",
+          "美10Y",
+          "美2Y",
+          "3M",
+          "6M",
+          "1Y",
+          "3Y",
+          "期限利差",
+          "信用利差",
+          "政策利率"
+        ],
+        "clicked": [
+          [
+            "3M",
+            true
+          ],
+          [
+            "3Y",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "step": "1280/us_failed 圖表可見/無橫溢",
+      "ok": true,
+      "detail": {
+        "chart_visible": true,
+        "width": 720,
+        "paths": 1,
+        "h_overflow": false
+      }
+    },
+    {
+      "step": "1280/us_failed 缺值揭露不外漏原文",
+      "ok": true,
+      "detail": {
+        "mentions_failed_series": true,
+        "token_leak": false,
+        "failed_series_has_no_asof_line": true,
+        "healthy_series_keeps_asof": true,
+        "has_unavailable_marker": true
+      }
+    },
+    {
+      "step": "1280/us_missing 圖表可見/無橫溢",
+      "ok": true,
+      "detail": {
+        "chart_visible": true,
+        "width": 720,
+        "paths": 1,
+        "h_overflow": false
+      }
+    },
+    {
+      "step": "1280/us_missing 缺值揭露不外漏原文",
+      "ok": true,
+      "detail": {
+        "mentions_failed_series": true,
+        "token_leak": false,
+        "failed_series_has_no_asof_line": true,
+        "healthy_series_keeps_asof": true,
+        "has_unavailable_marker": true
+      }
+    },
+    {
+      "step": "1280/tw_failed 圖表可見/無橫溢",
+      "ok": true,
+      "detail": {
+        "chart_visible": true,
+        "width": 720,
+        "paths": 1,
+        "h_overflow": false
+      }
+    },
+    {
+      "step": "1280/tw_failed 缺值揭露不外漏原文",
+      "ok": true,
+      "detail": {
+        "mentions_failed_series": true,
+        "token_leak": false,
+        "failed_series_has_no_asof_line": true,
+        "healthy_series_keeps_asof": true,
+        "has_unavailable_marker": true
+      }
+    }
+  ],
+  "conclusion": "LOCAL_PREVIEW_VERIFIED"
+}
