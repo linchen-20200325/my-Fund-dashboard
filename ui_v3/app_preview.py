@@ -5,7 +5,7 @@
 ⛔ 這**不是**正式入口：不切正式 Streamlit entrypoint、不 cutover、Old UI 與 `ui_v2` 不在這裡、也不在這裡暴露；
    preview ≠ 正式 App（`DEC-2026-11-02-06`、`DEC-2026-11-03-04`）。本檔不得被 `app.py`、`ui/`、`ui_v2/` 引用
    （守衛：`tests/ui_v3/test_ui_v3_preview_not_formal_guard.py`）；**不得**設為「正式 App」的 main file；
-   獨立 Preview App 可使用本檔作 main file（客戶方案 B／P1，2026-11-21；Cloud 建站、部署、OAuth、Secrets 與正式切換另依各自授權）。
+   獨立 Preview App 可使用本檔作 main file（客戶方案 B／P1，2026-11-21，Cloud 建站、部署、OAuth、Secrets 與正式切換另依各自授權）。
 ⛔ 不得 import `ui_v3.fixtures`（preview 不得顯示 fake 資料）、不得 import ui_v2／Old UI。
 
 執行：repo 根目錄 `streamlit run ui_v3/app_preview.py`。`main()` 會把 repo 根目錄補進 `sys.path`（`streamlit run` 只加腳本所在資料夾）。

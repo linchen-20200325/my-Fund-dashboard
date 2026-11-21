@@ -202,26 +202,36 @@ def test_negative_control_root_pages_detector(tmp_path):
 import re  # noqa: E402
 
 
+_MAIN_FILE = re.compile(r"main[ _-]?file|main[ _-]?script", re.IGNORECASE)
+_NEGATION = re.compile(r"不可|不得|禁止|不能|無法|不允許|不應")
+_PERMISSION = re.compile(r"可使用|可作|可以|可設|可用")
+_EXCEPTION = re.compile(r"例外|除外|但可|惟可")
+
+
 def _sentences_about_main_file(doc: str) -> list:
     flat = re.sub(r"\s+", " ", doc or "")
-    return [x.strip() for x in re.split(r"[；。]", flat) if "main file" in x]
+    return [x.strip() for x in re.split(r"[；。]", flat) if _MAIN_FILE.search(x)]
 
 
 def preview_entry_contract_violations(doc: str) -> list:
-    """入口說明契約：回傳違規清單（空＝通過）。"""
+    """入口說明契約：回傳違規清單（空＝通過）。
+
+    只涵蓋「含 main file／main script（不分大小寫、可帶空白或連字號）」的句子（以 `；`、`。` 切句）；不證明語意，只防無意的文字回退
+    （舊句、方向對調、缺句、否定詞反轉、以「例外」翻案）。不防刻意改寫，也不證明 Cloud 實際設定。
+    """
     sentences = _sentences_about_main_file(doc)
     bad, forbids_formal, allows_preview = [], False, False
     for sentence in sentences:
         if "正式 App" in sentence:
-            if "不得" in sentence and "可作" not in sentence and "可使用" not in sentence:
+            if _NEGATION.search(sentence) and not _PERMISSION.search(sentence) and not _EXCEPTION.search(sentence):
                 forbids_formal = True
             else:
-                bad.append(("正式 App 的 main file 句不是禁止", sentence))
+                bad.append(("正式 App 的 main file 句不是純粹禁止", sentence))
         elif "Preview App" in sentence:
-            if "可" in sentence and "不得" not in sentence:
+            if _PERMISSION.search(sentence) and not _NEGATION.search(sentence):
                 allows_preview = True
             else:
-                bad.append(("Preview App 的 main file 句不是允許", sentence))
+                bad.append(("Preview App 的 main file 句不是純粹允許", sentence))
         else:
             bad.append(("main file 句沒有區分正式 App／Preview App", sentence))
     if not forbids_formal:
@@ -251,6 +261,14 @@ def test_preview_entry_docstring_allows_independent_preview_app_and_forbids_form
     "正式 App 可使用本檔作 main file；獨立 Preview App 可使用本檔作 main file。",
     # 提到 main file 但沒有區分對象
     "不得設為 main file；獨立 Preview App 可使用本檔作 main file。",
+    # 否定詞繞過：「不可使用」含「可」字，舊版會被誤判為允許
+    "不得設為正式 App 的 main file；獨立 Preview App 不可使用本檔作 main file。",
+    # 以「例外」翻案
+    "不得設為正式 App 的 main file（例外：可以設為）；獨立 Preview App 可使用本檔作 main file。",
+    # 大小寫／連字號變體的矛盾句不得漏檢
+    "不得設為正式 App 的 main file；獨立 Preview App 可使用本檔作 main file；正式 App 可作為 Main-File。",
+    # 關鍵詞湊齊但沒有任何 main file 句
+    "正式 App 不得；獨立 Preview App 可使用。",
 ])
 def test_negative_control_preview_entry_contract_detector_fails_on_reversed_or_incomplete_text(bad_doc):
     assert preview_entry_contract_violations(bad_doc), bad_doc
@@ -264,7 +282,7 @@ def test_positive_control_preview_entry_contract_accepts_the_intended_wording():
 def test_negative_control_mutating_the_real_docstring_flips_the_guard():
     """對真實 docstring 做文字變異（記憶體內）：把「不得」改「可」、或移除允許句，守衛必須報。"""
     doc = ast.get_docstring(ast.parse(lib.read(_PREVIEW)))
-    assert "不得**設為「正式 App」" in doc or "**不得**設為「正式 App」" in doc
+    assert "**不得**設為「正式 App」" in doc
     flipped = doc.replace("**不得**設為「正式 App」的 main file", "可設為「正式 App」的 main file")
     assert flipped != doc and preview_entry_contract_violations(flipped)
     removed = re.sub(r"獨立 Preview App 可使用本檔作 main file[^；。\n]*", "", doc)
