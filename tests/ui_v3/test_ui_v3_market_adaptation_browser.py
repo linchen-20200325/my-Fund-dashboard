@@ -175,15 +175,16 @@ def _chart_forced_colors(base_and_browser, width, *, css=None):
         ctx.close()
 
 
+_BASELINE_JS = r"""
+() => [...document.querySelectorAll('a[data-testid="stPageLink-NavLink"]')].map(a => { const s = getComputedStyle(a);
+  return {outlineStyle: s.outlineStyle, outlineWidth: s.outlineWidth, boxShadow: s.boxShadow, bg: s.backgroundColor, deco: s.textDecorationLine}; })
+"""
 _FOCUS_JS = r"""
 () => { const a = document.activeElement; if (!a || a === document.body) return null;
   const s = getComputedStyle(a);
-  return {tag: a.tagName, fv: a.matches(':focus-visible'), outlineStyle: s.outlineStyle, outlineWidth: s.outlineWidth,
+  const idx = [...document.querySelectorAll('a[data-testid="stPageLink-NavLink"]')].indexOf(a);
+  return {tag: a.tagName, idx, fv: a.matches(':focus-visible'), outlineStyle: s.outlineStyle, outlineWidth: s.outlineWidth,
           boxShadow: s.boxShadow, bg: s.backgroundColor, deco: s.textDecorationLine}; }
-"""
-_UNFOCUSED_JS = r"""
-() => { const a = document.querySelector('a[data-testid="stPageLink-NavLink"]'); const s = getComputedStyle(a);
-  return {outlineStyle: s.outlineStyle, outlineWidth: s.outlineWidth, boxShadow: s.boxShadow, bg: s.backgroundColor, deco: s.textDecorationLine}; }
 """
 
 
@@ -206,13 +207,13 @@ def _nav_focus(base_and_browser, width, *, css=None):
         if css:
             page.add_style_tag(content=css)
             page.wait_for_timeout(300)
-        unfocused = page.evaluate(_UNFOCUSED_JS)
+        baselines = page.evaluate(_BASELINE_JS)   # 每個導覽連結各自的未聚焦樣式；之後與「被聚焦的同一個元素」比對
         for _ in range(6):
             page.keyboard.press("Tab")
             f = page.evaluate(_FOCUS_JS)
-            if f and f["tag"] == "A":
-                return unfocused, f
-        return unfocused, None
+            if f and f["tag"] == "A" and f["idx"] >= 0:
+                return baselines[f["idx"]], f
+        return baselines[0], None
     finally:
         ctx.close()
 
@@ -265,7 +266,7 @@ def test_mobile_top_nav_link_shows_visible_focus_indicator(base_and_browser):
     assert not focus_indicator_violations(unfocused, focused), (focus_indicator_violations(unfocused, focused), unfocused, focused)
 
 
-@pytest.mark.xfail(strict=True, reason="KNOWN-GAP（未修，需導覽樣式 Gate）：≥769 側欄導覽連結聚焦後無任何可見焦點指示；"
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason="KNOWN-GAP（未修，需導覽樣式 Gate）：≥769 側欄導覽連結聚焦後無任何可見焦點指示；"
                                        "見 docs/evidence/ui_a5_mkt_adaptation_2026_11_21/report.md §4。修好後本測試會 XPASS(strict)→紅，屆時移除此標記。")
 def test_desktop_sidebar_nav_link_shows_visible_focus_indicator_known_gap(base_and_browser):
     unfocused, focused = _nav_focus(base_and_browser, 1280)
@@ -293,13 +294,15 @@ def test_mutation_non_mirror_or_empty_stop_is_flagged_by_tab_reversibility_check
     assert tab_reversibility_violations(fwd, rev[:-1] + [None]), "出現空站（焦點掉到 body）必須被判"
 
 
-def test_mutation_focus_ring_added_makes_desktop_gap_check_pass_and_removed_ring_is_flagged_on_mobile(base_and_browser):
-    """負控（真 DOM 變異）：桌機側欄加上 2px 實線焦點環 → 判定轉為無違規（證明判定看得到「有環」）；
-    手機頁首把環與底線拿掉 → 判定必須報（證明判定看得到「沒環」）。"""
+def test_mutation_focus_ring_added_makes_desktop_gap_check_pass(base_and_browser):
+    """負控（真 DOM 變異）：桌機側欄加上 2px 實線焦點環 → 判定轉為無違規（證明 known-gap 測試判的就是「沒有環」）。"""
     unfocused, focused = _nav_focus(base_and_browser, 1280,
                                     css='a[data-testid="stPageLink-NavLink"]:focus-visible{outline:2px solid #fff !important}')
     assert not focus_indicator_violations(unfocused, focused), focused
+
+
+def test_mutation_deleting_only_the_mobile_outline_rule_is_flagged(base_and_browser):
+    """真負控（不強制 bg／底線）：只拿掉手機頁首 `:focus-visible` 的 outline，同一元素聚焦前後無任何可見差異 → 必須被判。"""
     unfocused, focused = _nav_focus(base_and_browser, 390,
-                                    css='a[data-testid="stPageLink-NavLink"]:focus-visible{outline:none !important;box-shadow:none !important;'
-                                        'background:rgb(24,37,74) !important;text-decoration:none !important}')
-    assert focus_indicator_violations(unfocused, focused), focused
+                                    css='a[data-testid="stPageLink-NavLink"]:focus-visible{outline:none !important}')
+    assert focus_indicator_violations(unfocused, focused), (unfocused, focused)
