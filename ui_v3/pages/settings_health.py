@@ -84,10 +84,11 @@ def scope_html(model: vm.SettingsHealthModel) -> str:
     tally = [c.tally for c in model.categories if c.tally is not None]
     total = {name: sum(getattr(t, name) for t in tally) for name in vm.HEALTH_STATES}
     n = sum(total.values())
+    tally_line = W.span("health_tally", ok=total["ok"], gone=total["missing"], fail=total["failed"],
+                        unset=total["not_configured"], undet=total["undetermined"])
     return (f'<div class="uv3-health-scope" data-health="scope" data-covered="{escape(",".join(model.covered_keys))}">'
             f'<div class="uv3-row">{W.span("health_scope", n=n)}</div>'
-            f'<div class="uv3-row" data-health="tally">{W.span("health_tally", ok=total["ok"], gone=total["missing"], fail=total["failed"],
-                                                          unset=total["not_configured"], undet=total["undetermined"])}</div>'
+            f'<div class="uv3-row" data-health="tally">{tally_line}</div>'
             f'<div class="uv3-row">{W.span("health_scope_note")}</div></div>')
 
 
