@@ -15,14 +15,14 @@
 
 ## 2. 本批新增且**無需新 Gate**的三項（已寫成可重跑測試）
 
-`tests/ui_v3/test_ui_v3_market_adaptation_browser.py`（slow lane；15 條：正向 9＋known-gap xfail 1＋負控 5）。
+`tests/ui_v3/test_ui_v3_market_adaptation_browser.py`（slow lane；（本 PR 修後共 20 條；下列 §2 敘述為替代 PR 當時狀態，桌機焦點項以 §9 為準））。
 
 | # | 檢查 | 判定標準 | 結果（本機 Chromium＋合成 fixture） |
 |---|---|---|---|
 | 1 | WCAG 1.4.12 文字間距覆寫（行高 1.5、字距 .12em、詞距 .16em、段距 2em）× `normal`／`us_failed` × 390／1280 | 整頁與主內容區無橫向溢出；被裁切容器數不得多於覆寫前 | **PASS**（4 組：docScrollW＝視窗寬；覆寫前後被裁切容器數皆 11，`measure.json` 記錄皆為 1×1px 的 `<span>`；視覺隱藏（`clip`／`clip-path`）僅後續探針抽樣前 3 個確認、未留存，其餘未逐一查證；「與覆寫無關」為推論）。截圖 `textspacing_normal_390.png` 目視：折行、無重疊 |
 | 2 | forced-colors（高對比）× 390／1280 | 主圖兩條線至少 stroke-dasharray 不同（顏色被系統收掉後仍可分辨） | **PASS**：實線 `none`／虛線 `6px, 4px`，stroke 同為黑；截圖 `forced_colors_390.png` 目視：兩線可分、選取 pill 仍為粗體＋黑框 |
 | 3 | 鍵盤順序可逆：Tab 10 站、Shift+Tab 9 站（測試檔設定；`measure.json` 的 `tab/*` 是另一次 14 站走訪原始輸出） | 逆向逐站為正向的鏡像；無空站 | **PASS**（390／1280） |
-| 4 | 導覽連結可見焦點指示（WCAG 2.4.7） | 聚焦（`:focus-visible`）後須有 ≥2px 實線環、或 box-shadow、或背景／底線變化 | **390 PASS**（`ui_v3/shell/nav.py` 的 `:focus-visible{outline:2px solid currentColor}`；底線與淡背景是「目前頁」本來的樣式，不是焦點指示）；**1280 FAIL → 鎖為 `xfail(strict)` known-gap**：側欄導覽連結聚焦前後 `outline-style:none`、`box-shadow:none`、背景同為 `rgb(24,37,74)`、無底線＝**無任何可見焦點指示**（`navfocus_1280.png`；`measure.json` 的 `tab/1280`）。真 DOM 變異：桌機加 `outline:2px solid` → 轉綠；手機只拿掉 `:focus-visible` 的 outline（不強制其他樣式）→ 轉紅。未聚焦基準取自「被聚焦的同一個元素」（初版取 DOM 第一個導覽連結，經獨立 QA 指出後已改）。**來源：未入庫探針的 computed style 數值，`measure.json` 只留有 outline，其餘欄位未留存** |
+| 4 | 導覽連結可見焦點指示（WCAG 2.4.7） | 聚焦（`:focus-visible`）後須有 ≥2px 實線環、或 box-shadow、或背景／底線變化 | **390 PASS**（`ui_v3/shell/nav.py` 的 `:focus-visible{outline:2px solid currentColor}`；底線與淡背景是「目前頁」本來的樣式，不是焦點指示）；**1280 修前 FAIL（修前曾鎖為 `xfail(strict)` known-gap；已由 §9 取代為真 PASS）**：側欄導覽連結聚焦前後 `outline-style:none`、`box-shadow:none`、背景同為 `rgb(24,37,74)`、無底線＝**無任何可見焦點指示**（`navfocus_1280.png`；`measure.json` 的 `tab/1280`）。真 DOM 變異：桌機加 `outline:2px solid` → 轉綠；手機只拿掉 `:focus-visible` 的 outline（不強制其他樣式）→ 轉紅。未聚焦基準取自「被聚焦的同一個元素」（初版取 DOM 第一個導覽連結，經獨立 QA 指出後已改）。**來源：未入庫探針的 computed style 數值，`measure.json` 只留有 outline，其餘欄位未留存** |
 
 負控（記憶體內現編，不改 production）：文字間距下卡片 `min-width:900px` → 判溢出；forced-colors 下 `stroke-dasharray:none` → 判「僅靠顏色」；走訪結果反轉／插入空站 → 判不可逆（**判定函式層級**；正 tabindex 仍是可逆順序，不能當負控，檔內已據實標明）。
 
@@ -42,9 +42,9 @@
 
 1. 頁自有文字 px→rem（A2 Gate #2）：需客戶核准 token 單位。**本批沒有新證據可改變該 Gate。**
 2. 橫向手機導覽斷點（A2 Gate #3）：需版面／導覽 Gate。
-3. **≥769 側欄導覽連結無可見焦點指示（本批新發現，已鎖 known-gap）**：手機頁首已有 `outline:2px solid currentColor` 的焦點慣例（`ui_v3/shell/nav.py` 的 `TOP_KEY` 區塊 `a[data-testid="stPageLink-NavLink"]:focus-visible{outline:2px solid currentColor;…}`；符號式引用，不寫行號），桌機側欄沒有。
+3. **≥769 側欄導覽連結無可見焦點指示（本批新發現；修前曾鎖 known-gap，**已由 §9 修復並改為真 PASS**）**：手機頁首已有 `outline:2px solid currentColor` 的焦點慣例（`ui_v3/shell/nav.py` 的 `TOP_KEY` 區塊 `a[data-testid="stPageLink-NavLink"]:focus-visible{outline:2px solid currentColor;…}`；符號式引用，不寫行號），桌機側欄沒有。
    - **候選最小修法（未實作、未核准）**：桌機側欄連結 `:focus-visible` 沿用手機同一組焦點樣式（同 token，不新增色、不改尺寸／間距／導覽斷點）。判定歸屬：把壞掉的鍵盤可見性修回既有慣例（A2 接合 A2「修正錯誤」）vs 導覽樣式變更——**我方讀法可被推翻**：因會動導覽殼的樣式，先不施工。
-   - 現行驗收依據：`tests/ui_v3/test_ui_v3_market_adaptation_browser.py::test_desktop_sidebar_nav_link_shows_visible_focus_indicator_known_gap`（修好會 XPASS strict→紅，提醒移除標記）。
+   - 現行驗收依據：`tests/ui_v3/test_ui_v3_market_adaptation_browser.py::test_desktop_sidebar_nav_link_shows_visible_focus_indicator`（修前名稱為 `…_known_gap`，已改名）（修好會 XPASS strict→紅，提醒移除標記）。
    - **單一最小決策題（待總管排入，不由本線直接問客戶）**：「桌機側欄導覽的鍵盤焦點，是否沿用手機頁首的同一組焦點樣式？」推薦：是（僅 CSS、無版面變更）；未授權範圍：導覽斷點、尺寸、色票。
 4. 可捲動容器（`stMain`）Tab 停駐點的可見焦點環：新視覺元件＋需確認是否歸 Streamlit 上游；**候選、未提出核准請求**（避免一次丟多個問題；與上一項合併處理）。
 5. Cloud／真機／系統字級／真實輔助科技（螢幕閱讀器）：全部 NOT VERIFIED。本批是自動化量測，不等於人工輔助科技驗收。
@@ -74,3 +74,5 @@
 `ui_v3/shell/nav.py` 新增一條規則：`[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:focus-visible{outline:2px solid currentColor;outline-offset:-3px}`（與手機頁首同一組焦點樣式；只在 `:focus-visible`；不改 hover／尺寸／斷點／色票／registry／`app_preview`）。
 `xfail(strict)` 已改為真 PASS；新增驗收：1280 normal／dark／forced-colors 聚焦可見、Shift+Tab 走回仍可見、「開發中」項目不可聚焦、拿掉規則的真負控會轉紅；手機頁首既有 `top_nav_browser` 等 226 條回歸測試全綠。
 本機：`test_ui_v3_market_adaptation_browser.py` → `20 passed in 61.78s`；`top_nav_browser／navigation_shell／token_contrast／design_tokens／preview_navigation_pages_guard／page_registry_guard／readonly_guard／import_guard` → `226 passed`（2026-11-21）。Cloud／真機／輔助科技仍 NOT VERIFIED。
+
+（§9 補註：QA 差額複驗 Should-Fix 已修——補「開發中項目存在」前置斷言避免空洞通過；移除失效的『桌機加環轉綠』負控；§2／§4 舊敘述加註由 §9 取代。）

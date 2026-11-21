@@ -293,13 +293,6 @@ def test_mutation_non_mirror_or_empty_stop_is_flagged_by_tab_reversibility_check
     assert tab_reversibility_violations(fwd, rev[:-1] + [None]), "出現空站（焦點掉到 body）必須被判"
 
 
-def test_mutation_focus_ring_added_makes_desktop_gap_check_pass(base_and_browser):
-    """負控（真 DOM 變異）：桌機側欄加上 2px 實線焦點環 → 判定轉為無違規（證明 known-gap 測試判的就是「沒有環」）。"""
-    unfocused, focused = _nav_focus(base_and_browser, 1280,
-                                    css='a[data-testid="stPageLink-NavLink"]:focus-visible{outline:2px solid #fff !important}')
-    assert not focus_indicator_violations(unfocused, focused), focused
-
-
 def test_mutation_deleting_only_the_mobile_outline_rule_is_flagged(base_and_browser):
     """真負控（不強制 bg／底線）：只拿掉手機頁首 `:focus-visible` 的 outline，同一元素聚焦前後無任何可見差異 → 必須被判。"""
     unfocused, focused = _nav_focus(base_and_browser, 390,
@@ -318,6 +311,7 @@ def test_desktop_sidebar_focus_returns_visible_with_shift_tab_and_disabled_items
     ctx, page = _open(browser, base, "normal", 1280)
     try:
         base_styles = page.evaluate(_BASELINE_JS)
+        assert page.locator(".uv3-nav-disabled").count() > 0, "找不到「開發中」項目：class 改名時本測試不得空洞通過"
         seen_disabled = False
         for _ in range(_N_STOPS):
             page.keyboard.press("Tab")
