@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""🔍 單碼入口離線注入接口的正反控制：五欄投影、以及「不觸發真實三源 build_profiles」。
+"""🔍 單碼入口離線注入接口的正反控制：四欄投影、以及「不觸發真實三源 build_profiles」。
 
 不重做 #1311 的入口對照與 DomainStatus 反例；不改既有測試檔。全部離線：假 loader、現編隨機字串、網路守衛（autouse）。
 """
@@ -136,12 +136,13 @@ def test_moneydj_failed_status_is_source_failed_and_not_page_unmatched():
 
 # ───────────────────────── (2) 反控：不觸發預設 build_profiles／真取數 ─────────────────────────
 
-def test_lookup_fund_never_calls_default_build_profiles_or_repositories_fund(monkeypatch, no_real_network):
-    """若 L2 可載入：把 build_profiles 與 L1 取數換成會 raise 的 spy，跑完所有路徑（放行、攔截、失敗）後呼叫次數必為 0。"""
+def _install_spies(monkeypatch) -> list:
+    """把 build_profiles 與 repositories.fund 的取數入口換成會 raise 的 spy，回傳命中紀錄。"""
     try:
         from services.v2_tables import exp_profile
+        import repositories.fund as rf
     except Exception as exc:                                            # 依賴缺 → CI 內 fail、本機 skip（見 support）
-        S.unavailable(f"services.v2_tables.exp_profile 無法載入，無法做 spy：{type(exc).__name__}")
+        S.unavailable(f"L2／L1 無法載入，無法做 spy：{type(exc).__name__}")
     hits: list = []
 
     def spy(name):
@@ -151,16 +152,41 @@ def test_lookup_fund_never_calls_default_build_profiles_or_repositories_fund(mon
         return _spy
 
     monkeypatch.setattr(exp_profile, "build_profiles", spy("exp_profile.build_profiles"))
-    import repositories.fund as rf
     for attr in [a for a in dir(rf) if a.startswith(("fetch", "_src_"))]:
         if callable(getattr(rf, attr)):
             monkeypatch.setattr(rf, attr, spy("repositories.fund." + attr))
+    return hits
+
+
+def _load(path: pathlib.Path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("adapter_spy_target_" + secrets.token_hex(4), path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_lookup_fund_never_calls_default_build_profiles_or_repositories_fund(monkeypatch, no_real_network):
+    """跑完所有路徑（放行、攔截、失敗、無 loader）後 spy 命中必為 0；無 loader 只能是契約錯誤，不得退回預設。"""
+    from ui_v3.viewmodels.fund_lookup import LookupContractError
+    hits = _install_spies(monkeypatch)
     lookup_fund(S.CountingLoader(S.profile()), S.SAMPLE_CODE)
     lookup_fund(S.CountingLoader(ConnectionError("x")), S.SAMPLE_CODE)
     lookup_fund(S.sentinel_loader(), "https://example.invalid/x")
-    with pytest.raises(Exception):
-        lookup_fund(None, S.SAMPLE_CODE)                                # 沒有 loader 時不得退回預設
+    with pytest.raises(LookupContractError):
+        lookup_fund(None, S.SAMPLE_CODE)
     assert hits == [] and no_real_network == []
+
+
+def test_spy_control_turns_red_when_adapter_defaults_to_the_live_build_profiles(monkeypatch, tmp_path):
+    """變異負控：改接預設 loader 後，lookup_fund(None, …) 會觸發 spy（命中非空），證明上面的 spy 不是死的。"""
+    hits = _install_spies(monkeypatch)
+    path = tmp_path / "mutant_spy.py"
+    path.write_text(_mutants()["lazy_default_loader"], encoding="utf-8")
+    mod = _load(path)
+    with pytest.raises(AssertionError, match="live path called"):
+        mod.lookup_fund(None, S.SAMPLE_CODE)
+    assert hits == ["exp_profile.build_profiles"]
 
 
 def test_adapter_source_imports_nothing_from_the_live_fetch_layers():
@@ -209,11 +235,19 @@ def test_mutant_adapter_wired_to_a_default_live_loader_turns_the_guard_red(name,
 
 
 def test_runtime_blocker_alone_catches_a_lazy_import_the_static_scan_would_miss(tmp_path):
-    """執行期那層獨立有效：用字串組出模組名的延遲載入，AST 掃不到，但 import blocker 會擋下並讓 is_green 轉紅。"""
+    """執行期那層獨立有效：字串組出的延遲載入，靜態掃描判綠，僅 runtime 判紅，且紅燈來自 blocker 紀錄的被擋根模組。"""
     src = ADAPTER.read_text(encoding="utf-8")
     anchor = '    _need(callable(loader), "loader", "callable", loader)\n'
-    sneaky = ("    if loader is None:\n        import sys as _s\n"
+    sneaky = ("    if loader is None:\n"
               "        __builtins__['__im' + 'port__']('serv' + 'ices.v2_tables.exp_profile')\n")
+    mutated = src.replace(anchor, sneaky + anchor, 1)
+    assert mutated != src
     path = tmp_path / "sneaky.py"
-    path.write_text(src.replace(anchor, sneaky + anchor, 1), encoding="utf-8")
+    path.write_text(mutated, encoding="utf-8")
+    assert static_violations(mutated) == []                             # 靜態層判綠（看不到）
+    proc = runtime_run(path)
+    assert proc.returncode == 0, proc.stderr
+    blocked = proc.stdout.strip().splitlines()[0]
+    assert "services" in blocked, blocked        # 紅燈確實來自 import blocker 擋下的 services 根
     assert is_green(path) is False
+    assert is_green(ADAPTER) is True                                    # 對照：真 adapter 的 blocker 紀錄為空
