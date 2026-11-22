@@ -452,4 +452,3 @@ def test_零網路守衛本身有效(no_real_network):
         socket.create_connection(("127.0.0.1", 9), timeout=0.01)
     assert no_real_network == ["socket.create_connection"]
     no_real_network.clear()
-
