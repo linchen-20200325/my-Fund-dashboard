@@ -1,0 +1,160 @@
+{
+  "idle_390": {
+    "vw": 390,
+    "docScrollW": 390,
+    "mainScrollW": 390,
+    "mainClientW": 390,
+    "small": [],
+    "input": {
+      "h": 48,
+      "w": 356
+    },
+    "submit": {
+      "h": 48,
+      "w": 54
+    },
+    "title": "找一檔基金",
+    "pageFake": "FAKE 模擬頁：以下全部是離線測試資料，沒有查詢任何真實來源",
+    "fakeTags": [
+      "FAKE 模擬"
+    ],
+    "statusbar": 0,
+    "card": "idle",
+    "rows": []
+  },
+  "result_390": {
+    "vw": 390,
+    "docScrollW": 390,
+    "mainScrollW": 390,
+    "mainClientW": 390,
+    "small": [],
+    "input": {
+      "h": 48,
+      "w": 356
+    },
+    "submit": {
+      "h": 48,
+      "w": 54
+    },
+    "title": "找一檔基金",
+    "pageFake": "FAKE 模擬頁：以下全部是離線測試資料，沒有查詢任何真實來源",
+    "fakeTags": [
+      "FAKE 模擬"
+    ],
+    "statusbar": 0,
+    "card": "result",
+    "rows": [
+      "status",
+      "input-code",
+      "name",
+      "dividend-mode",
+      "inception",
+      "mgmt-fee"
+    ]
+  },
+  "failed_390": {
+    "vw": 390,
+    "docScrollW": 390,
+    "mainScrollW": 390,
+    "mainClientW": 390,
+    "small": [],
+    "input": {
+      "h": 48,
+      "w": 356
+    },
+    "submit": {
+      "h": 48,
+      "w": 54
+    },
+    "title": "找一檔基金",
+    "pageFake": "FAKE 模擬頁：以下全部是離線測試資料，沒有查詢任何真實來源",
+    "fakeTags": [
+      "FAKE 模擬"
+    ],
+    "statusbar": 0,
+    "card": "failed",
+    "rows": [
+      "status",
+      "input-code"
+    ]
+  },
+  "idle_1280": {
+    "vw": 1280,
+    "docScrollW": 1280,
+    "mainScrollW": 980,
+    "mainClientW": 980,
+    "small": [],
+    "input": {
+      "h": 48,
+      "w": 686
+    },
+    "submit": {
+      "h": 48,
+      "w": 54
+    },
+    "title": "找一檔基金",
+    "pageFake": "FAKE 模擬頁：以下全部是離線測試資料，沒有查詢任何真實來源",
+    "fakeTags": [
+      "FAKE 模擬"
+    ],
+    "statusbar": 0,
+    "card": "idle",
+    "rows": []
+  },
+  "result_1280": {
+    "vw": 1280,
+    "docScrollW": 1280,
+    "mainScrollW": 980,
+    "mainClientW": 980,
+    "small": [],
+    "input": {
+      "h": 48,
+      "w": 686
+    },
+    "submit": {
+      "h": 48,
+      "w": 54
+    },
+    "title": "找一檔基金",
+    "pageFake": "FAKE 模擬頁：以下全部是離線測試資料，沒有查詢任何真實來源",
+    "fakeTags": [
+      "FAKE 模擬"
+    ],
+    "statusbar": 0,
+    "card": "result",
+    "rows": [
+      "status",
+      "input-code",
+      "name",
+      "dividend-mode",
+      "inception",
+      "mgmt-fee"
+    ]
+  },
+  "failed_1280": {
+    "vw": 1280,
+    "docScrollW": 1280,
+    "mainScrollW": 980,
+    "mainClientW": 980,
+    "small": [],
+    "input": {
+      "h": 48,
+      "w": 686
+    },
+    "submit": {
+      "h": 48,
+      "w": 54
+    },
+    "title": "找一檔基金",
+    "pageFake": "FAKE 模擬頁：以下全部是離線測試資料，沒有查詢任何真實來源",
+    "fakeTags": [
+      "FAKE 模擬"
+    ],
+    "statusbar": 0,
+    "card": "failed",
+    "rows": [
+      "status",
+      "input-code"
+    ]
+  }
+}

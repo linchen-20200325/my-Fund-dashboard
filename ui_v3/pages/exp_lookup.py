@@ -61,6 +61,7 @@ h1{{font-size:{page} !important;padding:.2rem 0 !important}}
 .uv3-note{{font-size:{caption};color:{text2};line-height:1.5;margin:.15rem 0;overflow-wrap:anywhere}}
 {theme.card_css(".uv3-card")}
 .fl-card{{box-sizing:border-box;max-width:100%;color:{text1};font-size:{body}}}
+.fl-page-fake{{border:1px dashed {border};border-radius:{radius};padding:{space1} {space2};margin:0 0 {space1} 0;font-weight:700;color:{text1}}}
 .fl-tag{{display:inline-block;box-sizing:border-box;max-width:100%;border:1px solid {grey['border']};background:{grey['background']};color:{grey['text']};border-radius:{radius};padding:2px 8px;font-size:{caption};margin-bottom:{space1}}}
 .fl-status{{margin:{space1} 0 {space2} 0;line-height:1.55;font-size:{body};font-weight:700;overflow-wrap:anywhere}}
 .uv3-st{{display:inline-block;box-sizing:border-box;max-width:100%;border:1px solid {border};border-radius:{radius};padding:1px 8px;white-space:normal}}
@@ -95,10 +96,11 @@ def isin_note_html() -> str:
     return f'<div class="uv3-note" data-block="isin-note">{W.pending("isin_note")}</div>'
 
 
-def idle_html() -> str:
-    """查詢前（尚未送出）：整張卡只顯示『尚未查詢』，沒有任何欄位列。"""
+def idle_html(*, fake: bool = False) -> str:
+    """查詢前（尚未送出）：整張卡只顯示『尚未查詢』，沒有任何欄位列。`fake=True` 時卡首出『FAKE 模擬』標籤（卡級 FAKE 恆顯）。"""
+    tag = f'<span class="fl-tag" data-tag="fake">{W.pending("fake_tag")}</span>' if fake else ""
     return (f'<div class="uv3-card fl-card" data-block="lookup-idle" data-state="idle" role="region" aria-labelledby="{ID_STATUS}">'
-            f'<div class="fl-status" id="{ID_STATUS}" data-row="idle" role="status">{W.pending("not_queried")}</div></div>')
+            f'{tag}<div class="fl-status" id="{ID_STATUS}" data-row="idle" role="status">{W.pending("not_queried")}</div></div>')
 
 
 def _dl_row(name: str, label_key: str, value_html: str, field_status: str) -> str:
@@ -139,7 +141,7 @@ def lookup_card_html(view: FundLookupView, *, fake: bool) -> str:
     if not isinstance(view, FundLookupView):
         raise TypeError("view must be a FundLookupView")
     if view.state is LookupState.NOT_QUERIED:
-        return idle_html()
+        return idle_html(fake=fake)
     name, status_html, extras, role = _state_parts(view)
     parts = []
     if fake:
@@ -170,6 +172,19 @@ def lookup_card_html(view: FundLookupView, *, fake: bool) -> str:
 
 
 # ───────────────────────────── Streamlit 部分（widgets 與 session_state） ─────────────────────────────
+
+def page_header_html(codes_hint: str) -> str:
+    """頁級 FAKE 標示（每個狀態都在頁頂、永久可見）：標題下一條 FAKE 橫幅＋示範代碼提示。純函式。"""
+    return (f'<div class="uv3-note fl-page-fake" data-block="page-fake" role="note">{W.pending("page_fake_banner")}</div>'
+            f'<div class="uv3-note" data-note="demo-codes">{W.pending("page_fake_hint", codes=codes_hint)}</div>')
+
+
+def render_page_header(codes_hint: str) -> None:
+    import streamlit as st
+
+    st.title(W.text("page_title"), anchor=False)
+    st.markdown(page_header_html(codes_hint), unsafe_allow_html=True)
+
 
 def render_css() -> None:
     import streamlit as st

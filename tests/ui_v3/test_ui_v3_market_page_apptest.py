@@ -15,6 +15,7 @@ import pytest
 streamlit_testing = pytest.importorskip("streamlit.testing.v1")
 
 import market_stubs as ms
+import ui_v3_guard_lib
 from shared.ui_semantics import rules
 from ui_v3.adapters import market_page as adapter
 from ui_v3.pages import mkt
@@ -217,6 +218,8 @@ def test_page_imports_no_fixtures_and_no_old_ui(monkeypatch):
     import ast
     for rel in ("ui_v3/app_preview.py", "ui_v3/pages/mkt.py", "ui_v3/adapters/market_page.py", "ui_v3/pages/chart_svg.py"):
         tree = ast.parse((Path(APP).parents[1] / rel).read_text(encoding="utf-8"))
+        # 唯一例外（Gate-M 方案 2a）：app_preview.py::_render_exp 函式內 `import ui_v3.fixtures.exp_lookup_fake`；其餘照舊。
+        tree = ui_v3_guard_lib.without_sanctioned_fixture_import(rel, tree)
         mods = {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | \
                {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
         assert not any(m.startswith("ui_v3.fixtures") or m.split(".")[0] in ("ui", "ui_v2", "app") for m in mods), (rel, mods)

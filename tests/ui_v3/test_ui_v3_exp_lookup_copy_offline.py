@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Gate-M M-copy 第一段（客戶 2026-11-21 核准）：`ui_v3/pages/exp_lookup.py` 與 `ui_v3/viewmodels/exp_lookup_wording.py`
-離線呈現＋隔離守衛＋變異負控。複本**尚未掛載**；全部離線（假 loader 由既有 `fund_lookup_support` 注入，不 import 真實 L1／L2）。
+離線呈現＋隔離守衛＋變異負控。複本（#1326）自 Gate-M 方案 2a 起僅以本地 FAKE 頁掛載（見 mount 測試檔）；本檔全部離線（假 loader 由既有 `fund_lookup_support` 注入，不 import 真實 L1／L2）。
 """
 from __future__ import annotations
 
@@ -240,22 +240,56 @@ def test_no_dynamic_import_write_surface_env_or_network_by_ast(path):
     assert not re.search(r"#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|rgba?\(|hsla?\(", src.replace("&#", ""))
 
 
-def test_the_copy_is_not_mounted_and_does_not_touch_the_poc_or_shared_entries():
+def _functions_containing(tree: ast.AST, pred) -> set:
+    """回傳『含有符合 pred 的 import 節點』的函式名稱集合；模組層的符合者記為 `<module>`。"""
+    found: set = set()
+
+    def visit(node, func):
+        if isinstance(node, (ast.Import, ast.ImportFrom)) and pred(node):
+            found.add(func)
+        for child in ast.iter_child_nodes(node):
+            visit(child, child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else func)
+
+    visit(tree, "<module>")
+    return found
+
+
+def _mentions_page(node) -> bool:
+    names = [a.name for a in node.names] + [getattr(node, "module", "") or ""]
+    return any("exp_lookup" in n and "exp_lookup_fake" not in n for n in names)
+
+
+def test_the_page_is_mounted_only_as_the_sanctioned_local_fake_page_and_nothing_else_moved():
+    """Gate-M 方案 2a（總管 #7073385776）：1326 時的『未掛載』斷言改為『只以唯一核可的方式掛載』——不是刪掉斷言。"""
     from ui_v3.shell import registry
-    for path in (ROOT / "ui_v3" / "app_preview.py", ROOT / "ui_v3" / "shell" / "registry.py"):
-        assert "exp_lookup" not in path.read_text(encoding="utf-8"), path.name
-    assert "exp_lookup" not in " ".join(str(getattr(p, "key", p)) for p in registry.IA_PAGES)
+    assert [p.slug for p in registry.registered_pages()] == ["mkt", "exp", "set"]
+    assert {p.slug for p in registry.IA_PAGES if not p.registered} == {"ast", "ai"}
+    # 掛載點只有 app_preview.py 的 `_render_exp`（函式內 import），共用殼層與導覽沒有任何引用
+    tree = ast.parse((ROOT / "ui_v3" / "app_preview.py").read_text(encoding="utf-8"))
+    assert _functions_containing(tree, _mentions_page) == {"_render_exp"}
+    for rel in ("ui_v3/shell/registry.py", "ui_v3/shell/nav.py", "ui_v3/pages/chrome.py"):
+        assert "exp_lookup" not in (ROOT / rel).read_text(encoding="utf-8"), rel
     poc = ROOT / "poc" / "fund_lookup_component_preview"
     assert poc.is_dir() and not any(p.name.startswith("exp_lookup") for p in poc.iterdir())
 
 
-def test_no_production_module_imports_the_copy_yet():
+def test_only_the_sanctioned_preview_entry_imports_the_page_and_its_wording():
     pat = re.compile(r"exp_lookup(_wording)?\b")
+    importers = set()
     for base in ("ui", "ui_v2", "ui_v3", "services", "repositories", "infra", "shared"):
         for p in (ROOT / base).rglob("*.py"):
             if p in FILES:
                 continue
-            assert not pat.search(p.read_text(encoding="utf-8")), p
+            if pat.search(p.read_text(encoding="utf-8")):
+                importers.add(p.relative_to(ROOT).as_posix())
+    # 頁本身載入自己的字樣表（pages/exp_lookup.py 屬 FILES，已排除）；除入口外不得有任何其他引用者
+    assert importers == {"ui_v3/app_preview.py"}, importers
+
+
+def test_negative_control_the_scoped_import_finder_catches_module_level_and_other_functions():
+    assert _functions_containing(ast.parse("from ui_v3.pages import exp_lookup\n"), _mentions_page) == {"<module>"}
+    assert _functions_containing(ast.parse("def other():\n    from ui_v3.pages import exp_lookup\n"), _mentions_page) == {"other"}
+    assert _functions_containing(ast.parse("def _render_exp():\n    from ui_v3.pages import exp_lookup as p\n"), _mentions_page) == {"_render_exp"}
 
 
 # ───────────────────────── 變異負控（記憶體內；偵測器須抓到，且不是單純崩潰） ─────────────────────────

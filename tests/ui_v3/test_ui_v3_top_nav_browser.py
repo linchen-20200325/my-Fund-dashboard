@@ -142,15 +142,16 @@ def test_mobile_top_nav_states_and_aria(base_and_browser):
             page.keyboard.press("Tab")
     finally:
         ctx.close()
-    now, ast, exp, ai, settings = m["cells"]       # 五頁順序：🌍 → 💼 → 🔍 → 🤖 → ⚙️；可進的是 🌍 與 ⚙️（BL-0540 Phase 1A，#7056447977）
+    now, ast, exp, ai, settings = m["cells"]       # 五頁順序：🌍 → 💼 → 🔍 → 🤖 → ⚙️；可進的是 🌍、🔍、⚙️（BL-0540 Phase 1A #7056447977；🔍 為 Gate-M 方案 2a 的本地 FAKE 頁 #7073385776）
     assert now["href"] is not None and now["ariaDisabled"] is None
     assert int(now["fw"]) >= 600 and now["deco"] == "underline" and float(now["bb"].replace("px", "")) >= 2, ("選取態不能只靠顏色", now)
     assert settings["href"] is not None and settings["ariaDisabled"] is None, ("⚙️ 是真連結", settings)
-    for cell, name in zip((ast, exp, ai), _NAMES[1:4]):
+    assert exp["href"] is not None and exp["ariaDisabled"] is None, ("🔍 是真連結（本地 FAKE 頁）", exp)
+    for cell, name in zip((ast, ai), (_NAMES[1], _NAMES[3])):
         assert cell["ariaDisabled"] == "true" and cell["href"] is None, cell
         assert _SOON[name] in cell["text"], cell
     in_nav = [f for f in focus_path if f and f["inNav"]]
-    assert len(in_nav) == 2 and "市場" in in_nav[0]["text"] and "設定" in in_nav[1]["text"], ("頁首只有 🌍、⚙️ 可聚焦、未掛載項不可聚焦", focus_path)
+    assert len(in_nav) == 3 and "市場" in in_nav[0]["text"] and "找基金" in in_nav[1]["text"] and "設定" in in_nav[2]["text"], ("頁首只有 🌍、🔍、⚙️ 可聚焦、未掛載項不可聚焦", focus_path)
     assert all(f["visible"] and f["outline"].startswith("solid") for f in in_nav), ("焦點外框必須可見", in_nav)
 
 

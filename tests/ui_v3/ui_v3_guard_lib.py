@@ -130,12 +130,52 @@ def dynamic_import_uses(tree: ast.AST) -> List[str]:
     return out
 
 
+# ───────────── 唯一的 fixtures 例外（Gate-M 方案 2a；總管裁示 #1296 comment 7073385776） ─────────────
+# 「Preview 不得顯示 fake」的原則只開**一個**狹窄例外：`ui_v3/app_preview.py::_render_exp` 函式本體的**直屬敘述**，
+# 以 `import ui_v3.fixtures.exp_lookup_fake [as x]` 單一 alias 載入那一個模組。其餘（模組層、其他函式、巢狀區塊、
+# `from … import` 寫法、其他 fixtures 模組、其他檔案）一律照舊違規。所有 fixtures／Preview 守衛都經 `without_sanctioned_fixture_import`
+# 取得「去除該例外後」的語法樹，所以守衛本身的邏輯與負控不變。
+FIXTURE_EXCEPTION_REL = "ui_v3/app_preview.py"
+FIXTURE_EXCEPTION_FUNC = "_render_exp"
+FIXTURE_EXCEPTION_MODULE = "ui_v3.fixtures.exp_lookup_fake"
+
+
+def is_sanctioned_fixture_import(node: ast.AST) -> bool:
+    return (isinstance(node, ast.Import) and len(node.names) == 1 and node.names[0].name == FIXTURE_EXCEPTION_MODULE)
+
+
+def sanctioned_fixture_imports(rel: str, tree: ast.AST) -> List[ast.AST]:
+    """符合唯一例外的 import 節點（空＝沒有）。只認 `ui_v3/app_preview.py` 模組層 `def _render_exp` 的直屬敘述。"""
+    if rel != FIXTURE_EXCEPTION_REL or not isinstance(tree, ast.Module):
+        return []
+    out: List[ast.AST] = []
+    for stmt in tree.body:
+        if isinstance(stmt, ast.FunctionDef) and stmt.name == FIXTURE_EXCEPTION_FUNC:
+            out.extend(n for n in stmt.body if is_sanctioned_fixture_import(n))
+    return out
+
+
+def without_sanctioned_fixture_import(rel: str, tree: ast.AST) -> ast.AST:
+    """回傳**複本**：已移除（至多一個）唯一例外 import 的語法樹；沒有符合者就原樣回傳複本。呼叫端的原樹不變。"""
+    import copy
+    clone = copy.deepcopy(tree)
+    allowed = sanctioned_fixture_imports(rel, clone)[:1]     # 至多放行一個（重複 import 的第二個仍違規）
+    if not allowed:
+        return clone
+    for node in ast.walk(clone):
+        for field in ("body", "orelse", "finalbody"):
+            stmts = getattr(node, field, None)
+            if isinstance(stmts, list) and any(n is allowed[0] for n in stmts):
+                setattr(node, field, [n for n in stmts if n is not allowed[0]] or [ast.Pass()])
+    return clone
+
+
 def import_violations(rel: str, source: str) -> List[str]:
     """單一檔的 import 違規（空 list ＝ 合規）。"""
     layer = layer_of(rel)
     if layer not in LAYER_DEPS:
         return [f"未知的層目錄 {layer!r}（fail-closed；新增層須同步改守衛）"]
-    tree = ast.parse(source)
+    tree = without_sanctioned_fixture_import(rel, ast.parse(source))
     bad: List[str] = []
     for module in imports_of(tree, package_of(rel)):
         if module.startswith("__future__."):

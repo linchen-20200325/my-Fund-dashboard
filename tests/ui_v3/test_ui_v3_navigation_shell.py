@@ -38,18 +38,18 @@ def test_nav_items_are_the_five_pages_in_ia_order_and_only_registered_are_availa
     items = nav.nav_items()
     assert [i.slug for i in items] == ["mkt", "ast", "exp", "ai", "set"]
     assert [i.title for i in items] == [p.title for p in IA_PAGES]
-    assert [i.slug for i in items if i.available] == [p.slug for p in registry.registered_pages()] == ["mkt", "set"]   # ⚙️：BL-0540 Phase 1A（#7056447977）
+    assert [i.slug for i in items if i.available] == [p.slug for p in registry.registered_pages()] == ["mkt", "exp", "set"]   # ⚙️：BL-0540 Phase 1A（#7056447977）；🔍：Gate-M 方案 2a（#7073385776，本地 FAKE 頁）
     assert all(i.icon and i.name and i.title == f"{i.icon} {i.name}" for i in items)
 
 
 def test_unregistered_pages_are_visible_but_never_available_and_ai_never_available():
     items = {i.slug: i for i in nav.nav_items()}
-    for slug in ("ast", "exp", "ai"):
+    for slug in ("ast", "ai"):
         assert items[slug].available is False
-    assert items["mkt"].available is True and items["set"].available is True
+    assert items["mkt"].available is True and items["exp"].available is True and items["set"].available is True
     # 負控：在記憶體內把 💼 掛載，導覽項跟著可進；🤖 仍然無法被建構成已掛載（登錄表建構時就擋）
     fake = tuple(PageSlot(p.slug, p.title, True) if p.slug == "ast" else p for p in IA_PAGES)
-    assert {i.slug for i in nav.nav_items(fake) if i.available} == {"mkt", "set", "ast"}
+    assert {i.slug for i in nav.nav_items(fake) if i.available} == {"mkt", "exp", "set", "ast"}
     with pytest.raises(ValueError):
         PageSlot("ai", "🤖 AI 投資總結", True)
 
@@ -342,8 +342,8 @@ def test_top_nav_is_not_a_second_router_and_uses_all_five_approved_labels():
     assert "nav.TOP_KEY" in render_src and "nav.BOTTOM_KEY" not in render_src
     assert "st.page_link" in render_src and "disabled_top_html" in render_src
     assert [W.text(i.short_key) for i in nav.nav_items()] == ["市場", "資產", "找基金", "AI", "設定"]
-    assert {i.slug for i in nav.nav_items() if i.available} == {"mkt", "set"}
-    assert all(not i.available for i in nav.nav_items() if i.slug not in ("mkt", "set"))
+    assert {i.slug for i in nav.nav_items() if i.available} == {"mkt", "exp", "set"}
+    assert all(not i.available for i in nav.nav_items() if i.slug not in ("mkt", "exp", "set"))
     css = nav.shell_css()
     assert ".st-key-uv3-bottom-nav" not in css
     assert "position:fixed" not in css
@@ -420,12 +420,12 @@ def test_app_renders_shell_with_five_pages_status_bar_cta_and_footer(monkeypatch
     assert "<style>" in main                                                      # CSS 已注入
 
 
-def test_app_has_exactly_two_navigable_pages_and_no_empty_shell_pages(monkeypatch):
+def test_app_has_exactly_three_navigable_pages_and_no_empty_shell_pages(monkeypatch):
     at = run(monkeypatch)
-    # 導覽連結只有 🌍、⚙️（各：側欄一個＋頁首一個）；💼／🔍／🤖 未掛載，沒有 renderer、沒有 `st.Page`
+    # 導覽連結只有 🌍、🔍、⚙️（各：側欄一個＋頁首一個）；💼／🤖 未掛載，沒有 renderer、沒有 `st.Page`
     links = [e for e in at.get("page_link")] if hasattr(at, "get") else []
-    assert len(links) == 4, links
-    assert sorted(l.proto.label for l in links) == sorted(["市場與趨勢", "市場", "設定", "設定"])
+    assert len(links) == 6, links
+    assert sorted(l.proto.label for l in links) == sorted(["市場與趨勢", "市場", "找基金", "找基金", "設定", "設定"])
     assert [t.value for t in at.title] == ["🌍 市場與趨勢"]
 
 

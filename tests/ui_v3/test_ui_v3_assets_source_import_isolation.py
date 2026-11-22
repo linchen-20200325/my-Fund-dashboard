@@ -238,5 +238,6 @@ def test_registry_has_no_new_page_and_preview_renderers_are_unchanged():
     from ui_v3.shell import registry
     registered = [p.slug for p in registry.IA_PAGES if p.registered]
     # 本批沒有新增 💼／🔍／🤖 的掛載（接頁需要線框草稿與客戶核准）。2026-11-21 起 ⚙️ 因 BL-0540 Phase 1A 客戶裁示（#7056447977）成為第二個已掛載頁。
-    assert registered == ["mkt", "set"], registered
-    assert not {"ast", "exp", "ai"} & set(registered)
+    # 2026-11-22：🔍 `exp` 因 Gate-M 方案 2a（總管 #7073385776）成為第三個已掛載頁（僅本地 Preview 的 FAKE 頁）；💼／🤖 仍不得掛載。
+    assert registered == ["mkt", "exp", "set"], registered
+    assert not {"ast", "ai"} & set(registered)

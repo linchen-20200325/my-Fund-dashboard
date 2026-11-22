@@ -306,19 +306,19 @@ def test_market_page_disclosures_are_unchanged_next_to_the_settings_page(monkeyp
 
 # ── 6. 導覽 ─────────────────────────────────────────────────────────────────
 
-def test_only_market_and_settings_are_navigable_on_both_pages(monkeypatch):
+def test_only_market_search_and_settings_are_navigable_on_all_three_pages(monkeypatch):
     env = Env(monkeypatch)
     at = env.session()
-    for slug in ("mkt", "set"):
+    for slug in ("mkt", "exp", "set"):
         env.visit(at, slug)
         assert not at.exception
         links = sorted(l.proto.label for l in at.get("page_link"))
-        expected = sorted(["市場與趨勢", "市場", "設定", "設定"] + (["🌍 市場與趨勢"] if slug == "set" else []))
+        expected = sorted(["市場與趨勢", "市場", "找基金", "找基金", "設定", "設定"] + (["🌍 市場與趨勢"] if slug == "set" else []))
         assert links == expected, (slug, links)
         side = "\n".join(m.value for m in at.sidebar.markdown)
-        for disabled in ("ast", "exp", "ai"):
+        for disabled in ("ast", "ai"):
             assert f'data-nav="{disabled}"' in side and 'aria-disabled="true"' in side
-        assert 'data-nav="set"' not in side and 'data-nav="mkt"' not in side     # 兩個可進頁不是禁用項
+        assert all(f'data-nav="{slug_}"' not in side for slug_ in ("set", "mkt", "exp"))     # 三個可進頁不是禁用項
 
 
 # ── 純 HTML：renderer 的列契約（沒有 Streamlit 也可跑）────────────────────────────

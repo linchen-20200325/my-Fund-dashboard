@@ -29,6 +29,9 @@ def _w(key: str, text: str) -> PendingWording:
 _LIST = (
     # 表單
     _w("page_title", "找一檔基金"),
+    # 頁級 FAKE 標示（Gate-M 方案 2a：頁級＋卡級永久可見；兩者皆暫行字樣，待客戶／設計者定字）
+    _w("page_fake_banner", "FAKE 模擬頁：以下全部是離線測試資料，沒有查詢任何真實來源"),
+    _w("page_fake_hint", "可輸入的 FAKE 示範代碼：{codes}"),
     _w("input_label", "MoneyDJ 基金代碼或 ISIN"),
     _w("isin_note", "ISIN：尚未啟用（目前沒有已核准的 ISIN 對照來源）"),
     _w("submit_label", "查詢"),
