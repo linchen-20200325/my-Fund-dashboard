@@ -6,7 +6,7 @@
 本檔把「UI2 現有資料輸出」與「OneBrain 預期輸入」之間**已驗證／缺契約**的邊界釘成 CI：
 - T1 FAKE 市場資料的出處欄位完整（🌍 market_view 每個 domain；market_indicator 每列＋表層狀態）。
 - T2 NaN、空表、來源錯誤**不會**變成數值 0。
-- T3 Yahoo／FRED 8 條＋FX 1 條序列：本檔**獨立手寫**一張表，與 production 實際發出的取數呼叫逐列對照；
+- T3 Yahoo／FRED 8 條＋FX 1 條序列：本檔**獨立手寫**一張表，逐列比對 (來源, 序列, 實際輸出位置)，位置由真 builder 的輸出觀察；
   每列 RIGHTS／AI USE 一律 NOT VERIFIED（本檔不宣稱任何權利已驗）。`USDTWD=X` 另受 FX 專屬 Gate，單列。
 - T4 `FundLookupView` 現階段**沒有** provenance（來源、取得時間、觀測日）——這是**待裁的契約缺口**，
   不是「永遠不准加」；日後加欄位屬 Decision Gate，屆時在同一個 PR 更新本鎖。
@@ -264,26 +264,49 @@ class TestT2MissingIsNotZero:
             check_no_fabricated_zero(numbers_in_view(view, "vix"))
 
 
-# ═══════════════════════ T3：8＋1 序列清單（獨立手寫，逐列對照實際取數呼叫） ═══════════════════════
+# ═══════════════════════ T3：8＋1 序列清單（獨立手寫，逐列對照「來源＋序列＋實際輸出位置」） ═══════════════════════
+#
+# 2026-11-22 Work QA Must-Fix（#1296 comment 7077712971／總管 7077736106）：舊版只比 (來源, 序列) 集合，
+# 兩個 FRED 序列的輸出位置對調時集合不變、守衛不會紅。現改為逐列比 (來源, 序列, 輸出位置)：
+# - 預期表 `SERIES_TABLE` 為本檔手寫字面值（不 import production 常數）。
+# - 觀察值不讀 production spec、也不從記錄器推導位置：每條序列餵**互不重疊的 FAKE 數值簽章**，
+#   跑真 builder 之後，從**輸出**（market_view 的 domain points、market_indicator 的列）看每個位置
+#   實際拿到的是哪一組簽章，才回推「哪條序列流到哪個位置」。
 
 NV = "NOT VERIFIED"
-#: 本檔獨立手寫（**不** import production 常數）。gate：該列除權利外另受的專屬 Gate。
+VIEW = "market_view"
+IND = "market_indicator"
+#: 本檔獨立手寫。每列＝一個實際輸出位置（^VIX 有兩個去處，分兩列）。gate：該列另受的專屬 Gate。
 SERIES_TABLE = (
-    # (來源, 序列, UI2 去處, RIGHTS, AI USE, 專屬 Gate)
-    ("Yahoo", "^VIX", "market_view.vix＋market_indicator.vol_index", NV, NV, None),
-    ("Yahoo", "^TWII", "market_view.taiex", NV, NV, None),
-    ("Yahoo", "^GSPC", "market_view.sp500", NV, NV, None),
-    ("FRED", "DGS10", "market_view.us10y", NV, NV, None),
-    ("FRED", "DGS2", "market_view.us2y", NV, NV, None),
-    ("FRED", "T10Y2Y", "market_indicator.term_spread_pct", NV, NV, None),
-    ("FRED", "BAMLH0A0HYM2", "market_indicator.credit_spread_pct", NV, NV, None),
-    ("FRED", "FEDFUNDS", "market_indicator.policy_rate_pct", NV, NV, None),
-    ("Yahoo", "USDTWD=X", "market_indicator.fx_twd_per_usd", NV, NV, "FX 觀測日規則 Gate（目前不取數）"),
+    # (來源, 序列, 輸出位置, RIGHTS, AI USE, 專屬 Gate)
+    ("Yahoo", "^VIX", (VIEW, "vix"), NV, NV, None),
+    ("Yahoo", "^VIX", (IND, "vol_index"), NV, NV, None),
+    ("Yahoo", "^TWII", (VIEW, "taiex"), NV, NV, None),
+    ("Yahoo", "^GSPC", (VIEW, "sp500"), NV, NV, None),
+    ("FRED", "DGS10", (VIEW, "us10y"), NV, NV, None),
+    ("FRED", "DGS2", (VIEW, "us2y"), NV, NV, None),
+    ("FRED", "T10Y2Y", (IND, "term_spread_pct"), NV, NV, None),
+    ("FRED", "BAMLH0A0HYM2", (IND, "credit_spread_pct"), NV, NV, None),
+    ("FRED", "FEDFUNDS", (IND, "policy_rate_pct"), NV, NV, None),
+    ("Yahoo", "USDTWD=X", (IND, "fx_twd_per_usd"), NV, NV, "FX 觀測日規則 Gate（目前關閉、不取數）"),
 )
 
+#: FAKE 數值簽章（互不重疊；只是本檔的輸入，與 production 無關）。
+SIGNATURES = {
+    (VIEW, ("Yahoo", "^VIX")): _fake_values(7, 11.11),
+    (VIEW, ("Yahoo", "^TWII")): _fake_values(7, 21.11),
+    (VIEW, ("Yahoo", "^GSPC")): _fake_values(7, 31.11),
+    (VIEW, ("FRED", "DGS10")): _fake_values(7, 4.11),
+    (VIEW, ("FRED", "DGS2")): [round(3.61 + i * 0.01, 2) for i in range(7)],
+    (IND, ("Yahoo", "^VIX")): _fake_values(7, 51.11),
+    (IND, ("FRED", "BAMLH0A0HYM2")): [5.51, 5.52],
+    (IND, ("FRED", "T10Y2Y")): [0.61, 0.62],
+    (IND, ("FRED", "FEDFUNDS")): [3.33, 3.34],
+}
 
-def live_series(table=SERIES_TABLE) -> set:
-    return {(src, sid) for src, sid, _w, _r, _a, gate in table if gate is None}
+
+def live_rows(table=SERIES_TABLE) -> set:
+    return {(src, sid, dest) for src, sid, dest, _r, _a, gate in table if gate is None}
 
 
 def check_rights_not_claimed(table) -> None:
@@ -291,45 +314,102 @@ def check_rights_not_claimed(table) -> None:
         assert row[3] == NV and row[4] == NV, f"{row[1]}：本檔不得宣稱權利或 AI 使用已驗"
 
 
-def check_series_match(expected: set, actual: set) -> None:
-    assert actual == expected, {"production 多出": actual - expected, "production 沒有": expected - actual}
+def check_rows_match(expected: set, observed: set) -> None:
+    """逐列比 (來源, 序列, 輸出位置)。"""
+    assert observed == expected, {"production 多出／錯位": observed - expected, "production 沒有": expected - observed}
 
 
-def actual_called_series(indicator_l1) -> set:
-    """跑 production 兩支 builder（全 FAKE 替身），收集**實際被要求**的序列代碼。"""
-    fakes = view_fakes()
-    mv.build_market_view(**fakes)
+def _which_series(layer: str, values) -> tuple:
+    """輸出某位置拿到的數值 → 唯一一組簽章（同一層內）。對不上或對到兩組都當場失敗。"""
+    vals = {round(v, 2) for v in values}
+    hits = [key for (lyr, key), sig in SIGNATURES.items() if lyr == layer and vals and vals <= set(sig)]
+    assert len(hits) == 1, (layer, sorted(vals), hits)
+    return hits[0]
+
+
+def observe_rows(indicator_l1) -> tuple:
+    """跑真 builder（全 FAKE 簽章），從**輸出**觀察 (來源, 序列, 位置)；另回傳實際取數呼叫（看 FX 零呼叫用）。"""
+    sig = {key: vals for (lyr, key), vals in SIGNATURES.items() if lyr == VIEW}
+    fakes = view_fakes(
+        vix=(fake_yahoo("^VIX", sig[("Yahoo", "^VIX")]), None),
+        twii=(fake_yahoo("^TWII", sig[("Yahoo", "^TWII")], exchange_tz="Asia/Taipei"), None),
+        gspc=(fake_yahoo("^GSPC", sig[("Yahoo", "^GSPC")], exchange_tz="America/New_York"), None),
+        fred={"DGS10": (fake_fred_frame("DGS10", sig[("FRED", "DGS10")]), None),
+              "DGS2": (fake_fred_frame("DGS2", sig[("FRED", "DGS2")]), None)})
+    view = mv.build_market_view(**fakes)
     yahoo, fred = indicator_l1
-    mi.build_market_indicator_table(fred_api_key=FAKE_FRED_KEY)
-    called = {("Yahoo", t) for t in fakes["fetch_vix"].calls + yahoo.calls}
-    called |= {("FRED", s) for s in fakes["fetch_fred"].calls + fred.calls}
-    return called
+    yahoo.by_key["^VIX"] = (fake_yahoo("^VIX", SIGNATURES[(IND, ("Yahoo", "^VIX"))]), None)
+    for sid in ("BAMLH0A0HYM2", "T10Y2Y", "FEDFUNDS"):
+        fred.by_key[sid] = (fake_vintage_frame(tuple(SIGNATURES[(IND, ("FRED", sid))])), None)
+    table = mi.build_market_indicator_table(fred_api_key=FAKE_FRED_KEY)
+
+    observed = set()
+    for d in view["domains"]:
+        if d["points"]:
+            src, sid = _which_series(VIEW, [p["value_num"] for p in d["points"]])
+            observed.add((src, sid, (VIEW, d["domain"])))
+    by_key: dict = {}
+    for r in table["rows"]:
+        by_key.setdefault(r["indicator_key"], []).append(r["value_num"])
+    for key, values in by_key.items():
+        src, sid = _which_series(IND, values)
+        observed.add((src, sid, (IND, key)))
+    calls = {("Yahoo", t) for t in fakes["fetch_vix"].calls + yahoo.calls}
+    calls |= {("FRED", s) for s in fakes["fetch_fred"].calls + fred.calls}
+    return observed, calls, table
+
+
+def _swap_fred_destinations(monkeypatch) -> None:
+    """記憶體變異（monkeypatch，測試結束自動還原）：對調 credit／term 兩鍵的 FRED 序列；序列集合不變。"""
+    specs = {k: dict(v) for k, v in mi.INDICATOR_SPECS.items()}
+    specs["credit_spread_pct"]["source"], specs["term_spread_pct"]["source"] = (
+        specs["term_spread_pct"]["source"], specs["credit_spread_pct"]["source"])
+    monkeypatch.setattr(mi, "INDICATOR_SPECS", specs)
 
 
 class TestT3SeriesList:
-    def test_表格為8條即時加1條FX(self):
-        assert len(SERIES_TABLE) == 9 and len(live_series()) == 8
+    def test_表格為9條序列_10個輸出位置_8條即時加1條FX(self):
+        assert len(SERIES_TABLE) == 10
+        assert len({(r[0], r[1]) for r in SERIES_TABLE}) == 9
+        assert len({(s, i) for s, i, _d in live_rows()}) == 8
         assert [r[1] for r in SERIES_TABLE if r[5] is not None] == ["USDTWD=X"]
 
     def test_每列RIGHTS與AI_USE皆為NOT_VERIFIED(self):
         check_rights_not_claimed(SERIES_TABLE)
 
-    def test_production實際取數呼叫恰為8條即時序列(self, indicator_l1):
-        check_series_match(live_series(), actual_called_series(indicator_l1))
+    def test_逐列_來源序列輸出位置_與真builder輸出一致(self, indicator_l1):
+        observed, _calls, _t = observe_rows(indicator_l1)
+        check_rows_match(live_rows(), observed)
 
-    def test_FX列_目前受專屬Gate_不取數_spec仍指向USDTWD(self, indicator_l1):
-        assert ("Yahoo", "USDTWD=X") not in actual_called_series(indicator_l1)
-        spec = mi.INDICATOR_SPECS["fx_twd_per_usd"]
-        assert spec["source"] == ("Yahoo", "USDTWD=X")
-        table = mi.build_market_indicator_table(fred_api_key=FAKE_FRED_KEY)
+    def test_指定兩列_BAMLH0A0HYM2到credit_T10Y2Y到term(self, indicator_l1):
+        observed, _calls, _t = observe_rows(indicator_l1)
+        assert ("FRED", "BAMLH0A0HYM2", (IND, "credit_spread_pct")) in observed
+        assert ("FRED", "T10Y2Y", (IND, "term_spread_pct")) in observed
+
+    def test_FX列_Gate關閉_零呼叫_無輸出列_pending(self, indicator_l1):
+        observed, calls, table = observe_rows(indicator_l1)
+        assert ("Yahoo", "USDTWD=X") not in calls
+        assert not any(dest == (IND, "fx_twd_per_usd") for _s, _i, dest in observed)
         assert "fx_twd_per_usd" in table["pending"]
+        assert mi.INDICATOR_SPECS["fx_twd_per_usd"]["source"] == ("Yahoo", "USDTWD=X")
 
-    def test_負控_清單多一條或少一條_對照必須失敗(self, indicator_l1):
-        actual = actual_called_series(indicator_l1)
+    def test_負控_對調credit與term的FRED序列_集合不變但逐列守衛必紅(self, indicator_l1, monkeypatch):
+        _swap_fred_destinations(monkeypatch)
+        observed, calls, _t = observe_rows(indicator_l1)
+        # 序列集合與呼叫集合都沒變（舊版只比這個，所以會漏判）……
+        assert {(s, i) for s, i, _d in observed} == {(s, i) for s, i, _d in live_rows()}
+        assert ("FRED", "T10Y2Y") in calls and ("FRED", "BAMLH0A0HYM2") in calls
+        # ……但逐列守衛必須轉紅，且錯位就是這兩列
+        assert ("FRED", "T10Y2Y", (IND, "credit_spread_pct")) in observed
         with pytest.raises(AssertionError):
-            check_series_match(live_series() | {("Yahoo", "^FAKE")}, actual)
+            check_rows_match(live_rows(), observed)
+
+    def test_負控_預期表多一列或少一列_對照必紅(self, indicator_l1):
+        observed, _calls, _t = observe_rows(indicator_l1)
         with pytest.raises(AssertionError):
-            check_series_match(live_series() - {("FRED", "FEDFUNDS")}, actual)
+            check_rows_match(live_rows() | {("Yahoo", "^FAKE", (VIEW, "vix"))}, observed)
+        with pytest.raises(AssertionError):
+            check_rows_match(live_rows() - {("FRED", "FEDFUNDS", (IND, "policy_rate_pct"))}, observed)
 
     def test_負控_任一列宣稱已驗_必須失敗(self):
         tampered = list(SERIES_TABLE)
@@ -409,14 +489,22 @@ def onebrain_references(source: str) -> list:
     return hits
 
 
+def check_onebrain_test_files(found: set) -> None:
+    """正向與負控共用：`tests/` 下 `test_onebrain_*.py` 必須恰為授權的 3 檔。"""
+    assert found == AUTHORISED_ONEBRAIN_TESTS, found
+
+
+def actual_onebrain_test_files() -> set:
+    return {p.name for p in (REPO / "tests").rglob("test_onebrain_*.py")}
+
+
 class TestT5Boundary:
     def test_本檔不import_OneBrain(self):
         assert onebrain_references(THIS_FILE.read_text(encoding="utf-8")) == []
 
     def test_本檔不是test_onebrain_檔_OneBrain測試仍恰為授權的3檔(self):
         assert not THIS_FILE.name.startswith("test_onebrain_")
-        found = {p.name for p in (REPO / "tests").rglob("test_onebrain_*.py")}
-        assert found == AUTHORISED_ONEBRAIN_TESTS
+        check_onebrain_test_files(actual_onebrain_test_files())
 
     def test_production不引用本檔(self):
         stem = THIS_FILE.stem
@@ -439,9 +527,10 @@ class TestT5Boundary:
         assert onebrain_references("import services.v2_tables\nfrom services import v2_domain\nx = 'onebrain'") == []
 
     def test_負控_多一個test_onebrain_檔名_白名單比對必須失敗(self):
-        found = AUTHORISED_ONEBRAIN_TESTS | {"test_onebrain_extra.py"}
         with pytest.raises(AssertionError):
-            assert found == AUTHORISED_ONEBRAIN_TESTS
+            check_onebrain_test_files(actual_onebrain_test_files() | {"test_onebrain_extra.py"})
+        with pytest.raises(AssertionError):
+            check_onebrain_test_files(actual_onebrain_test_files() - {"test_onebrain_fake_provider.py"})
 
 
 def test_零網路守衛本身有效(no_real_network):
