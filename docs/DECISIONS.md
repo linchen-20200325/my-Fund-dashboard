@@ -3721,6 +3721,24 @@
 | supersedes／amends | 不 supersede 任何既有 DEC；amends 如上。 |
 | provenance | 客戶指示原文：**逐字**（經 #1296 comment 存檔，由 repo OWNER 帳號張貼；repo 內未另存 sha256 逐字檔，以該 comment 為權威定位）。「首批逐列盤點」為執行組（C 線）依現有 DEC／ledger 逐列整理，**不是**客戶原話；單組作者，尚待 Work 非作者差額 QA。 |
 
+### DEC-2026-11-22-03｜D2 首批未處置九列：客戶採方案 P——R-NAV-6、R-PERF-1～8 逐列明示暫緩（仍 Pending，非 Excluded）；只登記決策，不授權任何施工
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-22（Asia/Taipei）；**客戶**。裁示由 GitHub #1296 comment [`7074611352`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7074611352) 存檔（repo OWNER 帳號張貼，自稱「客戶正式獨立裁示」）。**與 `DEC-2026-11-22-01`、`-02` 獨立存檔，互不替代、不捆綁擴權。** |
+| 客戶指示原文（如該 comment 所引） | 「我正式選擇投資基金 D2 九列決策方案 P：明示暫緩 R-NAV-6 與 R-PERF-1～8 共九列，逐列保留 #1296 comment 7074568235 的適用範圍及未決依賴。暫緩仍 Pending、不是 Excluded，不作初版金融判讀。此選擇僅同意按 DEC-2026-11-22-02 的首批 D2 流程完成判準登記與後續獨立審查；不核准 Digest Schema、公式、真資料、Provider、OneBrain 或正式上線。請正式回存 #1296，並沿原 C/Work 單寫者規則同步文件。」 |
+| 決定 | 採候選卡 [`7074568235`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7074568235) 方案 P：九列全部**客戶明示暫緩**；不選方案 Q（逐列核准）、不選方案 R（先處理 BL-0427 公式 Gate）；不採任一候選欄位契約核准或公式提案。 |
+| 逐列適用範圍與未決依賴（客戶 comment 所列，不擴權） | **R-NAV-6**：`provenance[fund_code]` 旁路，不在表欄內；與 R-NAV-5 成對且 R-NAV-5 已明示不含它（依賴：是否進契約欄＝Schema Gate；FX Gate D8 仍關）；**R-PERF-1**：重複列＝R-ID-1（依賴：母列已核但「不自動升格」；本列不視同自動核准；不獨立計）；**R-PERF-2**：僅舊站（`DEC-2026-10-23-02` 1B 已裁），New UI2 未核（依賴：BL-0427／0524／0547 公式與窗口；不得改 350 天）；**R-PERF-3**：重複列＝R-NAV-5；績效輸出本身不含 `ccy`，與 D2-B 衝突（依賴：母列限制 A；不得自行補幣別；不獨立計）；**R-PERF-4**：計算口徑標識，依附 R-PERF-2（依賴：隨 R-PERF-2，不核公式）；**R-PERF-5**：350 天是實作常數，核准依據 NOT VERIFIED（依賴：BL-0427 窗口定義）；**R-PERF-6**：重複列＝R-NAV-2；績效輸出不含此欄（依賴：不猜資料末端日期；不獨立計）；**R-PERF-7**：`ok`／`unavailable` 為現有實作字彙（依賴：D3(a)／(b) 狀態字彙；未核新正式詞）；**R-PERF-8**：既有五碼；`UNAVAILABLE_REASON_TEXT` 屬呈現層（依賴：值域核准性 NOT VERIFIED，隨 R-PERF-7） |
+| 首批 17 列分類（逐列重算） | **7 明示核准**（R-ID-1、R-ID-2、R-ID-3〔後二者僅 Sheet「基金代號」欄入口，`DEC-2026-11-22-01`〕、R-NAV-1、R-NAV-2、R-NAV-4、R-NAV-5）＋**10 明示暫緩**（R-NAV-3〔`DEC-2026-11-14-07`〕＋本筆九列）＋**0 未明示處置**。 |
+| 效力界線 | (1) 暫緩**仍 Pending**，**不是 Excluded、不是 Optional／Required 已分類、不是已核金融契約**；不得一律映射「無法判定」；`threshold_pending` 不當全域 Digest 狀態碼；真實缺資料、已有值但公式未核、日期存在而 freshness 門檻未核須保持不同語意。(2) 績效域沒有正式可用契約，初版不據以做金融判讀。(3) R-PERF-1／3／6 為重複列，**不自動升格、不獨立計**。(4) 本選擇**僅**同意登記與後續獨立審查；**首批流程是否已完成**須依 `DEC-2026-11-22-02` 經 Work 非作者 QA 與總管登記，本筆**不宣告 D2 或首批三域完成**；完成後至多取得**另行提出** D2-G2 Digest schema 決策案的資格。其餘六域依 G3 延後。 |
+| 不授權範圍（清單，皆不授權） | 程式碼／Schema 變更；金融公式、10 日或 350 天窗口、NAV freshness、閾值；Digest 欄位／狀態／reason；真 MoneyDJ／TDCC／FundClear、Sheet／Secrets／OAuth；NAS／Cloud；Prompt／SDK／Provider；OneBrain runtime；Phase 7；正式網址或上線。原 P1～P7／S7、BL-0545／0551 各自 Gate 保留。 |
+| 與既有 DEC 的關係 | 依 `DEC-2026-11-22-02` 判準登記，**不改寫** `-01`、`-02`、`DEC-2026-11-13-06`（裁示 (5)）、`DEC-2026-11-14-07`、`DEC-2026-11-17-06` 本文；補上九列的明示處置。 |
+| 是否可逆 | 可逆（純文件；客戶可另行撤回或改選任一列核准）。 |
+| 影響範圍 | 本檔；D2 卡 §9；候選 ledger 九列「本次狀態」欄、統計表合計格後綴與更新註。`BACKLOG.md`／`HANDOFF.md` 未動（治理單一 writer 另批）。不改任何程式、測試、Schema、Digest、Provider、Cloud、NAS、持股或正式來源。 |
+| evidence／source | #1296 comments：`7074611352`（客戶選擇）、`7074568235`（C 九列決策卡）、`7074599645`（總管推薦 P，非核准）、`7074482423`（總管派工）。 |
+| supersedes／amends | 不 supersede 任何既有 DEC；僅依 `-02` 登記九列處置。 |
+| provenance | 客戶指示原文：**逐字**（經 #1296 comment 存檔；repo 內未另存 sha256 逐字檔，以該 comment 為權威定位）。「逐列範圍與依賴」取自客戶 comment 的表；「17 列分類」為執行組（C 線）逐列重算，**非客戶原話**；單組作者，尚待 Work 非作者差額 QA。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
