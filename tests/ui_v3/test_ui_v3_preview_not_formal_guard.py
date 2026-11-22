@@ -82,7 +82,8 @@ def test_preview_module_has_no_module_level_streamlit_or_fixtures():
     top_imports = [m for stmt in tree.body if isinstance(stmt, (ast.Import, ast.ImportFrom))
                    for m in lib.imports_of(ast.Module(body=[stmt], type_ignores=[]), "ui_v3")]
     assert not any(m.split(".")[0] == "streamlit" for m in top_imports), top_imports
-    mods = lib.imports_of(tree, "ui_v3")
+    # 唯一例外（Gate-M 方案 2a）：`_render_exp` 函式內 `import ui_v3.fixtures.exp_lookup_fake`；模組層與其他寫法照舊違規。
+    mods = lib.imports_of(lib.without_sanctioned_fixture_import("ui_v3/app_preview.py", tree), "ui_v3")
     assert not any(m.startswith("ui_v3.fixtures") for m in mods)
     assert not any(m.split(".")[0] in ("ui_v2", "ui") for m in mods)
     assert lib.import_violations("ui_v3/app_preview.py", src) == []

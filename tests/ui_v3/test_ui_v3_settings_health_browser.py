@@ -202,13 +202,13 @@ _DISABLED = """() => [...document.querySelectorAll('[data-testid="stSidebar"] [d
 
 def test_desktop_1280_sidebar_keyboard_acceptance_with_integrated_main(base_and_browser):
     """與 main 整合（含 #1320 側欄焦點）後的 1280px 鍵盤驗收：Tab／Shift+Tab 焦點可見且順序可逆；Enter 可進市場與設定；
-    設定可返回市場；💼／🔍／🤖 三個入口維持停用（aria-disabled、無 href、Tab 與 Shift+Tab 都落不上去）。"""
+    設定可返回市場；💼／🤖 兩個入口維持停用（aria-disabled、無 href、Tab 與 Shift+Tab 都落不上去）；🔍 自 Gate-M 方案 2a 起為可進的本地 FAKE 頁。"""
     base, browser = base_and_browser
     ctx, page = _new(browser, base, 1280)
     try:
         page.wait_for_selector(".uv3-statusbar", timeout=60000)
         disabled = page.evaluate(_DISABLED)
-        assert sorted(d["nav"] for d in disabled) == ["ai", "ast", "exp"], disabled
+        assert sorted(d["nav"] for d in disabled) == ["ai", "ast"], disabled
         assert all(d["aria"] == "true" and d["href"] is None for d in disabled), disabled
         forward, backward = [], []
         for _ in range(12):
@@ -219,16 +219,16 @@ def test_desktop_1280_sidebar_keyboard_acceptance_with_integrated_main(base_and_
             backward.append(page.evaluate(_FOCUS))
         side_fwd = [f["text"] for f in forward if f and f["inSide"] and f["isLink"]]
         side_bwd = [f["text"] for f in backward if f and f["inSide"] and f["isLink"]]
-        assert any("市場" in x for x in side_fwd) and any("設定" in x for x in side_fwd), forward
+        assert any("市場" in x for x in side_fwd) and any("找基金" in x for x in side_fwd) and any("設定" in x for x in side_fwd), forward
         def order(texts):
             seen = []
             for x in texts:
-                key = "mkt" if "市場" in x else "set" if "設定" in x else None
+                key = "mkt" if "市場" in x else "exp" if "找基金" in x else "set" if "設定" in x else None
                 if key and key not in seen:
                     seen.append(key)
             return seen
-        assert order(side_fwd) == ["mkt", "set"], ("Tab 順序＝🌍 → ⚙️", side_fwd)
-        assert order(side_bwd) == ["set", "mkt"], ("Shift+Tab 順序反向＝⚙️ → 🌍", side_bwd)
+        assert order(side_fwd) == ["mkt", "exp", "set"], ("Tab 順序＝🌍 → 🔍 → ⚙️", side_fwd)
+        assert order(side_bwd) == ["set", "exp", "mkt"], ("Shift+Tab 順序反向＝⚙️ → 🔍 → 🌍", side_bwd)
         every = [f for f in forward + backward if f]
         assert not any(f["disabled"] for f in every), ("焦點不得落在停用入口", [f for f in every if f["disabled"]])
         sidebar_links = [f for f in every if f["inSide"] and f["isLink"]]
@@ -248,7 +248,7 @@ def test_desktop_1280_sidebar_keyboard_acceptance_with_integrated_main(base_and_
         _back_to_market(page)
         assert page.evaluate("() => (document.querySelector('h1') || {}).innerText") == "🌍 市場與趨勢"
         # 停用入口：嘗試 focus() 也不得取得焦點
-        for nav in ("ast", "exp", "ai"):
+        for nav in ("ast", "ai"):
             page.evaluate(f"() => document.querySelector('[data-testid=\"stSidebar\"] [data-nav=\"{nav}\"]').focus()")
             assert page.evaluate(_FOCUS) is None or not page.evaluate(_FOCUS)["disabled"], nav
     finally:

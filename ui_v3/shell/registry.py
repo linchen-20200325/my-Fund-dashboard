@@ -11,6 +11,7 @@
   逐頁 wireframe 經客戶核准、實作後，由該批**有意識地**把對應頁改為 True 並同步改守衛。
   ~~批 1 恆為空~~ → 2026-11-03 BL-0536 rendering 批：🌍 `mkt` 改 True（只進 Preview App；其餘四頁維持 False；狀態更新，不是漏刪）。
   2026-11-21 BL-0540 Phase 1A：⚙️ `set` 改 True（客戶逐字裁示，僅本地 Preview 第一切片；`ast`／`exp`／`ai` 維持 False；狀態更新，不是漏刪）。
+  2026-11-22 Gate-M 方案 2a：🔍 `exp` 改 True（客戶 #7073251388 選方案 B、總管 #7073385776 核可狹窄例外；僅本地 Preview 的 FAKE 頁，頁級＋卡級永久標示 FAKE，不接真來源；`ast`／`ai` 維持 False；狀態更新，不是漏刪）。
 - 🤖 `ai`：Phase 7（OneBrain）之前**禁止** registered=True（建構時就擋）。
 """
 from __future__ import annotations
@@ -51,7 +52,7 @@ class PageSlot:
 IA_PAGES: Tuple[PageSlot, ...] = (
     PageSlot("mkt", "🌍 市場與趨勢", True),   # 2026-11-03：線框已核准（DEC-2026-11-03-01）、Preview rendering 實作（BL-0536）
     PageSlot("ast", "💼 我的資產", False, REASON_WIREFRAME_PENDING),
-    PageSlot("exp", "🔍 找基金", False, REASON_WIREFRAME_PENDING),
+    PageSlot("exp", "🔍 找基金", True),   # 2026-11-22：Gate-M 方案 2a——僅本地 Preview 的 FAKE 頁（總管裁示 #1296 comment 7073385776）；不接任何真來源
     PageSlot(AI_SLUG, "🤖 AI 投資總結", False, REASON_PHASE7),
     PageSlot("set", "⚙️ 設定", True),   # 2026-11-21：BL-0540 Phase 1A 客戶裁示（#7056447977）——僅本地 Preview、唯讀市場與利率健康度；不是全站、不是搬遷
 )

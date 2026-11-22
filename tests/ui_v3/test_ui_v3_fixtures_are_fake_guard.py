@@ -26,7 +26,8 @@ def fixtures_importers(rel: str, source: str) -> list:
         package = ".".join(rel[: -len("/__init__.py")].split("/"))
     else:
         package = ".".join(rel[:-3].split("/")[:-1])
-    mods = lib.imports_of(ast.parse(source), package)
+    # 唯一例外（Gate-M 方案 2a）：app_preview.py::_render_exp 函式內 `import ui_v3.fixtures.exp_lookup_fake`；其餘一律照舊被偵測。
+    mods = lib.imports_of(lib.without_sanctioned_fixture_import(rel, ast.parse(source)), package)
     return [m for m in mods if m == "ui_v3.fixtures" or m.startswith("ui_v3.fixtures.")]
 
 

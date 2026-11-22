@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """ui_v3（New UI2）獨立 **Preview App** 入口 —— 目前有 🌍 市場與趨勢（BL-0536 rendering 批；客戶 2026-11-03 授權只進 Preview）
-與 ⚙️ 設定→資料健康度第一階段（BL-0540 Phase 1A；客戶 2026-11-21 裁示，僅本地 Preview、唯讀、僅市場與利率）。
+與 ⚙️ 設定→資料健康度第一階段（BL-0540 Phase 1A；客戶 2026-11-21 裁示，僅本地 Preview、唯讀、僅市場與利率）、
+以及 🔍 找基金的**本地 FAKE 頁**（Gate-M 方案 2a；客戶 2026-11-22 選方案 B，總管 #1296 comment 7073385776 核可唯一例外；頁級＋卡級永久標示 FAKE、不接任何真來源）。
 
 ⛔ 這**不是**正式入口：不切正式 Streamlit entrypoint、不 cutover、Old UI 與 `ui_v2` 不在這裡、也不在這裡暴露；
    preview ≠ 正式 App（`DEC-2026-11-02-06`、`DEC-2026-11-03-04`）。本檔不得被 `app.py`、`ui/`、`ui_v2/` 引用
    （守衛：`tests/ui_v3/test_ui_v3_preview_not_formal_guard.py`）；**不得**設為「正式 App」的 main file；
    獨立 Preview App 可使用本檔作 main file（客戶方案 B／P1，2026-11-21，Cloud 建站、部署、OAuth、Secrets 與正式切換另依各自授權）。
-⛔ 不得 import `ui_v3.fixtures`（preview 不得顯示 fake 資料）、不得 import ui_v2／Old UI。
+⛔ 除下列唯一例外外，不得 import `ui_v3.fixtures`（preview 不得顯示 fake 資料）；唯一例外＝🔍 頁只能在 `_render_exp` 函式內 import `ui_v3.fixtures.exp_lookup_fake`
+   （模組層、其他函式、其他檔案、其他 fixtures 模組一律由守衛攔截）；不得 import ui_v2／Old UI。
 
 執行：repo 根目錄 `streamlit run ui_v3/app_preview.py`。`main()` 會把 repo 根目錄補進 `sys.path`（`streamlit run` 只加腳本所在資料夾）。
 
@@ -68,6 +70,30 @@ def _render_set(pages: dict) -> None:
     page.render(None if snapshot is None else settings_health.build_from_snapshot(snapshot), market_page=pages.get("mkt"))
 
 
+def _render_exp() -> None:
+    """🔍 頁（本地 FAKE）：輸入 → FAKE 假取數函式（`ui_v3.fixtures.exp_lookup_fake`，只在此函式內 import）→ adapter → 頁渲染。
+
+    **不呼叫 `adapter.load`、不取數、不讀寫 ⚙️ 的快照鍵、不畫 🌍 的 Status Bar**；`session_state` 只存經 adapter 淨化後的 ViewModel（`fl_` 前綴鍵）。
+    頁級（頁頂橫幅）與卡級（結果卡標籤）都永久標示 FAKE。
+    """
+    import streamlit as st
+
+    import ui_v3.fixtures.exp_lookup_fake as fake
+    from ui_v3.adapters.fund_lookup import lookup_fund, not_queried
+    from ui_v3.pages import exp_lookup as page
+    from ui_v3.viewmodels.fund_lookup import FundLookupView
+
+    page.render_css()
+    page.render_page_header(fake.demo_codes_hint())
+    raw = page.render_form()
+    if raw is not None:
+        st.session_state[page.KEY_VIEW] = lookup_fund(fake.make_loader(), raw)
+    view = st.session_state.get(page.KEY_VIEW, not_queried())
+    if not isinstance(view, FundLookupView):
+        raise TypeError(f"session 的查詢結果型別錯誤：{type(view).__name__}（不猜、不忽略）")
+    page.render_card(view, fake=True)
+
+
 def _holder_renderer(fn, pages: dict):
     return lambda: fn(pages)
 
@@ -81,7 +107,7 @@ def main() -> None:
 
     pages = assert_preview_ready()
     st_pages: dict = {}   # `_render_set` 要連回 🌍 的 st.Page；頁建好後才填，執行時才讀
-    renderers = {"mkt": _render_mkt, "set": _holder_renderer(_render_set, st_pages)}
+    renderers = {"mkt": _render_mkt, "exp": _render_exp, "set": _holder_renderer(_render_set, st_pages)}
     missing = [p.slug for p in pages if p.slug not in renderers]
     if missing:
         raise NotImplementedError(f"已掛載的頁沒有 renderer：{missing}（不畫空殼）")
