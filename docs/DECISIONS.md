@@ -3678,7 +3678,7 @@
 | 適用範圍 | 僅 **Sheet「基金代號」欄取數入口**（`ui_v2/hld/source.py`、`ui_v2/alo/source.py`、`services/v2_tables/settings_store.py::refetch_nav` 呼叫 `resolve_full_keys` 者；入口清單取自單組靜讀，不宣稱窮舉）。**不含**：🔍 找基金（路徑 B）、選股池 EXP、💼 `assets_source`（不呼叫 resolver）、共用 resolver 規則、S7 對 Sheet 欄以外入口的答案。 |
 | 狀態語意（嚴格） | R-ID-2(3)、R-ID-3(3) 是**已核准的目標行為，程式尚未實作**，不得讀成產品現況；R-ID-2(4) 僅為**現況觀察，非 NAV／配息規範**，規範性條款屬 NAV 域、另經逐字 Gate；R-ID-3(1)(2) 是對既有 resolver 的描述，`ok` 不證明基金存在。 |
 | 不授權範圍（清單，皆不授權；依客戶原文與 `7072733923`「核准效力／嚴格排除事項」） | A0 實作／resolver 或 Schema 修改；Sheet／Google／OAuth／Secrets；NAS／Cloud；真實 Provider／基金來源／持股；其他入口 S7；NAV／配息契約；Digest schema；prompt／LLM／SDK；Phase 7；正式 UI／OneBrain 上線或 cutover。P1～P7／S7 其他 Stop Gate 照既有規定；基金存在性與後綴語意不推定；別名表跨部署一致性＝NOT VERIFIED；真實來源／真實 A 鏈對後綴碼的行為＝NOT VERIFIED。 |
-| 第二題（D2 首批流程完成判準） | **仍 Pending，客戶尚未回答。** Work 於 #1296 comment [`7072706506`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072706506) 判 C 原方案 A NEEDS FIX（Must-Fix 2），僅其修正版為另一獨立待裁題；GPT 總管 #1296 comment [`7072722291`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072722291)／[`7072745934`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072745934) 載明須分題、獨立存檔。**本筆不回答、不預選、不得據以宣告首批三域完成，亦不啟動 Digest。** |
+| 第二題（D2 首批流程完成判準） | **不在本筆範圍。** 客戶於 #1296 comment [`7072760335`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072760335) 另行**獨立**核准 Work 修正版單題，見 `DEC-2026-11-22-02`；兩筆互不替代、不捆綁擴權。**本筆不宣告 D2 已完成，亦不啟動 Digest。**（本筆草擬時第二題尚未回答；該句已隨第二題的獨立核准更正。） |
 | D2 17 列狀態（逐列點算，不憑總數推算） | 正式核准契約文字：R-ID-1、R-ID-2、R-ID-3（僅上述入口）、R-NAV-1、R-NAV-2、R-NAV-4、R-NAV-5＝**7 列**。仍 Pending：R-NAV-3（客戶 2026-11-14 採 B 暫緩）、R-NAV-6、R-PERF-1～8＝**10 列**（R-PERF-1／3／6 為與 R-ID-1／R-NAV-5／R-NAV-2 重複之列，依 `DEC-2026-11-13-06` (5)、`DEC-2026-11-14-07` 不因母列核准自動升格）。「核准」＝契約文字，不是實作行為，也不等於 Required 升格或 New UI2 適用。 |
 | 與既有 DEC 的關係 | **補充（amends）而不改寫**：`DEC-2026-11-13-06`（R-ID-1／R-NAV-1）、`DEC-2026-11-14-07`、`DEC-2026-11-17-06`。承接 Y 方向（#1296 comment [`7063845090`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7063845090)：R-ID-2 只描述現況、NAV 規範性條款另走 NAV 域逐字 Gate）與 Sheet A0 行為（#1296 comment [`7060465421`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7060465421)）。`DEC-2026-11-18-01`、`DEC-2026-11-19-10` 內「R-ID-2／R-ID-3 未核准」之句在寫下當時為真，**保留原文不改**，自本筆起 R-ID-2／3 的現行狀態以本筆為準。 |
 | 是否可逆 | 可逆（純文件；git 保有歷史；客戶可另行撤回或修訂）。 |
@@ -3702,6 +3702,24 @@
 1. `ok`＝既有 resolver 解析結果：通過解析鏈（含別名輸出的最終格式檢查）並得到合格 `full_key`；僅表示可送交取數。
 2. `ok=True` 不表示基金存在、不表示取得 NAV、不表示後綴已驗證；`ok=False` 時 `full_key`、`portal` 為 None、`error` 為字串，不補預設鍵。
 3. 〔目標行為；**尚未實作**〕後綴標示不改變 `ok`；標示不阻擋取數。
+
+
+### DEC-2026-11-22-02｜D2 首批流程完成判準：客戶採 Work 修正版單題——只規定「完成條件」，不宣告 D2 已完成，不授權 Digest 施工
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-22（Asia/Taipei）；**客戶**。裁示由 GitHub #1296 comment [`7072760335`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072760335) 存檔（repo OWNER 帳號張貼，自稱「客戶正式獨立裁示」）。**與 `DEC-2026-11-22-01`（第一題身份契約）獨立存檔，互不替代、不捆綁擴權。** |
+| 客戶指示原文（如該 comment 所引） | 「我正式核准投資基金 D2 首批流程完成判準，採 Work #1296 comment 7072706506 的完整『最小修正版單題』逐字內容：首批身份、NAV、績效每列必須由客戶明示核准或暫緩，記錄適用範圍及未決依賴，才可記首批流程完成；且僅取得 D2-G2 另行提案資格。暫緩仍 Pending，初版不據以作金融判讀，Digest 欄位、揭露、狀態映射另裁，其餘六域依 G3 延後。這不表示 D2 已完成，不授權 Digest 實作、公式、真資料或上線。請正式獨立回存 #1296。」 |
+| 核准標的（Work 修正版單題，逐字如該 comment 所引） | 「是否同意以「首批身份、NAV、績效逐列經客戶明示核准或暫緩，記錄適用範圍及未決依賴」作為首批 D2 **流程完成**判準，並接受它僅滿足 D2-G2 的**另行提案**前置？暫緩列維持 Pending，初版不以其作金融判讀；欄位納入、必要缺項揭露與狀態映射留 Digest Gate。其餘六域按 G3 延後。逐列正式契約、Required 分類、schema 研究／施工與發布仍各依原授權。」 **客戶答案：同意上述修正版全文。** 核准標的為 Work 非作者獨立 QA 修正版（#1296 comment [`7072706506`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072706506)，READY FOR CUSTOMER DECISION）；C 的原方案 A（#1296 comment [`7072650314`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072650314)，Work 判 NEEDS FIX／Must-Fix 2）**沒有獲核准**。 |
+| 生效邊界（依 `7072760335`；不得推定更多） | (1) 這是**完成條件的規則**，**不是宣告 D2 已完成**：首批身份／NAV／績效**每一列**須分別有客戶**明示核准或暫緩**，並記錄適用範圍與未決依賴，才可登記「首批流程完成」。**既有「Pending」標籤不得自動視作已獲客戶明示處置**；列數須依現況逐列重算，不得照搬 Work 先前「17 列：5 核准、12 Pending」的當時基準。(2) 達成後**僅可另行提出** D2-G2 的 Digest schema 決策案，**不等於** Digest schema 已核准；不授權 Digest 施工、Prompt／LLM／SDK／Provider、Rule ID、任何 AI 金融判斷或 Phase 7。(3) **暫緩仍 Pending，不是 Excluded，也不是已核金融契約**；沒有公式核准≠沒資料；真實缺值≠0；有日期但 freshness 門檻未裁≠已可判 stale／fresh。**不得**把所有暫緩列強制映射成「無法判定」，**不得**把市場頁 `threshold_pending` 擅自當全域 Digest 正式狀態碼；Digest 初版省欄、必要缺項揭露、狀態與 reason 編碼均另案 Gate。(4) 其餘六域依 D2-G3 延後（延後≠永久排除）；R-NAV-3 `fetched_at`／`stale_after`、R-NAV-6 Schema、R-PERF 正式公式／狀態詞／350 天實作常數各有 Stop／Decision Gate，**不藉此解凍**；PIT、日期、幣別、share class、NAS／Cloud／BL-0545／BL-0551 依既有 NOT VERIFIED／BLOCKED。 |
+| 不授權範圍（清單，皆不授權） | 程式碼／Schema 變更；真實資料／持股；NAS／Cloud／Secrets／OAuth；金融公式／閾值調整；Digest 實作；OneBrain 正式 AI；頁面上線或正式網址 cutover；以及任何「D2 已完成」之宣告。 |
+| 首批逐列盤點（本筆登記時的**現況**；逐列重算，詳表見 D2 卡 §8-2） | 17 列＝**7 列明示核准**（契約文字）：R-ID-1、R-ID-2、R-ID-3（後二者僅 Sheet「基金代號」欄取數入口，`DEC-2026-11-22-01`）、R-NAV-1、R-NAV-2、R-NAV-4、R-NAV-5；**1 列明示暫緩**：R-NAV-3（客戶 2026-11-14 採 B，`DEC-2026-11-14-07`）；**9 列尚無客戶明示處置**：R-NAV-6、R-PERF-1～8（R-PERF-1／3／6 為重複列，客戶僅裁示不自動升格〔`DEC-2026-11-13-06` (5)〕，**是否視同母列**待客戶明示）。**結論：判準尚未達成，首批流程未完成。** 各核准／暫緩之 provenance 照各原 DEC（多為要點轉述〔待核〕）。 |
+| 與既有 DEC 的關係 | 補充（amends）`DEC-2026-11-11-04`（D2-G2＝A：先 D2 後 Digest；D2-G3＝A）而**不改寫**其本文；補「首批流程完成」的判準，原 D2-G2 順序不變。承接 D2 卡 §3 ⑥（「D2 完成」終點線）所指的缺口。 |
+| 是否可逆 | 可逆（純文件；客戶可另行撤回或修訂）。 |
+| 影響範圍 | 本檔；D2 卡 §8（逐列清單）；候選 ledger 更新註。`BACKLOG.md`／`HANDOFF.md` 未動（治理單一 writer 另批）。不改任何程式、測試、Schema、Digest、Provider、Cloud、NAS、持股或正式來源。 |
+| evidence／source | #1296 comments：`7072760335`（客戶核准）、`7072706506`（Work 修正版單題）、`7072650314`（C 原版，**未獲核准**）、`7072722291`、`7072745934`（總管）。 |
+| supersedes／amends | 不 supersede 任何既有 DEC；amends 如上。 |
+| provenance | 客戶指示原文：**逐字**（經 #1296 comment 存檔，由 repo OWNER 帳號張貼；repo 內未另存 sha256 逐字檔，以該 comment 為權威定位）。「首批逐列盤點」為執行組（C 線）依現有 DEC／ledger 逐列整理，**不是**客戶原話；單組作者，尚待 Work 非作者差額 QA。 |
 
 ---
 
