@@ -3666,6 +3666,43 @@
 | supersedes／amends | 不 supersede 任何既有 DEC；不改任何既有 DEC 條文語意。 |
 | provenance | 使用者在 ChatGPT 對話中的確認，經 GitHub comment 存檔；本筆為執行組要點轉述〔待核〕，非逐字、非 DEC amendment、非獨立 QA。該 comment 內容是否為使用者本人原話，無法由 repo 核對（NOT VERIFIED）。本 DEC 條文已經 1 組非作者獨立治理稽核（與作者共享派工來源，非人類層級獨立；Must-Fix 2 已修），仍待 CI（治理規則，依 `DEC-2026-10-16-05`）。 |
 
+
+### DEC-2026-11-22-01｜D2 身份契約 R-ID-2／R-ID-3 方案 A：客戶核准完整逐字條款（僅 Sheet「基金代號」欄取數入口）——保留兩處〔目標行為；尚未實作〕與 R-ID-2(4)〔現況觀察，非規範〕；不授權任何施工
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-22（Asia/Taipei）；**客戶**。裁示原文由 GitHub #1296 comment [`7072733923`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072733923) 存檔（repo OWNER 帳號張貼，自稱「客戶正式逐字裁示」）。 |
+| 客戶指示原文（如該 comment 所引） | 「我選擇投資基金 D2 身份契約方案 A：核准 #1296 comment 7072112379 §2 的 R-ID-2 五項及 R-ID-3 三項完整逐字原文，保留兩處『目標行為；尚未實作』及 NAV『現況觀察，非規範』。本核准不授權程式實作、NAV 規範、Digest、真資料或上線。請正式回存決策，第二題 D2 完成條件仍待獨立裁示。」 |
+| 決策內容摘要 | 客戶採方案 A（三案 A／B／C 比較見 #1296 comment [`7072112379`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072112379) §4）：核准下列兩個入口標題及 R-ID-2 五項、R-ID-3 三項的**完整逐字文字**。核准範圍**僅此八項**；候選差額表（§1）、域邊界表（§3）、三案論證（§4）與待決 Gate（§5）**不因此自動核准**。 |
+| 核准逐字條文（與 `7072733923` 所引、`7072112379` §2 一字相同） | 見下方「逐字條文」區塊。 |
+| 適用範圍 | 僅 **Sheet「基金代號」欄取數入口**（`ui_v2/hld/source.py`、`ui_v2/alo/source.py`、`services/v2_tables/settings_store.py::refetch_nav` 呼叫 `resolve_full_keys` 者；入口清單取自單組靜讀，不宣稱窮舉）。**不含**：🔍 找基金（路徑 B）、選股池 EXP、💼 `assets_source`（不呼叫 resolver）、共用 resolver 規則、S7 對 Sheet 欄以外入口的答案。 |
+| 狀態語意（嚴格） | R-ID-2(3)、R-ID-3(3) 是**已核准的目標行為，程式尚未實作**，不得讀成產品現況；R-ID-2(4) 僅為**現況觀察，非 NAV／配息規範**，規範性條款屬 NAV 域、另經逐字 Gate；R-ID-3(1)(2) 是對既有 resolver 的描述，`ok` 不證明基金存在。 |
+| 不授權範圍（清單，皆不授權；依客戶原文與 `7072733923`「核准效力／嚴格排除事項」） | A0 實作／resolver 或 Schema 修改；Sheet／Google／OAuth／Secrets；NAS／Cloud；真實 Provider／基金來源／持股；其他入口 S7；NAV／配息契約；Digest schema；prompt／LLM／SDK；Phase 7；正式 UI／OneBrain 上線或 cutover。P1～P7／S7 其他 Stop Gate 照既有規定；基金存在性與後綴語意不推定；別名表跨部署一致性＝NOT VERIFIED；真實來源／真實 A 鏈對後綴碼的行為＝NOT VERIFIED。 |
+| 第二題（D2 首批流程完成判準） | **仍 Pending，客戶尚未回答。** Work 於 #1296 comment [`7072706506`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072706506) 判 C 原方案 A NEEDS FIX（Must-Fix 2），僅其修正版為另一獨立待裁題；GPT 總管 #1296 comment [`7072722291`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072722291)／[`7072745934`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072745934) 載明須分題、獨立存檔。**本筆不回答、不預選、不得據以宣告首批三域完成，亦不啟動 Digest。** |
+| D2 17 列狀態（逐列點算，不憑總數推算） | 正式核准契約文字：R-ID-1、R-ID-2、R-ID-3（僅上述入口）、R-NAV-1、R-NAV-2、R-NAV-4、R-NAV-5＝**7 列**。仍 Pending：R-NAV-3（客戶 2026-11-14 採 B 暫緩）、R-NAV-6、R-PERF-1～8＝**10 列**（R-PERF-1／3／6 為與 R-ID-1／R-NAV-5／R-NAV-2 重複之列，依 `DEC-2026-11-13-06` (5)、`DEC-2026-11-14-07` 不因母列核准自動升格）。「核准」＝契約文字，不是實作行為，也不等於 Required 升格或 New UI2 適用。 |
+| 與既有 DEC 的關係 | **補充（amends）而不改寫**：`DEC-2026-11-13-06`（R-ID-1／R-NAV-1）、`DEC-2026-11-14-07`、`DEC-2026-11-17-06`。承接 Y 方向（#1296 comment [`7063845090`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7063845090)：R-ID-2 只描述現況、NAV 規範性條款另走 NAV 域逐字 Gate）與 Sheet A0 行為（#1296 comment [`7060465421`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7060465421)）。`DEC-2026-11-18-01`、`DEC-2026-11-19-10` 內「R-ID-2／R-ID-3 未核准」之句在寫下當時為真，**保留原文不改**，自本筆起 R-ID-2／3 的現行狀態以本筆為準。 |
+| 是否可逆 | 可逆（純文件；git 保有歷史；客戶可另行撤回或修訂）。 |
+| 影響範圍 | 本檔；`docs/evidence/d2_next_domain_gate_card_2026_11_19.md`（append-only §8）；`docs/evidence/d2_contract_candidates_returns_identity_holdings_2026_11_08.md`（R-ID-2／R-ID-3 兩列與列數統計）。`docs/BACKLOG.md`、`docs/HANDOFF.md` 本批**未動**（治理單一 writer 另批整合）。不改任何程式、測試、Schema、Digest、Provider、Cloud、NAS、持股或正式來源。 |
+| evidence／source | #1296 comments：`7072733923`（客戶核准）、`7072112379`（候選 §2 權威原文）、`7072398308`（Work 非作者逐字 QA：READY FOR CUSTOMER DECISION、Must-Fix 0；針對候選文字，**不是**本批 docs PR 的 QA）、`7072722291`、`7072745934`（總管派工）。 |
+| supersedes／amends | 不 supersede 任何既有 DEC；amends 如上。 |
+| provenance | 客戶指示原文：**逐字**（經 #1296 comment 存檔，由 repo OWNER 帳號張貼；repo 內未另存 sha256 逐字檔，故以該 comment 為權威定位，本檔區塊為其引用）。其餘欄位為執行組（C 線）整理，**非**客戶原話。本批 docs PR 尚待 Work 非作者差額 QA；單組作者整理。 |
+
+**逐字條文**（客戶核准；`7072733923` ＝ `7072112379` §2；標記〔目標行為；**尚未實作**〕×2 與〔現況觀察，非規範〕不得刪改）
+
+**R-ID-2 `full_key`（僅 Sheet「基金代號」欄取數入口）**
+
+1. `input`＝傳入 resolver 的字串（僅 resolver 參數層級）；`parsed_code`＝strip、大寫、解析後、查別名表前的代碼；`full_key`＝別名表（若命中）與最終純代碼格式檢查後的字串。`full_key` 不是原碼。
+2. 別名命中時 `full_key` 可與輸入完全不同。
+3. 〔目標行為；**尚未實作**〕該欄帶通路後綴時，須標示「帶後綴」、保留 Sheet 原欄位代碼，並沿既有流程嘗試取數；不擅自剝除後綴；不排除既有別名映射。
+4. 〔現況觀察，非規範〕取數層回傳 `full_key` 與 resolver `full_key` 不符或缺失時，現行流程不寫該檔 NAV 並保留原因文字。規範性條款屬 NAV 域，另經逐字 Gate。
+5. 本列不宣稱後綴碼語意、NAV 等價性、通路頁是否存在。
+
+**R-ID-3 `ok`（同入口）**
+
+1. `ok`＝既有 resolver 解析結果：通過解析鏈（含別名輸出的最終格式檢查）並得到合格 `full_key`；僅表示可送交取數。
+2. `ok=True` 不表示基金存在、不表示取得 NAV、不表示後綴已驗證；`ok=False` 時 `full_key`、`portal` 為 None、`error` 為字串，不補預設鍵。
+3. 〔目標行為；**尚未實作**〕後綴標示不改變 `ok`；標示不阻擋取數。
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）

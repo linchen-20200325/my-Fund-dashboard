@@ -174,3 +174,11 @@ R-ID-1／R-NAV-1／2／4／5 契約文字（`-13-06`、`-14-07`、`-17-06`）｜
 3. 7-2 的入口清單取自 `git grep resolve_full_keys` 的靜讀，**不宣稱窮舉**（動態呼叫、其他分支不在內）。
 4. 「key 不符」守衛是否同時涵蓋所有 A 鏈回傳路徑、及其與 Evidence `key_failed` 的對映＝NV／待核（7-3）。
 5. 配息：源碼靜讀、離線實跑（既有測試與 Work 替身 payload）、真實來源 NOT RUN 三層已在 7-3 分列；真實 A 鏈對後綴的支援 NOT VERIFIED。
+
+## 8. 2026-11-22 補：R-ID-2／R-ID-3 客戶核准狀態（本節 append-only，§0～§7 一字未改）
+
+> **客戶已正式核准** #1296 comment [`7072733923`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072733923) 的 R-ID-2 五項與 R-ID-3 三項完整逐字條款（方案 A）；正式紀錄見 `docs/DECISIONS.md` 的 `DEC-2026-11-22-01`（含逐字條文）。權威原文＝ #1296 comment [`7072112379`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7072112379) §2。
+> **與本卡 §7-2 的關係**：§7-2 是 2026-11-21 的**候選**表，保留作歷史，**不再是現行文字**。核准文字相對 §7-2 的差額：(a) R-ID-2(4) 收窄為「〔現況觀察，非規範〕」，只述 NAV、不述配息，規範性條款屬 NAV 域；(b) R-ID-2(3)、R-ID-3(3) 明標「〔目標行為；**尚未實作**〕」；(c) 原 R-ID-3(4)（K3 評註）已移出契約文字。
+> **現行狀態**：R-ID-2、R-ID-3＝契約文字已核（**僅 Sheet「基金代號」欄取數入口**）；Required 升格／New UI2 適用仍未核。**未核准、仍 Pending**：A0 實作（P1，resolver 介面／Schema）、NAV 規範性條款（P2）、配息是否納入（P3）、存在性字樣（P6）、S7 對 Sheet 欄以外入口（P7「標示≠阻擋」的語意即 R-ID-3(3) 核准文字，屬目標行為、尚未實作）、R-NAV-3／R-NAV-6／R-PERF-1～8。真實來源／真實 A 鏈對後綴碼的行為與別名表跨部署一致性＝NOT VERIFIED。
+> **§2-C 的 Q-ID 與第二題**：D2 首批流程完成判準**仍 Pending、客戶尚未回答**（Work #1296 comment `7072706506` 判原方案 A 須修正，僅修正版為獨立待裁題）；本節**不**宣告首批三域完成，不啟動 Digest schema。
+> 本節只是狀態同步，**不是**施工授權（`CLAUDE.md` §-1）。
