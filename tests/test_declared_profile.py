@@ -146,6 +146,31 @@ def _net(monkeypatch, routes):
     return net
 
 
+#: 固定時鐘（C 的重現 #1296 comment 7076135503）：TS_BAD 的 `21.807315` 含子字串 "1.80"；TS_SAFE 不含。
+_TS_BAD = "2026-11-22T06:33:21.807315+00:00"
+_TS_SAFE = "2026-11-22T06:33:22.123456+00:00"
+_TIME_KEYS = frozenset({"at", "fetched_at", "observed_at"})
+
+
+def _strip_time(obj):
+    """遞迴移除已知時間欄位（只認這三個鍵名，其餘不動）。"""
+    if isinstance(obj, dict):
+        return {k: _strip_time(v) for k, v in obj.items() if k not in _TIME_KEYS}
+    if isinstance(obj, list):
+        return [_strip_time(v) for v in obj]
+    return obj
+
+
+def _fee_leaks(result: dict) -> list:
+    """最高經理費洩漏檢查：「經理費」對整份輸出（含時間欄）找；費率數字 "1.80" 只在排除已知時間欄位後找。"""
+    leaks = []
+    if "經理費" in json.dumps(result, ensure_ascii=False):
+        leaks.append("經理費")
+    if "1.80" in json.dumps(_strip_time(result), ensure_ascii=False):
+        leaks.append("1.80")
+    return leaks
+
+
 # ═════════════════════════════ MoneyDJ ═════════════════════════════
 
 class TestMoneyDJLabels:
@@ -158,11 +183,55 @@ class TestMoneyDJLabels:
         assert r["provenance"] == {"host": TCB, "page_type": "yp011001", "url": U1}
         assert r["error"] is None
 
+    # ~~assert "經理費" not in dumped and "1.80" not in dumped~~ → 2026-11-22 時間相依缺陷修正（有意識的更正，不是漏刪；
+    # 決策者：GPT 總管 #1296 comment 7076179955）：舊斷言對整份輸出（含 at／fetched_at 時間戳）找子字串 "1.80"，
+    # 時間戳秒數 21 ＋ 微秒開頭 80（例 `06:33:21.807315`）會誤中。舊斷言的目的（不讀最高經理費）不變：
+    # 「經理費」仍對整份輸出檢查；費率數字只在「排除已知時間欄位」後檢查，並另外直接核對 fields／非時間 provenance 的業務值。
     def test_max_mgmt_fee_is_never_read(self, monkeypatch):
         _net(monkeypatch, {U1: ("html", _page(FULL_TABLE))})
         r = dp.fetch_moneydj_basic_fields(CODE)
+        assert _fee_leaks(r) == []
+        assert all("1.80" not in str(v) and "經理費" not in str(v) for v in r["fields"].values())
+        assert all("1.80" not in str(v) and "經理費" not in str(v) for v in r["provenance"].values())
+
+    @pytest.mark.parametrize("ts", [_TS_BAD, _TS_SAFE])
+    def test_max_mgmt_fee_check_is_clock_independent(self, monkeypatch, ts):
+        """固定時鐘：TS_BAD 的舊斷言必紅（證明缺陷可重現）、新斷言仍綠；TS_SAFE 兩者皆綠。"""
+        monkeypatch.setattr(dp, "_now_iso", lambda: ts)
+        _net(monkeypatch, {U1: ("html", _page(FULL_TABLE))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
         dumped = json.dumps(r, ensure_ascii=False)
-        assert "經理費" not in dumped and "1.80" not in dumped
+        assert ts in dumped                                      # 固定時間確實進了輸出
+        old_assertion_holds = "經理費" not in dumped and "1.80" not in dumped
+        assert old_assertion_holds is (ts == _TS_SAFE)           # 舊斷言：BAD 紅、SAFE 綠
+        assert _fee_leaks(r) == []                               # 新斷言：兩者皆綠
+
+    @pytest.mark.parametrize("where", ["fields", "provenance"])
+    def test_max_mgmt_fee_check_catches_real_leak_in_business_values(self, monkeypatch, where):
+        """負控：業務值（fields／非時間 provenance）真的含 1.80 或「經理費」→ 新斷言必須失敗。"""
+        monkeypatch.setattr(dp, "_now_iso", lambda: _TS_SAFE)
+        _net(monkeypatch, {U1: ("html", _page(FULL_TABLE))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        for bad in ("1.80", "最高經理費(%)"):
+            leaked = json.loads(json.dumps(r))
+            leaked[where]["injected"] = bad
+            assert _fee_leaks(leaked) != []
+
+    def test_max_mgmt_fee_check_ignores_only_known_time_fields(self, monkeypatch):
+        """負控：時間欄位（at／fetched_at／observed_at）內的 1.80 被忽略；其他鍵（含名稱相近者）不被忽略；「經理費」連時間欄也不放過。"""
+        monkeypatch.setattr(dp, "_now_iso", lambda: _TS_SAFE)
+        _net(monkeypatch, {U1: ("html", _page(FULL_TABLE))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        for key in ("at", "fetched_at", "observed_at"):
+            shaped = json.loads(json.dumps(r))
+            shaped[key] = "x1.80x"
+            assert _fee_leaks(shaped) == []
+        near = json.loads(json.dumps(r))
+        near["fetched_at_note"] = "1.80"
+        assert _fee_leaks(near) != []
+        word = json.loads(json.dumps(r))
+        word["fetched_at"] = "經理費"
+        assert _fee_leaks(word) != []
 
     def test_near_miss_labels_are_not_accepted(self, monkeypatch):
         rows = (_row2("基金名稱", "某基金") + _row2("設立日期", "2001/01/01")
