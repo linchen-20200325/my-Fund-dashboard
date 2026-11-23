@@ -155,7 +155,7 @@ def test_mf3_deadline_and_encoding_and_dtd(monkeypatch, transport):
     with pytest.raises(t.DtdRefused):
         t.parse_items(b'<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "b">]><rss/>')
     with pytest.raises(t.ItemLimit):
-        t.parse_items(b"<rss>" + b"<item><title>a</title><link>b</link></item>" * 5 + b"</rss>", max_items=3)
+        t.parse_items(b"<rss><channel>" + b"<item><title>a</title><link>b</link></item>" * 5 + b"</channel></rss>", max_items=3)
 
 
 # ---------- MF4：時間窗與時間種類 ----------
@@ -199,7 +199,7 @@ def test_mf5_dedup_keeps_identifying_query_and_strips_tracking():
     s = n(["https://a/p?id=1", "https://a/p?id=2"]); assert s["valid"] == 2 and s["dedup"] == 0
     s = n(["https://a/p?id=1&utm_source=x", "https://a/p?id=1&fbclid=z#frag"]); assert s["valid"] == 1 and s["dedup"] == 1
     s = n(["https://a/P", "https://a/p"]); assert s["valid"] == 2           # path 大小寫不合併
-    s = n(["https://a/p?b=2&a=1", "https://a/p?a=1&b=2"]); assert s["valid"] == 1
+    s = n(["https://a/p?b=2&a=1", "https://a/p?a=1&b=2"]); assert s["valid"] == 2   # 第二輪：不再排序，保守不合併
 
 
 def test_mf5_buckets_and_hold_verdicts():
@@ -257,3 +257,155 @@ def test_no_forbidden_imports_or_flags():
     src = open(t.__file__, encoding="utf-8").read()
     for bad in ("import requests", "streamlit", "from services", "from ui_v3", "from repositories", "verify=False"):
         assert bad not in src.split('"""', 2)[2]
+
+
+# =====================  第二輪 C1–C3（Work #7102770525 MF3）  =====================
+import threading
+import time as _time
+
+
+# ---------- C1 ----------
+def test_c1_hard_deadline_with_blocking_read(monkeypatch, transport):
+    """阻塞中的 read（不回傳）也必須在期限內讓 fetch_source 返回 DeadlineExceeded。"""
+    calls, plan = transport
+    release = threading.Event()
+
+    class Blocking(FakeResp):
+        def read(self, n=-1):
+            release.wait(5)          # 模擬卡住的 recv
+            return b""
+    plan["resp"] = Blocking()
+    monkeypatch.setattr(t, "TOTAL_DEADLINE", 0.3)
+    t0 = _time.monotonic()
+    with pytest.raises(t.DeadlineExceeded):
+        t.fetch_source("BBC World", t.build_trial_opener())
+    assert _time.monotonic() - t0 < 2.0
+    release.set()
+
+
+def test_c1_deadline_checked_after_last_read_and_after_parse(monkeypatch, transport):
+    calls, plan = transport
+    clock = {"v": 0.0}
+    monkeypatch.setattr(t, "_now_mono", lambda: clock["v"])
+
+    class SlowEOF(FakeResp):
+        def read(self, n=-1):
+            clock["v"] += 21.0           # 最後一次 read 跨過 20s 才回 EOF
+            return b"" if self._body is None else super().read(n)
+    r = SlowEOF(RSS_OK)
+    r._body = RSS_OK[:0]
+    plan["resp"] = r
+    with pytest.raises(t.DeadlineExceeded):
+        t.fetch_source("BBC World", t.build_trial_opener())
+    # 解析之後超時也拒（假 parse 推進時鐘）
+    clock["v"] = 0.0
+    plan["resp"] = FakeResp(RSS_OK)
+    real = t.parse_items
+    monkeypatch.setattr(t, "parse_items", lambda b, *a, **k: (clock.__setitem__("v", 99.0), real(b))[1])
+    with pytest.raises(t.DeadlineExceeded):
+        t.fetch_source("BBC World", t.build_trial_opener())
+
+
+def test_c1_actual_bytes_strictly_capped(transport):
+    calls, plan = transport
+    plan["resp"] = FakeResp(chunks=True, headers={"Content-Length": "10"})
+    with pytest.raises(t.TooLarge):
+        t.fetch_source("BBC World", t.build_trial_opener())
+    assert plan["resp"].served <= t.MAX_BYTES + 1          # 嚴格封頂，不再多讀一整個 chunk
+
+
+@pytest.mark.parametrize("code", [206, 204, 201, 200])
+def test_c1_only_plain_200_is_complete_success(transport, code):
+    calls, plan = transport
+    plan["resp"] = FakeResp(RSS_OK, code=code)
+    if code == 200:
+        assert len(t.fetch_source("BBC World", t.build_trial_opener())) == 3     # 正例
+    else:
+        with pytest.raises(t.PartialRefused):
+            t.fetch_source("BBC World", t.build_trial_opener())
+
+
+_DTD = '<?xml version="1.0" encoding="{enc}"?><!DOCTYPE r [<!ENTITY a "b">]><rss><channel/></rss>'
+
+
+@pytest.mark.parametrize("enc,codec", [("UTF-16", "utf-16"), ("UTF-16LE", "utf-16-le"),
+                                       ("UTF-16BE", "utf-16-be"), ("UTF-32", "utf-32")])
+def test_c1_non_utf8_encodings_refused_even_with_dtd(enc, codec):
+    with pytest.raises(t.FetchRefused):
+        t.parse_items(_DTD.format(enc=enc).encode(codec))
+
+
+def test_c1_utf8_dtd_still_refused_and_clean_utf8_bom_ok():
+    with pytest.raises(t.DtdRefused):
+        t.parse_items(_DTD.format(enc="UTF-8").encode("utf-8"))
+    with pytest.raises(t.DtdRefused):
+        t.parse_items(("﻿" + _DTD.format(enc="UTF-8")).encode("utf-8"))
+    ok = b"\xef\xbb\xbf" + RSS_OK
+    assert len(t.parse_items(ok)) == 3
+
+
+# ---------- C2 ----------
+def test_c2_dedup_keeps_trailing_slash_and_duplicate_query_order():
+    def n(urls):
+        return t.aggregate({"A": [(f"t{i}", u, h(1), "published") for i, u in enumerate(urls)]}, NOW)
+    assert n(["https://a/p", "https://a/p/"])["valid"] == 2                      # 尾斜線有識別力
+    assert n(["https://a/p?id=1&id=2", "https://a/p?id=2&id=1"])["valid"] == 2    # 重複 key 值序保留
+    assert n(["https://a/p?id=1&id=2", "https://a/p?id=1&id=2&utm_x=1#f"])["valid"] == 1   # 正例：僅追蹤參數／fragment 合併
+
+
+@pytest.mark.parametrize("body", [b"<html><body/></html>", b"<foo/>", b"<rss/>", b"<feed-x/>"])
+def test_c2_non_feed_structure_is_error_not_empty(body):
+    with pytest.raises(t.NotAFeed):
+        t.parse_items(body)
+
+
+@pytest.mark.parametrize("body", [
+    b"<rss><channel><title>x</title></channel></rss>",
+    b'<feed xmlns="http://www.w3.org/2005/Atom"><title>x</title></feed>',
+    b'<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>',
+])
+def test_c2_legit_empty_feeds_are_ok_empty(body):
+    assert t.parse_items(body) == []
+    assert t.aggregate({"A": t.parse_items(body)}, NOW)["sources"]["A"] == "ok_empty_feed"
+
+
+# ---------- C3 ----------
+def test_c3_malformed_url_no_leak_no_escape(capsys):
+    sentinel = uuid.uuid4().hex
+    per = {"A": [("t", f"http://[{sentinel}", h(1), "published"), ("ok", "https://a/ok", h(1), "published")]}
+    s = t.aggregate(per, NOW)                      # 不得拋出
+    assert s["valid"] == 1 and s["unknown_date"]["malformed_url"] == 1
+    assert sentinel not in repr(s)
+
+
+def test_c3_malformed_url_through_main_prints_only_class(monkeypatch, capsys, transport):
+    calls, plan = transport
+    sentinel = uuid.uuid4().hex
+    body = (f"<rss><channel><item><title>x</title><link>http://[{sentinel}</link><pubDate>{h(1)}</pubDate></item>"
+            "</channel></rss>").encode()
+    plan["resp"] = FakeResp(body)
+    t.main(["--terms-ok", "BBC World"])
+    out = capsys.readouterr()
+    assert sentinel not in out.out + out.err
+
+
+def test_c3_unexpected_exception_in_run_does_not_escape_or_leak(monkeypatch, capsys):
+    sentinel = uuid.uuid4().hex
+    monkeypatch.setattr(t, "run", lambda *a, **k: (_ for _ in ()).throw(ValueError(sentinel)))
+    with pytest.raises(SystemExit):
+        t.main(["--terms-ok", "BBC World"])
+    out = capsys.readouterr()
+    assert sentinel not in out.out + out.err and "ValueError" in out.out + out.err
+
+
+def test_c3_sslkeylogfile_never_writes(monkeypatch, tmp_path):
+    p = tmp_path / "keys.log"
+    monkeypatch.setenv("SSLKEYLOGFILE", str(p))
+    # 負控：未防護的標準 context 會建檔（證明偵測力）
+    ssl.create_default_context()
+    assert p.exists()
+    p.unlink()
+    ctx = t._ssl_ctx()
+    t.build_trial_opener()
+    assert not p.exists() and ctx.keylog_filename is None
+    assert os.environ.get("SSLKEYLOGFILE") == str(p)          # 不永久改動呼叫者環境

@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import os
 import re
 import ssl
+import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -59,6 +62,8 @@ class EncodingRefused(FetchRefused): ...
 class DtdRefused(FetchRefused): ...
 class ItemLimit(FetchRefused): ...
 class NotPinned(FetchRefused): ...
+class PartialRefused(FetchRefused): ...
+class NotAFeed(FetchRefused): ...
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -67,7 +72,14 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _ssl_ctx():
-    ctx = ssl.create_default_context()   # CERT_REQUIRED + check_hostname
+    """CERT_REQUIRED＋hostname 驗證；並**禁止 SSLKEYLOGFILE**（標準 context 會讀環境變數並由 native 層落盤 TLS 金鑰）。"""
+    saved = os.environ.pop("SSLKEYLOGFILE", None)
+    try:
+        ctx = ssl.create_default_context()
+    finally:
+        if saved is not None:
+            os.environ["SSLKEYLOGFILE"] = saved          # 不永久改動呼叫者環境
+    ctx.keylog_filename = None
     return ctx
 
 
@@ -103,13 +115,35 @@ def parse_time(raw):
         return None, "overflow"
 
 
-def parse_items(xml_bytes, max_items=MAX_ITEMS):
-    """RSS/Atom → [(title, url, raw_time, kind)]；只取四欄，其餘立即丟棄。
-    kind='published'（pubDate／published／dc:date）或 'updated_only'（只有 updated，非首次發稿日）。"""
-    head = xml_bytes[:4096].lower()
-    if b"<!doctype" in head or b"<!entity" in xml_bytes.lower():
+def _check_encoding_and_dtd(xml_bytes):
+    """只接受 ASCII 相容編碼（UTF-8／含 BOM、ASCII、Latin-1 宣告）；UTF-16/32 等一律拒絕，
+    使後續以 ASCII 位元組比對 DOCTYPE／ENTITY 不會被編碼繞過。"""
+    b = xml_bytes
+    if b[:3] == b"\xef\xbb\xbf":
+        b = b[3:]
+    if b[:2] in (b"\xff\xfe", b"\xfe\xff") or b[:4] in (b"\x00\x00\xfe\xff", b"\xff\xfe\x00\x00") \
+            or b"\x00" in b[:8]:
+        raise EncodingRefused()
+    m = re.match(rb"<\?xml[^>]*?encoding\s*=\s*[\"']([A-Za-z0-9._-]+)[\"']", b[:200])
+    if m and m.group(1).lower() not in (b"utf-8", b"utf8", b"us-ascii", b"ascii", b"iso-8859-1", b"latin1", b"latin-1"):
+        raise EncodingRefused()
+    low = b.lower()
+    if b"<!doctype" in low or b"<!entity" in low:
         raise DtdRefused()
-    root = ET.fromstring(xml_bytes)
+    return xml_bytes
+
+
+def parse_items(xml_bytes, max_items=MAX_ITEMS):
+    """RSS/Atom/RDF → [(title, url, raw_time, kind)]；只取四欄，其餘立即丟棄。
+    kind='published'（pubDate／published／dc:date）或 'updated_only'（只有 updated，非首次發稿日）。
+    根元素非 rss(含 channel)／feed／RDF → NotAFeed（不可當合法空 feed）。"""
+    root = ET.fromstring(_check_encoding_and_dtd(xml_bytes))
+    rname = root.tag.rsplit("}", 1)[-1]
+    if rname == "rss":
+        if not any(c.tag.rsplit("}", 1)[-1] == "channel" for c in root):
+            raise NotAFeed()
+    elif rname not in ("feed", "RDF"):
+        raise NotAFeed()
     out = []
     for it in root.iter():
         if it.tag.rsplit("}", 1)[-1] not in ("item", "entry"):
@@ -134,12 +168,11 @@ def parse_items(xml_bytes, max_items=MAX_ITEMS):
 
 
 def norm_key(url):
-    """去重鍵：去 fragment 與明確追蹤參數；保留有識別作用的 query／path（path 不轉小寫）。"""
+    """去重鍵：僅去 fragment 與明確追蹤參數；**保留 path（含尾斜線、大小寫）與 query 的原順序／重複 key**。"""
     p = urlsplit(url.strip())
     q = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
          if not k.lower().startswith("utm_") and k.lower() not in TRACKING_PARAMS]
-    q.sort()
-    return f"{p.scheme.lower()}://{p.netloc.lower()}{p.path.rstrip('/')}?{urlencode(q)}"
+    return f"{p.scheme.lower()}://{p.netloc.lower()}{p.path}?{urlencode(q)}"
 
 
 def aggregate(per_source, now):
@@ -168,7 +201,11 @@ def aggregate(per_source, now):
             if not (now - WINDOW <= ts <= now):          # 嚴格：now-72h ≤ t ≤ now（無未來寬限）
                 stats["out_of_window"] += 1
                 continue
-            k = norm_key(url)
+            try:
+                k = norm_key(url)
+            except ValueError:                           # 畸形 URL：只分桶，不帶任何原文
+                stats["unknown_date"]["malformed_url"] += 1
+                continue
             if k in seen:
                 stats["dedup"] += 1
                 continue
@@ -205,43 +242,81 @@ def verdict(stats, n_terms_ok):
     return "SAMPLE_SIZE_OK(僅樣本量；不代表可用性／預測力)"
 
 
-def fetch_source(src, opener):
-    """單次、不重試。URL 只能取自 FEEDS（pinned HTTPS）；回傳 parse_items 結果。"""
+def _fetch_core(src, opener, t0, holder):
     url = FEEDS.get(src)
     if not url or not url.startswith("https://"):
         raise NotPinned()
     req = urllib.request.Request(url, headers={
-        "User-Agent": "personal-research-trial/0.2 (single request)", "Accept-Encoding": "identity"})
-    t0 = _now_mono()
+        "User-Agent": "personal-research-trial/0.3 (single request)", "Accept-Encoding": "identity"})
     try:
         resp = opener.open(req, timeout=SOCK_TIMEOUT)
     except urllib.error.HTTPError as e:
         if 300 <= e.code < 400:
             raise RedirectRefused() from None
         raise
+    holder["resp"] = resp
     try:
         status = getattr(resp, "status", None) or resp.getcode()
         if 300 <= status < 400:
             raise RedirectRefused()
+        if status != 200:                                  # 206／204／201… 皆非完整成功
+            raise PartialRefused()
         enc = (resp.headers.get("Content-Encoding") or "identity").lower()
         if enc not in ("", "identity"):
             raise EncodingRefused()
         cl = resp.headers.get("Content-Length")
-        if cl and cl.isdigit() and int(cl) > MAX_BYTES:   # 只做早退；不信任，下面仍按實際讀入量計
+        if cl and cl.isdigit() and int(cl) > MAX_BYTES:    # 只做早退；不信任，下面仍按實際讀入量計
             raise TooLarge()
         buf = bytearray()
         while True:
             if _now_mono() - t0 > TOTAL_DEADLINE:
                 raise DeadlineExceeded()
-            chunk = resp.read(CHUNK)
+            want = min(CHUNK, MAX_BYTES + 1 - len(buf))    # 實際讀入量嚴格 ≤ MAX_BYTES+1
+            chunk = resp.read(want)
+            if _now_mono() - t0 > TOTAL_DEADLINE:          # 最後一次 read（含 EOF）之後也檢查
+                raise DeadlineExceeded()
             if not chunk:
                 break
             buf += chunk
             if len(buf) > MAX_BYTES:
                 raise TooLarge()
     finally:
-        resp.close()
-    return parse_items(bytes(buf))
+        try:
+            resp.close()
+        except Exception:
+            pass
+    items = parse_items(bytes(buf))
+    if _now_mono() - t0 > TOTAL_DEADLINE:                  # 解析之後
+        raise DeadlineExceeded()
+    return items
+
+
+def fetch_source(src, opener):
+    """單次、不重試；URL 只能取自 FEEDS（pinned HTTPS）。
+    硬期限：核心在 daemon 工作緒執行，呼叫端 join(TOTAL_DEADLINE)；阻塞中的 read 也無法讓呼叫端超時。
+    （被放棄的工作緒仍受 socket 逾時與 MAX_BYTES 限制，且只持有記憶體內暫存。）"""
+    holder, box = {}, {}
+    t0 = _now_mono()
+
+    def work():
+        try:
+            box["ok"] = _fetch_core(src, opener, t0, holder)
+        except BaseException as e:   # noqa: BLE001 — 轉交呼叫端，只用類型
+            box["err"] = e
+    th = threading.Thread(target=work, daemon=True)
+    th.start()
+    th.join(TOTAL_DEADLINE)
+    if th.is_alive():
+        r = holder.get("resp")
+        if r is not None:
+            try:
+                r.close()
+            except Exception:
+                pass
+        raise DeadlineExceeded()
+    if "err" in box:
+        raise box["err"]
+    return box["ok"]
 
 
 def run(terms_ok, opener, now):
@@ -267,7 +342,11 @@ def main(argv=None):
     ap.add_argument("--terms-ok", default="", help="已人工查核條款可用的來源，逗號分隔")
     a = ap.parse_args(argv)
     ok = {s.strip() for s in a.terms_ok.split(",") if s.strip()}
-    st = run(ok, build_trial_opener(), dt.datetime.now(dt.timezone.utc))
+    try:
+        st = run(ok, build_trial_opener(), dt.datetime.now(dt.timezone.utc))
+    except Exception as e:  # 任何未預期例外：只印類型名，不印訊息（可能含 URL／netloc）
+        print("run_failed =", type(e).__name__)
+        sys.exit(2)
     for k, v in st.items():
         print(k, "=", dict(v) if isinstance(v, Counter) else v)
 
