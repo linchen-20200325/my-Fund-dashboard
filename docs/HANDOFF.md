@@ -4,7 +4,7 @@
 > - **目前正式有效**：現有 v0.1 產品規格及其已生效的 DEC／amendment／Contract；以 `CLAUDE.md` → `PROJECT_RULES.md` → 本 `docs/HANDOFF.md` → `docs/BACKLOG.md` → `docs/DECISIONS.md` → 對應正式 SSOT/spec 的順序接手。**不得將 2026-11-20 HTML v3 或本段視為已發布的正式 v0.2 規格。**
 > - **未來開發方向**：`FUND-v0.2-REAL-DATA-FIRST` 是已確認的**產品方向備忘錄**，GitHub [#1296 comment 7099966150](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7099966150)；優先真實資料試點、🔍 找基金可用性與新聞雷達獨立實驗；UI 順序建議仍是待審設計差額，非施工授權。
 > - **一旦問「要用哪版？」**：**執行與驗收遵守現行正式 v0.1＋有效修正案；產品方向參考 v0.2 Real-Data-First 備忘錄；直到完成真資料實證與正式 DEC/SSOT 更新前，v0.2 不得標示 CURRENT／已上線。** 若二者衝突，列差額、走現有 Gate，不以備忘錄覆蓋既有規格。
-> - **視覺參考版本**：2026-11-20 `fund_new_ui2_onebrain_per_page_review_2026-11-20(1).html` 是**靜態 HTML v3 參考稿**，不是 runtime／正式 UI 合格證據；五項擬議 UI 優化詳見上開決策備忘錄。新接手須再核 main、四 PR、CI 與 #1296 最新留言；本檔 SHA 快照不當即時證明。
+> - **視覺參考版本**：2026-11-20 `fund_new_ui2_onebrain_per_page_review_2026-11-20(1).html` 是**靜態 HTML v3 參考稿**，不是 runtime／正式 UI 合格證據；五項擬議 UI 優化詳見上開決策備忘錄。新接手須再核 main、每次重新核查全部 Open／Draft PR（不寫死數量）、CI 與 #1296 最新留言；本檔 SHA 快照不當即時證明。
 >
 
 > **CURRENT／GitHub-first；觀測日期：~~2026-11-20~~ 2026-11-21（有意識的更正，不是漏刪；Asia/Taipei；**最新增補見 §0 前『已完成』條的 2026-11-21 區塊，main 觀測基準 `41647fdb`**；2026-11-17 起累計，下列 2026-11-17／11-18 各段保留作追溯；各逐則『main 最新觀測基準』已被最新狀態同步段取代，現行基準以最新同步段為準）**。本檔是「最後一次查到什麼」的**導航快照**，不是現在的 GitHub 查詢結果，更不是完成、CI 或獨立 QA 證明。任何新對話、長對話 compact、排程巡檢、Claude Code 接手、合併前都必須重新讀 GitHub。
