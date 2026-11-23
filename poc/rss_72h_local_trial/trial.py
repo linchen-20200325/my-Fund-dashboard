@@ -11,12 +11,12 @@
 from __future__ import annotations
 
 import argparse
+import multiprocessing
 import datetime as dt
 import os
 import re
 import ssl
 import sys
-import threading
 import time
 import urllib.error
 import urllib.request
@@ -41,6 +41,13 @@ MAX_ITEMS = 1000                 # 每來源條目上限（超出 fail-closed）
 MIN_SAMPLE = 10                  # 有效樣本少於此數 → HOLD（暫定值，未經裁示）
 TRACKING_PARAMS = {"fbclid", "gclid", "mc_cid", "mc_eid", "ocid", "taid", "igshid", "ref_src"}  # 另加 utm_*
 _now_mono = time.monotonic       # 測試可替換
+KILL_JOIN_SECONDS = 2.0          # 逾時後 kill→回收子行程的有界等待
+_MP_METHOD = None                # None＝平台預設（Windows spawn）；測試可設 "fork" 以繼承 mock
+_LAST_PROC = None                # 測試觀察用：最近一次子行程
+ATOM_NS = "http://www.w3.org/2005/Atom"
+RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+RSS10_NS = "http://purl.org/rss/1.0/"
+DC_NS = "http://purl.org/dc/elements/1.1/"
 
 TOPICS = {  # 規則式關鍵字；命中只代表文字層面相關，不是風險燈號
     "risk": ("crash", "selloff", "sell-off", "default", "bankruptcy", "volatility", "recession", "downgrade", "war", "sanction"),
@@ -72,14 +79,15 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _ssl_ctx():
-    """CERT_REQUIRED＋hostname 驗證；並**禁止 SSLKEYLOGFILE**（標準 context 會讀環境變數並由 native 層落盤 TLS 金鑰）。"""
-    saved = os.environ.pop("SSLKEYLOGFILE", None)
-    try:
-        ctx = ssl.create_default_context()
-    finally:
-        if saved is not None:
-            os.environ["SSLKEYLOGFILE"] = saved          # 不永久改動呼叫者環境
-    ctx.keylog_filename = None
+    """CERT_REQUIRED＋hostname 驗證的 TLS 用戶端 context。
+    **不使用 `ssl.create_default_context()`**：該函式在 Python 層讀取 `SSLKEYLOGFILE` 並由 native 層開檔寫 TLS 金鑰。
+    直接以 `SSLContext(PROTOCOL_TLS_CLIENT)` 建構，建構當下即不讀取任何 key-log 環境；
+    **不改動 os.environ**（無競態）；`keylog_filename` 保持 None。"""
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)      # 預設 CERT_REQUIRED＋check_hostname
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    ctx.check_hostname = True
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.load_default_certs(ssl.Purpose.SERVER_AUTH)
     return ctx
 
 
@@ -133,24 +141,50 @@ def _check_encoding_and_dtd(xml_bytes):
     return xml_bytes
 
 
+def _q(tag):
+    """Clark 標記 → (namespace, local)。"""
+    if tag.startswith("{"):
+        ns, _, loc = tag[1:].partition("}")
+        return ns, loc
+    return "", tag
+
+
+def _field_map(it, allowed_ns):
+    out = {}
+    for c in it:
+        ns, loc = _q(c.tag)
+        if ns in allowed_ns and loc not in out:
+            out[loc] = c
+    return out
+
+
 def parse_items(xml_bytes, max_items=MAX_ITEMS):
-    """RSS/Atom/RDF → [(title, url, raw_time, kind)]；只取四欄，其餘立即丟棄。
-    kind='published'（pubDate／published／dc:date）或 'updated_only'（只有 updated，非首次發稿日）。
-    根元素非 rss(含 channel)／feed／RDF → NotAFeed（不可當合法空 feed）。"""
+    """RSS 2.0／Atom 1.0／RSS 1.0(RDF) → [(title, url, raw_time, kind)]；只取四欄，其餘立即丟棄。
+    **namespace 與必要結構必須相符**，否則 NotAFeed（不可當合法空 feed）：
+      · RSS 2.0：無 namespace 的 <rss> 且含無 namespace 的 <channel>；項目＝channel 下 <item>
+      · Atom 1.0：根為 {Atom ns}feed；項目＝{Atom ns}entry
+      · RSS 1.0：根為 {rdf ns}RDF 且含 {rss1.0 ns}channel；項目＝{rss1.0 ns}item
+    kind='published'（pubDate／published／dc:date）或 'updated_only'（只有 updated，非首次發稿日）。"""
     root = ET.fromstring(_check_encoding_and_dtd(xml_bytes))
-    rname = root.tag.rsplit("}", 1)[-1]
-    if rname == "rss":
-        if not any(c.tag.rsplit("}", 1)[-1] == "channel" for c in root):
+    rns, rloc = _q(root.tag)
+    if (rns, rloc) == ("", "rss"):
+        ch = [c for c in root if _q(c.tag) == ("", "channel")]
+        if not ch:
             raise NotAFeed()
-    elif rname not in ("feed", "RDF"):
+        entries, allowed, fmt = [e for c in ch for e in c if _q(e.tag) == ("", "item")], {"", DC_NS}, "rss"
+    elif (rns, rloc) == (ATOM_NS, "feed"):
+        entries, allowed, fmt = [e for e in root if _q(e.tag) == (ATOM_NS, "entry")], {ATOM_NS}, "atom"
+    elif (rns, rloc) == (RDF_NS, "RDF"):
+        if not any(_q(c.tag) == (RSS10_NS, "channel") for c in root):
+            raise NotAFeed()
+        entries, allowed, fmt = [e for e in root if _q(e.tag) == (RSS10_NS, "item")], {RSS10_NS, DC_NS}, "rdf"
+    else:
         raise NotAFeed()
     out = []
-    for it in root.iter():
-        if it.tag.rsplit("}", 1)[-1] not in ("item", "entry"):
-            continue
+    for it in entries:
         if len(out) >= max_items:
             raise ItemLimit()
-        f = {c.tag.rsplit("}", 1)[-1]: c for c in it}
+        f = _field_map(it, allowed)
         link = ""
         if "link" in f:
             link = f["link"].text or f["link"].get("href") or ""
@@ -242,7 +276,7 @@ def verdict(stats, n_terms_ok):
     return "SAMPLE_SIZE_OK(僅樣本量；不代表可用性／預測力)"
 
 
-def _fetch_core(src, opener, t0, holder):
+def _fetch_core(src, opener, t0):
     url = FEEDS.get(src)
     if not url or not url.startswith("https://"):
         raise NotPinned()
@@ -254,7 +288,6 @@ def _fetch_core(src, opener, t0, holder):
         if 300 <= e.code < 400:
             raise RedirectRefused() from None
         raise
-    holder["resp"] = resp
     try:
         status = getattr(resp, "status", None) or resp.getcode()
         if 300 <= status < 400:
@@ -291,32 +324,56 @@ def _fetch_core(src, opener, t0, holder):
     return items
 
 
-def fetch_source(src, opener):
-    """單次、不重試；URL 只能取自 FEEDS（pinned HTTPS）。
-    硬期限：核心在 daemon 工作緒執行，呼叫端 join(TOTAL_DEADLINE)；阻塞中的 read 也無法讓呼叫端超時。
-    （被放棄的工作緒仍受 socket 逾時與 MAX_BYTES 限制，且只持有記憶體內暫存。）"""
-    holder, box = {}, {}
-    t0 = _now_mono()
-
-    def work():
+def _child_main(src, conn, t0):
+    """子行程：自建 opener，只回傳 ("ok", items) 或 ("err", 例外類型名)；不印任何東西。"""
+    try:
         try:
-            box["ok"] = _fetch_core(src, opener, t0, holder)
-        except BaseException as e:   # noqa: BLE001 — 轉交呼叫端，只用類型
-            box["err"] = e
-    th = threading.Thread(target=work, daemon=True)
-    th.start()
-    th.join(TOTAL_DEADLINE)
-    if th.is_alive():
-        r = holder.get("resp")
-        if r is not None:
-            try:
-                r.close()
-            except Exception:
-                pass
-        raise DeadlineExceeded()
-    if "err" in box:
-        raise box["err"]
-    return box["ok"]
+            res = ("ok", _fetch_core(src, build_trial_opener(), t0))
+        except BaseException as e:   # noqa: BLE001
+            res = ("err", type(e).__name__)
+        conn.send(res)
+    except BaseException:            # noqa: BLE001 — 序列化／管線失敗：父端以逾時／無回應處理
+        pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def fetch_source(src, opener=None):
+    """單次、不重試；URL 只能取自 FEEDS（pinned HTTPS）。
+    **硬期限＝進程隔離**：整個抓取＋解析在獨立子行程；父端 `conn.poll(TOTAL_DEADLINE)` 逾時即 `kill()`
+    （SIGKILL／TerminateProcess，由 OS 強制回收 socket 與鎖），再以有界 join 回收。
+    因此 timeout 返回路徑不依賴任何 BufferedReader／socket 的可取消性；被殺子行程不留執行緒或連線。
+    子行程只經記憶體管線回傳（無落盤）。`opener` 參數僅為相容保留，子行程一律自建 opener。"""
+    global _LAST_PROC
+    if src not in FEEDS:
+        raise NotPinned()
+    ctx = multiprocessing.get_context(_MP_METHOD)
+    parent, child = ctx.Pipe(duplex=False)
+    t0 = _now_mono()
+    p = ctx.Process(target=_child_main, args=(src, child, t0), daemon=True)
+    _LAST_PROC = p
+    p.start()
+    child.close()
+    try:
+        if not parent.poll(TOTAL_DEADLINE):
+            raise DeadlineExceeded()
+        try:
+            kind, payload = parent.recv()
+        except (EOFError, OSError):
+            raise FetchRefused() from None          # 子行程無回應即死亡（如被 OOM／異常）
+    finally:
+        if p.is_alive():
+            p.kill()
+        p.join(KILL_JOIN_SECONDS)
+        parent.close()
+    if kind == "ok":
+        return payload
+    name = payload if isinstance(payload, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,60}", payload) else "ChildError"
+    cls = globals().get(name)
+    raise (cls() if isinstance(cls, type) and issubclass(cls, FetchRefused) else type(name, (Exception,), {})())
 
 
 def run(terms_ok, opener, now):
@@ -326,7 +383,7 @@ def run(terms_ok, opener, now):
             skipped.append(src)
             continue
         try:
-            per[src] = fetch_source(src, opener)
+            per[src] = fetch_source(src)
         except Exception as e:  # 只記錯誤類型名，不記訊息（可能含 URL／內容）
             per[src] = type(e).__name__
     st = aggregate(per, now)
@@ -343,7 +400,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     ok = {s.strip() for s in a.terms_ok.split(",") if s.strip()}
     try:
-        st = run(ok, build_trial_opener(), dt.datetime.now(dt.timezone.utc))
+        st = run(ok, None, dt.datetime.now(dt.timezone.utc))
     except Exception as e:  # 任何未預期例外：只印類型名，不印訊息（可能含 URL／netloc）
         print("run_failed =", type(e).__name__)
         sys.exit(2)
