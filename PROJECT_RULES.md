@@ -1,5 +1,8 @@
 # PROJECT_RULES — 專案 AI 工作規則（my-Fund-dashboard）
 
+> **2026-11-23 接手版本指標（僅導航，不改位階／既有 Gate）**：**正式有效版本仍為現行 v0.1＋已生效修正案/DEC/Contract**；`FUND-v0.2-REAL-DATA-FIRST` 是確認的**未來產品方向／尚未正式發行的 v0.2 候選**，見 [#1296 comment 7099966150](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7099966150)。開工先依既定順序讀 `CLAUDE.md`、本檔、`docs/HANDOFF.md`、`docs/BACKLOG.md`、`docs/DECISIONS.md` 及相關正式 SSOT；**詳細選版說明見 `docs/HANDOFF.md` 檔頭**。2026-11-20 HTML v3 僅為靜態視覺稿，非正式版本。兩者衝突時不得自行套用候選方向，須提出差額與正式 Gate。
+
+
 > **本檔是專案 AI「怎麼工作」的入口索引**，內容來自客戶 2026-10-16 頒布的 Project AI Constitution v1.0（要點轉述，見第 0 節出處）。
 > **2026-10-16 收斂**：本檔與既有規則的 11 項衝突，已由**客戶 2026-10-16 治理十一項裁示**（逐字全文見 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`；登記為 `docs/DECISIONS.md` `DEC-2026-10-16-03`～`DEC-2026-10-16-13`）收斂，見第 14 節。同日另有一份「十點裁示」（PR #974～#977），不是同一份。
 > 既有條文**只指不抄**：每條規則旁的「既有錨點」指回原檔原節，以原檔為準。
