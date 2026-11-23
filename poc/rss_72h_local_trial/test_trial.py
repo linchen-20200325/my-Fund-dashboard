@@ -648,3 +648,86 @@ def test_c3r_3_threads_hammer_no_file_no_error(monkeypatch, tmp_path):
     th = [threading.Thread(target=run) for _ in range(4)]
     [x.start() for x in th]; [x.join(20) for x in th]
     assert errs == [] and not p.exists() and os.environ["SSLKEYLOGFILE"] == str(p)
+
+
+# =====================  第四輪 C1：IPC 完整接收期限（Work #7104797103 MF1）  =====================
+import pickle
+import struct
+
+
+def _framed(obj):
+    data = pickle.dumps(obj)
+    return struct.pack("!i", len(data)) + data
+
+
+def _install_child(monkeypatch, behavior):
+    """以假子行程取代 _child_main（fork 繼承）；behavior(conn) 直接對管線寫原始位元組。"""
+    def fake_child(src, conn, t0):
+        try:
+            behavior(conn)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    monkeypatch.setattr(t, "_child_main", fake_child)
+
+
+def test_c4_header_ready_body_delayed_must_not_return_success(monkeypatch):
+    """Work 反例：先送可讀標頭（含部分 body），完整 body 延遲到期限之後 → 不得回成功。"""
+    blob = _framed(("ok", [("T", "https://x/1", h(1), "published")]))
+
+    def slow_body(conn):
+        os.write(conn.fileno(), blob[:6])         # header＋1 byte：poll 即可讀、recv 卻收不完
+        _time.sleep(3)
+        os.write(conn.fileno(), blob[6:])
+    _install_child(monkeypatch, slow_body)
+    monkeypatch.setattr(t, "TOTAL_DEADLINE", 0.2)
+    t0 = _time.monotonic()
+    with pytest.raises(t.DeadlineExceeded):
+        t.fetch_source("BBC World")
+    assert _time.monotonic() - t0 < 0.2 + t.KILL_JOIN_SECONDS + 0.5          # 返回有界
+    p = t._LAST_PROC
+    assert not p.is_alive() and p.exitcode is not None                        # 子行程已回收
+    assert not t._LAST_READER.is_alive()                                      # 讀取執行緒已結束（無殘留）
+
+
+def test_c4_complete_but_late_payload_is_deadline_not_success(monkeypatch):
+    blob = _framed(("ok", [("T", "https://x/1", h(1), "published")]))
+
+    def late(conn):
+        _time.sleep(0.5)
+        os.write(conn.fileno(), blob)
+    _install_child(monkeypatch, late)
+    monkeypatch.setattr(t, "TOTAL_DEADLINE", 0.2)
+    with pytest.raises(t.DeadlineExceeded):
+        t.fetch_source("BBC World")
+
+
+def test_c4_partial_then_eof_is_failure_not_success(monkeypatch):
+    blob = _framed(("ok", [("T", "https://x/1", h(1), "published")]))
+    _install_child(monkeypatch, lambda conn: os.write(conn.fileno(), blob[:len(blob) // 2]))
+    t0 = _time.monotonic()
+    with pytest.raises(t.FetchRefused):
+        t.fetch_source("BBC World")
+    assert _time.monotonic() - t0 < 3
+
+
+@pytest.mark.parametrize("bad", [("ok", "not-a-list"), ("weird", 1), "just-a-string", ("ok", [("a", "b")]), (), None])
+def test_c4_invalid_payload_shapes_are_failure(monkeypatch, bad):
+    _install_child(monkeypatch, lambda conn: os.write(conn.fileno(), _framed(bad)))
+    with pytest.raises(t.FetchRefused):
+        t.fetch_source("BBC World")
+
+
+def test_c4_on_time_complete_payload_is_success_and_resources_reaped(monkeypatch):
+    items = [("T", "https://x/1", h(1), "published")]
+    _install_child(monkeypatch, lambda conn: os.write(conn.fileno(), _framed(("ok", items))))
+    assert t.fetch_source("BBC World") == items
+    assert not t._LAST_READER.is_alive() and t._LAST_PROC.exitcode == 0
+
+
+def test_c4_child_error_payload_only_class_name(monkeypatch):
+    _install_child(monkeypatch, lambda conn: os.write(conn.fileno(), _framed(("err", "TooLarge"))))
+    with pytest.raises(t.TooLarge):
+        t.fetch_source("BBC World")

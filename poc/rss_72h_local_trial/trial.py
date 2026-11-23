@@ -17,6 +17,7 @@ import os
 import re
 import ssl
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -44,6 +45,7 @@ _now_mono = time.monotonic       # 測試可替換
 KILL_JOIN_SECONDS = 2.0          # 逾時後 kill→回收子行程的有界等待
 _MP_METHOD = None                # None＝平台預設（Windows spawn）；測試可設 "fork" 以繼承 mock
 _LAST_PROC = None                # 測試觀察用：最近一次子行程
+_LAST_READER = None              # 測試觀察用：最近一次 IPC 讀取執行緒
 ATOM_NS = "http://www.w3.org/2005/Atom"
 RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 RSS10_NS = "http://purl.org/rss/1.0/"
@@ -341,13 +343,27 @@ def _child_main(src, conn, t0):
             pass
 
 
+def _valid_payload(msg):
+    """父端對子行程訊息做結構驗證：只接受 ("ok", [4 元組…]) 或 ("err", str)。其餘一律視為失敗。"""
+    if not (isinstance(msg, tuple) and len(msg) == 2):
+        return False
+    kind, payload = msg
+    if kind == "err":
+        return isinstance(payload, str)
+    return kind == "ok" and isinstance(payload, list) and all(
+        isinstance(x, tuple) and len(x) == 4 and all(isinstance(f, str) for f in x) for x in payload)
+
+
 def fetch_source(src, opener=None):
     """單次、不重試；URL 只能取自 FEEDS（pinned HTTPS）。
-    **硬期限＝進程隔離**：整個抓取＋解析在獨立子行程；父端 `conn.poll(TOTAL_DEADLINE)` 逾時即 `kill()`
-    （SIGKILL／TerminateProcess，由 OS 強制回收 socket 與鎖），再以有界 join 回收。
-    因此 timeout 返回路徑不依賴任何 BufferedReader／socket 的可取消性；被殺子行程不留執行緒或連線。
-    子行程只經記憶體管線回傳（無落盤）。`opener` 參數僅為相容保留，子行程一律自建 opener。"""
-    global _LAST_PROC
+    **硬期限＝進程隔離＋有界完整 IPC 收取**：
+      · 整個抓取＋解析在獨立子行程；
+      · 父端不在主流程做阻塞 `recv`：由**讀取執行緒**執行 `recv`，主流程只 `join(剩餘期限)`；
+      · 期限到（含「標頭已到、body 未到」）→ `kill()` 子行程，管線寫端關閉使讀取執行緒因 EOF 結束，
+        再以有界 join 回收子行程與讀取執行緒；
+      · 即使訊息在期限後才完整到達也判逾時；部分資料／EOF／結構不符 → 失敗，**絕不回成功**。
+    `opener` 參數僅為相容保留，子行程一律自建 opener。"""
+    global _LAST_PROC, _LAST_READER
     if src not in FEEDS:
         raise NotPinned()
     ctx = multiprocessing.get_context(_MP_METHOD)
@@ -356,22 +372,40 @@ def fetch_source(src, opener=None):
     p = ctx.Process(target=_child_main, args=(src, child, t0), daemon=True)
     _LAST_PROC = p
     p.start()
-    child.close()
-    try:
-        if not parent.poll(TOTAL_DEADLINE):
-            raise DeadlineExceeded()
+    child.close()                                   # 父端不持有寫端：子行程死亡 → 讀端 EOF
+    box = {}
+
+    def reader():
         try:
-            kind, payload = parent.recv()
-        except (EOFError, OSError):
-            raise FetchRefused() from None          # 子行程無回應即死亡（如被 OOM／異常）
+            box["msg"] = parent.recv()
+        except BaseException as e:   # noqa: BLE001 — EOF／部分資料／反序列化失敗：只記有無，不記內容
+            box["eof"] = type(e).__name__
+    th = threading.Thread(target=reader, daemon=True)
+    _LAST_READER = th
+    th.start()
+    timed_out = False
+    try:
+        th.join(max(0.0, TOTAL_DEADLINE - (_now_mono() - t0)))
+        if th.is_alive():
+            timed_out = True
     finally:
         if p.is_alive():
-            p.kill()
+            p.kill()                                # 逾時或已收到結果後的子行程一律終止
         p.join(KILL_JOIN_SECONDS)
-        parent.close()
+        th.join(KILL_JOIN_SECONDS)                  # 子行程已死 → EOF → 讀取執行緒必然很快結束
+        try:
+            parent.close()
+        except Exception:
+            pass
+    if timed_out or _now_mono() - t0 > TOTAL_DEADLINE:
+        raise DeadlineExceeded()
+    msg = box.get("msg")
+    if "msg" not in box or not _valid_payload(msg):
+        raise FetchRefused()
+    kind, payload = msg
     if kind == "ok":
         return payload
-    name = payload if isinstance(payload, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,60}", payload) else "ChildError"
+    name = payload if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,60}", payload) else "ChildError"
     cls = globals().get(name)
     raise (cls() if isinstance(cls, type) and issubclass(cls, FetchRefused) else type(name, (Exception,), {})())
 
