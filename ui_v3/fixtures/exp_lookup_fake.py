@@ -203,4 +203,3 @@ class FakeNavLoader:
 
 def make_nav_loader() -> Callable[[str], object]:
     return FakeNavLoader()
-
