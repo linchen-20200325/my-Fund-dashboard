@@ -124,6 +124,8 @@ def demo_codes_hint() -> str:
 
 # ───────────────────────── NAV／輔助判定 sibling 的假資料（來源層：判定與格式化在這裡完成；renderer 不算）─────────────────────────
 
+#: 已核證的原始供應者擷取時間（含時分；與快取更新時間不同日，用來證明原值被保留、沒被截成日期或以快取時間代填）。
+_SUPPLIER_STAMP = "2026-11-20T09:30Z"
 _SRC = "GitHubActions:cache/nav/{code}.json（合成）"
 
 
@@ -178,15 +180,15 @@ def _nav_case(code: str):
     if code == "FAKE-ZZC3A":
         judgement = {"three_three_three": _metric("fail_evidenced", None, [("3 年平均年化", "6.00%"), ("門檻", "7%")]),
                      "eating_principal": _metric("fact_no_dividend"), "dividend_status": "confirmed_none"}
-        return {"nav": _nav_verified(code, supplier="2026-11-21"), "judgement": judgement, "ai_usable": True}
+        return {"nav": _nav_verified(code, supplier=_SUPPLIER_STAMP), "judgement": judgement, "ai_usable": True}
     if code == "FAKE-ZZC3B":
         judgement = {"three_three_three": _metric("undetermined", "history_short", [("序列", "300 點，不足 756 點")]),
                      "eating_principal": _metric("fact_no_dividend"), "dividend_status": "confirmed_none"}
-        return {"nav": _nav_verified(code, supplier="2026-11-21"), "judgement": judgement, "ai_usable": True}
+        return {"nav": _nav_verified(code, supplier=_SUPPLIER_STAMP), "judgement": judgement, "ai_usable": True}
     if code == "FAKE-ZZC3D":
         judgement = {"three_three_three": _metric("undetermined", "dividend_not_obtained"),
                      "eating_principal": _metric("undetermined", "dividend_not_obtained"), "dividend_status": "missing"}
-        return {"nav": _nav_verified(code, supplier="2026-11-21"), "judgement": judgement, "ai_usable": True}
+        return {"nav": _nav_verified(code, supplier=_SUPPLIER_STAMP), "judgement": judgement, "ai_usable": True}
     return None
 
 

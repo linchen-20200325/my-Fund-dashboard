@@ -75,7 +75,8 @@ def test_supplier_time_is_unknown_unless_the_case_gives_one_and_is_never_filled_
     for code in EXPECTED:
         n = load_exp_nav(fake.make_nav_loader(), code).nav
         if code.startswith("FAKE-ZZC3"):
-            assert n.supplier_fetched_at == "2026-11-21"
+            assert n.supplier_fetched_at == "2026-11-20T09:30Z"          # 原始時間戳原值保留（不截成日期、不等於快取時間）
+            assert n.supplier_fetched_at != n.cache_updated_at
         else:
             assert n.supplier_fetched_at is None          # 預存檔（cache_only 形）：未知，不得以快取時間代填
         assert n.cache_updated_at is not None
@@ -232,3 +233,31 @@ def test_sibling_layers_import_no_formula_service_repository_infra_fixture_or_ne
             names.append(node.module or "")
     banned = ("services", "repositories", "infra", "shared.", "ui_v3.fixtures", "requests", "httpx", "urllib", "socket", "gspread", "os", "subprocess")
     assert [n for n in names if n == "os" or any(n == b or n.startswith(b + ".") or (b.endswith(".") and n.startswith(b)) for b in banned)] == []
+
+
+# ───────────────────────── MF-A-1：擷取型時間保留原值（Work #7132438926） ─────────────────────────
+
+@pytest.mark.parametrize("stamp", ["2026-11-23T00:58Z", "2026-11-23T00:58:07Z", "2026-11-23"])
+def test_capture_times_accept_a_date_or_a_z_timestamp_and_keep_the_original_value(stamp):
+    for field in ("supplier_fetched_at", "cache_updated_at", "ccy_declared_at"):
+        assert getattr(_nav(**{field: stamp}), field) == stamp
+
+
+@pytest.mark.parametrize("bad", ["2026-11-23T00:58", "2026-11-23T24:00Z", "2026-11-23T00:60Z", "2026-11-23T00:58+08:00", "2026-11-23 00:58Z", "yesterday"])
+def test_capture_times_reject_malformed_timestamps(bad):
+    for field in ("supplier_fetched_at", "cache_updated_at", "ccy_declared_at"):
+        with pytest.raises(M.ExpNavContractError):
+            _nav(**{field: bad})
+
+
+def test_the_nav_observation_date_stays_a_plain_date():
+    with pytest.raises(M.ExpNavContractError):
+        _nav(nav_date="2026-11-20T09:30Z")
+
+
+def test_the_adapter_keeps_a_verified_supplier_timestamp_verbatim_and_cache_only_stays_null():
+    good = fake.make_nav_loader()("FAKE-ZZC3A")
+    injected = {**good, "nav": {**good["nav"], "supplier_fetched_at": "2026-11-23T00:58Z"}}
+    assert adapt_exp_nav(injected).nav.supplier_fetched_at == "2026-11-23T00:58Z"      # T-P1 的原值
+    cache_only = fake.make_nav_loader()("FAKE-ZZC2")
+    assert adapt_exp_nav(cache_only).nav.supplier_fetched_at is None                    # T-N1：預存檔＝未知，不以快取時間代填

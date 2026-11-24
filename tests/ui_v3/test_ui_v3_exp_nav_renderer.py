@@ -221,3 +221,10 @@ def test_a_mutated_view_model_cannot_smuggle_a_withheld_value_into_the_html():
     n = load_exp_nav(fake.make_nav_loader(), "FAKE-ZZC1")
     with pytest.raises(M.ExpNavContractError):
         M.NavSummaryView(n.nav.display, n.nav.reason_codes, nav_value="12.3456", conflicts=n.nav.conflicts)
+
+
+def test_the_card_prints_the_supplier_timestamp_verbatim_and_separately_from_the_cache_time():
+    html = _card("FAKE-ZZC3A")
+    cell = re.search(r'data-row="nav-supplier-at".*?</div>', html, re.S).group(0)
+    assert "2026-11-20T09:30Z" in cell and "2026-11-21" not in cell
+    assert "2026-11-21" in re.search(r'data-row="nav-cache-at".*?</div>', html, re.S).group(0)

@@ -73,6 +73,7 @@ CONFLICT_CODES = frozenset({"nav_before_inception"})
 _CCY_SOURCES = frozenset({"declared_page"})
 
 _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_STAMP = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?:T[0-9]{2}:[0-9]{2}(?::[0-9]{2})?Z)?")
 
 
 def _kind(value: object) -> str:
@@ -97,6 +98,19 @@ def _is_date(value: object) -> bool:
         _dt.date.fromisoformat(value)
     except ValueError:
         return False
+    return True
+
+
+def _is_stamp(value: object) -> bool:
+    """擷取型時間（快取更新／原始供應者擷取／幣別自報）：ISO 日期，或帶 `Z` 的 ISO 時間戳（到分或秒）。**原值保留，不截成日期**。"""
+    if not isinstance(value, str) or _STAMP.fullmatch(value) is None:
+        return False
+    if not _is_date(value[:10]):
+        return False
+    if len(value) > 10:
+        hh, mm = int(value[11:13]), int(value[14:16])
+        ss = int(value[17:19]) if len(value) >= 20 else 0
+        return hh < 24 and mm < 60 and ss < 60
     return True
 
 
@@ -146,8 +160,9 @@ class NavSummaryView:
         _need(self.content_tier in ("T0", "T1"), "content_tier", "T0 or T1", self.content_tier)
         for name in ("nav_value", "ccy", "source_label", "ccy_declared"):
             _opt(getattr(self, name), _is_text, name, "short text")
-        for name in ("nav_date", "cache_updated_at", "supplier_fetched_at", "ccy_declared_at"):
-            _opt(getattr(self, name), _is_date, name, "ISO date")
+        _opt(self.nav_date, _is_date, "nav_date", "ISO date")                      # 觀測日：維持 date 契約
+        for name in ("cache_updated_at", "supplier_fetched_at", "ccy_declared_at"):  # 擷取型時間：日期或帶 Z 的時間戳，原值保留
+            _opt(getattr(self, name), _is_stamp, name, "ISO date or Z timestamp")
         d = self.display
         if self.nav_value is not None:
             _need(d is NavDisplay.VERIFIED, "nav_value", "None unless the display is verified", self.nav_value)
