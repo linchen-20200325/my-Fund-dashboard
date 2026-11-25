@@ -392,3 +392,146 @@ def test_c1_unexpected_exception_while_inspecting_evidence_fails_closed_without_
     b = ei.admit([bad, good], test_mode=True)
     assert [a.card_id for a in b.approved] == ["OK"]
     assert b.refused[0].reason_codes == (ei.REASON_INCONSISTENT,) and "boom-detail" not in repr(b)
+
+
+# ───────── MF-C1 殘餘（Work #7163046730）：scope 完整校驗／容器例外／快照失敗／權利不合不讀證據 ─────────
+class _RaisingContainsList(list):
+    def __contains__(self, item):
+        raise RuntimeError("contains-detail-should-not-leak")
+
+
+class _RaisingIterList(list):
+    def __iter__(self):
+        raise RuntimeError("iter-detail-should-not-leak")
+
+
+class _LyingContainsList(list):
+    def __contains__(self, item):
+        return True
+
+
+class _BadStr(str):
+    def strip(self, *a, **k):
+        raise RuntimeError("strip-detail-should-not-leak")
+
+
+class _RaisingGetMapping(dict):
+    def get(self, key, default=None):
+        raise RuntimeError("get-detail-should-not-leak")
+
+
+class _ExplodingItemsDict(dict):
+    def items(self):
+        raise RuntimeError("items-detail-should-not-leak")
+
+
+class _BadStrObj:
+    def __str__(self):
+        raise RuntimeError("str-detail-should-not-leak")
+
+
+class _ReadTracker(dict):
+    """任何讀取（鍵／值／迭代／取值）都累計；用來證明權利不合時不讀證據。"""
+    reads = 0
+
+    def _hit(self):
+        type(self).reads += 1
+
+    def keys(self):
+        self._hit()
+        return super().keys()
+
+    def items(self):
+        self._hit()
+        return super().items()
+
+    def get(self, *a, **k):
+        self._hit()
+        return super().get(*a, **k)
+
+    def __getitem__(self, k):
+        self._hit()
+        return super().__getitem__(k)
+
+    def __iter__(self):
+        self._hit()
+        return super().__iter__()
+
+
+@pytest.mark.parametrize("scope", [["R4", None], ("R4", None), ("R4", 5), ["R4", ["R4"]], {"R4", None},
+                                   _RaisingContainsList(["R4"]), _RaisingIterList(["R4"]),
+                                   _LyingContainsList(["R2"]), _LyingContainsList([None])])
+def test_c1b_scope_fully_validated_all_elements_str_and_exceptions_fold_to_unknown(scope):
+    assert ei.effective_right(_g(scope=scope), "R4") is ei.RightState.UNKNOWN
+    b = ei.admit([card("A"), card("B", rights={**_real_rights(), "R4": _g(scope=scope)}), card("C")], test_mode=True)
+    assert [a.card_id for a in b.approved] == ["A", "C"]
+    assert b.refused[0].card_id == "B" and b.refused[0].reason_codes == (ei.REASON_RJ3,)
+    assert "detail-should-not-leak" not in repr(b)
+
+
+def test_c1b_clean_scope_positive_controls_still_allowed():
+    for scope in (("R2", "R3", "R4"), ["R4"], {"R4", "R2"}, frozenset({"R4"})):
+        assert ei.effective_right(_g(scope=scope), "R4") is ei.RightState.ALLOWED
+    assert ei.effective_right(_g(scope=["R4", "R2"]), "R3") is ei.RightState.UNKNOWN      # 範圍不涵蓋該軸
+
+
+def test_c1b_grant_with_exploding_state_or_rights_get_folds_to_rj3_and_batch_continues():
+    bad_state = card("S", rights={**_real_rights(), "R2": _g(state=_BadStr("ALLOWED"))})
+    bad_get = card("G", rights=_RaisingGetMapping(_real_rights()))
+    b = ei.admit([card("A"), bad_state, bad_get, card("Z")], test_mode=True)
+    assert [a.card_id for a in b.approved] == ["A", "Z"]
+    assert [r.reason_codes for r in b.refused] == [(ei.REASON_RJ3,), (ei.REASON_RJ3,)]
+    assert "detail-should-not-leak" not in repr(b)
+
+
+@pytest.mark.parametrize("make", [
+    lambda: card("X", support_refs=({"metric": "m", "nested": _ExplodingItemsDict(a=1)},)),
+    lambda: card("X", contradicting_evidence_refs=({"type": "source", "nested": _ExplodingItemsDict(a=1)},)),
+    lambda: card("X", credibility_boundary=_ExplodingItemsDict(n=1)),
+    lambda: card("X", rejected_metrics=({"metric": "m2", "reason_codes": [_ExplodingItemsDict(a=1)]},)),
+    lambda: card("X", data_gaps=(_BadStrObj(),)),
+])
+def test_c1b_snapshot_failure_after_rights_pass_is_per_card_input_inconsistent(make):
+    b = ei.admit([card("A"), make(), card("Z", lens=(ei.LENS_TREND,))], test_mode=True)
+    assert [a.card_id for a in b.approved] == ["A", "Z"]                 # 畸形卡前後的合法卡仍獲准
+    assert [r.card_id for r in b.refused] == ["X"]
+    r = b.refused[0]
+    assert r.reason_codes == (ei.REASON_INCONSISTENT,) and r.data_gaps == ("input_inconsistent",)
+    assert "detail-should-not-leak" not in repr(b)
+    assert b.by_lens(ei.LENS_TREND)[0].card_id == "Z"
+
+
+@pytest.mark.parametrize("bad_right", ["unknown", "deny"])
+def test_c1b_rights_denied_or_unknown_never_reads_evidence_content(bad_right):
+    _ReadTracker.reads = 0
+    tr = _ReadTracker(metric="m")
+    c = card("T", rights=grants(R4=BAD_GRANTS[bad_right]), support_refs=(tr,),
+             contradicting_evidence_refs=(_ReadTracker(a=1),), credibility_boundary=_ReadTracker(n=1))
+    b = ei.admit([c], test_mode=True)
+    assert b.refused[0].reason_codes == (ei.REASON_RJ3,)                # 既有 RJ3-only 順序
+    assert _ReadTracker.reads == 0                                       # 完全沒讀證據內容
+
+
+def test_c1b_all_cards_malformed_returns_empty_bundle_not_exception():
+    cards = [card("B1", rights={**_real_rights(), "R4": _g(scope=None)}),
+             card("B2", support_refs=({"metric": "m", "n": _ExplodingItemsDict(a=1)},))]
+    b = ei.admit(cards, test_mode=True)
+    assert b.approved == () and len(b.refused) == 2 and b.status == "insufficient"
+
+
+class _BenignList(list):
+    pass
+
+
+def test_c1b_even_benign_scope_subclass_is_fail_closed_unknown():
+    assert ei.effective_right(_g(scope=_BenignList(["R4"])), "R4") is ei.RightState.UNKNOWN
+
+
+class _BadBasis(str):
+    def strip(self, *a, **k):
+        raise RuntimeError("basis-detail-should-not-leak")
+
+
+def test_c1b_effective_right_itself_never_raises_on_exploding_string_fields():
+    assert ei.effective_right(_g(state=_BadStr("ALLOWED")), "R2") is ei.RightState.UNKNOWN
+    assert ei.effective_right(_g(basis_ref=_BadBasis("D")), "R2") is ei.RightState.UNKNOWN

@@ -64,8 +64,15 @@ class RightGrant:
     inferred: bool = False
 
 
-def effective_right(grant: object, axis: str, *, test_mode: bool = False) -> RightState:
-    """把宣告折算成有效權利值（fail-closed：任何不確定都是 UNKNOWN）。"""
+def effective_right(grant: object, axis: str, *, test_mode: object = False) -> RightState:
+    """把宣告折算成有效權利值（fail-closed：任何不確定、畸形或讀取例外都折成 UNKNOWN，不丟例外）。"""
+    try:
+        return _effective_right(grant, axis, test_mode)
+    except Exception:  # noqa: BLE001 — 權利檢查中的任何例外（含容器 __contains__／__iter__）一律 UNKNOWN
+        return RightState.UNKNOWN
+
+
+def _effective_right(grant: object, axis: str, test_mode: object) -> RightState:
     if not isinstance(grant, RightGrant):
         return RightState.UNKNOWN
     raw = grant.state.strip().upper() if isinstance(grant.state, str) else ""
@@ -76,8 +83,14 @@ def effective_right(grant: object, axis: str, *, test_mode: bool = False) -> Rig
     if not (isinstance(grant.basis_ref, str) and grant.basis_ref.strip()):
         return RightState.UNKNOWN
     scope = grant.scope
-    # scope 必須是 tuple／list／set／frozenset（不是 str：避免 "R2R3R4" 子字串誤判；None／數字／物件一律不合法）
-    if not isinstance(scope, (tuple, list, set, frozenset)) or axis not in scope:
+    # scope 必須是 tuple／list／set／frozenset 確切型別（不是 str：避免 "R2R3R4" 子字串誤判）；
+    # **完整校驗**：逐一走訪成純 tuple，每個元素都必須是 str（["R4", None] 不得獲准）；
+    # 之後只對這個純 tuple 做成員判斷，**不呼叫容器自己的 __contains__**（子類可說謊或拋例外）。
+    # 只認內建確切型別（不收子類：子類可覆寫 __contains__／__iter__ 說謊或拋例外 → fail-closed）
+    if type(scope) not in (tuple, list, set, frozenset):
+        return RightState.UNKNOWN
+    elems = tuple(scope)
+    if not all(isinstance(x, str) for x in elems) or axis not in elems:
         return RightState.UNKNOWN
     if grant.expired is not False or grant.revoked is not False or grant.inferred is not False:
         return RightState.UNKNOWN
@@ -216,14 +229,22 @@ def _inconsistent(card: AdmittedCard) -> bool:
         return True
 
 
+def _card_right_states(card: AdmittedCard, test_mode: object) -> list:
+    """逐軸折算權利；任何讀取例外（含 rights 對映的 get）→ 該卡三軸全 UNKNOWN（RJ3），不中斷批次。"""
+    try:
+        rights = card.rights if isinstance(card.rights, Mapping) else {}
+        return [(axis, effective_right(rights.get(axis), axis, test_mode=test_mode)) for axis in RIGHT_AXES]
+    except Exception:  # noqa: BLE001
+        return [(axis, RightState.UNKNOWN) for axis in RIGHT_AXES]
+
+
 def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> EvidenceBundle:
     """逐筆准入。R2／R3／R4 任一非 `ALLOWED`，或輸入自相矛盾 → 拒收（不丟例外、不洩漏內容）。"""
     approved, refused = [], []
     for card in cards:
         if not isinstance(card, AdmittedCard):
             raise TypeError("cards 的每個元素必須是 AdmittedCard")
-        rights = card.rights if isinstance(card.rights, Mapping) else {}
-        states = [(axis, effective_right(rights.get(axis), axis, test_mode=test_mode)) for axis in RIGHT_AXES]
+        states = _card_right_states(card, test_mode)
         reasons = []
         gaps = []
         if any(s is not RightState.ALLOWED for _, s in states):
@@ -243,9 +264,9 @@ def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> Evidence
                 )
             )
             continue
-        boundary = _snapshot(card.credibility_boundary) if isinstance(card.credibility_boundary, Mapping) else {}
-        approved.append(
-            ApprovedEvidence(
+        try:
+            boundary = _snapshot(card.credibility_boundary) if isinstance(card.credibility_boundary, Mapping) else {}
+            item = ApprovedEvidence(
                 card_id=card.card_id,
                 lens=tuple(card.lens),
                 support_refs=_snapshot(card.support_refs),
@@ -256,7 +277,17 @@ def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> Evidence
                 credibility_boundary=boundary,
                 card_status=card.card_status,
             )
-        )
+        except Exception:  # noqa: BLE001 — 快照失敗：按卡回固定 input_inconsistent；不夾帶例外訊息／內容、不中斷其他卡
+            refused.append(
+                RefusedEvidence(
+                    card_id=card.card_id,
+                    reason_codes=(REASON_INCONSISTENT,),
+                    rights_detail=tuple((a, s.value) for a, s in states),
+                    data_gaps=("input_inconsistent",),
+                )
+            )
+            continue
+        approved.append(item)
     return EvidenceBundle(approved=tuple(approved), refused=tuple(refused))
 
 
