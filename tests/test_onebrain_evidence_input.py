@@ -535,3 +535,30 @@ class _BadBasis(str):
 def test_c1b_effective_right_itself_never_raises_on_exploding_string_fields():
     assert ei.effective_right(_g(state=_BadStr("ALLOWED")), "R2") is ei.RightState.UNKNOWN
     assert ei.effective_right(_g(basis_ref=_BadBasis("D")), "R2") is ei.RightState.UNKNOWN
+
+
+class _FalseAxis(str):
+    def __eq__(self, other):
+        return True
+
+    __hash__ = str.__hash__
+
+
+class _PlainStrSub(str):
+    pass
+
+
+@pytest.mark.parametrize("elem", [_FalseAxis("unrelated"), _FalseAxis("R4"), _PlainStrSub("R4")])
+def test_c1c_scope_elements_must_be_exact_builtin_str(elem):
+    assert ei.effective_right(_g(scope=(elem,)), "R4") is ei.RightState.UNKNOWN
+    assert ei.effective_right(_g(scope=[elem, "R4"]), "R4") is ei.RightState.UNKNOWN
+    b = ei.admit([card("A"), card("B", rights={**_real_rights(), "R4": _g(scope=(elem,))}), card("C")], test_mode=True)
+    assert [a.card_id for a in b.approved] == ["A", "C"]
+    assert b.refused[0].card_id == "B" and b.refused[0].reason_codes == (ei.REASON_RJ3,)
+
+
+def test_c1c_exact_str_scope_positive_and_rj3_only_controls_preserved():
+    assert ei.effective_right(_g(scope=("R2", "R3", "R4")), "R4") is ei.RightState.ALLOWED
+    assert ei.effective_right(_g(scope=("unrelated",)), "R4") is ei.RightState.UNKNOWN
+    b = ei.admit([card("D", rights=grants(R4=BAD_GRANTS["deny"]), support_refs=None)], test_mode=True)
+    assert b.refused[0].reason_codes == (ei.REASON_RJ3,)

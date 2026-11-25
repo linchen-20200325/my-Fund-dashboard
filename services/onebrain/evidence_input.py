@@ -90,7 +90,8 @@ def _effective_right(grant: object, axis: str, test_mode: object) -> RightState:
     if type(scope) not in (tuple, list, set, frozenset):
         return RightState.UNKNOWN
     elems = tuple(scope)
-    if not all(isinstance(x, str) for x in elems) or axis not in elems:
+    # 元素也限確切內建 str（`type(x) is str`）：str 子類可覆寫 __eq__ 冒充任何軸，比較前先拒絕
+    if not all(type(x) is str for x in elems) or type(axis) is not str or axis not in elems:
         return RightState.UNKNOWN
     if grant.expired is not False or grant.revoked is not False or grant.inferred is not False:
         return RightState.UNKNOWN
