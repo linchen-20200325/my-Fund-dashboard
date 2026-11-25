@@ -48,9 +48,12 @@ def _no_network(monkeypatch):
 
 
 # ─────────────── 合成 OAS／資料 ───────────────
-def _props(isin_desc="ISIN 碼（單一份額級別識別）", code_desc="基金代碼"):
+def _props(isin_desc="ISIN 碼：唯一識別單一份額級別", code_desc="基金代碼：識別該基金份額級別", isin_len=12):
+    isin = {"type": "string", "description": isin_desc}
+    if isin_len:
+        isin.update({"minLength": isin_len, "maxLength": isin_len})
     return {m.KEY_CODE: {"type": "string", "description": code_desc},
-            m.KEY_ISIN: {"type": "string", "description": isin_desc},
+            m.KEY_ISIN: isin,
             m.KEY_NAV: {"type": "string"}, m.KEY_DATE: {"type": "string"},
             m.KEY_CCY: {"type": "string"}, m.KEY_NAME: {"type": "string"}}
 
@@ -222,8 +225,10 @@ def _gen():
                                               "https://data.gov.tw/dataset/11641"))), "binding_none"),
         ("POST", _oas(method="post"), "binding_none"),
         ("舊碼 3-4 無引用", _oas(path="/v1/opendata/3-4", op=_op(refs=())), "binding_none"),
-        ("必要查詢參數", _oas(op=_op(params=[{"name": "q", "in": "query", "required": True}])), "op_requires_params"),
-        ("path 參數", _oas(op=_op(params=[{"name": "id", "in": "path", "required": True}])), "op_requires_params"),
+        ("必要查詢參數", _oas(op=_op(params=[{"name": "q", "in": "query", "required": True, "schema": {"type": "string"}}])),
+         "op_requires_params"),
+        ("path 參數", _oas(op=_op(params=[{"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}])),
+         "op_requires_params"),
         ("需認證", _oas(op=_op(security=[{"apiKey": []}])), "op_requires_security"),
         ("全域認證", _oas(security=[{"apiKey": []}]), "op_requires_security"),
         ("缺 responses", _oas(op=_op(responses={})), "response_schema_missing"),
@@ -846,15 +851,14 @@ def test_mutation_url_layers_each_catch_dot_segment_and_both_removed_fails_open(
     ('            if p.get("required") is True or p.get("in") == "path":\n'
      '                raise FetchStop("op_requires_params")', "            pass", "params"),
     ('        if any(x for x in sec):\n            raise FetchStop("op_requires_security")', "        pass", "security"),
-    ('    return _CLASS_POSITIVE.search(desc) is not None and not any(n in low for n in _NEGATION)'
-     if False else '    return bool(_CLASS_POSITIVE.search(desc)) and not any(n in low for n in _NEGATION)',
-     '    return bool(_CLASS_POSITIVE.search(desc))', "negation"),
+    ('    if any(n in low for n in _NEGATION) or any(x in low for x in _SHARED):\n        return None\n',
+     '    pass\n', "negation"),
     ('            raise FetchStop("row_type_mismatch")', '            pass', "rowtype"),
     ('        raise FetchStop("server_conflict")', '        pass', "serverconflict"),
     ('            raise FetchStop("response_key_schema_invalid")', '            pass', "keyschema"),
     ('            raise FetchStop("op_security_invalid")', '            pass', "secinvalid"),
-    ('    if timed_out:\n        raise FetchStop("wall_clock_timeout")  # 逾期結果一律不用（含完整 frame）',
-     '    if False:\n        raise FetchStop("wall_clock_timeout")', "latefull"),
+    ('    if timed_out:\n        raise FetchStop("wall_clock_timeout")\n',
+     '    if False:\n        raise FetchStop("wall_clock_timeout")\n', "latefull"),
     ('        if user_confirmed_non_holding is not True:', '        if not user_confirmed_non_holding:', "truthy"),
     ('        if not use_decisions(res.rights)["display"]:\n            raise FetchStop("rights_unverified")',
      "        if False:\n            raise FetchStop('rights_unverified')", "rights"),
@@ -926,7 +930,7 @@ def test_mutations_are_killed(monkeypatch, old, new, probe):
         except KeyError:
             pass  # 守衛被拿掉 ⇒ 行為改變（崩潰）＝被殺
     elif probe == "negation":
-        res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(isin_desc="ISIN 碼（不代表任何份額級別識別）"))), _rows()))
+        res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(isin_desc="ISIN 碼：唯一識別單一份額級別，惟並非對所有基金成立"))), _rows()))
         assert res.local_display is not None  # 守衛被拿掉 ⇒ 否定文字也放行
     elif probe == "rowtype":
         try:
@@ -977,9 +981,39 @@ def test_mf1_class_doc_requires_positive_evidence_and_rejects_negation(isin_desc
 
 
 def test_mf1_positive_class_evidence_forms_are_accepted():
-    for d in ("ISIN 碼（單一份額級別識別）", "國際證券識別碼，識別單一份額級別", "ISIN is the share class identifier"):
-        res = _run(FakeTransport(_oas(op=_op(props=_props(isin_desc=d))), _rows()))
-        assert res.stop_reason is None and res.class_doc_evidence is True, d
+    for isin_d, code_d in (("ISIN 碼：唯一識別單一份額級別", "基金代碼：識別該基金份額級別"),
+                           ("國際證券識別碼，唯一對應一個份額級別", "基金代號用以識別基金"),
+                           ("The ISIN uniquely identifies a single share class", "fund code identifies the fund")):
+        res = _run(FakeTransport(_oas(op=_op(props=_props(isin_desc=isin_d, code_desc=code_d))), _rows()))
+        assert res.stop_reason is None and res.class_doc_evidence is True, (isin_d, code_d)
+
+
+@pytest.mark.parametrize("isin_desc,code_desc,why", [
+    ("各份額級別共用同一 ISIN，單一份額級別識別", "基金代碼：識別該基金份額級別", "Work 反例：共享 ISIN 仍命中舊關鍵字"),
+    ("ISIN 碼：唯一識別單一份額級別", "行銷活動代碼", "Work 反例：代碼說明無關"),
+    ("ISIN 碼：唯一識別單一份額級別", "基金代碼：行銷活動用", "含無關詞"),
+    ("ISIN 碼：唯一識別單一份額級別，多個份額共享", "基金代碼：識別該基金份額級別", "共享／多個"),
+    ("ISIN 碼：識別單一份額級別", "基金代碼：識別該基金份額級別", "缺『唯一』"),
+    ("ISIN 碼：單一份額級別識別碼", "基金代碼：識別該基金份額級別", "只提級別、無唯一性"),
+    ("ISIN 碼：唯一識別單一份額級別", "基金代碼", "代碼說明無身分語意"),
+    ("ISIN 碼：唯一識別單一份額級別", "基金代碼：for reference only", "代碼說明無身分語意（英文）"),
+    ("ISIN is shared by multiple classes; uniquely identifies a single share class", "fund code identifies the fund", "英文共享"),
+])
+def test_mf1_shared_unrelated_or_non_unique_evidence_is_withheld(isin_desc, code_desc, why):
+    res = _run(FakeTransport(_oas(op=_op(props=_props(isin_desc=isin_desc, code_desc=code_desc))), _rows()))
+    assert res.stop_reason == "class_evidence_insufficient" and res.local_display is None, why
+    assert res.class_doc_evidence is False and res.checks.class_verified is False
+
+
+@pytest.mark.parametrize("isin_len", [None])
+def test_mf1_text_alone_is_not_enough_isin_schema_must_declare_12_chars(isin_len):
+    res = _run(FakeTransport(_oas(op=_op(props=_props(isin_len=isin_len))), _rows()))
+    assert res.stop_reason == "class_evidence_insufficient" and res.local_display is None
+    pat = _props(isin_len=None)
+    pat[m.KEY_ISIN]["pattern"] = "^[A-Z]{2}[A-Z0-9]{9}[0-9]$"  # pattern 含 {9}…不含 {10}／12 ⇒ 不算
+    assert _run(FakeTransport(_oas(op=_op(props=pat)), _rows())).stop_reason == "class_evidence_insufficient"
+    pat[m.KEY_ISIN]["pattern"] = "^[A-Z]{2}[A-Z0-9]{10}$"
+    assert _run(FakeTransport(_oas(op=_op(props=pat)), _rows())).stop_reason is None
 
 
 @pytest.mark.parametrize("field", [m.KEY_CODE, m.KEY_NAME, m.KEY_ISIN, m.KEY_CCY, m.KEY_DATE])
@@ -1135,3 +1169,141 @@ def test_mf2_complete_frame_within_deadline_still_succeeds():
     conn, proc = _Conn(), _Proc()
     assert m.run_in_worker(ent_ok, (1,), wall=5.0, reap=0.1, ctx=_ctx(conn, proc)) == {"a": 1}
     assert conn.closed
+
+
+# ─────────────── 第三輪（Work #7153884392）MF1／MF2／MF3 ───────────────
+# MF3：parameters 未宣告 vs null；合法位置；完整結構
+def _with_params(value, level="op"):
+    op = _op()
+    oas = _oas(op=op)
+    if level == "op":
+        op["parameters"] = value
+    else:
+        oas["paths"]["/v1/opendata/X-1"]["parameters"] = value
+    return oas
+
+
+@pytest.mark.parametrize("level", ["op", "item"])
+@pytest.mark.parametrize("value,name", [
+    (None, "parameters: null"),
+    ("oops", "字串"), ({"name": "q"}, "物件非陣列"), (0, "數字"),
+    ([{"name": "q", "in": "invalid", "schema": {"type": "string"}}], "in: invalid（Work 反例）"),
+    ([{"name": "q", "in": "", "schema": {"type": "string"}}], "in 為空"),
+    ([{"name": "q", "in": None, "schema": {"type": "string"}}], "in 為 null"),
+    ([{"name": "", "in": "query", "schema": {"type": "string"}}], "name 為空"),
+    ([{"in": "query", "schema": {"type": "string"}}], "缺 name"),
+    ([{"name": "q", "in": "query"}], "缺 schema／content"),
+    ([{"name": "q", "in": "query", "schema": None}], "schema 為 null"),
+    ([{"name": "q", "in": "query", "schema": {"type": "string"}, "required": "yes"}], "required 非布林"),
+    ([{"name": "id", "in": "path", "schema": {"type": "string"}}], "path 參數未標 required"),
+    ([None], "元素為 null"), (["x"], "元素非物件"),
+])
+def test_mf3_declared_but_invalid_parameters_mean_zero_r1(level, value, name):
+    tp = FakeTransport(_with_params(value, level), _rows())
+    res = _run(tp)
+    assert res.stop_reason == "op_params_invalid" and len(tp.calls) == 1 and res.requests_used == 1, name
+
+
+@pytest.mark.parametrize("params", [
+    [{"name": "q", "in": "query", "schema": {"type": "string"}},
+     {"name": "X-Trace", "in": "header", "required": False, "schema": {"type": "string"}},
+     {"name": "c", "in": "cookie", "content": {"application/json": {"schema": {}}}}],
+    [],
+])
+def test_mf3_absent_or_fully_valid_optional_parameters_are_accepted(params):
+    tp = FakeTransport(_with_params(params), _rows())
+    assert _run(tp).stop_reason is None and len(tp.calls) == 2
+    assert _run(FakeTransport(_oas(), _rows())).stop_reason is None  # 未宣告鍵＝合法
+
+
+def test_mf3_parameter_via_valid_ref_is_resolved_and_bad_ref_stops():
+    oas = _with_params([{"$ref": "#/components/parameters/Q"}])
+    oas["components"] = {"parameters": {"Q": {"name": "q", "in": "query", "required": True, "schema": {"type": "string"}}}}
+    assert _run(FakeTransport(oas, _rows())).stop_reason == "op_requires_params"
+    oas2 = _with_params([{"$ref": "#/components/parameters/Missing"}])
+    assert _run(FakeTransport(oas2, _rows())).stop_reason == "ref_unresolved"
+
+
+# MF2：JSON 解碼也受牆鐘約束
+class _SlowJson:
+    """替身：只讓 IPC 的 JSON 解碼變慢（80 ms），其餘委派真實 json。"""
+
+    def __init__(self, delay):
+        self._d = delay
+
+    def loads(self, s, *a, **k):
+        time.sleep(self._d)
+        return json.loads(s, *a, **k)
+
+    def dumps(self, *a, **k):
+        return json.dumps(*a, **k)
+
+
+def test_mf2_slow_ipc_json_decode_inside_deadline_is_refused(monkeypatch):
+    monkeypatch.setattr(m, "json", _SlowJson(0.15))
+    conn, proc = _Conn(), _Proc()  # frame 期限內即到；僅解碼超時
+    t0 = time.monotonic()
+    with pytest.raises(m.FetchStop) as e:
+        m.run_in_worker(ent_ok, (1,), wall=0.04, reap=0.05, ctx=_ctx(conn, proc))
+    assert e.value.reason == "wall_clock_timeout" and proc.killed >= 1
+    assert time.monotonic() - t0 < 2  # 監督者未等解碼完成（<2 s），回收已執行
+
+
+def test_mf2_fast_decode_within_deadline_still_succeeds(monkeypatch):
+    monkeypatch.setattr(m, "json", _SlowJson(0.0))
+    assert m.run_in_worker(ent_ok, (1,), wall=2.0, reap=0.05, ctx=_ctx(_Conn(), _Proc())) == {"a": 1}
+
+
+def test_mf2_decode_error_and_tags_map_to_fixed_codes():
+    for payload, reason in ((b"Rnot-json", "ipc_bad_payload"), (b"Zxx", "step_error"),
+                            (b"Sbad reason!", "step_error"), (b"Soversize", "oversize")):
+        with pytest.raises(m.FetchStop) as e:
+            m.run_in_worker(ent_ok, (1,), wall=2.0, reap=0.05, ctx=_ctx(_Conn(payload=payload), _Proc()))
+        assert e.value.reason == reason
+
+
+# 第三輪突變：拿掉新守衛，行為必須改變
+@pytest.mark.parametrize("old,new,probe", [
+    ('        if not isinstance(plist, list):  # 含 null\n            raise FetchStop("op_params_invalid")\n',
+     '        if plist is None:\n            continue\n        if not isinstance(plist, list):\n            raise FetchStop("op_params_invalid")\n',
+     "paramsnull"),
+    ('p.get("in") not in _PARAM_IN', 'False', "paramin"),
+    ('                    or not (isinstance(p.get("schema"), dict) or isinstance(p.get("content"), dict))):',
+     '                    ):', "paramschema"),
+    ('    and _isin_schema_structure_ok(props[KEY_ISIN]))', ')', "structure") if False else
+    ('                and _isin_schema_structure_ok(props[KEY_ISIN]))', ')', "structure"),
+    ('code_txt and _CODE_IDENTITY.search(code_txt)', 'code_txt', "codeidentity"),
+    ('"各份額級別", ', '', "sharedword"),
+    ('    elapsed = time.monotonic() - t0\n    timed_out = rx.is_alive() or elapsed > wall',
+     '    elapsed = time.monotonic() - t0\n    timed_out = False', "nodeadline"),
+])
+def test_round3_mutations_are_killed(old, new, probe):
+    ns = _mutant(old, new)
+    if probe == "paramsnull":
+        assert _mrun(ns, FakeTransport(_with_params(None), _rows())).stop_reason != "op_params_invalid"
+    elif probe == "paramin":
+        bad = [{"name": "q", "in": "invalid", "schema": {"type": "string"}}]
+        assert _mrun(ns, FakeTransport(_with_params(bad), _rows())).stop_reason != "op_params_invalid"
+    elif probe == "paramschema":
+        assert _mrun(ns, FakeTransport(_with_params([{"name": "q", "in": "query"}]), _rows())).stop_reason != "op_params_invalid"
+    elif probe == "structure":
+        assert _mrun(ns, FakeTransport(_oas(op=_op(props=_props(isin_len=None))), _rows())).local_display is not None
+    elif probe == "codeidentity":
+        res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(code_desc="行銷活動代碼".replace("行銷活動", "備註")))), _rows()))
+        assert res.local_display is not None  # 代碼說明無身分語意仍放行 ⇒ 守衛被拿掉
+    elif probe == "sharedword":
+        res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(
+            isin_desc="各份額級別皆可識別；唯一識別單一份額級別"))), _rows()))
+        assert res.local_display is not None  # 拿掉「各份額級別」標記 ⇒ 泛稱文字仍放行 ⇒ 被殺
+    elif probe == "nodeadline":
+        ns["json"] = _SlowJson(0.15)
+        try:
+            out = ns["run_in_worker"](ent_ok, (1,), wall=0.04, reap=0.05, ctx=_ctx(_Conn(), _Proc()))
+            assert out == {"a": 1}  # 解碼逾期仍被接受
+        except ns["FetchStop"] as e:
+            assert e.reason != "wall_clock_timeout" or False
+
+
+def test_mf1_generic_all_classes_wording_is_withheld_even_with_unique_phrase():
+    res = _run(FakeTransport(_oas(op=_op(props=_props(isin_desc="各份額級別皆可識別；唯一識別單一份額級別"))), _rows()))
+    assert res.stop_reason == "class_evidence_insufficient" and res.local_display is None

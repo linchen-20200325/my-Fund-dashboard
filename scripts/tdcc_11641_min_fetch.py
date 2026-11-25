@@ -216,19 +216,26 @@ def bind_dataset_operation(oas: Any) -> tuple[str, dict, dict]:
     return hits[0]
 
 
+_PARAM_IN = ("query", "header", "path", "cookie")
+
+
 def _check_no_required_params_or_auth(oas: dict, op: dict, item: dict) -> None:
-    """參數／認證結構須可驗：型別不符＝證據不明＝停；必要參數或認證＝停。"""
-    for plist in (item.get("parameters"), op.get("parameters")):
-        if plist is None:
-            continue
-        if not isinstance(plist, list):
+    """參數／認證結構須完整可驗：未宣告（鍵不存在）與宣告為 null／錯型別不同——後者＝證據不明＝停。"""
+    for holder in (item, op):
+        if "parameters" not in holder:
+            continue  # 未宣告＝無參數（合法）
+        plist = holder["parameters"]
+        if not isinstance(plist, list):  # 含 null
             raise FetchStop("op_params_invalid")
         for p in plist:
             p = _resolve(p, oas)
-            if not isinstance(p, dict) or not isinstance(p.get("in"), str) or not isinstance(p.get("name"), str):
+            if (not isinstance(p, dict) or not _nonblank(p.get("name")) or p.get("in") not in _PARAM_IN
+                    or not (isinstance(p.get("schema"), dict) or isinstance(p.get("content"), dict))):
                 raise FetchStop("op_params_invalid")
             if "required" in p and not isinstance(p["required"], bool):
                 raise FetchStop("op_params_invalid")
+            if p.get("in") == "path" and p.get("required") is not True:
+                raise FetchStop("op_params_invalid")  # OAS：path 參數必為 required
             if p.get("required") is True or p.get("in") == "path":
                 raise FetchStop("op_requires_params")
     for sec in ((op["security"],) if "security" in op else ()) + (
@@ -282,27 +289,48 @@ def _response_schema_props(oas: dict, op: dict) -> dict:
     return out
 
 
-_CLASS_POSITIVE = re.compile(r"(單一|各)份額級別|份額級別(識別|代碼)|識別[^，。；;,]{0,6}份額級別|share class (identifier|code)",
-                             re.I)
+_SEP = r"[^，。；;,]"
+# ISIN 說明須正向載明「唯一識別一個（單一）份額級別」；『各份額級別』『共用』等泛稱不算
+_ISIN_UNIQUE = re.compile(
+    rf"唯一(識別|對應|代表){_SEP}{{0,6}}(一個|單一)?份額級別"
+    rf"|(一個|單一)份額級別{_SEP}{{0,6}}(對應|僅對應|只對應){_SEP}{{0,4}}(一個|唯一)\s*isin"
+    r"|uniquely identifies (a|one|a single) share class",
+    re.I)
+# 代碼說明須載明其為基金／份額級別的身分代碼（不能只是「有說明」）
+_CODE_IDENTITY = re.compile(rf"(基金|份額級別)(代碼|代號){_SEP}{{0,12}}(識別|代表|對應){_SEP}{{0,12}}(基金|份額級別)"
+                            r"|fund code identifies (the|a) (fund|share class)", re.I)
+_SHARED = ("各份額級別", "共用", "共享", "共同", "多個", "多支", "同一 isin", "同一isin", "shared", "multiple",
+           "any class", "all classes", "行銷", "促銷", "活動", "campaign", "promo", "廣告")
 _NEGATION = ("不代表", "不是", "並非", "非", "無法", "未", "沒有", "不含", "不具", "不為", "不屬", "不提供", "不包含",
              "not ", "no ", "n't", "cannot", "without", "unrelated")
 
 
-def _positive_class_text(desc: Any) -> bool:
-    """正向且無否定：說明須明示識別『單一份額級別』，且全文不含任何否定詞（寧可誤拒＝fail-closed）。"""
+def _clean_text(desc: Any) -> Optional[str]:
+    """說明文字須為非空字串，且不含否定詞、共用／多對一／無關（行銷等）標記；否則視為無正向證據（fail-closed）。"""
     if not isinstance(desc, str) or not desc.strip():
-        return False
+        return None
     low = desc.lower()
-    return bool(_CLASS_POSITIVE.search(desc)) and not any(n in low for n in _NEGATION)
+    if any(n in low for n in _NEGATION) or any(x in low for x in _SHARED):
+        return None
+    return desc
+
+
+def _isin_schema_structure_ok(sch: Any) -> bool:
+    """結構佐證（不只靠文字）：ISIN 欄位須宣告固定 12 碼（minLength／maxLength 為 12，或 pattern 含 12／{10}）。"""
+    if not isinstance(sch, dict):
+        return False
+    if sch.get("minLength") == 12 or sch.get("maxLength") == 12:
+        return True
+    pat = sch.get("pattern")
+    return isinstance(pat, str) and ("{10}" in pat or "12" in pat)
 
 
 def _class_doc_evidence(props: dict) -> bool:
-    """文件層證據（rev2 §四.1）：ISIN 說明須「正向」載明識別單一份額級別；代碼說明須非空且無否定。缺／否定 ⇒ False。"""
-    isin_desc = props[KEY_ISIN].get("description")
-    code_desc = props[KEY_CODE].get("description")
-    code_ok = isinstance(code_desc, str) and bool(code_desc.strip()) and not any(
-        n in code_desc.lower() for n in _NEGATION)
-    return _positive_class_text(isin_desc) and code_ok
+    """文件層證據（rev2 §四.1）：ISIN＝正向『唯一識別單一份額級別』文字＋12 碼結構；代碼＝基金／級別身分語意。缺 ⇒ False。"""
+    isin_txt = _clean_text(props[KEY_ISIN].get("description"))
+    code_txt = _clean_text(props[KEY_CODE].get("description"))
+    return bool(isin_txt and _ISIN_UNIQUE.search(isin_txt) and code_txt and _CODE_IDENTITY.search(code_txt)
+                and _isin_schema_structure_ok(props[KEY_ISIN]))
 
 
 def process_r0(body: bytes) -> dict[str, Any]:
@@ -824,9 +852,19 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
 
     def _rx() -> None:
         try:
-            box["data"] = parent.recv_bytes(IPC_MAX_BYTES)
+            data = parent.recv_bytes(IPC_MAX_BYTES)
+            tag, body = data[:1], data[1:]
+            if tag == b"R":  # JSON 解碼也在受牆鐘約束的執行緒內
+                box["ok"] = json.loads(body.decode("utf-8"))
+            elif tag == b"S":
+                reason = body.decode("utf-8", "replace")
+                box["err"] = reason if _REASON.match(reason) else "step_error"
+            else:
+                box["err"] = "step_error"
         except EOFError:
             box["err"] = "ipc_truncated"
+        except (ValueError, UnicodeDecodeError):
+            box["err"] = "ipc_bad_payload"
         except OSError as e:
             msg = str(e)
             box["err"] = ("ipc_oversize" if "bad message length" in msg
@@ -838,9 +876,10 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
     rx = threading.Thread(target=_rx, daemon=True)
     rx.start()
     rx.join(max(0.0, wall - (time.monotonic() - t0)))
-    timed_out = rx.is_alive() or (time.monotonic() - t0) > wall
+    elapsed = time.monotonic() - t0
+    timed_out = rx.is_alive() or elapsed > wall  # 以接收＋解碼完成後的時刻判定；逾期任何結果一律不用
     if timed_out:
-        _safe_kill(p)  # 接收未完成或已逾期：先殺，再獨立回收
+        _safe_kill(p)  # 接收／解碼未完成或已逾期：先殺，再獨立回收
     p.join(reap)
     if p.is_alive():
         _safe_kill(p)
@@ -848,24 +887,12 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
         if p.is_alive():
             _safe_close(parent)
             raise FetchStop("UNREAPED")
-    if not timed_out:
-        rx.join(0.0)
     _safe_close(parent)
     if timed_out:
-        raise FetchStop("wall_clock_timeout")  # 逾期結果一律不用（含完整 frame）
-    data = box.get("data")
-    if data is None:
-        raise FetchStop(box.get("err") or "ipc_error")
-    tag, body = data[:1], data[1:]
-    if tag == b"R":
-        try:
-            return json.loads(body.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
-            raise FetchStop("ipc_bad_payload") from None
-    if tag == b"S":
-        reason = body.decode("utf-8", "replace")
-        raise FetchStop(reason if _REASON.match(reason) else "step_error")
-    raise FetchStop("step_error")
+        raise FetchStop("wall_clock_timeout")
+    if "ok" in box:
+        return box["ok"]
+    raise FetchStop(box.get("err") or "ipc_error")
 
 
 def _safe_close(c: Any) -> None:
