@@ -75,11 +75,14 @@ def effective_right(grant: object, axis: str, *, test_mode: bool = False) -> Rig
         return RightState.UNKNOWN
     if not (isinstance(grant.basis_ref, str) and grant.basis_ref.strip()):
         return RightState.UNKNOWN
-    if axis not in tuple(grant.scope):
+    scope = grant.scope
+    # scope 必須是 tuple／list／set／frozenset（不是 str：避免 "R2R3R4" 子字串誤判；None／數字／物件一律不合法）
+    if not isinstance(scope, (tuple, list, set, frozenset)) or axis not in scope:
         return RightState.UNKNOWN
     if grant.expired is not False or grant.revoked is not False or grant.inferred is not False:
         return RightState.UNKNOWN
-    if grant.synthetic is not False and not test_mode:  # 合成 ALLOWED 只在測試模式有效
+    # 合成 ALLOWED 只在「明示布林 True」的測試模式有效；"false"／1／None／物件等非布林值一律不放行
+    if grant.synthetic is not False and test_mode is not True:
         return RightState.UNKNOWN
     return RightState.ALLOWED
 
@@ -185,18 +188,32 @@ class EvidenceBundle:
 
 
 def _inconsistent(card: AdmittedCard) -> bool:
-    rejected_names = set()
-    for r in card.rejected_metrics:
-        if isinstance(r, Mapping) and isinstance(r.get("metric"), str):
-            rejected_names.add(r["metric"])
-    for ref in tuple(card.support_refs) + tuple(card.contradicting_evidence_refs):
-        if not isinstance(ref, Mapping):
+    """證據結構是否自相矛盾或畸形（fail-closed：任何無法確認的結構都視為矛盾；不丟例外、不夾帶內容）。"""
+    try:
+        seqs = (card.support_refs, card.contradicting_evidence_refs, card.rejected_metrics, card.data_gaps)
+        if not all(isinstance(x, (tuple, list)) for x in seqs):
             return True
-        if _FORBIDDEN_EVIDENCE_KEYS & set(ref.keys()):
-            return True
-        if ref.get("metric") in rejected_names:
-            return True
-    return False
+        rejected_names = set()
+        for r in card.rejected_metrics:
+            if not isinstance(r, Mapping):
+                return True
+            name = r.get("metric")
+            if not isinstance(name, str):
+                return True
+            rejected_names.add(name)
+        for ref in tuple(card.support_refs) + tuple(card.contradicting_evidence_refs):
+            if not isinstance(ref, Mapping):
+                return True
+            if _FORBIDDEN_EVIDENCE_KEYS & set(ref.keys()):
+                return True
+            metric = ref.get("metric")
+            if metric is not None and not isinstance(metric, str):
+                return True
+            if isinstance(metric, str) and metric in rejected_names:
+                return True
+        return False
+    except Exception:  # noqa: BLE001 — 無法確認即視為矛盾
+        return True
 
 
 def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> EvidenceBundle:
@@ -210,9 +227,10 @@ def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> Evidence
         reasons = []
         gaps = []
         if any(s is not RightState.ALLOWED for _, s in states):
+            # 權利不合：只回固定 RJ3；**不檢視證據內容**（不論其結構是否畸形，不外洩、不拋例外）
             reasons.append(REASON_RJ3)
             gaps.append("rights_unverified")
-        if _inconsistent(card):
+        elif _inconsistent(card):
             reasons.append(REASON_INCONSISTENT)
             gaps.append("input_inconsistent")
         if reasons:

@@ -295,3 +295,100 @@ def test_module_does_not_import_formulas_or_ui():
     assert not any(m and (m.startswith("services.health") or m.startswith("ui_v3") or m.startswith("ui"))
                    for m in mods)
     assert "check_333_principle(" not in src and "classify_eating_principal(" not in src
+
+
+# ───────── MF-C1／MF-C2（Work #7161452041）：fail-closed 反例與 test_mode 嚴格布林 ─────────
+def _g(**kw):
+    base = dict(state="ALLOWED", basis_ref="D", scope=("R2", "R3", "R4"), synthetic=False)
+    base.update(kw)
+    return ei.RightGrant(**base)
+
+
+def _real_rights():
+    return {a: _g() for a in ei.RIGHT_AXES}
+
+
+BAD_SCOPES = [None, "R2R3R4", "R4", 5, 1.5, {"R4": 1}, object()]
+
+
+@pytest.mark.parametrize("scope", BAD_SCOPES)
+def test_c1_malformed_scope_folds_to_unknown_without_raising(scope):
+    assert ei.effective_right(_g(scope=scope), "R4") is ei.RightState.UNKNOWN
+    b = ei.admit([card(rights={**_real_rights(), "R4": _g(scope=scope)})])
+    assert b.approved == () and b.refused[0].reason_codes == (ei.REASON_RJ3,)
+
+
+def test_c1_scope_list_and_set_forms_still_valid_positive_control():
+    for scope in (("R4",), ["R4"], frozenset({"R4"}), {"R4"}):
+        assert ei.effective_right(_g(scope=scope), "R4") is ei.RightState.ALLOWED
+
+
+@pytest.mark.parametrize("field,value", [("support_refs", None), ("contradicting_evidence_refs", None),
+                                         ("rejected_metrics", None), ("data_gaps", None),
+                                         ("support_refs", ({"metric": ["wrong-shape"]},)),
+                                         ("support_refs", ({"metric": {"a": 1}},)),
+                                         ("contradicting_evidence_refs", ("raw",)),
+                                         ("rejected_metrics", ({"metric": ["x"]},)),
+                                         ("support_refs", 5)])
+def test_c1_malformed_evidence_with_allowed_rights_is_refused_not_raised(field, value):
+    b = ei.admit([card(**{field: value})], test_mode=True)
+    assert b.approved == () and len(b.refused) == 1
+    assert b.refused[0].reason_codes == (ei.REASON_INCONSISTENT,)
+    assert "wrong-shape" not in repr(b)
+
+
+def test_c1_deny_with_none_support_refs_returns_rj3_only_and_no_leak():
+    c = card(rights=grants(R4=BAD_GRANTS["deny"]), support_refs=None, contradicting_evidence_refs=None)
+    b = ei.admit([c], test_mode=True)
+    assert b.approved == () and b.refused[0].reason_codes == (ei.REASON_RJ3,)    # 只回固定 RJ3，不夾 input_inconsistent
+    assert b.refused[0].data_gaps == ("rights_unverified",)
+
+
+def test_c1_rights_failure_with_malformed_refs_is_rj3_only():
+    c = card(rights=grants(R3=BAD_GRANTS["unknown"]), support_refs=({"metric": ["wrong-shape"]},))
+    b = ei.admit([c], test_mode=True)
+    assert b.refused[0].reason_codes == (ei.REASON_RJ3,) and "wrong-shape" not in repr(b)
+
+
+def test_c1_mixed_valid_and_invalid_cards_do_not_block_each_other():
+    good1 = card("G1")
+    bad = [card("B1", rights={**_real_rights(), "R4": _g(scope=None)}),
+           card("B2", rights=grants(R4=BAD_GRANTS["deny"]), support_refs=None),
+           card("B3", support_refs=({"metric": ["wrong-shape"]},)),
+           card("B4", data_gaps=None)]
+    good2 = card("G2", lens=(ei.LENS_TREND,))
+    b = ei.admit([good1, *bad, good2], test_mode=True)
+    assert [a.card_id for a in b.approved] == ["G1", "G2"]
+    assert [r.card_id for r in b.refused] == ["B1", "B2", "B3", "B4"]
+    assert b.by_lens(ei.LENS_TREND)[0].card_id == "G2"
+    assert set(b.refused[0].reason_codes + b.refused[1].reason_codes) == {ei.REASON_RJ3}
+    assert b.refused[2].reason_codes == b.refused[3].reason_codes == (ei.REASON_INCONSISTENT,)
+
+
+@pytest.mark.parametrize("flag", ["false", "true", "False", "True", "", "0", "1", 0, 1, 2, 1.0, None, [], [1], object()])
+def test_c2_test_mode_only_explicit_bool_true_enables_synthetic(flag):
+    assert ei.effective_right(_g(synthetic=True), "R4", test_mode=flag) is ei.RightState.UNKNOWN
+    assert ei.admit([card()], test_mode=flag).approved == ()
+
+
+def test_c2_explicit_bool_true_positive_and_false_negative_controls():
+    assert ei.effective_right(_g(synthetic=True), "R4", test_mode=True) is ei.RightState.ALLOWED
+    assert len(ei.admit([card()], test_mode=True).approved) == 1
+    assert ei.effective_right(_g(synthetic=True), "R4", test_mode=False) is ei.RightState.UNKNOWN
+
+
+def test_c2_non_synthetic_real_grant_is_unaffected_by_test_mode_value():
+    assert len(ei.admit([card(rights=_real_rights())], test_mode="false").approved) == 1
+
+
+class _ExplodingMapping(dict):
+    def keys(self):
+        raise RuntimeError("boom-detail-should-not-leak")
+
+
+def test_c1_unexpected_exception_while_inspecting_evidence_fails_closed_without_leak():
+    good = card("OK")
+    bad = card("BOOM", support_refs=(_ExplodingMapping(metric="m"),))
+    b = ei.admit([bad, good], test_mode=True)
+    assert [a.card_id for a in b.approved] == ["OK"]
+    assert b.refused[0].reason_codes == (ei.REASON_INCONSISTENT,) and "boom-detail" not in repr(b)
