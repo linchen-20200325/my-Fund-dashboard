@@ -843,10 +843,18 @@ def test_mutation_url_layers_each_catch_dot_segment_and_both_removed_fails_open(
      "", "noversion"),
     ('    if not all(k in props for k in REQUIRED_KEYS):\n        raise FetchStop("response_keys_missing")\n', "",
      "nokeys"),
-    ('            if isinstance(p, dict) and (p.get("required") is True or p.get("in") == "path"):\n'
+    ('            if p.get("required") is True or p.get("in") == "path":\n'
      '                raise FetchStop("op_requires_params")', "            pass", "params"),
-    ('    if isinstance(sec, list) and any(isinstance(s, dict) and s for s in sec):\n'
-     '        raise FetchStop("op_requires_security")', "    pass", "security"),
+    ('        if any(x for x in sec):\n            raise FetchStop("op_requires_security")', "        pass", "security"),
+    ('    return _CLASS_POSITIVE.search(desc) is not None and not any(n in low for n in _NEGATION)'
+     if False else '    return bool(_CLASS_POSITIVE.search(desc)) and not any(n in low for n in _NEGATION)',
+     '    return bool(_CLASS_POSITIVE.search(desc))', "negation"),
+    ('            raise FetchStop("row_type_mismatch")', '            pass', "rowtype"),
+    ('        raise FetchStop("server_conflict")', '        pass', "serverconflict"),
+    ('            raise FetchStop("response_key_schema_invalid")', '            pass', "keyschema"),
+    ('            raise FetchStop("op_security_invalid")', '            pass', "secinvalid"),
+    ('    if timed_out:\n        raise FetchStop("wall_clock_timeout")  # 逾期結果一律不用（含完整 frame）',
+     '    if False:\n        raise FetchStop("wall_clock_timeout")', "latefull"),
     ('        if user_confirmed_non_holding is not True:', '        if not user_confirmed_non_holding:', "truthy"),
     ('        if not use_decisions(res.rights)["display"]:\n            raise FetchStop("rights_unverified")',
      "        if False:\n            raise FetchStop('rights_unverified')", "rights"),
@@ -917,9 +925,213 @@ def test_mutations_are_killed(monkeypatch, old, new, probe):
             assert _mrun(ns, FakeTransport(_oas(), rows)).stop_reason != "row_schema_mismatch"
         except KeyError:
             pass  # 守衛被拿掉 ⇒ 行為改變（崩潰）＝被殺
+    elif probe == "negation":
+        res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(isin_desc="ISIN 碼（不代表任何份額級別識別）"))), _rows()))
+        assert res.local_display is not None  # 守衛被拿掉 ⇒ 否定文字也放行
+    elif probe == "rowtype":
+        try:
+            res = _mrun(ns, FakeTransport(_oas(), _rows(**{m.KEY_NAME: 123})))
+            assert res.stop_reason != "row_type_mismatch"
+        except AttributeError:
+            pass
+    elif probe == "serverconflict":
+        op = _op()
+        op["servers"] = [{"url": "https://openapi.tdcc.com.tw/other"}]
+        assert _mrun(ns, FakeTransport(_oas(op=op), _rows())).stop_reason != "server_conflict"
+    elif probe == "keyschema":
+        props = _props()
+        props[m.KEY_NAME] = {"description": "x"}
+        assert _mrun(ns, FakeTransport(_oas(op=_op(props=props)), _rows())).stop_reason != "response_key_schema_invalid"
+    elif probe == "secinvalid":
+        assert _mrun(ns, FakeTransport(_oas(op=_op(security="oops")), _rows())).stop_reason != "op_security_invalid"
+    elif probe == "latefull":
+        conn = _Conn(delay=0.2)
+        proc = _Proc()
+        try:
+            out = ns["run_in_worker"](ent_ok, (1,), wall=0.05, reap=0.05, ctx=_ctx(conn, proc))
+            assert out != {"a": 1}
+        except ns["FetchStop"] as e:
+            assert e.reason != "wall_clock_timeout"  # 守衛被拿掉 ⇒ 逾期結果不再以 wall_clock_timeout 拒絕＝被殺
     elif probe == "sendguard":
         ns["LIVE_ENABLED"] = False
         _patch_pool(monkeypatch, _FakeResp())
         monkeypatch.setattr(ns["__builtins__"] if False else m, "LIVE_ENABLED", False)
         out = ns["_single_get"](PINNED, 100, 1.0)  # 守衛被拿掉 ⇒ LIVE=False 仍送出
         assert out.body == b"[]" and len(_FakePool.instances) == 1
+
+
+# ─────────────── 修後複驗（Work #7151535412）MF1／MF2／MF3 具名反例 ───────────────
+@pytest.mark.parametrize("isin_desc,code_desc", [
+    ("ISIN 碼：不代表任何份額級別", "基金代碼"),  # Work 反例：否定
+    ("ISIN 碼（單一份額級別識別）", "基金代碼，不是級別識別"),  # Work 反例：代碼說明否定
+    ("this ISIN is not a share class identifier", "fund code"),
+    ("ISIN 碼並非單一份額級別識別", "基金代碼"),
+    ("ISIN 碼（單一份額級別識別，但目前無法保證）", "基金代碼"),
+    ("份額級別", "基金代碼"),  # 只有名詞、無「識別」語意
+    ("ISIN 碼", "基金代碼"),
+])
+def test_mf1_class_doc_requires_positive_evidence_and_rejects_negation(isin_desc, code_desc):
+    res = _run(FakeTransport(_oas(op=_op(props=_props(isin_desc=isin_desc, code_desc=code_desc))), _rows()))
+    assert res.stop_reason == "class_evidence_insufficient" and res.local_display is None
+    assert res.class_doc_evidence is False and res.checks.class_verified is False
+
+
+def test_mf1_positive_class_evidence_forms_are_accepted():
+    for d in ("ISIN 碼（單一份額級別識別）", "國際證券識別碼，識別單一份額級別", "ISIN is the share class identifier"):
+        res = _run(FakeTransport(_oas(op=_op(props=_props(isin_desc=d))), _rows()))
+        assert res.stop_reason is None and res.class_doc_evidence is True, d
+
+
+@pytest.mark.parametrize("field", [m.KEY_CODE, m.KEY_NAME, m.KEY_ISIN, m.KEY_CCY, m.KEY_DATE])
+@pytest.mark.parametrize("bad", [123, None, ["x"], {"a": 1}, True])
+def test_mf1_non_string_identity_fields_are_refused_not_stringified(field, bad):
+    res = _run(FakeTransport(_oas(), _rows(**{field: bad})))
+    assert res.stop_reason == "row_type_mismatch" and res.local_display is None and not res.value_released
+
+
+def test_mf1_non_string_identity_in_unselected_row_also_stops():
+    res = _run(FakeTransport(_oas(), [_row(), _row(**{m.KEY_ISIN: "US0000000002", m.KEY_CODE: 999})]))
+    assert res.stop_reason == "row_type_mismatch"
+
+
+@pytest.mark.parametrize("nav,ok", [("12.5", True), (12.5, True), (7, True), (True, False), (None, False),
+                                      ([1], False), ({"a": 1}, False)])
+def test_mf1_nav_type_rules(nav, ok):
+    res = _run(FakeTransport(_oas(), _rows(**{m.KEY_NAV: nav})))
+    assert (res.stop_reason is None) == ok, res.stop_reason
+
+
+# ── MF3
+def _op_with(**kw):
+    op = _op()
+    op.update(kw)
+    return op
+
+
+@pytest.mark.parametrize("name,oas,reason", [
+    ("operation server 與全域不同", _oas(op=_op_with(servers=[{"url": "https://openapi.tdcc.com.tw/other"}])),
+     "server_conflict"),
+    ("pathItem server 與全域不同", None, "server_conflict"),
+    ("全域無 server、僅 operation 宣告兩個", _oas(servers=[], op=_op_with(servers=[{"url": "a"}, {"url": "b"}])),
+     "server_conflict"),
+    ("三層皆無 server", {"openapi": "3.0.1", "info": {"version": "1"}, "paths": {"/v1/x": {"get": _op()}}},
+     "server_not_unique"),
+    ("必要欄位 schema 為 null", _oas(op=_op(props=dict(_props(), **{m.KEY_NAME: None}))), "response_key_schema_invalid"),
+    ("必要欄位 schema 缺 type", _oas(op=_op(props=dict(_props(), **{m.KEY_NAV: {"description": "x"}}))),
+     "response_key_schema_invalid"),
+    ("必要欄位 type 為 array", _oas(op=_op(props=dict(_props(), **{m.KEY_CODE: {"type": "array"}}))),
+     "response_key_schema_invalid"),
+    ("security 非陣列", _oas(op=_op(security="oops")), "op_security_invalid"),
+    ("security 元素非物件", _oas(op=_op(security=["x"])), "op_security_invalid"),
+    ("全域 security 非陣列", _oas(security={"a": []}), "op_security_invalid"),
+    ("parameters 非陣列", _oas(op=_op_with(parameters="oops")), "op_params_invalid"),
+    ("parameter 非物件", _oas(op=_op(params=["x"])), "op_params_invalid"),
+    ("parameter required 非布林", _oas(op=_op(params=[{"name": "q", "in": "query", "required": "yes"}])),
+     "op_params_invalid"),
+    ("parameter 缺 in", _oas(op=_op(params=[{"name": "q"}])), "op_params_invalid"),
+    ("pathItem 為 $ref", {"openapi": "3.0.1", "info": {"version": "1"}, "servers": [{"url": "https://openapi.tdcc.com.tw"}],
+                         "paths": {"/v1/x": {"$ref": "#/x", "get": _op()}}}, "path_item_ref"),
+], ids=lambda x: x if isinstance(x, str) else None)
+def test_mf3_effective_server_and_structure_evidence(name, oas, reason):
+    if oas is None:
+        oas = _oas()
+        oas["paths"]["/v1/opendata/X-1"]["servers"] = [{"url": "https://openapi.tdcc.com.tw/other"}]
+    tp = FakeTransport(oas, _rows())
+    res = _run(tp)
+    assert res.stop_reason == reason and len(tp.calls) == 1 and res.requests_used == 1, name
+
+
+def test_mf3_consistent_multi_level_servers_and_empty_security_ok():
+    op = _op_with(servers=[{"url": "https://openapi.tdcc.com.tw"}], security=[])
+    oas = _oas(op=op, security=[{"apiKey": []}])  # operation 以 [] 明示覆蓋全域認證
+    oas["paths"]["/v1/opendata/X-1"]["servers"] = [{"url": "https://openapi.tdcc.com.tw"}]
+    tp = FakeTransport(oas, _rows())
+    assert _run(tp).stop_reason is None and len(tp.calls) == 2
+
+
+def test_mf3_effective_server_must_still_be_the_pinned_origin():
+    op = _op_with(servers=[{"url": "https://evil.example"}])
+    oas = _oas(op=op, servers=[{"url": "https://evil.example"}])
+    tp = FakeTransport(oas, _rows())
+    res = _run(tp)
+    assert res.stop_reason == "host_mismatch" and len(tp.calls) == 1
+
+
+# ── MF2：監督者獨立計時；逾期完整 frame 亦拒；回收不被接收阻塞（假 context，零網路）
+class _Conn:
+    def __init__(self, delay=0.0, payload=b'R{"a": 1}', block=None):
+        self.delay, self.payload, self.block, self.closed = delay, payload, block, False
+
+    def recv_bytes(self, maxlength=None):
+        if self.block is not None:
+            self.block.wait(30)
+        time.sleep(self.delay)
+        return self.payload
+
+    def close(self):
+        self.closed = True
+
+
+class _Child:
+    def close(self):
+        pass
+
+
+class _Proc:
+    def __init__(self):
+        self.killed, self.joins, self._alive = 0, [], True
+
+    def start(self):
+        pass
+
+    def kill(self):
+        self.killed += 1
+        self._alive = False
+
+    def join(self, t=None):
+        self.joins.append(t)
+
+    def is_alive(self):
+        return self._alive
+
+
+def _ctx(conn, proc):
+    class _C:
+        @staticmethod
+        def Pipe(duplex=False):
+            return conn, _Child()
+
+        @staticmethod
+        def Process(target, args, daemon):
+            return proc
+
+    return _C()
+
+
+def test_mf2_full_frame_after_deadline_is_refused():
+    conn, proc = _Conn(delay=0.2), _Proc()
+    t0 = time.monotonic()
+    with pytest.raises(m.FetchStop) as e:
+        m.run_in_worker(ent_ok, (1,), wall=0.05, reap=0.05, ctx=_ctx(conn, proc))
+    assert e.value.reason == "wall_clock_timeout" and proc.killed >= 1 and time.monotonic() - t0 < 2
+
+
+def test_mf2_reap_runs_even_while_receive_is_blocked_and_exit_is_bounded():
+    from threading import Event
+
+    gate = Event()
+    conn, proc = _Conn(block=gate), _Proc()
+    t0 = time.monotonic()
+    try:
+        with pytest.raises(m.FetchStop) as e:
+            m.run_in_worker(ent_ok, (1,), wall=0.2, reap=0.1, ctx=_ctx(conn, proc))
+        assert e.value.reason == "wall_clock_timeout"
+        assert time.monotonic() - t0 < 2 and proc.killed >= 1 and proc.joins  # 回收在接收仍阻塞時已執行
+    finally:
+        gate.set()
+
+
+def test_mf2_complete_frame_within_deadline_still_succeeds():
+    conn, proc = _Conn(), _Proc()
+    assert m.run_in_worker(ent_ok, (1,), wall=5.0, reap=0.1, ctx=_ctx(conn, proc)) == {"a": 1}
+    assert conn.closed

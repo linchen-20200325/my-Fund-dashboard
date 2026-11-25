@@ -217,14 +217,39 @@ def bind_dataset_operation(oas: Any) -> tuple[str, dict, dict]:
 
 
 def _check_no_required_params_or_auth(oas: dict, op: dict, item: dict) -> None:
+    """參數／認證結構須可驗：型別不符＝證據不明＝停；必要參數或認證＝停。"""
     for plist in (item.get("parameters"), op.get("parameters")):
-        for p in plist if isinstance(plist, list) else []:
+        if plist is None:
+            continue
+        if not isinstance(plist, list):
+            raise FetchStop("op_params_invalid")
+        for p in plist:
             p = _resolve(p, oas)
-            if isinstance(p, dict) and (p.get("required") is True or p.get("in") == "path"):
+            if not isinstance(p, dict) or not isinstance(p.get("in"), str) or not isinstance(p.get("name"), str):
+                raise FetchStop("op_params_invalid")
+            if "required" in p and not isinstance(p["required"], bool):
+                raise FetchStop("op_params_invalid")
+            if p.get("required") is True or p.get("in") == "path":
                 raise FetchStop("op_requires_params")
-    sec = op["security"] if "security" in op else oas.get("security")
-    if isinstance(sec, list) and any(isinstance(s, dict) and s for s in sec):
-        raise FetchStop("op_requires_security")
+    for sec in ((op["security"],) if "security" in op else ()) + (
+            (oas["security"],) if "security" in oas and "security" not in op else ()):
+        if not isinstance(sec, list) or not all(isinstance(x, dict) for x in sec):
+            raise FetchStop("op_security_invalid")
+        if any(x for x in sec):
+            raise FetchStop("op_requires_security")
+
+
+def _effective_servers(oas: dict, item: dict, op: dict) -> Any:
+    """OAS3：operation > pathItem > 全域。多層宣告且內容不同＝衝突＝停；回傳有效 servers。"""
+    levels = [x["servers"] for x in (op, item, oas) if isinstance(x, dict) and "servers" in x]
+    if not levels:
+        raise FetchStop("server_not_unique")  # 未宣告＝OAS 預設相對路徑，無法釘住 origin
+    if any(lv != levels[0] for lv in levels[1:]):
+        raise FetchStop("server_conflict")
+    return levels[0]
+
+
+_KEY_TYPES = {KEY_NAV: ("string", "number", "integer")}
 
 
 def _response_schema_props(oas: dict, op: dict) -> dict:
@@ -248,16 +273,36 @@ def _response_schema_props(oas: dict, op: dict) -> dict:
         raise FetchStop("response_items_not_object")
     if not all(k in props for k in REQUIRED_KEYS):
         raise FetchStop("response_keys_missing")
-    return {k: _resolve(props[k], oas) for k in REQUIRED_KEYS}
+    out = {}
+    for k in REQUIRED_KEYS:
+        v = _resolve(props[k], oas)
+        if not isinstance(v, dict) or v.get("type") not in _KEY_TYPES.get(k, ("string",)):
+            raise FetchStop("response_key_schema_invalid")  # 必要欄位 schema 不可為 null／缺型別
+        out[k] = v
+    return out
+
+
+_CLASS_POSITIVE = re.compile(r"(單一|各)份額級別|份額級別(識別|代碼)|識別[^，。；;,]{0,6}份額級別|share class (identifier|code)",
+                             re.I)
+_NEGATION = ("不代表", "不是", "並非", "非", "無法", "未", "沒有", "不含", "不具", "不為", "不屬", "不提供", "不包含",
+             "not ", "no ", "n't", "cannot", "without", "unrelated")
+
+
+def _positive_class_text(desc: Any) -> bool:
+    """正向且無否定：說明須明示識別『單一份額級別』，且全文不含任何否定詞（寧可誤拒＝fail-closed）。"""
+    if not isinstance(desc, str) or not desc.strip():
+        return False
+    low = desc.lower()
+    return bool(_CLASS_POSITIVE.search(desc)) and not any(n in low for n in _NEGATION)
 
 
 def _class_doc_evidence(props: dict) -> bool:
-    """文件層證據：ISIN 欄位說明明載「份額級別」層次，且代碼欄位有說明。缺 ⇒ False（不是錯誤）。"""
-    isin_desc = props[KEY_ISIN].get("description") if isinstance(props[KEY_ISIN], dict) else None
-    code_desc = props[KEY_CODE].get("description") if isinstance(props[KEY_CODE], dict) else None
-    ok_isin = isinstance(isin_desc, str) and any(w in isin_desc.lower() for w in ("級別", "份額", "share class"))
-    ok_code = isinstance(code_desc, str) and bool(code_desc.strip())
-    return ok_isin and ok_code
+    """文件層證據（rev2 §四.1）：ISIN 說明須「正向」載明識別單一份額級別；代碼說明須非空且無否定。缺／否定 ⇒ False。"""
+    isin_desc = props[KEY_ISIN].get("description")
+    code_desc = props[KEY_CODE].get("description")
+    code_ok = isinstance(code_desc, str) and bool(code_desc.strip()) and not any(
+        n in code_desc.lower() for n in _NEGATION)
+    return _positive_class_text(isin_desc) and code_ok
 
 
 def process_r0(body: bytes) -> dict[str, Any]:
@@ -275,11 +320,14 @@ def process_r0(body: bytes) -> dict[str, Any]:
     if not isinstance(info, dict) or not isinstance(info.get("version"), str) or not info["version"].strip():
         raise FetchStop("oas_info_version_missing")
     path, op, item = bind_dataset_operation(oas)
+    if "$ref" in item:
+        raise FetchStop("path_item_ref")
+    servers = _effective_servers(oas, item, op)
     _check_no_required_params_or_auth(oas, op, item)
     props = _response_schema_props(oas, op)
     return {
         "oas_version": ver,
-        "servers": oas.get("servers"),
+        "servers": servers,
         "path": path,
         "class_doc_ok": _class_doc_evidence(props),
     }
@@ -300,16 +348,19 @@ def process_r1(body: bytes, isin: str) -> dict[str, Any]:
     for r in rows:
         if not isinstance(r, dict) or not all(k in r for k in REQUIRED_KEYS):
             raise FetchStop("row_schema_mismatch")  # 逐列驗證（不只首列）
-        if str(r[KEY_ISIN]).strip().upper() == isin:
+        if not all(isinstance(r[k], str) for k in (KEY_CODE, KEY_ISIN, KEY_NAME, KEY_CCY, KEY_DATE)) or \
+                isinstance(r[KEY_NAV], bool) or not isinstance(r[KEY_NAV], (str, int, float)):
+            raise FetchStop("row_type_mismatch")  # 身分欄型別不符不字串化，一律停（不放行）
+        if r[KEY_ISIN].strip().upper() == isin:
             if len(selected) >= MAX_SELECTED_ROWS:
                 raise FetchStop("too_many_selected")
-            selected.append({k: ("" if r[k] is None else str(r[k])) for k in REQUIRED_KEYS})
+            selected.append({k: str(r[k]) for k in REQUIRED_KEYS})
     codes = {s[KEY_CODE].strip() for s in selected}
     code_isins: dict[str, set[str]] = {c: set() for c in codes}
     for r in rows:
-        c = str(r[KEY_CODE]).strip() if r[KEY_CODE] is not None else ""
+        c = r[KEY_CODE].strip()
         if c in code_isins:
-            code_isins[c].add(str(r[KEY_ISIN]).strip().upper())
+            code_isins[c].add(r[KEY_ISIN].strip().upper())
     return {"rows_seen": len(rows), "selected": selected,
             "code_isin_max": max((len(v) for v in code_isins.values()), default=0)}
 
@@ -753,9 +804,11 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
     """於子行程執行 entry(*args)；牆鐘涵蓋啟動、執行、解析與 IPC 接收；固定錯誤碼；有界回收。
 
     - 一律 spawn（跨平台一致；entry 須為頂層可 pickle 函式）。
-    - 父行程關閉自己手上的寫端：子行程一死即得 EOF，不會無限等待。
-    - 牆鐘由 watchdog 計時器 kill 子行程達成（連「寫到一半卡住」亦被截斷）。
-    - 回收：join(reap) → kill → join(reap)；仍存活 ⇒ UNREAPED（硬停）。
+    - 父行程關閉自己手上的寫端：子行程一死即得 EOF。
+    - 監督者（本函式）**不**同步等待接收：接收在 daemon 執行緒，監督者以 `join(剩餘牆鐘)` 自行計時；
+      到期即 kill 子行程並進入回收，**不論接收執行緒是否已退出**（回收不再受接收阻塞）。
+    - 逾期後即使收到完整 frame 亦拒絕（`wall_clock_timeout`），不回傳任何結果。
+    - 回收：join(reap) → kill → join(reap)；仍存活 ⇒ UNREAPED（優先於其他碼，硬停）。
     """
     import multiprocessing as mp
     import threading
@@ -767,32 +820,42 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
     p = ctx.Process(target=worker, args=(child, entry, tuple(args)), daemon=True)
     p.start()
     child.close()
-    timer = threading.Timer(max(0.0, wall - (time.monotonic() - t0)), lambda: _safe_kill(p))
-    timer.daemon = True
-    timer.start()
-    data: Optional[bytes] = None
-    err: Optional[str] = None
-    try:
-        data = parent.recv_bytes(IPC_MAX_BYTES)
-    except EOFError:
-        err = "ipc_truncated"
-    except OSError as e:
-        msg = str(e)
-        err = ("ipc_oversize" if "bad message length" in msg
-               else "ipc_truncated" if ("end of file" in msg or isinstance(e, ConnectionResetError))
-               else "ipc_error")
-    finally:
-        timer.cancel()
-        parent.close()
-    timed_out = (time.monotonic() - t0) >= wall
+    box: dict[str, Any] = {}
+
+    def _rx() -> None:
+        try:
+            box["data"] = parent.recv_bytes(IPC_MAX_BYTES)
+        except EOFError:
+            box["err"] = "ipc_truncated"
+        except OSError as e:
+            msg = str(e)
+            box["err"] = ("ipc_oversize" if "bad message length" in msg
+                          else "ipc_truncated" if ("end of file" in msg or isinstance(e, ConnectionResetError))
+                          else "ipc_error")
+        except BaseException:  # noqa: BLE001
+            box["err"] = "ipc_error"
+
+    rx = threading.Thread(target=_rx, daemon=True)
+    rx.start()
+    rx.join(max(0.0, wall - (time.monotonic() - t0)))
+    timed_out = rx.is_alive() or (time.monotonic() - t0) > wall
+    if timed_out:
+        _safe_kill(p)  # 接收未完成或已逾期：先殺，再獨立回收
     p.join(reap)
     if p.is_alive():
         _safe_kill(p)
         p.join(reap)
         if p.is_alive():
+            _safe_close(parent)
             raise FetchStop("UNREAPED")
+    if not timed_out:
+        rx.join(0.0)
+    _safe_close(parent)
+    if timed_out:
+        raise FetchStop("wall_clock_timeout")  # 逾期結果一律不用（含完整 frame）
+    data = box.get("data")
     if data is None:
-        raise FetchStop("wall_clock_timeout" if timed_out else (err or "ipc_error"))
+        raise FetchStop(box.get("err") or "ipc_error")
     tag, body = data[:1], data[1:]
     if tag == b"R":
         try:
@@ -803,6 +866,13 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
         reason = body.decode("utf-8", "replace")
         raise FetchStop(reason if _REASON.match(reason) else "step_error")
     raise FetchStop("step_error")
+
+
+def _safe_close(c: Any) -> None:
+    try:
+        c.close()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _safe_kill(p: Any) -> None:
