@@ -108,6 +108,26 @@ def disabled_top_html(item: nav.NavItem) -> str:
             f'<span class="uv3-tn-soon">{W.span(item.soon_key)}</span></div>')
 
 
+def demo_marker_html(item: nav.NavItem, *, where: str) -> str:
+    """離線示範頁在導覽項旁的標示（純文字；與 `disabled_*_html` 的「開發中」不同：沒有 `aria-disabled`、不是 `uv3-nav-soon`／`uv3-tn-soon`，頁是可進的）。
+    `where`＝`side`／`top`；是 `st.page_link` 的**同層兄弟**（不放進連結的 label，連結名稱仍是頁名）。"""
+    css = "uv3-nav-demo" if where == "side" else "uv3-tn-demo"
+    return f'<div class="{css}" data-nav-demo="{escape(item.slug)}">{W.span("ast_demo_nav_marker")}</div>'
+
+
+def demo_banner_html() -> str:
+    """離線示範頁的頁頂橫幅（畫在頁標題之前）。純文字；不是 chip、不是狀態列。"""
+    return f'<div class="uv3-demo-banner" role="note" data-shell="demo-banner">{W.span("ast_demo_banner")}</div>'
+
+
+def demo_limit_note_html() -> str:
+    return f'<div class="uv3-demo-note" data-shell="demo-note">{W.span("ast_demo_limit_note")}</div>'
+
+
+def demo_footer_html() -> str:
+    return f'<div class="uv3-footer" data-shell="footer">{W.span("ast_demo_footer")}</div>'
+
+
 # ───────────────────────────── Streamlit 畫面 ─────────────────────────────
 
 def render_navigation(pages: Mapping[str, object], current_slug: Optional[str] = None) -> None:
@@ -122,6 +142,8 @@ def render_navigation(pages: Mapping[str, object], current_slug: Optional[str] =
             if item.available:
                 with st.container(key=_now_key("side", item.slug, current_slug)):
                     st.page_link(pages[item.slug], label=item.name, icon=item.icon or None)
+                    if item.demo:
+                        st.markdown(demo_marker_html(item, where="side"), unsafe_allow_html=True)
             else:
                 st.markdown(disabled_side_html(item), unsafe_allow_html=True)
     with st.container(key=nav.TOP_KEY, horizontal=True, gap="small"):
@@ -129,6 +151,8 @@ def render_navigation(pages: Mapping[str, object], current_slug: Optional[str] =
             if item.available:
                 with st.container(key=_now_key("top", item.slug, current_slug)):
                     st.page_link(pages[item.slug], label=W.text(item.short_key), icon=item.icon or None, width="stretch")
+                    if item.demo:
+                        st.markdown(demo_marker_html(item, where="top"), unsafe_allow_html=True)
             else:
                 st.markdown(disabled_top_html(item), unsafe_allow_html=True)
 
@@ -148,6 +172,18 @@ def render_status(status: ShellStatus, *, key: str = "uv3_shell_refresh") -> Non
         st.button(W.text("shell_refresh_cta"), key=key, disabled=not status.refresh_available, width="stretch")
         if not status.refresh_available:
             st.markdown(f'<div class="uv3-cta-note">{W.span("shell_refresh_unavailable")}</div>', unsafe_allow_html=True)
+
+
+def render_demo_banner() -> None:
+    import streamlit as st
+
+    st.markdown(demo_banner_html(), unsafe_allow_html=True)
+
+
+def render_demo_footer() -> None:
+    import streamlit as st
+
+    st.markdown(demo_footer_html(), unsafe_allow_html=True)
 
 
 def render_footer() -> None:

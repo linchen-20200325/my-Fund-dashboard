@@ -12,6 +12,7 @@
   ~~批 1 恆為空~~ → 2026-11-03 BL-0536 rendering 批：🌍 `mkt` 改 True（只進 Preview App；其餘四頁維持 False；狀態更新，不是漏刪）。
   2026-11-21 BL-0540 Phase 1A：⚙️ `set` 改 True（客戶逐字裁示，僅本地 Preview 第一切片；`ast`／`exp`／`ai` 維持 False；狀態更新，不是漏刪）。
   2026-11-22 Gate-M 方案 2a：🔍 `exp` 改 True（客戶 #7073251388 選方案 B、總管 #7073385776 核可狹窄例外；僅本地 Preview 的 FAKE 頁，頁級＋卡級永久標示 FAKE，不接真來源；`ast`／`ai` 維持 False；狀態更新，不是漏刪）。
+  2026-11-25 A-AST-MOUNT-FAKE-1：💼 `ast` 改 True 且 `data_mode="offline_demo"`（客戶方案甲，只示範資料不足的版面狀態；導覽項與頁頂帶示範標示；`exp`／`ai` 維持原狀；狀態更新，不是漏刪）。
 - 🤖 `ai`：Phase 7（OneBrain）之前**禁止** registered=True（建構時就擋）。
 """
 from __future__ import annotations
@@ -25,6 +26,10 @@ _REASONS = (REASON_WIREFRAME_PENDING, REASON_PHASE7)
 
 AI_SLUG = "ai"
 
+DATA_MODE_REAL = "real"                # 預設：頁面資料來自正式載入端（或尚未掛載）
+DATA_MODE_OFFLINE_DEMO = "offline_demo"  # 離線示範：固定常數封包、不取數；導覽與頁頂必須明示「示範」（與「開發中」「尚未開放」不同）
+_DATA_MODES = (DATA_MODE_REAL, DATA_MODE_OFFLINE_DEMO)
+
 
 @dataclass(frozen=True)
 class PageSlot:
@@ -34,8 +39,13 @@ class PageSlot:
     title: str
     registered: bool = False
     unregistered_reason: Optional[str] = None
+    data_mode: str = DATA_MODE_REAL
 
     def __post_init__(self) -> None:
+        if self.data_mode not in _DATA_MODES:
+            raise ValueError(f"data_mode 必須 ∈ {_DATA_MODES}")
+        if self.data_mode == DATA_MODE_OFFLINE_DEMO and (not self.registered or self.slug == AI_SLUG):
+            raise ValueError("離線示範只能用於已掛載、且非 🤖 的頁（未掛載的頁沒有畫面可示範；🤖 Phase 7 前不得掛）")
         if not self.slug or not self.title:
             raise ValueError("slug 與 title 不得為空")
         if self.registered and self.unregistered_reason is not None:
@@ -51,7 +61,7 @@ class PageSlot:
 # 頁序與頁名：80 第 7 節；與 ui_v2 預覽導覽的四頁逐字一致。
 IA_PAGES: Tuple[PageSlot, ...] = (
     PageSlot("mkt", "🌍 市場與趨勢", True),   # 2026-11-03：線框已核准（DEC-2026-11-03-01）、Preview rendering 實作（BL-0536）
-    PageSlot("ast", "💼 我的資產", False, REASON_WIREFRAME_PENDING),
+    PageSlot("ast", "💼 我的資產", True, data_mode=DATA_MODE_OFFLINE_DEMO),   # 2026-11-25：A-AST-MOUNT-FAKE-1（客戶 #7147974835 方案甲）——僅本地 Preview 的離線示範頁；不讀個人持倉、不取數；導覽與頁頂永久標示「示範」
     PageSlot("exp", "🔍 找基金", True),   # 2026-11-22：Gate-M 方案 2a——僅本地 Preview 的 FAKE 頁（總管裁示 #1296 comment 7073385776）；不接任何真來源
     PageSlot(AI_SLUG, "🤖 AI 投資總結", False, REASON_PHASE7),
     PageSlot("set", "⚙️ 設定", True),   # 2026-11-21：BL-0540 Phase 1A 客戶裁示（#7056447977）——僅本地 Preview、唯讀市場與利率健康度；不是全站、不是搬遷

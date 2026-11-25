@@ -19,7 +19,7 @@ from typing import Optional
 
 from shared.ui_semantics import rules
 from ui_v3.design import theme, tokens
-from ui_v3.pages import chart_svg
+from ui_v3.pages import chart_svg, onebrain_slot
 from ui_v3.shell import nav
 from ui_v3.shell.registry import IA_PAGES
 from ui_v3.viewmodels import preview_wording as W
@@ -428,6 +428,7 @@ def _render(model: MarketPageModel) -> None:
         with st.expander(W.text("source_limits_title")):
             md(source_limits_html(model))
 
+    onebrain_slot.render()   # MK-1：本頁唯一的 OneBrain 解釋槽（恆「未啟用」；頁面在 AI 關閉時照常可操作）
     columns = st.columns(len(model.secondary))
     for column, secondary in zip(columns, model.secondary):
         with column:

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from ui_v3.design import theme
-from ui_v3.shell.registry import IA_PAGES, PageSlot
+from ui_v3.shell.registry import DATA_MODE_OFFLINE_DEMO, IA_PAGES, PageSlot
 
 MOBILE_MAX_PX = 768          # 44 第二節 2.1：≤768 手機頁首、>768 原桌機側欄（兩者不同時出現）
 TOUCH_MIN_PX = 48            # 觸控目標下限（Apple HIG／Material 取 44～48）
@@ -42,6 +42,7 @@ class NavItem:
     available: bool      # True＝可進；False＝可見但不可進（開發中；不是空殼頁）
     short_key: str       # 手機頁首導覽短字樣在規則表 `APPROVED_WORDING` 的鍵
     soon_key: str        # 未掛載時的標籤鍵：🤖 用「尚未開放」（Phase 7 前不可進）、其餘用「開發中」（客戶 2026-11-03，`DEC-2026-11-03-11`）
+    demo: bool = False   # True＝離線示範頁（已掛載、可進，但資料是固定示範）：導覽項旁加「示範頁」標示（不是「開發中」、不 aria-disabled）
 
 
 def nav_items(pages: Optional[Tuple[PageSlot, ...]] = None) -> Tuple[NavItem, ...]:
@@ -50,7 +51,8 @@ def nav_items(pages: Optional[Tuple[PageSlot, ...]] = None) -> Tuple[NavItem, ..
     for slot in (IA_PAGES if pages is None else pages):
         icon, name = split_title(slot.title)
         soon_key = "shell_nav_not_open" if slot.slug == "ai" else "shell_nav_soon"
-        out.append(NavItem(slot.slug, icon, name, slot.title, slot.registered, f"shell_nav_short_{slot.slug}", soon_key))
+        out.append(NavItem(slot.slug, icon, name, slot.title, slot.registered, f"shell_nav_short_{slot.slug}", soon_key,
+                           demo=slot.registered and slot.data_mode == DATA_MODE_OFFLINE_DEMO))
     return tuple(out)
 
 
@@ -85,6 +87,11 @@ def shell_css() -> str:
 [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]{{min-height:{touch}px}}
 /* 鍵盤焦點：桌機側欄沿用手機頁首同一組可見焦點（2px 實線、currentColor）；只在 :focus-visible，不改 hover／active、尺寸、色票 */
 [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:focus-visible{{outline:2px solid currentColor;outline-offset:-3px}}
+/* 離線示範標示（💼）：只用 token 色、虛線框＋文字；與「開發中」（不可點、cursor:not-allowed）不同——示範頁是可進的 */
+.uv3-nav-demo{{display:inline-block;font-size:{caption};line-height:1.4;color:{text2};border:1px dashed {text2};border-radius:10px;padding:0 6px;margin:0 0 .25rem 1rem}}
+.uv3-demo-banner{{font-size:{caption};line-height:1.5;color:{text2};border:1px dashed {text2};border-radius:6px;padding:.25rem .5rem;margin:0 0 .5rem 0}}
+.uv3-onebrain-slot{{font-size:{caption};line-height:1.5;color:{text2};border:1px dashed {text2};border-radius:8px;padding:.5rem .75rem;margin:.75rem 0}}
+.uv3-demo-note{{font-size:{caption};line-height:1.5;color:{text2};margin:.25rem 0 .75rem 0}}
 /* Top／Status Bar：極薄一行（Shell 的一部分，不是頁級狀態 chip）。視覺批 2：非主導覽的輔助字 12→13px（type.caption）；Status Bar 行高固定 18px（＝原 12px×1.5），首屏露出量不變 */
 .uv3-statusbar{{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:{caption};line-height:18px;color:{text2};margin:0 0 .25rem 0}}
 .uv3-statusbar .uv3-tag{{font-weight:700;letter-spacing:.06em;border:1px solid currentColor;border-radius:4px;padding:0 5px;cursor:help}}
@@ -115,6 +122,7 @@ def shell_css() -> str:
   .st-key-{TOP_KEY} .uv3-tn-disabled{{color:{text2};cursor:not-allowed;font-size:12px}}
   .st-key-{TOP_KEY} .uv3-tn-icon{{font-size:20px;line-height:1}}
   .st-key-{TOP_KEY} .uv3-tn-soon{{font-size:10px}}
+  .st-key-{TOP_KEY} .uv3-tn-demo{{display:block;width:100%;text-align:center;font-size:10px;line-height:1.2;color:{text2};margin:0;padding:0}}
 }}
 </style>
 """

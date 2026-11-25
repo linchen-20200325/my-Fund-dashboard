@@ -70,6 +70,25 @@ def _render_set(pages: dict) -> None:
     page.render(None if snapshot is None else settings_health.build_from_snapshot(snapshot), market_page=pages.get("mkt"))
 
 
+def _render_ast() -> None:
+    """💼 頁（離線示範，方案甲）：固定常數封包（情境③：市值基準未開放、無證據）→ 既有 `build_assets_page` → 既有 `assets.render`。
+
+    **不取數、不讀個人持倉／Active Sheet／設定、不呼叫 `adapter.load`、不寫 ⚙️ 快照鍵、不畫 🌍 的 Status Bar**；封包由 `assets_demo_envelope` 提供（純常數、無任何 import）。
+    頁頂先畫示範橫幅（在頁標題之前），標題之後有一行限制說明；頁尾與 OneBrain 未啟用槽照規格。其餘 10 個 FAKE 情境不進畫面。
+    """
+    from ui_v3.adapters.assets_demo_envelope import demo_envelope
+    from ui_v3.adapters.assets_page import build_assets_page
+    from ui_v3.pages import assets, chrome, onebrain_slot
+
+    chrome.render_demo_banner()
+    assets.render(build_assets_page(demo_envelope()))
+    import streamlit as st
+
+    st.markdown(chrome.demo_limit_note_html(), unsafe_allow_html=True)
+    onebrain_slot.render()
+    chrome.render_demo_footer()
+
+
 def _render_exp() -> None:
     """🔍 頁（本地 FAKE）：輸入 → FAKE 假取數函式（`ui_v3.fixtures.exp_lookup_fake`，只在此函式內 import）→ adapter → 頁渲染。
 
@@ -107,7 +126,7 @@ def main() -> None:
 
     pages = assert_preview_ready()
     st_pages: dict = {}   # `_render_set` 要連回 🌍 的 st.Page；頁建好後才填，執行時才讀
-    renderers = {"mkt": _render_mkt, "exp": _render_exp, "set": _holder_renderer(_render_set, st_pages)}
+    renderers = {"mkt": _render_mkt, "ast": _render_ast, "exp": _render_exp, "set": _holder_renderer(_render_set, st_pages)}
     missing = [p.slug for p in pages if p.slug not in renderers]
     if missing:
         raise NotImplementedError(f"已掛載的頁沒有 renderer：{missing}（不畫空殼）")

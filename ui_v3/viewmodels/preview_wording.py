@@ -26,6 +26,8 @@ STATUS_PENDING = "pending"
 _SRC_81 = "81 第 3.1 節「擬：」（PENDING，待客戶定字）"
 _SRC_UIV2 = "沿用 ui_v2 既有字樣（核准狀態未查證）"
 _SRC_EXEC = "執行組暫擬（Preview 用；可被客戶推翻）"
+_SRC_AST_APPROVED = ("客戶已核准字樣 W-AST-0{n}（`#1296` comment 7079420078，2026-11-20）；尚未進規則表（本批不動規則表），"
+                     "待治理 writer 落盤後搬進 `APPROVED_WORDING` 並刪除本列")
 
 
 @dataclass(frozen=True)
@@ -117,6 +119,14 @@ _LIST = (
     _w("health_field_as_of", "資料日", _SRC_EXEC),
     _w("health_field_fetched", "取得時間（台北時間）", _SRC_EXEC),
     _w("health_no_snapshot", "尚未評估：這次開啟還沒有市場與利率的資料可看。請先到市場頁；本頁不會自行取數。", _SRC_EXEC),
+    # 💼 離線示範頁（A-AST-MOUNT-FAKE-1；客戶 2026-11-25 方案甲）：四句為客戶已核准字樣（逐字），OneBrain 槽字樣為執行組暫擬
+    _w("ast_demo_nav_marker", "示範頁", _SRC_AST_APPROVED.format(n=1)),
+    _w("ast_demo_banner", "畫面示範｜尚未連接個人持倉資料", _SRC_AST_APPROVED.format(n=2)),
+    _w("ast_demo_limit_note", "此頁僅展示資產頁的版面與資料不足狀態，未讀取個人持股、成本或資產金額。", _SRC_AST_APPROVED.format(n=3)),
+    _w("ast_demo_footer", "PREVIEW · 未連接個人持倉資料", _SRC_AST_APPROVED.format(n=4)),
+    # 🌍／💼 共用的 OneBrain 解釋槽（MK-1）：恆「未啟用」，不是 AI 結論
+    _w("onebrain_slot_title", "OneBrain 解釋：未啟用", _SRC_EXEC),
+    _w("onebrain_slot_body", "此位置之後只會顯示有來源、有反面證據的短結論；目前不產生任何 AI 結論，本頁其他功能不受影響。", _SRC_EXEC),
     # 頁級
     _w("preview_banner", "Preview 預覽（非正式頁面）：字樣標有虛線底線者為暫時字樣，待客戶定字", _SRC_EXEC),
 )
