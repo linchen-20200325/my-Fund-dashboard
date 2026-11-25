@@ -219,6 +219,28 @@ def bind_dataset_operation(oas: Any) -> tuple[str, dict, dict]:
 _PARAM_IN = ("query", "header", "path", "cookie")
 
 
+_MEDIA_TYPE = re.compile(r"[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+*-]+(\s*;.*)?")
+
+
+def _check_param_representation(p: dict) -> None:
+    """OAS 3.0.3 Parameter Object：`schema` 與 `content` **互斥且恰一**；content 只允許單一有效 media object。"""
+    has_schema, has_content = "schema" in p, "content" in p
+    if has_schema == has_content:  # 同存或皆無
+        raise FetchStop("op_params_invalid")
+    if has_schema:
+        if not isinstance(p["schema"], dict):
+            raise FetchStop("op_params_invalid")
+        return
+    c = p["content"]
+    if not isinstance(c, dict) or len(c) != 1:  # 空、或多個 media entries
+        raise FetchStop("op_params_invalid")
+    (mt, mo), = c.items()
+    if not isinstance(mt, str) or not _MEDIA_TYPE.fullmatch(mt) or not isinstance(mo, dict):
+        raise FetchStop("op_params_invalid")
+    if "schema" in mo and not isinstance(mo["schema"], dict):
+        raise FetchStop("op_params_invalid")
+
+
 def _check_no_required_params_or_auth(oas: dict, op: dict, item: dict) -> None:
     """參數／認證結構須完整可驗：未宣告（鍵不存在）與宣告為 null／錯型別不同——後者＝證據不明＝停。"""
     for holder in (item, op):
@@ -227,15 +249,20 @@ def _check_no_required_params_or_auth(oas: dict, op: dict, item: dict) -> None:
         plist = holder["parameters"]
         if not isinstance(plist, list):  # 含 null
             raise FetchStop("op_params_invalid")
+        seen: set = set()
         for p in plist:
             p = _resolve(p, oas)
-            if (not isinstance(p, dict) or not _nonblank(p.get("name")) or p.get("in") not in _PARAM_IN
-                    or not (isinstance(p.get("schema"), dict) or isinstance(p.get("content"), dict))):
+            if (not isinstance(p, dict) or not _nonblank(p.get("name")) or p.get("in") not in _PARAM_IN):
                 raise FetchStop("op_params_invalid")
+            _check_param_representation(p)
             if "required" in p and not isinstance(p["required"], bool):
                 raise FetchStop("op_params_invalid")
             if p.get("in") == "path" and p.get("required") is not True:
                 raise FetchStop("op_params_invalid")  # OAS：path 參數必為 required
+            ident = (p["name"].lower() if p["in"] == "header" else p["name"], p["in"])
+            if ident in seen:
+                raise FetchStop("op_params_invalid")  # 同層 name＋in 不得重複
+            seen.add(ident)
             if p.get("required") is True or p.get("in") == "path":
                 raise FetchStop("op_requires_params")
     for sec in ((op["security"],) if "security" in op else ()) + (
@@ -289,48 +316,80 @@ def _response_schema_props(oas: dict, op: dict) -> dict:
     return out
 
 
-_SEP = r"[^，。；;,]"
-# ISIN 說明須正向載明「唯一識別一個（單一）份額級別」；『各份額級別』『共用』等泛稱不算
-_ISIN_UNIQUE = re.compile(
-    rf"唯一(識別|對應|代表){_SEP}{{0,6}}(一個|單一)?份額級別"
-    rf"|(一個|單一)份額級別{_SEP}{{0,6}}(對應|僅對應|只對應){_SEP}{{0,4}}(一個|唯一)\s*isin"
-    r"|uniquely identifies (a|one|a single) share class",
+# 說明文字須是「單一子句、整句符合」的正向身分陳述；多子句／附註／矛盾／設計目標／沿用母基金／無關代碼一律不採證。
+_ISIN_FULL = re.compile(
+    r"(isin\s*(碼|代碼)?\s*[：:]?\s*)?唯一(識別|對應|代表)(一個|單一)份額級別[。.]?"
+    r"|isin\s*(碼|代碼)?\s*[：:]?\s*(一個|單一)份額級別唯一對應(一個|唯一)\s*isin[。.]?"
+    r"|the isin uniquely identifies (a|one|a single) share class\.?",
     re.I)
-# 代碼說明須載明其為基金／份額級別的身分代碼（不能只是「有說明」）
-_CODE_IDENTITY = re.compile(rf"(基金|份額級別)(代碼|代號){_SEP}{{0,12}}(識別|代表|對應){_SEP}{{0,12}}(基金|份額級別)"
-                            r"|fund code identifies (the|a) (fund|share class)", re.I)
+_CODE_FULL = re.compile(
+    r"(基金|份額級別)(代碼|代號)\s*[：:]?\s*(用以|用於)?(識別|代表|對應)(該)?(基金|份額級別)(份額級別)?[。.]?"
+    r"|fund code identifies (the|a) (fund|share class)\.?",
+    re.I)
 _SHARED = ("各份額級別", "共用", "共享", "共同", "多個", "多支", "同一 isin", "同一isin", "shared", "multiple",
-           "any class", "all classes", "行銷", "促銷", "活動", "campaign", "promo", "廣告")
+           "any class", "all classes", "行銷", "促銷", "活動", "campaign", "promo", "廣告",
+           # 矛盾／來源不明／設計目標類
+           "無關", "不識別", "沿用", "母基金", "子基金", "設計目標", "目標", "僅為", "僅供", "參考", "附註", "註記",
+           "預留", "保留", "暫", "待", "未來", "將", "計畫", "規劃", "草案", "inherit", "parent", "goal", "design",
+           "target", "reserved", "planned", "legacy", "deprecated", "todo", "tbd", "note:")
 _NEGATION = ("不代表", "不是", "並非", "非", "無法", "未", "沒有", "不含", "不具", "不為", "不屬", "不提供", "不包含",
-             "not ", "no ", "n't", "cannot", "without", "unrelated")
+             "不能", "不可", "不得", "不保證", "not ", "no ", "n't", "cannot", "without", "unrelated")
+_DESC_MAX = 80
 
 
 def _clean_text(desc: Any) -> Optional[str]:
-    """說明文字須為非空字串，且不含否定詞、共用／多對一／無關（行銷等）標記；否則視為無正向證據（fail-closed）。"""
-    if not isinstance(desc, str) or not desc.strip():
+    """說明須為非空、短（≤80 字）、單一子句字串，且不含否定／共用／無關／矛盾／設計目標標記；否則無正向證據。"""
+    if not isinstance(desc, str) or not desc.strip() or len(desc) > _DESC_MAX:
         return None
     low = desc.lower()
     if any(n in low for n in _NEGATION) or any(x in low for x in _SHARED):
         return None
-    return desc
+    if re.search(r"[，；;,\n]", desc.strip().rstrip("。.")):
+        return None  # 多子句／附加說明（可夾帶矛盾）一律不採證
+    return desc.strip()
 
 
-def _isin_schema_structure_ok(sch: Any) -> bool:
-    """結構佐證（不只靠文字）：ISIN 欄位須宣告固定 12 碼（minLength／maxLength 為 12，或 pattern 含 12／{10}）。"""
-    if not isinstance(sch, dict):
+_PATTERN_SAFE = re.compile(r"[\^$\[\]\-A-Za-z0-9{},()\\.+*?|]{1,64}")
+_ISIN_OK, _ISIN_BAD = ("US0378331005", "JP3633400001"), ("US037833100", "US03783310055", "us0378331005",
+                                                         "US-378331005", "", "US0378331005 ")
+
+
+def _isin_schema_restricts_12(sch: Any) -> bool:
+    """結構佐證（不只靠文字）：ISIN 欄位 schema 須**確實**限制為合法 12 碼，且不得自相矛盾。
+
+    - minLength／maxLength 若宣告任一個，須兩者皆為整數 12（13／12 等矛盾＝不採證）。
+    - pattern 若宣告，須為短的安全字元集、可編譯，且**實測**：接受合法 12 碼範例、拒絕 11／13 碼、小寫、
+      含符號與前後空白（`^(12)?[A-Z0-9]+$` 這類不限長度的樣式＝不採證）。
+    - 至少一種限制成立；宣告了但不成立者一律不採證。
+    """
+    if not isinstance(sch, dict) or sch.get("type") != "string":
         return False
-    if sch.get("minLength") == 12 or sch.get("maxLength") == 12:
-        return True
+    lo, hi = sch.get("minLength"), sch.get("maxLength")
+    ok_len = type(lo) is int and type(hi) is int and lo == 12 and hi == 12
+    if (lo is not None or hi is not None) and not ok_len:
+        return False
     pat = sch.get("pattern")
-    return isinstance(pat, str) and ("{10}" in pat or "12" in pat)
+    ok_pat = False
+    if pat is not None:
+        if not isinstance(pat, str) or not _PATTERN_SAFE.fullmatch(pat):
+            return False
+        try:
+            rx = re.compile(pat)
+        except re.error:
+            return False
+        ok_pat = all(rx.search(x) for x in _ISIN_OK) and not any(rx.search(x) for x in _ISIN_BAD)
+        if not ok_pat:
+            return False
+    return ok_len or ok_pat
 
 
 def _class_doc_evidence(props: dict) -> bool:
-    """文件層證據（rev2 §四.1）：ISIN＝正向『唯一識別單一份額級別』文字＋12 碼結構；代碼＝基金／級別身分語意。缺 ⇒ False。"""
+    """文件層證據（rev2 §四.1）：ISIN 說明＝整句正向『唯一識別單一份額級別』；代碼說明＝整句基金／級別身分陳述；
+    ISIN schema 確實限制合法 12 碼。任一缺或矛盾 ⇒ False（扣值）。"""
     isin_txt = _clean_text(props[KEY_ISIN].get("description"))
     code_txt = _clean_text(props[KEY_CODE].get("description"))
-    return bool(isin_txt and _ISIN_UNIQUE.search(isin_txt) and code_txt and _CODE_IDENTITY.search(code_txt)
-                and _isin_schema_structure_ok(props[KEY_ISIN]))
+    return bool(isin_txt and _ISIN_FULL.fullmatch(isin_txt) and code_txt and _CODE_FULL.fullmatch(code_txt)
+                and _isin_schema_restricts_12(props[KEY_ISIN]))
 
 
 def process_r0(body: bytes) -> dict[str, Any]:
@@ -827,6 +886,23 @@ def _worker_main(conn: Any, entry: Callable[..., Any], args: tuple) -> None:
     conn.close()
 
 
+def _decode_ipc(body: bytes) -> Any:
+    """IPC payload 解碼（≤ IPC_MAX_BYTES）。獨立函式以便注入『持有／釋放 GIL』的堵塞負控。"""
+    return json.loads(body.decode("utf-8"))
+
+
+def _watchdog_main(pid: int, deadline_epoch: float) -> None:
+    """獨立看門狗行程：到絕對牆鐘時刻即 SIGKILL worker。不與父行程共用 GIL，父行程解碼再久也照期殺。"""
+    import signal
+    import time
+
+    try:
+        time.sleep(max(0.0, deadline_epoch - time.time()))
+        os.kill(pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+    except Exception:  # noqa: BLE001 — worker 已退出等情況：忽略
+        pass
+
+
 def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = STEP_WALL_SECONDS,
                   reap: float = REAP_SECONDS, ctx: Any = None, worker: Callable[..., None] = _worker_main) -> Any:
     """於子行程執行 entry(*args)；牆鐘涵蓋啟動、執行、解析與 IPC 接收；固定錯誤碼；有界回收。
@@ -836,7 +912,10 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
     - 監督者（本函式）**不**同步等待接收：接收在 daemon 執行緒，監督者以 `join(剩餘牆鐘)` 自行計時；
       到期即 kill 子行程並進入回收，**不論接收執行緒是否已退出**（回收不再受接收阻塞）。
     - 逾期後即使收到完整 frame 亦拒絕（`wall_clock_timeout`），不回傳任何結果。
-    - 回收：join(reap) → kill → join(reap)；仍存活 ⇒ UNREAPED（優先於其他碼，硬停）。
+    - 看門狗**行程**（spawn，與父行程不共用 GIL）於絕對牆鐘時刻 SIGKILL worker：即使父行程的 IPC 解碼
+      持有 GIL（原生呼叫不讓出）而使監督執行緒停擺，worker 仍按期被殺；父行程恢復後因已逾期而拒絕任何結果。
+      （父行程能返回的時刻仍受其自身解碼耗時限制——解碼僅處理 ≤64 KiB 的自家 payload。）
+    - 回收：join(reap) → kill → join(reap)；仍存活 ⇒ UNREAPED（優先於其他碼，硬停）；看門狗同樣有界回收。
     """
     import multiprocessing as mp
     import threading
@@ -848,6 +927,12 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
     p = ctx.Process(target=worker, args=(child, entry, tuple(args)), daemon=True)
     p.start()
     child.close()
+    deadline_epoch = time.time() + max(0.0, wall - (time.monotonic() - t0))
+    wd = None
+    pid = getattr(p, "pid", None)
+    if isinstance(pid, int):
+        wd = ctx.Process(target=_watchdog_main, args=(pid, deadline_epoch), daemon=True)
+        wd.start()
     box: dict[str, Any] = {}
 
     def _rx() -> None:
@@ -855,7 +940,7 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
             data = parent.recv_bytes(IPC_MAX_BYTES)
             tag, body = data[:1], data[1:]
             if tag == b"R":  # JSON 解碼也在受牆鐘約束的執行緒內
-                box["ok"] = json.loads(body.decode("utf-8"))
+                box["ok"] = _decode_ipc(body)
             elif tag == b"S":
                 reason = body.decode("utf-8", "replace")
                 box["err"] = reason if _REASON.match(reason) else "step_error"
@@ -878,6 +963,9 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
     rx.join(max(0.0, wall - (time.monotonic() - t0)))
     elapsed = time.monotonic() - t0
     timed_out = rx.is_alive() or elapsed > wall  # 以接收＋解碼完成後的時刻判定；逾期任何結果一律不用
+    if wd is not None:  # 先收看門狗（避免 worker 結束後 pid 被重用時誤殺）
+        _safe_kill(wd)
+        wd.join(reap)
     if timed_out:
         _safe_kill(p)  # 接收／解碼未完成或已逾期：先殺，再獨立回收
     p.join(reap)
@@ -887,6 +975,9 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
         if p.is_alive():
             _safe_close(parent)
             raise FetchStop("UNREAPED")
+    if wd is not None and wd.is_alive():
+        _safe_close(parent)
+        raise FetchStop("UNREAPED")
     _safe_close(parent)
     if timed_out:
         raise FetchStop("wall_clock_timeout")

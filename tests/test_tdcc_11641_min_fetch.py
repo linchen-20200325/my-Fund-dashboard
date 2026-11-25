@@ -817,6 +817,14 @@ def _mutant(old: str, new: str):
     return _load_src(src.replace(old, new), "mutant_" + str(abs(hash(old)) % 10**8))
 
 
+def _mutant_multi(pairs):
+    src = SRC.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert src.count(old) == 1, old
+        src = src.replace(old, new)
+    return _load_src(src, "mutant_multi_" + str(abs(hash(tuple(o for o, _ in pairs))) % 10**8))
+
+
 def _mrun(ns, tp, rights=None, **kw):
     r = rights or ns["Rights"]("ALLOWED", basis_ref="B", synthetic=True,
                                r2_evidence=ns["R2Evidence"](RUN, ns["R2_PURPOSE"], ns["R2_SCOPE_FILE"], "c"))
@@ -851,8 +859,6 @@ def test_mutation_url_layers_each_catch_dot_segment_and_both_removed_fails_open(
     ('            if p.get("required") is True or p.get("in") == "path":\n'
      '                raise FetchStop("op_requires_params")', "            pass", "params"),
     ('        if any(x for x in sec):\n            raise FetchStop("op_requires_security")', "        pass", "security"),
-    ('    if any(n in low for n in _NEGATION) or any(x in low for x in _SHARED):\n        return None\n',
-     '    pass\n', "negation"),
     ('            raise FetchStop("row_type_mismatch")', '            pass', "rowtype"),
     ('        raise FetchStop("server_conflict")', '        pass', "serverconflict"),
     ('            raise FetchStop("response_key_schema_invalid")', '            pass', "keyschema"),
@@ -929,9 +935,6 @@ def test_mutations_are_killed(monkeypatch, old, new, probe):
             assert _mrun(ns, FakeTransport(_oas(), rows)).stop_reason != "row_schema_mismatch"
         except KeyError:
             pass  # 守衛被拿掉 ⇒ 行為改變（崩潰）＝被殺
-    elif probe == "negation":
-        res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(isin_desc="ISIN 碼：唯一識別單一份額級別，惟並非對所有基金成立"))), _rows()))
-        assert res.local_display is not None  # 守衛被拿掉 ⇒ 否定文字也放行
     elif probe == "rowtype":
         try:
             res = _mrun(ns, FakeTransport(_oas(), _rows(**{m.KEY_NAME: 123})))
@@ -982,7 +985,8 @@ def test_mf1_class_doc_requires_positive_evidence_and_rejects_negation(isin_desc
 
 def test_mf1_positive_class_evidence_forms_are_accepted():
     for isin_d, code_d in (("ISIN 碼：唯一識別單一份額級別", "基金代碼：識別該基金份額級別"),
-                           ("國際證券識別碼，唯一對應一個份額級別", "基金代號用以識別基金"),
+                           ("ISIN：唯一對應一個份額級別", "基金代號用以識別基金"),
+                           ("唯一識別單一份額級別。", "份額級別代碼：代表該份額級別"),
                            ("The ISIN uniquely identifies a single share class", "fund code identifies the fund")):
         res = _run(FakeTransport(_oas(op=_op(props=_props(isin_desc=isin_d, code_desc=code_d))), _rows()))
         assert res.stop_reason is None and res.class_doc_evidence is True, (isin_d, code_d)
@@ -1005,15 +1009,69 @@ def test_mf1_shared_unrelated_or_non_unique_evidence_is_withheld(isin_desc, code
     assert res.class_doc_evidence is False and res.checks.class_verified is False
 
 
-@pytest.mark.parametrize("isin_len", [None])
-def test_mf1_text_alone_is_not_enough_isin_schema_must_declare_12_chars(isin_len):
-    res = _run(FakeTransport(_oas(op=_op(props=_props(isin_len=isin_len))), _rows()))
-    assert res.stop_reason == "class_evidence_insufficient" and res.local_display is None
-    pat = _props(isin_len=None)
-    pat[m.KEY_ISIN]["pattern"] = "^[A-Z]{2}[A-Z0-9]{9}[0-9]$"  # pattern 含 {9}…不含 {10}／12 ⇒ 不算
-    assert _run(FakeTransport(_oas(op=_op(props=pat)), _rows())).stop_reason == "class_evidence_insufficient"
-    pat[m.KEY_ISIN]["pattern"] = "^[A-Z]{2}[A-Z0-9]{10}$"
-    assert _run(FakeTransport(_oas(op=_op(props=pat)), _rows())).stop_reason is None
+def test_mf1_text_alone_is_not_enough_isin_schema_must_restrict_valid_12_chars():
+    res = _run(FakeTransport(_oas(op=_op(props=_props(isin_len=None))), _rows()))
+    assert res.stop_reason == "class_evidence_insufficient" and res.local_display is None  # 無任何長度限制
+
+
+def _isin_schema_case(**sch):
+    props = _props(isin_len=None)
+    props[m.KEY_ISIN].update(sch)
+    return _run(FakeTransport(_oas(op=_op(props=props)), _rows()))
+
+
+@pytest.mark.parametrize("sch,why", [
+    ({"minLength": 13, "maxLength": 12}, "Work 反例：min13／max12 自相矛盾"),
+    ({"minLength": 12}, "只宣告 min"), ({"maxLength": 12}, "只宣告 max"),
+    ({"minLength": 12, "maxLength": 13}, "max 不是 12"), ({"minLength": 11, "maxLength": 12}, "min 不是 12"),
+    ({"minLength": True, "maxLength": True}, "布林冒充 1"), ({"minLength": "12", "maxLength": "12"}, "字串數字"),
+    ({"minLength": 12.0, "maxLength": 12.0}, "浮點"),
+    ({"pattern": "^(12)?[A-Z0-9]+$"}, "Work 反例：不限長度的樣式"),
+    ({"pattern": "^[A-Z0-9]+$"}, "不限長度"), ({"pattern": ".*"}, "任意"),
+    ({"pattern": "^[A-Z]{2}[A-Z0-9]{9}$"}, "只允許 11 碼"), ({"pattern": "^[A-Z]{2}[A-Z0-9]{11}[0-9]$"}, "13 碼"),
+    ({"pattern": "[A-Z0-9]{12}"}, "未錨定：11／13 碼也含 12 碼子串"),
+    ({"pattern": "^[a-z]{12}$"}, "不接受合法 ISIN"), ({"pattern": "("}, "無法編譯"), ({"pattern": 12}, "非字串"),
+    ({"pattern": "^" + "(a*)*" * 40 + "$"}, "過長／可疑樣式"),
+    ({"minLength": 12, "maxLength": 12, "pattern": "^[A-Z0-9]+$"}, "長度對但樣式宣告了且不成立"),
+])
+def test_mf1_isin_schema_must_really_restrict_12_chars(sch, why):
+    res = _isin_schema_case(**sch)
+    assert res.stop_reason == "class_evidence_insufficient" and res.local_display is None, why
+
+
+def test_mf1_isin_schema_type_must_be_string():
+    res = _isin_schema_case(type="integer", minLength=12, maxLength=12)
+    assert res.stop_reason == "response_key_schema_invalid" and res.local_display is None
+
+
+@pytest.mark.parametrize("sch", [
+    {"minLength": 12, "maxLength": 12},
+    {"pattern": "^[A-Z]{2}[A-Z0-9]{9}[0-9]$"}, {"pattern": "^[A-Z]{2}[A-Z0-9]{10}$"},
+    {"pattern": "^[A-Z0-9]{12}$"},
+    {"minLength": 12, "maxLength": 12, "pattern": "^[A-Z]{2}[A-Z0-9]{9}[0-9]$"},
+])
+def test_mf1_isin_schema_that_really_restricts_12_chars_is_accepted(sch):
+    assert _isin_schema_case(**sch).stop_reason is None
+
+
+@pytest.mark.parametrize("isin_desc,code_desc,why", [
+    ("ISIN 碼：唯一識別單一份額級別", "基金代碼欄無關；代碼附註：基金代碼不識別基金", "Work 反例：代碼說明自相矛盾"),
+    ("本資料集沿用母基金 ISIN；唯一識別單一份額級別僅為欄位設計目標", "基金代碼：識別該基金份額級別", "Work 反例：沿用母基金／設計目標"),
+    ("ISIN 碼：唯一識別單一份額級別。母基金 ISIN 沿用", "基金代碼：識別該基金份額級別", "附加子句"),
+    ("ISIN 碼：唯一識別單一份額級別（設計目標）", "基金代碼：識別該基金份額級別", "括號內設計目標"),
+    ("ISIN 碼：唯一識別單一份額級別 預留欄位", "基金代碼：識別該基金份額級別", "預留"),
+    ("ISIN 碼：唯一識別單一份額級別", "基金代碼：識別該基金份額級別，但與本欄位無關", "代碼說明含無關"),
+    ("ISIN 碼：唯一識別單一份額級別", "備註代碼", "無關代碼（無基金身分語意）"),
+    ("ISIN 碼：唯一識別單一份額級別", "客戶代碼：識別該客戶", "他種代碼"),
+    ("ISIN 碼：唯一識別單一份額級別" + "x" * 200, "基金代碼：識別該基金份額級別", "過長（可夾帶矛盾）"),
+    ("ISIN 碼：唯一識別單一份額級別\n母基金", "基金代碼：識別該基金份額級別", "換行附註"),
+    ("the ISIN uniquely identifies a single share class (inherited from the parent fund)", "fund code identifies the fund", "英文繼承"),
+    ("ISIN 碼：唯一識別單一份額級別", "fund code identifies the fund; planned", "英文計畫"),
+])
+def test_mf1_contradictory_inherited_design_goal_or_unrelated_text_is_never_evidence(isin_desc, code_desc, why):
+    res = _run(FakeTransport(_oas(op=_op(props=_props(isin_desc=isin_desc, code_desc=code_desc))), _rows()))
+    assert res.stop_reason == "class_evidence_insufficient" and res.local_display is None, why
+    assert res.class_doc_evidence is False
 
 
 @pytest.mark.parametrize("field", [m.KEY_CODE, m.KEY_NAME, m.KEY_ISIN, m.KEY_CCY, m.KEY_DATE])
@@ -1268,12 +1326,14 @@ def test_mf2_decode_error_and_tags_map_to_fixed_codes():
      '        if plist is None:\n            continue\n        if not isinstance(plist, list):\n            raise FetchStop("op_params_invalid")\n',
      "paramsnull"),
     ('p.get("in") not in _PARAM_IN', 'False', "paramin"),
-    ('                    or not (isinstance(p.get("schema"), dict) or isinstance(p.get("content"), dict))):',
-     '                    ):', "paramschema"),
-    ('    and _isin_schema_structure_ok(props[KEY_ISIN]))', ')', "structure") if False else
-    ('                and _isin_schema_structure_ok(props[KEY_ISIN]))', ')', "structure"),
-    ('code_txt and _CODE_IDENTITY.search(code_txt)', 'code_txt', "codeidentity"),
-    ('"各份額級別", ', '', "sharedword"),
+    ('    if has_schema == has_content:  # 同存或皆無\n        raise FetchStop("op_params_invalid")\n',
+     '    if not (has_schema or has_content):\n        raise FetchStop("op_params_invalid")\n', "bothrep"),
+    ('    if not isinstance(c, dict) or len(c) != 1:  # 空、或多個 media entries\n        raise FetchStop("op_params_invalid")\n',
+     '    if not isinstance(c, dict):\n        raise FetchStop("op_params_invalid")\n', "multimedia"),
+    ('            if ident in seen:\n                raise FetchStop("op_params_invalid")  # 同層 name＋in 不得重複\n',
+     '            if False:\n                raise FetchStop("op_params_invalid")\n', "dupparam"),
+    ('                and _isin_schema_restricts_12(props[KEY_ISIN]))', ')', "structure"),
+    ('code_txt and _CODE_FULL.fullmatch(code_txt)', 'code_txt', "codeidentity"),
     ('    elapsed = time.monotonic() - t0\n    timed_out = rx.is_alive() or elapsed > wall',
      '    elapsed = time.monotonic() - t0\n    timed_out = False', "nodeadline"),
 ])
@@ -1284,26 +1344,233 @@ def test_round3_mutations_are_killed(old, new, probe):
     elif probe == "paramin":
         bad = [{"name": "q", "in": "invalid", "schema": {"type": "string"}}]
         assert _mrun(ns, FakeTransport(_with_params(bad), _rows())).stop_reason != "op_params_invalid"
-    elif probe == "paramschema":
-        assert _mrun(ns, FakeTransport(_with_params([{"name": "q", "in": "query"}]), _rows())).stop_reason != "op_params_invalid"
+    elif probe == "bothrep":
+        both = [{"name": "q", "in": "query", "schema": {"type": "string"}, "content": {"application/json": {}}}]
+        assert _mrun(ns, FakeTransport(_with_params(both), _rows())).stop_reason != "op_params_invalid"
+    elif probe == "multimedia":
+        two = [{"name": "q", "in": "query", "content": {"application/json": {}, "text/plain": {}}}]
+        try:
+            assert _mrun(ns, FakeTransport(_with_params(two), _rows())).stop_reason != "op_params_invalid"
+        except ValueError:
+            pass  # 守衛被拿掉 ⇒ 行為改變（解包失敗）＝被殺
+    elif probe == "dupparam":
+        dup = [{"name": "q", "in": "query", "schema": {"type": "string"}}] * 2
+        assert _mrun(ns, FakeTransport(_with_params(dup), _rows())).stop_reason != "op_params_invalid"
     elif probe == "structure":
-        assert _mrun(ns, FakeTransport(_oas(op=_op(props=_props(isin_len=None))), _rows())).local_display is not None
+        sch = _props(isin_len=None)
+        sch[m.KEY_ISIN].update({"minLength": 13, "maxLength": 12})
+        assert _mrun(ns, FakeTransport(_oas(op=_op(props=sch)), _rows())).local_display is not None
     elif probe == "codeidentity":
-        res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(code_desc="行銷活動代碼".replace("行銷活動", "備註")))), _rows()))
-        assert res.local_display is not None  # 代碼說明無身分語意仍放行 ⇒ 守衛被拿掉
-    elif probe == "sharedword":
-        res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(
-            isin_desc="各份額級別皆可識別；唯一識別單一份額級別"))), _rows()))
-        assert res.local_display is not None  # 拿掉「各份額級別」標記 ⇒ 泛稱文字仍放行 ⇒ 被殺
+        res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(code_desc="備註代碼"))), _rows()))
+        assert res.local_display is not None  # 無關代碼說明仍放行 ⇒ 守衛被拿掉
     elif probe == "nodeadline":
         ns["json"] = _SlowJson(0.15)
         try:
             out = ns["run_in_worker"](ent_ok, (1,), wall=0.04, reap=0.05, ctx=_ctx(_Conn(), _Proc()))
             assert out == {"a": 1}  # 解碼逾期仍被接受
         except ns["FetchStop"] as e:
-            assert e.reason != "wall_clock_timeout" or False
+            assert e.reason != "wall_clock_timeout"
+
+
+_MARKERS = '    if any(n in low for n in _NEGATION) or any(x in low for x in _SHARED):\n        return None\n'
+_CLAUSES = '    if re.search(r"[，；;,\\n]", desc.strip().rstrip("。.")):\n        return None  # 多子句／附加說明（可夾帶矛盾）一律不採證\n'
+
+
+@pytest.mark.parametrize("texts", [
+    ("ISIN 碼：唯一識別單一份額級別，惟並非對所有基金成立", "基金代碼：識別該基金份額級別"),  # 否定
+    ("各份額級別皆可識別；唯一識別單一份額級別", "基金代碼：識別該基金份額級別"),  # 泛稱
+    ("本資料集沿用母基金 ISIN；唯一識別單一份額級別僅為欄位設計目標", "基金代碼：識別該基金份額級別"),  # 沿用／設計目標
+    ("ISIN 碼：唯一識別單一份額級別", "基金代碼欄無關；代碼附註：基金代碼不識別基金"),  # 矛盾
+])
+def test_round3_text_layers_overlap_but_removing_all_of_them_releases(texts):
+    """文字防線是多層（標記／子句／整句 fullmatch）；全部拿掉才放行，證明每個反例都由這幾層擋住。"""
+    pairs = [(_MARKERS, "    pass\n"), (_CLAUSES, "    pass\n"),
+             ("_ISIN_FULL.fullmatch(isin_txt)", "isin_txt"), ("_CODE_FULL.fullmatch(code_txt)", "code_txt")]
+    ns = _mutant_multi(pairs)
+    res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(isin_desc=texts[0], code_desc=texts[1]))), _rows()))
+    assert res.local_display is not None
+    real = _run(FakeTransport(_oas(op=_op(props=_props(isin_desc=texts[0], code_desc=texts[1]))), _rows()))
+    assert real.local_display is None and real.stop_reason == "class_evidence_insufficient"
 
 
 def test_mf1_generic_all_classes_wording_is_withheld_even_with_unique_phrase():
     res = _run(FakeTransport(_oas(op=_op(props=_props(isin_desc="各份額級別皆可識別；唯一識別單一份額級別"))), _rows()))
     assert res.stop_reason == "class_evidence_insufficient" and res.local_display is None
+
+
+# ─────────────── MF3：Parameter Object（schema／content 互斥且恰一；同層不重複）───────────────
+def _p(**kw):
+    d = {"name": "q", "in": "query"}
+    d.update(kw)
+    return d
+
+
+@pytest.mark.parametrize("level", ["op", "item"])
+@pytest.mark.parametrize("plist,why", [
+    ([_p(schema={"type": "string"}, content={"application/json": {}})], "Work 反例：schema＋content 同存"),
+    ([_p()], "兩者皆無"),
+    ([_p(content={})], "Work 反例：空 content"),
+    ([_p(content={"application/json": {}, "text/plain": {}})], "Work 反例：兩個 media entries"),
+    ([_p(content={"not a media type": {}})], "非法 media type 字串"),
+    ([_p(content={"": {}})], "空 media type"),
+    ([_p(content={"application/json": None})], "media object 為 null"),
+    ([_p(content={"application/json": "x"})], "media object 非物件"),
+    ([_p(content={"application/json": {"schema": "x"}})], "media schema 非物件"),
+    ([_p(content=[("application/json", {})])], "content 非物件"),
+    ([_p(content=None)], "content 為 null（無 schema）"),
+    ([_p(schema="x")], "schema 非物件"),
+    ([_p(schema=None, content={"application/json": {}})], "schema 為 null＋content"),
+    ([_p(schema={"type": "string"}), _p(schema={"type": "integer"})], "Work 反例：同層重複 name＋in"),
+    ([_p(name="X-Id", **{"in": "header"}, schema={"type": "string"}),
+      _p(name="x-id", **{"in": "header"}, schema={"type": "string"})], "header 名稱大小寫不分的重複"),
+    ([_p(schema={"type": "string"}), {"$ref": "#/components/parameters/Q"}], "經 $ref 重複"),
+])
+def test_mf3_parameter_object_representation_and_uniqueness(level, plist, why):
+    oas = _with_params(plist, level)
+    oas["components"] = {"parameters": {"Q": _p(schema={"type": "string"})}}
+    tp = FakeTransport(oas, _rows())
+    res = _run(tp)
+    assert res.stop_reason == "op_params_invalid" and len(tp.calls) == 1 and res.requests_used == 1, why
+
+
+@pytest.mark.parametrize("plist", [
+    [_p(schema={"type": "string"})],
+    [_p(content={"application/json": {}})],
+    [_p(content={"application/json; charset=utf-8": {"schema": {"type": "string"}}})],
+    [_p(schema={"type": "string"}), _p(name="q", **{"in": "header"}, schema={"type": "string"})],  # 同名不同位置
+    [_p(name="X-Id", **{"in": "header"}, schema={"type": "string"}),
+     _p(name="X-Other", **{"in": "header"}, schema={"type": "string"})],
+])
+def test_mf3_exactly_one_valid_representation_is_accepted(plist):
+    tp = FakeTransport(_with_params(plist), _rows())
+    assert _run(tp).stop_reason is None and len(tp.calls) == 2
+
+
+def test_mf3_same_name_in_across_levels_is_allowed_override():
+    oas = _with_params([_p(schema={"type": "string"})], "item")
+    oas["paths"]["/v1/opendata/X-1"]["get"]["parameters"] = [_p(schema={"type": "integer"})]
+    assert _run(FakeTransport(oas, _rows())).stop_reason is None
+
+
+# ─────────────── MF2：監督者獨立於解碼所持 GIL（釋放／持有兩種堵塞負控）───────────────
+class _RecProc(_Proc):
+    pid = 4242
+
+
+def _rec_ctx(conn, procs):
+    class _C:
+        @staticmethod
+        def Pipe(duplex=False):
+            return conn, _Child()
+
+        @staticmethod
+        def Process(target, args, daemon):
+            pr = _RecProc()
+            pr.target, pr.args = target, args
+            procs.append(pr)
+            return pr
+
+    return _C()
+
+
+def test_mf2_watchdog_process_is_started_with_absolute_deadline_and_reaped():
+    procs: list = []
+    assert m.run_in_worker(ent_ok, (1,), wall=5.0, reap=0.05, ctx=_rec_ctx(_Conn(), procs)) == {"a": 1}
+    assert [pr.target for pr in procs] == [m._worker_main, m._watchdog_main]
+    pid, deadline_epoch = procs[1].args
+    assert pid == 4242 and abs(deadline_epoch - (time.time() + 5.0)) < 2.0
+    assert procs[1].killed >= 1 and procs[1].joins  # 看門狗正常路徑亦被收掉
+
+
+def test_mf2_release_gil_decode_block_times_out_and_recovers(monkeypatch):
+    from threading import Event
+
+    gate = Event()
+    monkeypatch.setattr(m, "_decode_ipc", lambda body: (gate.wait(30), {"a": 1})[1])  # 釋放 GIL 的堵塞
+    procs: list = []
+    t0 = time.monotonic()
+    try:
+        with pytest.raises(m.FetchStop) as e:
+            m.run_in_worker(ent_ok, (1,), wall=0.05, reap=0.05, ctx=_rec_ctx(_Conn(), procs))
+        assert e.value.reason == "wall_clock_timeout" and time.monotonic() - t0 < 1.5
+        assert procs[0].killed >= 1 and procs[0].joins  # kill＋回收已執行
+    finally:
+        gate.set()
+
+
+def test_mf2_hold_gil_decode_is_rejected_and_not_accepted_late(monkeypatch):
+    import ctypes
+
+    sleep = ctypes.PyDLL(None).sleep  # PyDLL：呼叫期間持有 GIL
+    monkeypatch.setattr(m, "_decode_ipc", lambda body: (sleep(1), {"a": 1})[1])
+    procs: list = []
+    with pytest.raises(m.FetchStop) as e:
+        m.run_in_worker(ent_ok, (1,), wall=0.2, reap=0.05, ctx=_rec_ctx(_Conn(), procs))
+    assert e.value.reason == "wall_clock_timeout"  # 逾期即使解碼成功也拒
+    assert procs[0].killed >= 1 and procs[0].joins and procs[1].killed >= 1
+
+
+def w_frame_then_beat(conn, entry, args):
+    """送出完整 frame 後持續寫心跳（共享記憶體）直到被殺；用來量測『何時被殺』。"""
+    (beat,) = args
+    conn.send_bytes(b'R{"a": 1}')
+    while True:
+        beat.value = time.time()
+        time.sleep(0.005)
+
+
+def test_mf2_real_spawn_hold_gil_decode_worker_is_still_killed_on_time_by_watchdog_process(monkeypatch):
+    """核心負控：父行程解碼持有 GIL 4 秒（監督執行緒完全停擺），worker 仍須在牆鐘到期時被獨立看門狗行程殺掉。"""
+    import ctypes
+    import multiprocessing as mp
+
+    ctx = mp.get_context("spawn")
+    beat = ctx.Value("d", 0.0)
+    sleep = ctypes.PyDLL(None).sleep
+    monkeypatch.setattr(m, "_decode_ipc", lambda body: (sleep(4), {"a": 1})[1])
+    t_start = time.time()
+    wall = 2.0
+    with pytest.raises(m.FetchStop) as e:
+        m.run_in_worker(ent_ok, (beat,), wall=wall, reap=2.0, ctx=ctx, worker=w_frame_then_beat)
+    t_return = time.time()
+    last = beat.value
+    assert e.value.reason == "wall_clock_timeout"
+    assert last > t_start + 0.2, "worker 應曾存活並送出心跳"
+    assert last <= t_start + wall + 0.6, f"worker 應於牆鐘到期（≈{wall}s）被看門狗殺掉，實際最後心跳 {last - t_start:.2f}s"
+    assert t_return - last >= 0.4, "父行程仍被 GIL 持有的解碼拖住；worker 的死亡不得依賴父行程恢復"
+    assert not mp.active_children()  # 看門狗與 worker 皆已回收
+
+
+def test_round3_mutation_without_watchdog_process_is_killed():
+    ns = _mutant('    if isinstance(pid, int):\n        wd = ctx.Process(', '    if False:\n        wd = ctx.Process(')
+    procs: list = []
+    ns["run_in_worker"](ent_ok, (1,), wall=5.0, reap=0.05, ctx=_rec_ctx(_Conn(), procs))
+    assert [pr.target.__name__ for pr in procs] == ["_worker_main"]  # 看門狗未啟動 ⇒ 與正常行為（兩個行程）不同＝被殺
+
+
+def test_round3_mutation_watchdog_kill_removed_lets_worker_outlive_deadline_detectable_by_unreaped_guard():
+    """看門狗若未被回收（is_alive 仍真）⇒ UNREAPED；證明新增的回收檢查存在。"""
+    procs: list = []
+
+    class _Stuck(_RecProc):
+        def is_alive(self):
+            return True
+
+        def kill(self):
+            self.killed += 1
+
+    class _C:
+        @staticmethod
+        def Pipe(duplex=False):
+            return _Conn(), _Child()
+
+        @staticmethod
+        def Process(target, args, daemon):
+            pr = _Stuck() if target is m._watchdog_main else _RecProc()
+            pr.target, pr.args = target, args
+            procs.append(pr)
+            return pr
+
+    with pytest.raises(m.FetchStop) as e:
+        m.run_in_worker(ent_ok, (1,), wall=5.0, reap=0.05, ctx=_C())
+    assert e.value.reason == "UNREAPED"
