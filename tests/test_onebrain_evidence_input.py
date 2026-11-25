@@ -562,3 +562,93 @@ def test_c1c_exact_str_scope_positive_and_rj3_only_controls_preserved():
     assert ei.effective_right(_g(scope=("unrelated",)), "R4") is ei.RightState.UNKNOWN
     b = ei.admit([card("D", rights=grants(R4=BAD_GRANTS["deny"]), support_refs=None)], test_mode=True)
     assert b.refused[0].reason_codes == (ei.REASON_RJ3,)
+
+
+# ═════════════ 三主題短解釋（brief_for_lens／briefs_for_all_lenses） ═════════════
+import re
+
+_FORBIDDEN_CONCLUSION = re.compile(r"無異常|低風險|高風險|安全|正常|買進|賣出|加碼|減碼|持有|建議你|保證|預測")
+
+
+def _shared_bundle():
+    risk_cash = card("RC", lens=(ei.LENS_RISK, ei.LENS_CASHFLOW),
+                     contradicting_evidence_refs=({"type": "source", "idx": 1},), contradiction_search="found",
+                     data_gaps=("window_too_short",))
+    trend = card("T", lens=(ei.LENS_TREND,), contradicting_evidence_refs=(), contradiction_search="not_found_in_window",
+                 data_gaps=("no_fund_mapping",), credibility_boundary={"n_sources": 2, "window_hours": 48, "not_forecast": False})
+    refused = card("REF", lens=(ei.LENS_RISK,), rights=grants(R4=BAD_GRANTS["deny"]))
+    return ei.admit([risk_cash, trend, refused], test_mode=True)
+
+
+def test_brief_has_conclusion_evidence_counter_gaps_boundary_for_each_lens_from_same_bundle():
+    b = _shared_bundle()
+    briefs = ei.briefs_for_all_lenses(b)
+    assert set(briefs) == set(ei.LENSES)
+    r, c, t = briefs[ei.LENS_RISK], briefs[ei.LENS_CASHFLOW], briefs[ei.LENS_TREND]
+    assert r.conclusion == c.conclusion == t.conclusion == ei.CONCLUSION_PARTIAL
+    assert r.evidence == c.evidence and r.counter_evidence == c.counter_evidence       # 風險／現金流共用同一張卡的證據
+    assert r.counter_evidence == ({"type": "source", "idx": 1},) and t.counter_evidence == ()
+    assert r.evidence[0] is b.approved[0].support_refs[0]                              # 同一物件，未複製或改寫
+    assert r.contradiction_summary == (ei.CONTRADICTION_TEXT["found"],)
+    assert t.contradiction_summary == (ei.CONTRADICTION_TEXT["not_found_in_window"],)
+    assert "RC:window_too_short" in r.data_gaps and "T:no_fund_mapping" in t.data_gaps
+    assert r.credibility_boundary["not_forecast"] is True and t.credibility_boundary["not_forecast"] is True  # 恆 True，輸入 False 也不可覆寫
+    assert t.credibility_boundary["window_hours"] == 48
+    assert r.ai_status == "disabled" and r.ai_text == ""
+
+
+def test_brief_without_any_approved_support_is_insufficient_never_ok():
+    b = ei.admit([card("X", rights=grants(R3=BAD_GRANTS["unknown"]))], test_mode=True)
+    for lens in ei.LENSES:
+        br = ei.brief_for_lens(b, lens)
+        assert br.conclusion == ei.CONCLUSION_INSUFFICIENT and br.evidence == () and br.counter_evidence == ()
+    only_gap = ei.admit([card("G", support_refs=(), card_status="insufficient", data_gaps=("g1",))], test_mode=True)
+    br = ei.brief_for_lens(only_gap, ei.LENS_RISK)
+    assert br.conclusion == ei.CONCLUSION_INSUFFICIENT and "G:g1" in br.data_gaps          # 缺口仍可見
+
+
+def test_conclusions_never_contain_assurance_rating_or_action_words():
+    for text in (ei.CONCLUSION_INSUFFICIENT, ei.CONCLUSION_PARTIAL, *ei.CONTRADICTION_TEXT.values()):
+        assert not _FORBIDDEN_CONCLUSION.search(text.replace("不構成投資判斷或行動建議", "")), text
+
+
+def test_ai_text_is_separate_and_cannot_change_conclusion_or_evidence():
+    b = _shared_bundle()
+    before = repr(b)
+    br = ei.brief_for_lens(b, ei.LENS_RISK, SpyProvider(text="觀察到市場波動，資料日期見證據"), enabled=True)
+    assert br.ai_status == "ok" and br.ai_text.startswith("觀察到") and br.ai_is_fake is True
+    assert br.conclusion == ei.CONCLUSION_PARTIAL and repr(b) == before
+
+
+@pytest.mark.parametrize("bad", ["建議買進", "目前低風險", "一切正常", "預測將上漲", "可以安心持有", "無異常"])
+def test_ai_text_with_advice_or_assurance_is_dropped(bad):
+    br = ei.brief_for_lens(_shared_bundle(), ei.LENS_RISK, SpyProvider(text=bad), enabled=True)
+    assert br.ai_status == "text_rejected" and br.ai_text == "" and br.conclusion == ei.CONCLUSION_PARTIAL
+
+
+@pytest.mark.parametrize("scenario", [FakeScenario.TIMEOUT, FakeScenario.RATE_LIMIT, FakeScenario.UNAVAILABLE, FakeScenario.DEGRADED])
+def test_ai_failure_never_blocks_the_brief(scenario):
+    brs = ei.briefs_for_all_lenses(_shared_bundle(), FakeProvider(scenario), enabled=True)
+    for lens, br in brs.items():
+        assert br.ai_text == "" and br.ai_status in ("failed", "no_evidence")
+        assert br.conclusion in (ei.CONCLUSION_PARTIAL, ei.CONCLUSION_INSUFFICIENT)
+
+
+@pytest.mark.parametrize("behaviour", ["raise", "timeout_exc", "bad_type"])
+def test_provider_exceptions_do_not_block_briefs(behaviour):
+    brs = ei.briefs_for_all_lenses(_shared_bundle(), SpyProvider(behaviour), enabled=True)
+    assert all(b.ai_text == "" for b in brs.values()) and brs[ei.LENS_RISK].evidence
+
+
+def test_provider_called_at_most_once_per_lens_and_only_with_evidence():
+    spy = SpyProvider()
+    ei.briefs_for_all_lenses(_shared_bundle(), spy, enabled=True)
+    assert spy.calls == 3
+    spy2 = SpyProvider()
+    ei.briefs_for_all_lenses(ei.admit([], test_mode=True), spy2, enabled=True)
+    assert spy2.calls == 0
+
+
+def test_brief_rejects_unknown_lens_and_settings_page_has_no_brief():
+    with pytest.raises(ValueError):
+        ei.brief_for_lens(_shared_bundle(), "settings")

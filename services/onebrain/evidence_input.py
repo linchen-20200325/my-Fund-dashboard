@@ -376,3 +376,88 @@ def explain(
         text=outcome.response.text,
         is_fake=outcome.response.is_fake,
     )
+
+
+# ═════════════ 三主題短解釋（確定性骨架；AI 文字只是附帶欄位） ═════════════
+# 「結論」只由獲准證據的**狀態**決定（固定句型），不是投資判斷、不是風險等級、不由 AI 產生。
+CONCLUSION_INSUFFICIENT = "證據不足：本主題沒有任何獲准的支持證據。"
+CONCLUSION_PARTIAL = "僅陳述證據狀態：已有獲准支持證據，另見反證與資料缺口；不構成投資判斷或行動建議。"
+CONTRADICTION_TEXT = {
+    "found": "有反面證據",
+    "not_found_in_window": "未找到反面證據（不等於無反證）",
+    "not_evaluable": "反證無法評估",
+    "not_searched": "未搜尋反證",
+}
+# AI 附帶文字若含下列詞彙（行動／評等／無異常類），整段捨棄；AI 不得改寫結論或風控決策
+_AI_TEXT_FORBIDDEN = ("買進", "賣出", "加碼", "減碼", "持有", "停損", "建議", "無異常", "低風險", "高風險",
+                      "安全", "正常", "保證", "必漲", "必跌", "預測")
+
+
+@dataclass(frozen=True)
+class LensBrief:
+    """某主題的短解釋：結論（確定性）＋證據＋反證＋缺口＋可信邊界；AI 文字另列、可為空。"""
+
+    lens: str
+    conclusion: str
+    evidence: tuple
+    counter_evidence: tuple
+    contradiction_states: tuple
+    contradiction_summary: tuple
+    data_gaps: tuple
+    credibility_boundary: dict
+    ai_status: str
+    ai_text: str = ""
+    ai_is_fake: bool = False
+
+
+def _boundary_summary(view: tuple) -> dict:
+    """可信邊界彙總：只彙總不改寫；`not_forecast` 恆為 True，不可被輸入覆寫。"""
+    windows = []
+    n_sources = 0
+    for a in view:
+        b = a.credibility_boundary if isinstance(a.credibility_boundary, dict) else {}
+        w = b.get("window_hours")
+        if type(w) is int:
+            windows.append(w)
+        ns = b.get("n_sources")
+        if type(ns) is int:
+            n_sources += ns
+    return {"n_cards": len(view), "n_sources": n_sources,
+            "window_hours": (min(windows) if windows else None), "not_forecast": True}
+
+
+def _clean_ai_text(text: str) -> str:
+    return "" if any(w in text for w in _AI_TEXT_FORBIDDEN) else text
+
+
+def brief_for_lens(bundle: EvidenceBundle, lens: str, provider: Optional[AnalysisProvider] = None, *,
+                   enabled: bool = False, **explain_kwargs) -> LensBrief:
+    """產出單一主題的短解釋。AI 未啟用／失敗／逾時／例外 → `ai_text=""`，其餘欄位完整、不阻塞。"""
+    exp = explain(bundle, lens, provider, enabled=enabled, **explain_kwargs)
+    view = exp.evidence
+    support = tuple(ref for a in view for ref in a.support_refs)
+    counter = tuple(ref for a in view for ref in a.contradicting_evidence_refs)
+    states = tuple(a.contradiction_search for a in view)
+    summary = tuple(CONTRADICTION_TEXT[s] for s in dict.fromkeys(states))
+    gaps = tuple(f"{a.card_id}:{g}" for a in view for g in a.data_gaps)
+    text = _clean_ai_text(exp.text) if exp.status is ExplainStatus.OK else ""
+    status = "text_rejected" if (exp.status is ExplainStatus.OK and exp.text and not text) else exp.status.value
+    return LensBrief(
+        lens=lens,
+        conclusion=CONCLUSION_PARTIAL if support else CONCLUSION_INSUFFICIENT,
+        evidence=support,
+        counter_evidence=counter,
+        contradiction_states=states,
+        contradiction_summary=summary,
+        data_gaps=gaps,
+        credibility_boundary=_boundary_summary(view),
+        ai_status=status,
+        ai_text=text,
+        ai_is_fake=exp.is_fake if text else False,
+    )
+
+
+def briefs_for_all_lenses(bundle: EvidenceBundle, provider: Optional[AnalysisProvider] = None, *,
+                          enabled: bool = False, **explain_kwargs) -> dict:
+    """三主題共用同一份 `bundle`；每個主題各自一份短解釋（Provider 至多各呼叫一次）。"""
+    return {lens: brief_for_lens(bundle, lens, provider, enabled=enabled, **explain_kwargs) for lens in LENSES}
