@@ -88,7 +88,7 @@ def shell_css() -> str:
 /* 鍵盤焦點：桌機側欄沿用手機頁首同一組可見焦點（2px 實線、currentColor）；只在 :focus-visible，不改 hover／active、尺寸、色票 */
 [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:focus-visible{{outline:2px solid currentColor;outline-offset:-3px}}
 /* 離線示範標示（💼）：只用 token 色、虛線框＋文字；與「開發中」（不可點、cursor:not-allowed）不同——示範頁是可進的 */
-.uv3-nav-demo{{display:inline-block;font-size:{caption};line-height:1.4;color:{text2};border:1px dashed {text2};border-radius:10px;padding:0 6px;margin:0 0 .25rem 1rem}}
+.uv3-nav-demo{{display:inline-block;font-size:{caption};line-height:1.4;color:{text2};border:1px solid {text2};border-radius:10px;padding:0 6px;margin:0 0 .25rem 1rem}}
 .uv3-demo-banner{{font-size:{caption};line-height:1.5;color:{text2};border:1px dashed {text2};border-radius:6px;padding:.25rem .5rem;margin:0 0 .5rem 0}}
 .uv3-onebrain-slot{{font-size:{caption};line-height:1.5;color:{text2};border:1px dashed {text2};border-radius:8px;padding:.5rem .75rem;margin:.75rem 0}}
 .uv3-demo-note{{font-size:{caption};line-height:1.5;color:{text2};margin:.25rem 0 .75rem 0}}
