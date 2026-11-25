@@ -224,28 +224,84 @@ _TOKEN = r"[A-Za-z0-9!#$%&'*+.^_`|~-]+"
 _MEDIA_TYPE = re.compile(rf"{_TOKEN}/{_TOKEN}(?:\s*;\s*{_TOKEN}=(?:{_TOKEN}|\"[^\"\\\r\n]*\"))*")
 
 
-def _check_refs_resolvable(node: Any, oas: dict, seen: Optional[set] = None, budget: Optional[list] = None) -> None:
-    """schema 內所有 `$ref` 須為文件內且可解析（含遞迴追入、防環、節點數上限）；否則停（⇒ R-1＝0）。"""
+_SCHEMA_TYPES = frozenset({"array", "boolean", "integer", "number", "object", "string"})
+_SCHEMA_KEYS = frozenset({
+    "$ref", "type", "format", "title", "description", "default", "example", "nullable", "deprecated", "readOnly",
+    "writeOnly", "enum", "multipleOf", "maximum", "minimum", "exclusiveMaximum", "exclusiveMinimum", "maxLength",
+    "minLength", "pattern", "maxItems", "minItems", "uniqueItems", "maxProperties", "minProperties", "required",
+    "properties", "additionalProperties", "items", "allOf", "oneOf", "anyOf", "not", "discriminator", "xml",
+    "externalDocs"})
+_SCHEMA_NONNEG_INT = ("maxLength", "minLength", "maxItems", "minItems", "maxProperties", "minProperties")
+_SCHEMA_BOOL = ("nullable", "deprecated", "readOnly", "writeOnly", "uniqueItems")
+_SCHEMA_NUM = ("multipleOf", "maximum", "minimum")
+
+
+def _validate_schema_object(node: Any, oas: dict, seen: Optional[set] = None, budget: Optional[list] = None,
+                            depth: int = 0) -> None:
+    """OAS 3.0 Schema Object 結構驗證（跟隨 `$ref`，每個解析終點都必須是合法 Schema Object）。
+
+    非物件（字串／陣列／數字／null）、未知鍵（`x-` 擴充除外）、型別錯誤、`type` 不在集合、`array` 缺 `items`、
+    `$ref` 外部／無法解析／終點非 Schema Object ⇒ 一律停（⇒ R-1＝0）。含防環、節點數與深度上限。
+    """
     seen = set() if seen is None else seen
-    budget = [400] if budget is None else budget
+    budget = [600] if budget is None else budget
     budget[0] -= 1
-    if budget[0] < 0:
+    if budget[0] < 0 or depth > 12:
         raise FetchStop("schema_too_complex")
-    if isinstance(node, dict):
-        if "$ref" in node:
-            ref = node["$ref"]
-            if not isinstance(ref, str) or not ref.startswith("#/"):
-                raise FetchStop("external_ref")
-            if ref in seen:
-                return
-            seen.add(ref)
-            _check_refs_resolvable(_resolve(node, oas), oas, seen, budget)
+    if not isinstance(node, dict):
+        raise FetchStop("schema_not_object")
+    if "$ref" in node:
+        ref = node["$ref"]
+        if not isinstance(ref, str) or not ref.startswith("#/"):
+            raise FetchStop("external_ref")
+        if ref in seen:
             return
-        for v in node.values():
-            _check_refs_resolvable(v, oas, seen, budget)
-    elif isinstance(node, list):
-        for v in node:
-            _check_refs_resolvable(v, oas, seen, budget)
+        seen.add(ref)
+        _validate_schema_object(_resolve(node, oas), oas, seen, budget, depth + 1)
+        return
+    if any(not isinstance(k, str) or (k not in _SCHEMA_KEYS and not k.startswith("x-")) for k in node):
+        raise FetchStop("schema_unknown_keyword")
+    t = node.get("type")
+    if "type" in node and (not isinstance(t, str) or t not in _SCHEMA_TYPES):
+        raise FetchStop("schema_invalid")
+    for k in _SCHEMA_NONNEG_INT:
+        if k in node and (type(node[k]) is not int or node[k] < 0):
+            raise FetchStop("schema_invalid")
+    for k in _SCHEMA_BOOL:
+        if k in node and not isinstance(node[k], bool):
+            raise FetchStop("schema_invalid")
+    for k in _SCHEMA_NUM:
+        if k in node and (isinstance(node[k], bool) or not isinstance(node[k], (int, float))):
+            raise FetchStop("schema_invalid")
+    for k in ("format", "title", "description", "pattern"):
+        if k in node and not isinstance(node[k], str):
+            raise FetchStop("schema_invalid")
+    if "enum" in node and (not isinstance(node["enum"], list) or not node["enum"]):
+        raise FetchStop("schema_invalid")
+    if "required" in node and (not isinstance(node["required"], list) or not node["required"]
+                               or not all(isinstance(x, str) for x in node["required"])):
+        raise FetchStop("schema_invalid")
+    if t == "array" and "items" not in node:
+        raise FetchStop("schema_invalid")
+    if "items" in node:
+        _validate_schema_object(node["items"], oas, seen, budget, depth + 1)
+    if "properties" in node:
+        props = node["properties"]
+        if not isinstance(props, dict):
+            raise FetchStop("schema_invalid")
+        for v in props.values():
+            _validate_schema_object(v, oas, seen, budget, depth + 1)
+    if "additionalProperties" in node and not isinstance(node["additionalProperties"], bool):
+        _validate_schema_object(node["additionalProperties"], oas, seen, budget, depth + 1)
+    for k in ("allOf", "oneOf", "anyOf"):
+        if k in node:
+            lst = node[k]
+            if not isinstance(lst, list) or not lst:
+                raise FetchStop("schema_invalid")
+            for v in lst:
+                _validate_schema_object(v, oas, seen, budget, depth + 1)
+    if "not" in node:
+        _validate_schema_object(node["not"], oas, seen, budget, depth + 1)
 
 
 def _check_param_representation(p: dict, oas: dict) -> None:
@@ -256,7 +312,7 @@ def _check_param_representation(p: dict, oas: dict) -> None:
     if has_schema:
         if not isinstance(p["schema"], dict):
             raise FetchStop("op_params_invalid")
-        _check_refs_resolvable(p["schema"], oas)
+        _validate_schema_object(p["schema"], oas)
         return
     c = p["content"]
     if not isinstance(c, dict) or len(c) != 1:  # 空、或多個 media entries
@@ -267,7 +323,7 @@ def _check_param_representation(p: dict, oas: dict) -> None:
     if "schema" in mo:
         if not isinstance(mo["schema"], dict):
             raise FetchStop("op_params_invalid")
-        _check_refs_resolvable(mo["schema"], oas)
+        _validate_schema_object(mo["schema"], oas)
 
 
 def _check_no_required_params_or_auth(oas: dict, op: dict, item: dict) -> None:
@@ -933,9 +989,37 @@ def _entry_r1(url: str, isin: str) -> dict[str, Any]:
     return process_r1(_check_response(_single_get(url, R1_MAX_BYTES, STEP_WALL_SECONDS), R1_MAX_BYTES), isin)
 
 
+_TLV_MAX_DEPTH = 8
+
+
+def _tlv_encode(obj: Any, depth: int = 0) -> bytes:
+    """worker 端：把純資料編成長度前綴二進位（TLV）。供監督者以**內建運算**解碼，不經 json／pickle。"""
+    if depth > _TLV_MAX_DEPTH:
+        raise ValueError("depth")
+    if obj is None:
+        return b"N"
+    if obj is True:
+        return b"T"
+    if obj is False:
+        return b"F"
+    if isinstance(obj, int):
+        return b"I" + obj.to_bytes(8, "big", signed=True)
+    if isinstance(obj, str):
+        raw = obj.encode("utf-8")
+        return b"S" + len(raw).to_bytes(4, "big") + raw
+    if isinstance(obj, list):
+        return b"L" + len(obj).to_bytes(4, "big") + b"".join(_tlv_encode(x, depth + 1) for x in obj)
+    if isinstance(obj, dict):
+        if not all(isinstance(k, str) for k in obj):
+            raise ValueError("key")
+        return b"D" + len(obj).to_bytes(4, "big") + b"".join(
+            _tlv_encode(k, depth + 1) + _tlv_encode(v, depth + 1) for k, v in obj.items())
+    raise ValueError("type")
+
+
 def _worker_main(conn: Any, entry: Callable[..., Any], args: tuple) -> None:
     try:
-        payload = b"R" + json.dumps(entry(*args), ensure_ascii=False).encode("utf-8")
+        payload = b"R" + _tlv_encode(entry(*args))
         if len(payload) > IPC_MAX_BYTES - 16:
             payload = b"Sresult_oversize"
     except FetchStop as e:
@@ -946,51 +1030,19 @@ def _worker_main(conn: Any, entry: Callable[..., Any], args: tuple) -> None:
     conn.close()
 
 
-def _decode_ipc(body: bytes) -> Any:
-    """IPC payload 解碼（≤ IPC_MAX_BYTES）。**只在獨立的 decoder 行程內呼叫**（可能持有 GIL，不得在監督者行程內執行）。"""
-    return json.loads(body.decode("utf-8"))
-
-
-def _plain(obj: Any, depth: int = 0) -> bool:
-    """僅允許純資料型別（None／bool／int／float／str／list／dict[str,…]）；其餘不經 pickle 回傳。"""
-    if depth > 8:
-        return False
-    if obj is None or isinstance(obj, (bool, int, float, str)):
-        return True
-    if isinstance(obj, list):
-        return all(_plain(x, depth + 1) for x in obj)
-    if isinstance(obj, dict):
-        return all(isinstance(k, str) and _plain(v, depth + 1) for k, v in obj.items())
-    return False
-
-
-def _decoder_main(conn: Any, body: bytes) -> None:
-    """獨立 decoder 行程：解碼 worker 的 JSON payload，以純資料經 pipe 回傳；失敗只回固定碼。"""
-    try:
-        obj = _decode_ipc(body)
-        msg: tuple = ("ok", obj) if _plain(obj) else ("err", "ipc_bad_payload")
-    except (ValueError, UnicodeDecodeError, RecursionError):
-        msg = ("err", "ipc_bad_payload")
-    except BaseException:  # noqa: BLE001
-        msg = ("err", "ipc_error")
-    try:
-        conn.send(msg)
-    finally:
-        conn.close()
-
-
 def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = STEP_WALL_SECONDS,
-                  reap: float = REAP_SECONDS, ctx: Any = None, worker: Callable[..., None] = _worker_main,
-                  decoder: Callable[..., None] = _decoder_main) -> Any:
-    """於子行程執行 entry(*args)；牆鐘涵蓋啟動、執行、IPC 接收與**解碼**；固定錯誤碼；有界回收。
+                  reap: float = REAP_SECONDS, ctx: Any = None, worker: Callable[..., None] = _worker_main) -> Any:
+    """於子行程執行 entry(*args)；牆鐘涵蓋啟動、執行、IPC 接收與結果還原；固定錯誤碼；有界回收。
 
-    監督者（本函式所在行程）**不做任何可能持有 GIL 的解碼**，只做會釋放 GIL 的等待（執行緒 join／pipe 讀取）：
-      1. worker 行程（spawn；entry 須為頂層可 pickle 函式）完成 GET＋解析，經 pipe 回傳 JSON bytes。
-      2. 監督者收到 bytes 後，交給**獨立 decoder 行程**解碼（可能持有 GIL 亦只拖住該行程）；
-         decoder 以純資料（pickle）回傳結果，監督者不呼叫 `json`。
-      3. 全程共用同一個絕對牆鐘；到期即 kill worker／decoder 並進入回收；逾期後即使收到完整結果亦一律拒絕
-         （`wall_clock_timeout`），**監督者的返回時刻不受解碼耗時拖延**。
-      4. 回收：join(reap) → kill → join(reap)；仍存活 ⇒ UNREAPED（優先於其他碼，硬停）。
+    **監督者行程不對子行程產出做任何 json／pickle／第三方反序列化**：
+      - IPC 只用 `Connection.recv_bytes`（I/O，釋放 GIL；上限 IPC_MAX_BYTES）。
+      - 結果為 worker 以 TLV 編碼的純資料，由本函式內的巢狀解碼器以**內建運算**（切片、`int.from_bytes`、
+        `bytes.decode`）還原；長度嚴格檢查、深度與總量有上限，僅處理 ≤64 KiB 且不經任何可替換的模組函式。
+      - 因此監督期限、worker 截斷與有界回收不依賴任何「可能持有 GIL 的反序列化」：
+        `multiprocessing.connection._ForkingPickler.loads`、`json.loads`、本模組任何函式被替換成持 GIL 的呼叫，
+        皆不影響本函式的回傳時刻。
+      - 到期即 kill worker 並進入回收；逾期任何結果一律拒絕（`wall_clock_timeout`）。
+      - 回收：join(reap) → kill → join(reap)；仍存活 ⇒ UNREAPED（優先於其他碼，硬停）。
     """
     import multiprocessing as mp
     import threading
@@ -998,21 +1050,13 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
 
     ctx = ctx or mp.get_context("spawn")
     t0 = time.monotonic()
-
-    def _left() -> float:
-        return max(0.0, wall - (time.monotonic() - t0))
-
-    procs: list = []
-    conns: list = []
     parent, child = ctx.Pipe(duplex=False)
-    conns.append(parent)
     p = ctx.Process(target=worker, args=(child, entry, tuple(args)), daemon=True)
     p.start()
-    procs.append(p)
     child.close()
     box: dict[str, Any] = {}
 
-    def _rx1() -> None:
+    def _rx() -> None:
         try:
             box["raw"] = parent.recv_bytes(IPC_MAX_BYTES)
         except EOFError:
@@ -1025,67 +1069,99 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
         except BaseException:  # noqa: BLE001
             box["err"] = "ipc_error"
 
-    timed_out = False
-    t_rx = threading.Thread(target=_rx1, daemon=True)
-    t_rx.start()
-    t_rx.join(_left())
-    if t_rx.is_alive():
-        timed_out = True
-    elif "raw" in box:
-        raw = box["raw"]
-        tag, body = raw[:1], raw[1:]
-        if tag == b"R":
-            dparent, dchild = ctx.Pipe(duplex=False)
-            conns.append(dparent)
-            d = ctx.Process(target=decoder, args=(dchild, body), daemon=True)
-            d.start()
-            procs.append(d)
-            dchild.close()
+    class _Bad(Exception):
+        pass
 
-            def _rx2() -> None:
+    def _unpack(buf: bytes) -> Any:  # 巢狀＝無法被模組層替換；僅內建運算
+        n, pos = len(buf), 0
+
+        def item(depth: int) -> Any:
+            nonlocal pos
+            if depth > _TLV_MAX_DEPTH or pos >= n:
+                raise _Bad
+            t = buf[pos:pos + 1]
+            pos += 1
+            if t == b"N":
+                return None
+            if t == b"T":
+                return True
+            if t == b"F":
+                return False
+            if t == b"I":
+                if pos + 8 > n:
+                    raise _Bad
+                v = int.from_bytes(buf[pos:pos + 8], "big", signed=True)
+                pos += 8
+                return v
+            if t in (b"S", b"L", b"D"):
+                if pos + 4 > n:
+                    raise _Bad
+                k = int.from_bytes(buf[pos:pos + 4], "big")
+                pos += 4
+                if t == b"S":
+                    if pos + k > n:
+                        raise _Bad
+                    sv = buf[pos:pos + k].decode("utf-8")
+                    pos += k
+                    return sv
+                if k > n:  # 元素數不可能超過總長
+                    raise _Bad
+                if t == b"L":
+                    return [item(depth + 1) for _ in range(k)]
+                out: dict = {}
+                for _ in range(k):
+                    key = item(depth + 1)
+                    if not isinstance(key, str):
+                        raise _Bad
+                    out[key] = item(depth + 1)
+                return out
+            raise _Bad
+
+        v = item(0)
+        if pos != n:
+            raise _Bad
+        return v
+
+    rx = threading.Thread(target=_rx, daemon=True)
+    rx.start()
+    rx.join(max(0.0, wall - (time.monotonic() - t0)))
+    timed_out = rx.is_alive()
+    result: Any = None
+    err: Optional[str] = None
+    if not timed_out:
+        if "raw" in box:
+            raw = box["raw"]
+            tag, body = raw[:1], raw[1:]
+            if tag == b"R":
                 try:
-                    box["msg"] = dparent.recv()
-                except EOFError:
-                    box["err"] = "ipc_truncated"
-                except BaseException:  # noqa: BLE001
-                    box["err"] = "ipc_error"
-
-            t_dec = threading.Thread(target=_rx2, daemon=True)
-            t_dec.start()
-            t_dec.join(_left())
-            if t_dec.is_alive():
-                timed_out = True
-        elif tag == b"S":
-            reason = body.decode("utf-8", "replace")
-            box["err"] = reason if _REASON.match(reason) else "step_error"
+                    result = _unpack(body)
+                except (_Bad, UnicodeDecodeError, RecursionError):
+                    err = "ipc_bad_payload"
+            elif tag == b"S":
+                reason = body.decode("utf-8", "replace")
+                err = reason if _REASON.match(reason) else "step_error"
+            else:
+                err = "step_error"
         else:
-            box["err"] = "step_error"
+            err = box.get("err") or "ipc_error"
     if (time.monotonic() - t0) > wall:
         timed_out = True  # 逾期任何結果一律不用
-
-    for pr in procs:
-        if timed_out or pr.is_alive():
-            _safe_kill(pr)  # 逾期：先殺；或 worker 已回傳後仍存活（如心跳迴圈）：收掉
+    if timed_out or p.is_alive():
+        _safe_kill(p)
+    p.join(reap)
     unreaped = False
-    for pr in procs:
-        pr.join(reap)
-        if pr.is_alive():
-            _safe_kill(pr)
-            pr.join(reap)
-            unreaped = unreaped or pr.is_alive()
-    for c in conns:
-        _safe_close(c)
+    if p.is_alive():
+        _safe_kill(p)
+        p.join(reap)
+        unreaped = p.is_alive()
+    _safe_close(parent)
     if unreaped:
         raise FetchStop("UNREAPED")
     if timed_out:
         raise FetchStop("wall_clock_timeout")
-    msg = box.get("msg")
-    if isinstance(msg, tuple) and len(msg) == 2:
-        if msg[0] == "ok":
-            return msg[1]
-        reason = msg[1] if isinstance(msg[1], str) else ""
-        raise FetchStop(reason if _REASON.match(reason) else "step_error")
-    raise FetchStop(box.get("err") or "ipc_error")
+    if err is not None:
+        raise FetchStop(err)
+    return result
 
 
 def _safe_close(c: Any) -> None:
