@@ -3771,7 +3771,7 @@
 | 施工邊界（照抄該 comment，不擴權） | 既有資產元件、`registry`／`app_preview`、nav／chrome demo 標記及暫行字樣、唯一合成 fixture、僅必要且精確的掛載守衛期望及離線／瀏覽器測試；MK-1 共用未啟用槽（市場與資產各一個，找基金沿用同模式；涉及 #1336 時待其正式整合或依既有非重疊分支程序，不覆蓋）。G5：A 為 `registry.py`／`app_preview.py`／`mkt.py` 單一 writer，**開工前確認 B P2／C ast 停寫且無衝突**；不授權 B P2／C ast。 |
 | 不授權範圍（清單，皆不授權） | 新增公式、金額合計、比例、匯率、真持倉、正式 `ui_v2` 或正式掛載、AI Runtime；**AS-2／AS-3／AS-4、MK-2／MK-3**；真取數、Secrets、Provider／Digest；放寬或移除任何守衛（精確例外以外）；Ready／merge／deploy；`DEC-2026-11-19-09` 條件 (1) 的修訂；其他 HOLD。 |
 | **Gate 狀態（未閉合，據實列出；本筆不宣告任何一項已閉合）** | ①**Gate-M／M-2（`DEC-2026-11-19-01`）**：💼 逐頁獨立掛載 Gate——未閉合；客戶「依既有Gate辦理」＝仍待依程序處理。②**S-AST-M1 v2 修正版 Gate（`DEC-2026-11-19-09` 區分欄 2 (2)：「須使用者另行核准」）**——是否已因本客戶裁示而核准，**該裁示未明文**；**本筆不推定**（見下「待客戶確認」）。③**情境③**之選用、**精確限縮例外的守衛期望值（v2 卡 §c；A 施工前 Gate 列 7 處，DEC-2026-11-19-09 載 8 條）**、**暫行字樣（PendingWording）**——均未核准（`DEC-2026-11-19-09` 區分欄 2 (1)(3)(4)）。④**G1（兩頁各一個「未啟用」槽）**：施工範圍已核准，G1 的版面／字樣細節仍由既有程序確認。⑤**G5**：單寫確認為開工前置，未見回存。 |
-| 待客戶確認（單題，**本筆不代答**；治理 writer 建議，非裁示） | 「11-25 的施工範圍核准，是否同時構成 S-AST-M1 v2 修正版 Gate 的核准——含情境③的選用、7／8 條守衛的精確限縮例外，以及暫行字樣維持 PendingWording？」若**是**，下一則 DEC 只需登記該確認；若**否**，由既有 Gate 程序另行取得，A 在此之前不改碼。 |
+| 待客戶確認（單題，**本筆不代答**；治理 writer 建議，非裁示） | 「11-25 的施工範圍核准，是否同時構成 S-AST-M1 v2 修正版 Gate 的核准——含情境③的選用、7／8 條守衛的精確限縮例外，以及暫行字樣維持 PendingWording？」若**是**，下一則 DEC 只需登記該確認；若**否**，由既有 Gate 程序另行取得，A 在此之前不改碼。 <br>**→ 2026-11-25 狀態更新（append-only；上列文字一字未刪）**：本單題**已由客戶於同日追加裁示作答，不再待確認**，見 `DEC-2026-11-25-04`（#1296 comment [`7148843625`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7148843625)）：客戶選定方案甲並核准 S-AST-M1 v2 修正版 Gate（僅情境③、暫行字樣維持 PendingWording）；**仍不代表**七處／八條守衛已逐項核定、Gate-M／G1／G5 已閉合。 |
 | 是否可逆／影響範圍 | 可逆（純文件）。**登記不構成動工授權**（`CLAUDE.md` §-1）。 |
 | evidence／source | #1296 comments：`7147974835`（客戶裁示）、`7147923962`（總管排程）、`7147965061`（A 施工前 Gate）、`7147985182`（Work：A 資產／市場槽未啟動畫面 QA）、`7132292658`（A 第二棒缺口卡）；`DEC-2026-11-19-01`、`DEC-2026-11-19-09`、`DEC-2026-11-16-01`、`DEC-2026-11-09-02`；`docs/evidence/c_assets_s_ast_m1_gate_v2_2026_11_19.md`。 |
 | supersedes／amends | 不 supersede、不 amend 任何既有 DEC；`DEC-2026-11-19-01`、`-09` 全部原樣有效。 |
@@ -3786,7 +3786,7 @@
 | 決定 (i) 切片 | 核准 C 的**獨立離線證據輸入器**切片：僅新增 `services/onebrain/evidence_input.py` 與 `tests/test_onebrain_evidence_input.py` 各一檔；接收既有已驗收准入結果；R2／R3／R4 任一非 `ALLOWED` 或證據不合即拒收並保留 RJ3／適用缺口；三主題共用同一輸入；disabled／timeout／error 離線負控回空解釋、不改規則數值；**不核准正式 Digest schema 或 Runtime；D2-G2 仍維持，不宣稱已通過**；不接真資料。 |
 | 決定 (ii) 守衛例外（客戶） | 僅在既有分支修改 `tests/test_onebrain_offline_guard.py`：`EXPECTED_PKG_FILES` 增加 `services/onebrain/evidence_input.py` 對應一項；`EXPECTED_TEST_FILES` 增加 `tests/test_onebrain_evidence_input.py` 對應一項；**僅**必要計數／檔名描述同步（4→5、3→4）。**其餘守衛邏輯、import／socket／安全白名單與拒絕條件一字不動**；不容許泛化或移除守衛。背景（C 回報 `7133619412`）：該守衛自述「多一個即超範圍，需重新取得授權才能改本檔」，兩項測試於加檔後轉紅（2 failed／111 passed）；C 未自行改守衛（避免自我核准）。 |
 | 不授權範圍（清單，皆不授權） | 正式 Digest schema、D2-G2 通過、Provider／Runtime、真 R4／AI USE、正式 L1／L2、真取數、RSS、正式掛載、Secrets、交易規則、公式、其他守衛的任何放寬；既有 provider、B 契約、A 的 `ui_v3`／`app_preview.py`／registry；Ready／merge／deploy。 |
-| Gate 狀態 | **已閉合**：客戶對 (ii) 的精確例外授權（逐字存檔）。**未閉合／未驗證**：①C 的實作僅見 #7133619412 的**作者自述**（本機分支 `claude/c-ob-evidence-offline-1`，未見 push、未見 Draft PR）——**本批未驗證其存在或內容**；②獨立 Work／O 非作者 QA（精確三檔差額、守衛仍拒其他未授權檔、權利拒收、公式 blob、零外連）；③(i) 的客戶本人逐字來源〔待核〕。 |
+| Gate 狀態 | **已閉合**：客戶對 (ii) 的精確例外授權（逐字存檔）。**未閉合／未驗證**：①C 的實作僅見 #7133619412 的**作者自述**（本機分支 `claude/c-ob-evidence-offline-1`，未見 push、未見 Draft PR）——**本批未驗證其存在或內容**；②獨立 Work／O 非作者 QA（精確三檔差額、守衛仍拒其他未授權檔、權利拒收、公式 blob、零外連）；③(i) 的客戶本人逐字來源〔待核〕。 <br>**→ 2026-11-25 狀態更新（append-only）**：客戶已追加核准第四檔例外，見 `DEC-2026-11-25-05`；上列「三檔」描述為追加前狀態，現行授權範圍為**四檔**（精確定義見 -05）。 |
 | 是否可逆／影響範圍 | 可逆（純文件）。 |
 | evidence／source | #1296 comments：`7132782309`、`7133619412`、`7147974835`；`DEC-2026-11-20-01`（OB-B 最小離線切片）、`DEC-2026-11-18-03`。 |
 | supersedes／amends | 不 supersede 任何既有 DEC；僅登記上述授權。 |
@@ -3806,6 +3806,37 @@
 | evidence／source | #1296 comments：`7147997811`、`7148029279`、`7148118288`（O 的首份回存，作格式前例）；`DEC-2026-10-16-05`（稽核分級）。 |
 | supersedes／amends | 不 supersede 任何既有 DEC。 |
 | provenance | 客戶用語逐字經 comment 存檔；其餘為總管整理之要點轉述；單組整理，**尚待非作者獨立 QA**。 |
+
+### DEC-2026-11-25-04｜A-AST-MOUNT-FAKE-1＋MK-1：客戶正式選定方案甲並核准 S-AST-M1 v2 修正版 Gate（僅情境③）——守衛逐項核定、G5 停寫確認、#1339 程序差額（落盤補件）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-25（Asia/Taipei）；**客戶**。#1296 comment [`7148843625`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7148843625)（2026-11-25T00:45:26Z；GPT 總管張貼，引客戶本輪逐字）存檔。 |
+| 客戶指示原文（如該 comment 所引） | 「核准以下施工範圍：A 採方案甲，核准 S-AST-M1 v2 修正版 Gate，僅情境③、暫行字樣維持 PendingWording；七處／八條守衛須先精確對照，只允許已核定例外。……依既有治理程序落盤，其餘 HOLD 不變。請寫入 GitHub #1296 並安排派工。」（C 部分見 `DEC-2026-11-25-05`） |
+| 決定（客戶） | ①**方案甲＝客戶正式選定**（原 `DEC-2026-11-25-01` 稱其為「總管執行邊界、非客戶選擇」，自本筆起該描述**由客戶選定取代**；`-01` 原文不改）。②**核准 S-AST-M1 v2 修正版 Gate**，限情境③（`evidence=None`）、本機隔離 Preview、原合成資料、無假持股／假金額／假成本／個人設定；其餘十個情境留 PoC 測試；不符則退 A0。③暫行字樣**維持 PendingWording**，不升格正式字樣。④七處（原 A 施工前 Gate）／八條（v2 §c L54）守衛：**須先精確對照，只允許已核定例外**。 |
+| 七處／八條守衛核定狀態（據實；**本筆不核定任何一項**） | **未逐項核定**。客戶明文此裁示「不代表七處／八條已逐項核定或 G5 停寫已完成」。Work SF-1（[`7148831687`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7148831687)）指出 A 卡「7 處」無逐項列名；v2 §c 八條＝①registry 雙 slugs／模式 ②assets source isolation 登錄 ③nav_items 順序／可進 ④未掛載／示範旗標與反向負控 ⑤五短標及單路由 ⑥AppTest 連結數與市場預設頁 ⑦缺 renderer 必須報錯 ⑧手機 ARIA／Tab 示範標記。#1339 對照（Work 範圍對照，非核定）：①③④⑤⑥⑦⑧有對應、②檔案未改；另改 exp browser、exp copy、settings browser、settings page 期望（均**無核定依據**）；⑦採合成 slug（舊卡舉 exp）。**要求 A 交矩陣**：每個檔名／斷言／舊新預期／對應正式條款／必要性／負控；**無精確核定依據的差額不保留、不擴權；需新增例外則停該項另請示**。 |
+| Gate 狀態（據實） | **已閉合**：客戶選定方案甲；S-AST-M1 v2 修正版 Gate 核准（限上列範圍）。**未閉合**：Gate-M／M-2（`DEC-2026-11-19-01`）、G1、G5（B P2／C ast 停寫且 A 單寫之確認）、七處／八條逐項核定、非作者 QA、Cloud／真機。進入合法修正的前置＝確認 Gate-M／G1／G5 與停寫、A 單寫。 |
+| 程序差額（據實揭露，**不追認**） | #1339（Draft；觀測 live head `33b2d776ed16408cdc3dedd4b1e7f260bccd038a`、4 commits、18 檔、`mergeable_state=unstable`；客戶裁示當時觀測 head `59b24d1f…`／17 檔，head 之後已變）建立於 2026-11-25T00:40:19Z，**早於**本追加裁示（00:45:26Z）：先施工後追加裁示，**不追認**；PR 自述「13 個守衛預期」「未刪弱斷言」均為作者自述，**未驗證**。指令：A **先停止擴張及 Ready／merge**；#1339 原畫面與作者測試不盲目重做，待守衛核定與正式前置後由 Work 非作者驗 390／1280 實際操作、缺值／示範標識、未啟用槽、五格、守衛、公式、零外連。 |
+| 不授權範圍（清單，皆不授權） | 七處／八條守衛任何未核定放寬；其餘十情境上畫面；假資料呈現；新公式、真取數、AI Runtime、正式 `ui_v2`／正式掛載；AS-2／AS-3／AS-4、MK-2／MK-3；暫行字樣升格；Ready／merge／deploy；解除其他 HOLD。 |
+| 是否可逆／影響範圍 | 可逆（純文件）。登記不構成動工授權（`CLAUDE.md` §-1）。 |
+| evidence／source | #1296 comments：`7148843625`（客戶裁示）、`7147974835`、`7148831687`（Work SF-1）；PR #1339（觀測值）；`DEC-2026-11-19-01`、`-09`；`docs/evidence/c_assets_s_ast_m1_gate_v2_2026_11_19.md` §c。 |
+| supersedes／amends | **amends** `DEC-2026-11-25-01`（「方案甲＝總管邊界」→客戶選定；「待客戶確認」單題已作答）；不 supersede、不改寫任何既有 DEC。 |
+| provenance | 客戶逐字經 comment 存檔（總管張貼）；治理 writer 單組整理，**尚待非作者獨立 QA**（`DEC-2026-10-16-05`）。 |
+
+### DEC-2026-11-25-05｜C-OB-EVIDENCE-OFFLINE-1：第四檔精確例外 `tests/ui_v3/test_ui2_ai_input_gap_offline.py`（客戶）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-25（Asia/Taipei）；**客戶**。#1296 comment [`7148843625`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7148843625)；阻塞回報見 C 的 [`7148193963`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7148193963)。 |
+| 客戶指示原文（如該 comment 所引） | 「C 核准第四檔 tests/ui_v3/test_ui2_ai_input_gap_offline.py，僅 AUTHORISED_ONEBRAIN_TESTS 增加 test_onebrain_evidence_input.py 一項與必要計數描述，原守衛與負控不弱化。依既有治理程序落盤，其餘 HOLD 不變。」 |
+| 決定 | 在 C 既有分支（`claude/c-ob-evidence-offline-1`）僅修改該檔：`AUTHORISED_ONEBRAIN_TESTS` 增 `test_onebrain_evidence_input.py` 一項；及必要計數描述（3→4）。原集合精確比對、守衛邏輯、未授權檔負控（含 `test_負控_多一個test_onebrain_檔名…`）**不弱化**。**禁止第五檔及泛化例外。**授權檔數：原 `-02` 的三檔（evidence_input.py、test_onebrain_evidence_input.py、test_onebrain_offline_guard.py）＋本第四檔。 |
+| C 最新進度（據實；**作者自述，未驗證**） | 依 #1296 [`7148193963`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7148193963)：本機 commit `99669fca`／`85522f9c`；onebrain 四測試檔合跑 287 passed；未授權檔負控使守衛轉紅、移除後恢復；公式 blob 與 main 同；零外連；第四檔缺口使 `test_本檔不是test_onebrain_檔…` 1 failed。**本批治理 writer 查核（2026-11-25）：遠端無 `claude/c-ob*` 分支，main 仍為 `649eaa23`；即**尚未 push、無 Draft PR**，上述一律 NOT VERIFIED。 |
+| 後續流程（客戶／總管指示） | 正式程序閉合（本批合入 main）並確認槽位後，C 沿用既有三檔成果，跑受影響守衛、未授權檔負控與必要整合測試，正常 push、開 Draft PR，附精確四檔 diff、exact SHA、CI 四項與 Slow 實際 step，交 Work 非作者 QA。未閉合前不占施工槽，不 Ready／merge。 |
+| 不授權範圍（清單，皆不授權） | 第五檔；泛化或放寬守衛；正式 Digest schema、D2-G2、Provider／Runtime、真 R4／AI USE、真取數、正式掛載、公式、Ready／merge／deploy。 |
+| 是否可逆／影響範圍 | 可逆（純文件）。 |
+| evidence／source | #1296 comments：`7148843625`、`7148193963`、`7147974835`、`7132782309`；`DEC-2026-11-25-02`。 |
+| supersedes／amends | **amends** `DEC-2026-11-25-02`（授權檔由三檔增為四檔）；不 supersede 任何既有 DEC。 |
+| provenance | 客戶逐字經 comment 存檔；C 進度為作者自述；單組整理，**尚待非作者獨立 QA**。 |
 
 ---
 
