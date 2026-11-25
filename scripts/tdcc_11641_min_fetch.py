@@ -232,8 +232,41 @@ _SCHEMA_KEYS = frozenset({
     "properties", "additionalProperties", "items", "allOf", "oneOf", "anyOf", "not", "discriminator", "xml",
     "externalDocs"})
 _SCHEMA_NONNEG_INT = ("maxLength", "minLength", "maxItems", "minItems", "maxProperties", "minProperties")
-_SCHEMA_BOOL = ("nullable", "deprecated", "readOnly", "writeOnly", "uniqueItems")
-_SCHEMA_NUM = ("multipleOf", "maximum", "minimum")
+# OAS 3.0：exclusiveMaximum／exclusiveMinimum 為布林（3.1 的數值寫法尚無法正確驗證 ⇒ 保守拒絕，不擴張支援）
+_SCHEMA_BOOL = ("nullable", "deprecated", "readOnly", "writeOnly", "uniqueItems", "exclusiveMaximum",
+                "exclusiveMinimum")
+_SCHEMA_NUM = ("maximum", "minimum")
+_XML_KEYS = {"name": str, "namespace": str, "prefix": str, "attribute": bool, "wrapped": bool}
+
+
+def _is_real(v: Any) -> bool:
+    return not isinstance(v, bool) and isinstance(v, (int, float)) and v == v and v not in (float("inf"), float("-inf"))
+
+
+def _check_aux_objects(node: dict) -> None:
+    """multipleOf、xml、externalDocs、discriminator 的值結構（無法正確驗證者一律保守拒絕）。"""
+    if "multipleOf" in node and not (_is_real(node["multipleOf"]) and node["multipleOf"] > 0):
+        raise FetchStop("schema_invalid")  # multipleOf 須為 > 0 的數值（0、負數、字串、布林皆拒）
+    if "xml" in node:
+        x = node["xml"]
+        if not isinstance(x, dict) or any(
+                (k not in _XML_KEYS and not (isinstance(k, str) and k.startswith("x-")))
+                or (k in _XML_KEYS and (type(v) is not _XML_KEYS[k])) for k, v in x.items()):
+            raise FetchStop("schema_invalid")
+    if "externalDocs" in node:
+        d = node["externalDocs"]
+        if (not isinstance(d, dict) or not isinstance(d.get("url"), str) or not d["url"].strip()
+                or ("description" in d and not isinstance(d["description"], str))
+                or any(k not in ("url", "description") and not (isinstance(k, str) and k.startswith("x-")) for k in d)):
+            raise FetchStop("schema_invalid")
+    if "discriminator" in node:
+        d = node["discriminator"]
+        if (not isinstance(d, dict) or not isinstance(d.get("propertyName"), str) or not d["propertyName"].strip()
+                or any(k not in ("propertyName", "mapping") and not (isinstance(k, str) and k.startswith("x-"))
+                       for k in d)
+                or ("mapping" in d and (not isinstance(d["mapping"], dict) or not all(
+                    isinstance(k, str) and isinstance(v, str) for k, v in d["mapping"].items())))):
+            raise FetchStop("schema_invalid")
 
 
 def _validate_schema_object(node: Any, oas: dict, seen: Optional[set] = None, budget: Optional[list] = None,
@@ -271,8 +304,9 @@ def _validate_schema_object(node: Any, oas: dict, seen: Optional[set] = None, bu
         if k in node and not isinstance(node[k], bool):
             raise FetchStop("schema_invalid")
     for k in _SCHEMA_NUM:
-        if k in node and (isinstance(node[k], bool) or not isinstance(node[k], (int, float))):
+        if k in node and not _is_real(node[k]):
             raise FetchStop("schema_invalid")
+    _check_aux_objects(node)
     for k in ("format", "title", "description", "pattern"):
         if k in node and not isinstance(node[k], str):
             raise FetchStop("schema_invalid")

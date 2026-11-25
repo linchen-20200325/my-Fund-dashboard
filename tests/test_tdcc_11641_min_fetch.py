@@ -1890,3 +1890,104 @@ def test_round5_schema_mutations_are_killed(old, new, probe):
            else _with_params([_p(schema=bad)]))
     res = _mrun(ns, FakeTransport(oas, _rows()))
     assert res.stop_reason is None  # 守衛被拿掉 ⇒ 非法 Schema Object 也放行（R-1 被送出）
+
+
+# ─────────────── 第六輪（Work #7161727036）MF3：Schema Object 關鍵字「值」的合法性 ───────────────
+_BAD_KEYWORD_VALUES = {
+    # Work 具名反例
+    "exclusiveMaximum_str_false": {"type": "number", "maximum": 5, "exclusiveMaximum": "false"},
+    "multipleOf_zero": {"type": "number", "multipleOf": 0},
+    "xml_int": {"type": "string", "xml": 9},
+    # 同類延伸
+    "exclusiveMinimum_str": {"type": "number", "minimum": 1, "exclusiveMinimum": "true"},
+    "exclusiveMaximum_number_3_1_style": {"type": "number", "exclusiveMaximum": 5},
+    "exclusiveMinimum_none": {"type": "number", "exclusiveMinimum": None},
+    "exclusiveMaximum_list": {"type": "number", "exclusiveMaximum": [True]},
+    "multipleOf_neg": {"type": "number", "multipleOf": -1}, "multipleOf_str": {"type": "number", "multipleOf": "2"},
+    "multipleOf_bool": {"type": "number", "multipleOf": True}, "multipleOf_float_zero": {"type": "number", "multipleOf": 0.0},
+    "multipleOf_none": {"type": "number", "multipleOf": None},
+    "maximum_str": {"type": "number", "maximum": "9"}, "maximum_nan": {"type": "number", "maximum": float("nan")},
+    "maximum_inf": {"type": "number", "maximum": float("inf")},
+    "xml_str": {"type": "string", "xml": "x"}, "xml_list": {"type": "string", "xml": ["a"]},
+    "xml_none": {"type": "string", "xml": None}, "xml_name_int": {"type": "string", "xml": {"name": 5}},
+    "xml_attr_str": {"type": "string", "xml": {"attribute": "yes"}}, "xml_wrapped_int": {"type": "string", "xml": {"wrapped": 1}},
+    "xml_unknown": {"type": "string", "xml": {"bogus": "x"}},
+    "extdocs_str": {"type": "string", "externalDocs": "x"}, "extdocs_no_url": {"type": "string", "externalDocs": {"description": "d"}},
+    "extdocs_url_int": {"type": "string", "externalDocs": {"url": 5}}, "extdocs_unknown": {"type": "string", "externalDocs": {"url": "u", "bogus": 1}},
+    "extdocs_desc_int": {"type": "string", "externalDocs": {"url": "u", "description": 5}},
+    "disc_str": {"oneOf": [{"type": "string"}], "discriminator": "x"},
+    "disc_no_prop": {"oneOf": [{"type": "string"}], "discriminator": {}},
+    "disc_prop_int": {"oneOf": [{"type": "string"}], "discriminator": {"propertyName": 5}},
+    "disc_mapping_list": {"oneOf": [{"type": "string"}], "discriminator": {"propertyName": "t", "mapping": ["a"]}},
+    "disc_mapping_val_int": {"oneOf": [{"type": "string"}], "discriminator": {"propertyName": "t", "mapping": {"a": 1}}},
+    "disc_unknown": {"oneOf": [{"type": "string"}], "discriminator": {"propertyName": "t", "bogus": 1}},
+}
+
+
+@pytest.mark.parametrize("level", ["op", "item"])
+@pytest.mark.parametrize("where", ["param", "media"])
+@pytest.mark.parametrize("kind", sorted(_BAD_KEYWORD_VALUES))
+def test_mf3_round6_invalid_schema_keyword_values_mean_zero_r1(kind, where, level):
+    schema = _BAD_KEYWORD_VALUES[kind]
+    plist = [_p(schema=schema)] if where == "param" else [_p(content={"application/json": {"schema": schema}})]
+    tp = FakeTransport(_with_params(plist, level), _rows())
+    res = _run(tp)
+    assert res.stop_reason == "schema_invalid" and len(tp.calls) == 1 and res.requests_used == 1, (kind, res.stop_reason)
+
+
+def test_mf3_round6_work_named_twelve_cases_exactly():
+    named = ("exclusiveMaximum_str_false", "multipleOf_zero", "xml_int")
+    n = 0
+    for kind in named:
+        for where in ("param", "media"):
+            for level in ("op", "item"):
+                schema = _BAD_KEYWORD_VALUES[kind]
+                plist = [_p(schema=schema)] if where == "param" else [_p(content={"application/json": {"schema": schema}})]
+                tp = FakeTransport(_with_params(plist, level), _rows())
+                assert _run(tp).stop_reason == "schema_invalid" and len(tp.calls) == 1  # R-1 = 0
+                n += 1
+    assert n == 12
+
+
+@pytest.mark.parametrize("schema", [
+    {"type": "number", "maximum": 5, "exclusiveMaximum": True}, {"type": "number", "minimum": 1, "exclusiveMinimum": False},
+    {"type": "number", "multipleOf": 0.5}, {"type": "integer", "multipleOf": 3, "minimum": -2.5, "maximum": 10},
+    {"type": "string", "xml": {"name": "a", "namespace": "http://x", "prefix": "p", "attribute": True, "wrapped": False}},
+    {"type": "string", "xml": {}, "x-flag": 1}, {"type": "string", "xml": {"x-vendor": 1}},
+    {"type": "string", "externalDocs": {"url": "https://docs.example"}},
+    {"type": "string", "externalDocs": {"url": "u", "description": "d", "x-v": 1}},
+    {"oneOf": [{"type": "string"}, {"type": "integer"}], "discriminator": {"propertyName": "kind"}},
+    {"oneOf": [{"type": "string"}], "discriminator": {"propertyName": "kind", "mapping": {"a": "#/x", "b": "y"}}},
+])
+def test_mf3_round6_valid_keyword_values_are_still_accepted(schema):
+    for level in ("op", "item"):
+        for where in ("param", "media"):
+            plist = [_p(schema=schema)] if where == "param" else [_p(content={"application/json": {"schema": schema}})]
+            tp = FakeTransport(_with_params(plist, level), _rows())
+            assert _run(tp).stop_reason is None and len(tp.calls) == 2, (schema, where, level)
+
+
+@pytest.mark.parametrize("old,new,probe", [
+    ('    if "multipleOf" in node and not (_is_real(node["multipleOf"]) and node["multipleOf"] > 0):\n        raise FetchStop("schema_invalid")', '    pass', "multipleof"),
+    ('        if not isinstance(x, dict) or any(', '        if False or any(', "xmlshape"),
+    ('    for k in _SCHEMA_NUM:\n        if k in node and not _is_real(node[k]):\n            raise FetchStop("schema_invalid")\n', '', "numeric"),
+    ('_SCHEMA_BOOL = ("nullable", "deprecated", "readOnly", "writeOnly", "uniqueItems", "exclusiveMaximum",\n                "exclusiveMinimum")', '_SCHEMA_BOOL = ("nullable", "deprecated", "readOnly", "writeOnly", "uniqueItems")', "exclusive"),
+    ('    if "externalDocs" in node:', '    if False and "externalDocs" in node:', "extdocs"),
+    ('    if "discriminator" in node:', '    if False and "discriminator" in node:', "disc"),
+])
+def test_round6_mutations_are_killed(old, new, probe):
+    ns = _mutant(old, new)
+    bad = {"multipleof": "multipleOf_zero", "xmlshape": "xml_int", "numeric": "maximum_str",
+           "exclusive": "exclusiveMaximum_str_false", "extdocs": "extdocs_str", "disc": "disc_str"}[probe]
+    try:
+        res = _mrun(ns, FakeTransport(_with_params([_p(schema=_BAD_KEYWORD_VALUES[bad])]), _rows()))
+    except AttributeError:
+        return  # 守衛被拿掉 ⇒ 行為改變（崩潰）＝被殺
+    assert res.stop_reason is None, probe  # 守衛被拿掉 ⇒ 非法關鍵字值被放行（R-1 被送出）＝被殺
+
+
+def test_round6_does_not_touch_tlv_ipc_or_supervisor():
+    import inspect
+
+    src = inspect.getsource(m.run_in_worker)
+    assert "recv_bytes" in src and "_unpack" in src and "json" not in src.split('"""', 2)[2]
