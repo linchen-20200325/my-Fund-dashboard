@@ -2,7 +2,7 @@
 
 授權依據：`DEC-2026-11-20-01`（客戶本人逐字確認）。本檔把下列「不得」從文件宣稱變成 CI 紅燈：
 
-A. **套件邊界**：`services/onebrain/` 恰為 4 檔、`tests/test_onebrain_*.py` 恰為 3 檔
+A. **套件邊界**：`services/onebrain/` 恰為 5 檔、`tests/test_onebrain_*.py` 恰為 4 檔
    （白名單；多一個即超範圍，需重新取得授權才能改本檔）。
 B. **離線保證（比 L2 通用白名單更窄）**：套件內只准 import
    `__future__` / `abc` / `dataclasses` / `enum` / `typing` 與絕對 `services.onebrain…` 自引；
@@ -63,6 +63,7 @@ EXPECTED_PKG_FILES = frozenset(
         "services/onebrain/provider_types.py",
         "services/onebrain/provider_interface.py",
         "services/onebrain/fake_provider.py",
+        "services/onebrain/evidence_input.py",
     }
 )
 EXPECTED_TEST_FILES = frozenset(
@@ -70,6 +71,7 @@ EXPECTED_TEST_FILES = frozenset(
         "tests/test_onebrain_provider_types.py",
         "tests/test_onebrain_fake_provider.py",
         "tests/test_onebrain_offline_guard.py",
+        "tests/test_onebrain_evidence_input.py",
     }
 )
 
@@ -79,7 +81,7 @@ def _rel(p: pathlib.Path) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A. 套件邊界（白名單恰為 7 檔）
+# A. 套件邊界（白名單恰為 9 檔）
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -87,11 +89,11 @@ def _pkg_py_files() -> list[pathlib.Path]:
     return sorted(p for p in PKG_DIR.rglob("*.py") if "__pycache__" not in p.parts)
 
 
-def test_package_contains_exactly_the_four_authorised_files():
+def test_package_contains_exactly_the_five_authorised_files():
     assert {_rel(p) for p in _pkg_py_files()} == EXPECTED_PKG_FILES
 
 
-def test_onebrain_tests_are_exactly_the_three_authorised_files():
+def test_onebrain_tests_are_exactly_the_four_authorised_files():
     found = {_rel(p) for p in TESTS_DIR.rglob("test_onebrain_*.py")}
     assert found == EXPECTED_TEST_FILES
 
