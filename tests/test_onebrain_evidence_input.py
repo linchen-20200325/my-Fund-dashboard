@@ -652,3 +652,56 @@ def test_provider_called_at_most_once_per_lens_and_only_with_evidence():
 def test_brief_rejects_unknown_lens_and_settings_page_has_no_brief():
     with pytest.raises(ValueError):
         ei.brief_for_lens(_shared_bundle(), "settings")
+
+
+# ═════════════ MF-C-BRIEF-1：短解釋保留各主題的固定 reasons-only 拒收缺口 ═════════════
+def _mixed_bundle():
+    good = card("GOOD", lens=(ei.LENS_RISK, ei.LENS_CASHFLOW, ei.LENS_TREND), data_gaps=("time_sources_differ_note",))
+    bad_rights = card("BAD", lens=(ei.LENS_RISK, ei.LENS_CASHFLOW), rights=grants(R4=BAD_GRANTS["deny"]),
+                      support_refs=({"metric": "secret-metric-name", "status": "computed"},))
+    bad_shape = card("SHAPE", lens=(ei.LENS_TREND,), support_refs=({"metric": ["wrong-shape"]},))
+    return ei.admit([good, bad_rights, bad_shape], test_mode=True)
+
+
+def test_brief_keeps_fixed_refusal_gaps_per_lens_in_mixed_batch():
+    b = _mixed_bundle()
+    risk, cash, trend = (ei.brief_for_lens(b, x) for x in (ei.LENS_RISK, ei.LENS_CASHFLOW, ei.LENS_TREND))
+    assert "GOOD:time_sources_differ_note" in risk.data_gaps and "BAD:rights_unverified" in risk.data_gaps
+    assert "BAD:rights_unverified" in cash.data_gaps and "SHAPE:input_inconsistent" not in cash.data_gaps
+    assert "SHAPE:input_inconsistent" in trend.data_gaps and "BAD:rights_unverified" not in trend.data_gaps   # 只保留該主題有權取得者
+    for br in (risk, cash, trend):
+        assert br.conclusion == ei.CONCLUSION_PARTIAL and len(br.evidence) == 2               # 只有 GOOD 的支持證據，拒收者不添 support
+        assert "secret-metric-name" not in repr(br) and "wrong-shape" not in repr(br)        # 不洩露拒收內容
+
+
+def test_brief_keeps_refusal_gaps_when_every_card_is_refused():
+    b = ei.admit([card("B1", lens=(ei.LENS_RISK,), rights=grants(R3=BAD_GRANTS["unknown"])),
+                  card("B2", lens=(ei.LENS_TREND,), support_refs=None)], test_mode=True)
+    assert b.approved == ()
+    risk, cash, trend = (ei.brief_for_lens(b, x) for x in (ei.LENS_RISK, ei.LENS_CASHFLOW, ei.LENS_TREND))
+    assert risk.data_gaps == ("B1:rights_unverified",) and trend.data_gaps == ("B2:input_inconsistent",)
+    assert cash.data_gaps == ()
+    for br in (risk, cash, trend):
+        assert br.conclusion == ei.CONCLUSION_INSUFFICIENT and br.evidence == () and br.counter_evidence == ()
+
+
+def test_refusal_gaps_in_brief_never_call_provider_or_add_support():
+    spy = SpyProvider()
+    b = ei.admit([card("B1", lens=(ei.LENS_RISK,), rights=grants(R4=BAD_GRANTS["deny"]))], test_mode=True)
+    br = ei.brief_for_lens(b, ei.LENS_RISK, spy, enabled=True)
+    assert spy.calls == 0 and br.ai_status == "no_evidence" and br.data_gaps == ("B1:rights_unverified",)
+
+
+def test_refused_evidence_carries_lens_routing_without_reading_evidence():
+    _ReadTracker.reads = 0
+    c = card("T", lens=(ei.LENS_CASHFLOW,), rights=grants(R4=BAD_GRANTS["deny"]), support_refs=(_ReadTracker(metric="m"),))
+    b = ei.admit([c], test_mode=True)
+    assert b.refused[0].lens == (ei.LENS_CASHFLOW,) and _ReadTracker.reads == 0
+
+
+def test_snapshot_failure_refusal_also_routes_fixed_gap_to_its_lens_only():
+    bad = card("SNAP", lens=(ei.LENS_CASHFLOW,), support_refs=({"metric": "m", "nested": _ExplodingItemsDict(a=1)},))
+    b = ei.admit([card("OK", lens=(ei.LENS_RISK,)), bad], test_mode=True)
+    assert b.refused[0].lens == (ei.LENS_CASHFLOW,)
+    assert ei.brief_for_lens(b, ei.LENS_CASHFLOW).data_gaps == ("SNAP:input_inconsistent",)
+    assert "SNAP:input_inconsistent" not in ei.brief_for_lens(b, ei.LENS_RISK).data_gaps

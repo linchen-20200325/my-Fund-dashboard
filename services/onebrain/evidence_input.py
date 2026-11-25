@@ -173,6 +173,7 @@ class RefusedEvidence:
     reason_codes: tuple
     rights_detail: tuple  # ((軸, 有效值字串), …)
     data_gaps: tuple
+    lens: tuple = ()  # 路由用主題（建構時已驗證的卡屬性，非證據內容）；供短解釋保留各主題的固定拒收缺口
 
 
 @dataclass(frozen=True)
@@ -262,6 +263,7 @@ def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> Evidence
                     reason_codes=tuple(reasons),
                     rights_detail=tuple((a, s.value) for a, s in states),
                     data_gaps=tuple(gaps),
+                    lens=tuple(card.lens),
                 )
             )
             continue
@@ -285,6 +287,7 @@ def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> Evidence
                     reason_codes=(REASON_INCONSISTENT,),
                     rights_detail=tuple((a, s.value) for a, s in states),
                     data_gaps=("input_inconsistent",),
+                    lens=tuple(card.lens),
                 )
             )
             continue
@@ -440,6 +443,8 @@ def brief_for_lens(bundle: EvidenceBundle, lens: str, provider: Optional[Analysi
     states = tuple(a.contradiction_search for a in view)
     summary = tuple(CONTRADICTION_TEXT[s] for s in dict.fromkeys(states))
     gaps = tuple(f"{a.card_id}:{g}" for a in view for g in a.data_gaps)
+    # 保留本主題有權取得的固定 reasons-only 拒收缺口（只有固定缺口碼；不讀、不洩露拒收內容，不添 support）
+    gaps += tuple(f"{r.card_id}:{g}" for r in bundle.refused if lens in r.lens for g in r.data_gaps)
     text = _clean_ai_text(exp.text) if exp.status is ExplainStatus.OK else ""
     status = "text_rejected" if (exp.status is ExplainStatus.OK and exp.text and not text) else exp.status.value
     return LensBrief(
