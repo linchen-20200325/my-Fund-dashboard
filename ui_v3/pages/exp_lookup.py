@@ -19,10 +19,12 @@ from typing import Optional
 
 from ui_v3.design import theme
 from ui_v3.viewmodels import exp_lookup_wording as W
+from ui_v3.viewmodels.exp_nav import DividendStatus, ExpNavView, MetricKind, MetricView, NavDisplay
 from ui_v3.viewmodels.fund_lookup import FieldStatus, FieldView, FundLookupView, LookupState
 
 KEY_INPUT = "fl_query_input"
 KEY_VIEW = "fl_last_view"
+KEY_NAV = "fl_last_nav"
 KEY_FORM = "fl_lookup_form"
 MAX_INPUT_CHARS = 100
 ID_STATUS = "fl-status"
@@ -72,6 +74,17 @@ h1{{font-size:{page} !important;padding:.2rem 0 !important}}
 .fl-row dt{{display:inline;font-size:{caption};color:{text2};margin:0 6px 0 0}}
 .fl-row dd{{display:inline;margin:0}}
 .fl-value-missing,.fl-value-conflict{{color:{text2}}}
+.fl-sect{{margin:{space2} 0 0 0;padding-top:{space1};border-top:1px solid {border};font-size:{caption};color:{text2}}}
+.fl-judge{{display:block;box-sizing:border-box;max-width:100%;margin:{space1} 0;border:1px solid {border};border-radius:{radius};padding:{space1} {space2};overflow-wrap:anywhere}}
+.fl-judge .fl-jk{{display:block;font-size:{caption};color:{text2}}}
+.fl-judge[data-judgement="fail-evidenced"]{{border-color:{red['border']};background:{red['background']};color:{red['text']}}}
+.fl-judge[data-judgement="fail-evidenced"] .fl-jk{{color:{red['text']}}}
+.fl-judge[data-judgement="undetermined"]{{border-color:{grey['border']};background:{grey['background']};color:{grey['text']}}}
+.fl-judge[data-judgement="fact-no-dividend"]{{border-style:dashed;background:transparent}}
+.fl-withheld{{display:block;box-sizing:border-box;margin:{space1} 0;border:1px solid {grey['border']};background:{grey['background']};color:{grey['text']};border-radius:{radius};padding:{space1} {space2};font-weight:700;overflow-wrap:anywhere}}
+.fl-fold{{border-top:1px solid {border};padding-top:{space1};margin-top:{space1}}}
+.fl-fold summary{{cursor:pointer;min-height:32px}}
+.fl-slot{{box-sizing:border-box;max-width:100%;border:1px dashed {border};border-radius:{radius};padding:{space1} {space2};margin-top:{space2};color:{text2};font-size:{caption}}}
 .fl-card[data-state="failed"]{{border-color:{red['border']}}}
 .fl-card[data-state="unmatched"],.fl-card[data-state="blocked"]{{border-style:dashed;border-color:{text2}}}
 /* 原生控制項的觸控目標 ≥48px；焦點環不靠瀏覽器預設（Streamlit 會改寫），改用 primary token 的 2px 外框 */
@@ -136,7 +149,113 @@ def _state_parts(view: FundLookupView) -> tuple:
     raise ValueError(f"未知的查詢狀態 {s!r}")
 
 
-def lookup_card_html(view: FundLookupView, *, fake: bool) -> str:
+_JUDGE_ATTR = {MetricKind.PASS_EVIDENCED: "pass-evidenced", MetricKind.FAIL_EVIDENCED: "fail-evidenced",
+               MetricKind.FACT_NO_DIVIDEND: "fact-no-dividend", MetricKind.UNDETERMINED: "undetermined"}
+_MISSING_BY_REASON = {"input_conflict": "miss_nav", "nav_not_admitted": "miss_nav", "dividend_not_obtained": "miss_dividend", "history_short": "miss_return_3y",
+                      "rights_unverified": "miss_rights", "identity_unverified": "miss_class"}
+
+
+def _nav_row(name: str, label_key: str, value_html: str) -> str:
+    return (f'<div class="fl-row" data-row="{escape(name)}"><dt class="uv3-label">{W.pending(label_key)}</dt><dd>{value_html}</dd></div>')
+
+
+def nav_block_html(nav: ExpNavView) -> str:
+    """淨值區（sibling；純函式）。`nav_value` 只在 VERIFIED 才有（view model 強制）；時間欄位各列各自標示、不互相代填。"""
+    n, j = nav.nav, nav.judgement
+    rows = []
+    status_html = ""
+    if n.display is NavDisplay.VERIFIED:
+        rows.append(_nav_row("nav-value", "nav_row_value", f'<span data-value="nav-value">{safe(n.nav_value)}</span> {safe(n.ccy)}'))
+        rows.append(_nav_row("nav-date", "nav_row_date", f'<span data-value="nav-date">{safe(n.nav_date)}</span>'))
+    elif n.display is NavDisplay.MISSING:
+        status_html = f'<div class="fl-withheld" role="status" data-nav-note="missing">⬜ {W.pending("nav_missing")}</div>'
+    else:
+        key = "nav_withheld_conflict" if n.display is NavDisplay.WITHHELD_CONFLICT else "nav_withheld_not_admitted"
+        status_html = f'<div class="fl-withheld" role="alert" data-nav-note="withheld">⬜ {W.pending(key)}</div>'
+        if n.conflicts:
+            if n.content_tier == "T1":
+                c = n.conflicts[0]
+                diag = W.pending("nav_diag_dates", a=c.a_date, b=c.b_date)
+            else:
+                diag = W.pending("nav_diag_t0")
+            rows.append(_nav_row("nav-diag", "nav_diag", diag))
+        others = [r for r in n.reason_codes if r != "input_conflict"]
+        if others:
+            rows.append(_nav_row("nav-reasons", "nav_row_reasons", "、".join(W.pending("nr_" + r) for r in others)))
+    if n.source_label is not None:
+        rows.append(_nav_row("nav-source", "nav_row_source", safe(n.source_label)))
+    if n.cache_updated_at is not None:
+        rows.append(_nav_row("nav-cache-at", "nav_row_cache", safe(n.cache_updated_at)))
+    supplier = safe(n.supplier_fetched_at) if n.supplier_fetched_at else f'<span class="fl-value-missing" data-kind="unknown">{W.pending("nav_supplier_unknown")}</span>'
+    if n.display is not NavDisplay.MISSING:
+        rows.append(_nav_row("nav-supplier-at", "nav_row_supplier", supplier))
+    if n.ccy_declared is not None and n.display is not NavDisplay.VERIFIED:
+        rows.append(_nav_row("ccy-declared", "nav_row_ccy_declared", safe(n.ccy_declared)))
+    if n.ccy_declared_at is not None:
+        rows.append(_nav_row("ccy-declared-at", "nav_row_ccy_at", safe(n.ccy_declared_at)))
+    div_key = {DividendStatus.MISSING: "nav_div_missing", DividendStatus.CONFIRMED_NONE: "nav_div_none", DividendStatus.PRESENT: "nav_div_present"}[j.dividend_status]
+    rows.append(_nav_row("dividend-status", "nav_row_dividend", f'<span data-dividend="{j.dividend_status.value}">{"⬜ " if j.dividend_status is DividendStatus.MISSING else ""}{W.pending(div_key)}</span>'))
+    note = f'<div class="uv3-note" data-note="time-differ">{W.pending("nav_time_differ")}</div>' if n.time_sources_differ else ""
+    return (f'<section data-block="nav" data-nav-display="{n.display.value}"><div class="fl-sect">{W.pending("nav_section")}</div>'
+            f'{status_html}<dl class="fl-list">{"".join(rows)}</dl>{note}</section>')
+
+
+def _metric_html(metric: MetricView, row_name: str, label_key: str, pass_key: str, fail_key: str) -> str:
+    """一列判定。符號只由 `kind` 決定：❌＝有證據的未通過、⬜＝無法判定、無配息事實＝無判定符號。renderer 不算、不改寫數值字串。"""
+    attr = _JUDGE_ATTR[metric.kind]
+    label = f'<span class="fl-jk">{W.pending(label_key)}</span>'
+    ev = "；".join(f"{escape(a)} {safe(b)}" for a, b in metric.evidence)
+    if metric.kind is MetricKind.PASS_EVIDENCED:
+        body = f'✅ {W.pending(pass_key)}' + (f"：{ev}" if ev else "")
+    elif metric.kind is MetricKind.FAIL_EVIDENCED:
+        body = f'❌ {W.pending(fail_key)}' + (f"：{ev}" if ev else "")
+    elif metric.kind is MetricKind.FACT_NO_DIVIDEND:
+        body = f'{W.pending("nav_div_none")}；{W.pending("judge_eating_na")}'
+    else:
+        body = f'{W.status("undetermined")} {W.pending("mr_" + metric.reason_code)}' + (f"（{ev}）" if ev else "")
+    return f'<span class="fl-judge" data-judgement="{attr}" data-metric="{escape(row_name)}">{label}{body}</span>'
+
+
+def judgement_block_html(nav: ExpNavView) -> str:
+    """輔助判定區：兩項各自獨立；層 F（淨值扣下）時兩項由 view model 強制為「無法判定」。"""
+    j = nav.judgement
+    return (f'<section data-block="judgement"><div class="fl-sect">{W.pending("judge_section")}</div>'
+            f'{_metric_html(j.three_three_three, "333", "judge_row_333", "judge_pass_333", "judge_fail_333")}'
+            f'{_metric_html(j.eating_principal, "eating", "judge_row_eating", "judge_pass_eating", "judge_fail_eating")}</section>')
+
+
+def folds_html(nav: ExpNavView) -> str:
+    """「為什麼／來源／限制」與「尚未取得」（預設收合；來源、日期已在卡面常駐，不收進這裡）。AI 使用權未核證只出現在這裡一行，不改主畫面。"""
+    limit = W.pending("limit_verified" if nav.nav.display is NavDisplay.VERIFIED else "limit_withheld")
+    ai = "" if nav.ai_usable else f'<div class="uv3-note" data-note="ai-unusable">{W.pending("limit_ai")}</div>'
+    miss = []
+    if nav.nav.display is not NavDisplay.VERIFIED:
+        miss.append("miss_nav")
+    if nav.judgement.dividend_status is DividendStatus.MISSING:
+        miss.append("miss_dividend")
+    for m in (nav.judgement.three_three_three, nav.judgement.eating_principal):
+        key = _MISSING_BY_REASON.get(m.reason_code or "")
+        if key:
+            miss.append(key)
+    for r in nav.nav.reason_codes:
+        key = {"identity_unverified": "miss_class", "class_unverified": "miss_class", "rights_unverified": "miss_rights"}.get(r)
+        if key:
+            miss.append(key)
+    seen = []
+    for k in miss:
+        if k not in seen:
+            seen.append(k)
+    miss_html = "、".join(W.pending(k) for k in seen) if seen else W.pending("fold_none")
+    return (f'<details class="fl-fold" data-fold="why"><summary>{W.pending("fold_why")}</summary><div class="uv3-note">{limit}</div>{ai}</details>'
+            f'<details class="fl-fold" data-fold="missing"><summary>{W.pending("fold_missing")}</summary><div class="uv3-note">{miss_html}</div></details>')
+
+
+def onebrain_slot_html() -> str:
+    """OneBrain 解釋槽：恆「未啟用」。不是 AI 結論、不用 ActionSlot、不依任何權利旗標改變。"""
+    return (f'<div class="fl-slot" data-block="onebrain-slot" data-state="disabled" role="note"><b>{W.pending("slot_title")}</b><br>{W.pending("slot_body")}</div>')
+
+
+def lookup_card_html(view: FundLookupView, *, fake: bool, nav: Optional[ExpNavView] = None) -> str:
     """依 ViewModel 組結果卡。`fake=True` 時卡首先出一個『FAKE 模擬』標籤（必在任何欄位列之前）。`NOT_QUERIED` → 『尚未查詢』卡。"""
     if not isinstance(view, FundLookupView):
         raise TypeError("view must be a FundLookupView")
@@ -165,6 +284,12 @@ def lookup_card_html(view: FundLookupView, *, fake: bool) -> str:
             rows.append(_dl_row(row_name, label_key, value_html, fs))
     if rows:
         parts.append(f'<dl class="fl-list" data-block="rows">{"".join(rows)}</dl>')
+    if nav is not None and view.state is LookupState.RESULT:      # sibling：五欄之後、單檔說明之前；其他狀態與無 sibling 時輸出與原來逐字相同
+        if not isinstance(nav, ExpNavView):
+            raise TypeError("nav must be an ExpNavView")
+        parts.append(nav_block_html(nav))
+        parts.append(judgement_block_html(nav))
+        parts.append(folds_html(nav))
     parts.append(f'<div class="uv3-note" data-note="single">{W.pending("single_note")}</div>')
     reason_attr = f' data-reason="{escape(view.reason_code)}"' if view.reason_code else ""
     return (f'<div class="uv3-card fl-card" data-block="lookup-result" data-state="{name}"{reason_attr} role="region" aria-labelledby="{ID_STATUS}">'
@@ -203,7 +328,9 @@ def render_form() -> Optional[str]:
     return raw if submitted else None
 
 
-def render_card(view: FundLookupView, *, fake: bool) -> None:
+def render_card(view: FundLookupView, *, fake: bool, nav: Optional[ExpNavView] = None) -> None:
     import streamlit as st
 
-    st.markdown(lookup_card_html(view, fake=fake), unsafe_allow_html=True)
+    st.markdown(lookup_card_html(view, fake=fake, nav=nav), unsafe_allow_html=True)
+    if nav is not None and view.state is LookupState.RESULT:
+        st.markdown(onebrain_slot_html(), unsafe_allow_html=True)
