@@ -219,10 +219,36 @@ def bind_dataset_operation(oas: Any) -> tuple[str, dict, dict]:
 _PARAM_IN = ("query", "header", "path", "cookie")
 
 
-_MEDIA_TYPE = re.compile(r"[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+*-]+(\s*;.*)?")
+_TOKEN = r"[A-Za-z0-9!#$%&'*+.^_`|~-]+"
+# RFC 9110 media-type：type/subtype 後接零或多個 `; token=(token|quoted-string)`；無值參數（如 `; charset`）不合法
+_MEDIA_TYPE = re.compile(rf"{_TOKEN}/{_TOKEN}(?:\s*;\s*{_TOKEN}=(?:{_TOKEN}|\"[^\"\\\r\n]*\"))*")
 
 
-def _check_param_representation(p: dict) -> None:
+def _check_refs_resolvable(node: Any, oas: dict, seen: Optional[set] = None, budget: Optional[list] = None) -> None:
+    """schema 內所有 `$ref` 須為文件內且可解析（含遞迴追入、防環、節點數上限）；否則停（⇒ R-1＝0）。"""
+    seen = set() if seen is None else seen
+    budget = [400] if budget is None else budget
+    budget[0] -= 1
+    if budget[0] < 0:
+        raise FetchStop("schema_too_complex")
+    if isinstance(node, dict):
+        if "$ref" in node:
+            ref = node["$ref"]
+            if not isinstance(ref, str) or not ref.startswith("#/"):
+                raise FetchStop("external_ref")
+            if ref in seen:
+                return
+            seen.add(ref)
+            _check_refs_resolvable(_resolve(node, oas), oas, seen, budget)
+            return
+        for v in node.values():
+            _check_refs_resolvable(v, oas, seen, budget)
+    elif isinstance(node, list):
+        for v in node:
+            _check_refs_resolvable(v, oas, seen, budget)
+
+
+def _check_param_representation(p: dict, oas: dict) -> None:
     """OAS 3.0.3 Parameter Object：`schema` 與 `content` **互斥且恰一**；content 只允許單一有效 media object。"""
     has_schema, has_content = "schema" in p, "content" in p
     if has_schema == has_content:  # 同存或皆無
@@ -230,6 +256,7 @@ def _check_param_representation(p: dict) -> None:
     if has_schema:
         if not isinstance(p["schema"], dict):
             raise FetchStop("op_params_invalid")
+        _check_refs_resolvable(p["schema"], oas)
         return
     c = p["content"]
     if not isinstance(c, dict) or len(c) != 1:  # 空、或多個 media entries
@@ -237,8 +264,10 @@ def _check_param_representation(p: dict) -> None:
     (mt, mo), = c.items()
     if not isinstance(mt, str) or not _MEDIA_TYPE.fullmatch(mt) or not isinstance(mo, dict):
         raise FetchStop("op_params_invalid")
-    if "schema" in mo and not isinstance(mo["schema"], dict):
-        raise FetchStop("op_params_invalid")
+    if "schema" in mo:
+        if not isinstance(mo["schema"], dict):
+            raise FetchStop("op_params_invalid")
+        _check_refs_resolvable(mo["schema"], oas)
 
 
 def _check_no_required_params_or_auth(oas: dict, op: dict, item: dict) -> None:
@@ -254,7 +283,7 @@ def _check_no_required_params_or_auth(oas: dict, op: dict, item: dict) -> None:
             p = _resolve(p, oas)
             if (not isinstance(p, dict) or not _nonblank(p.get("name")) or p.get("in") not in _PARAM_IN):
                 raise FetchStop("op_params_invalid")
-            _check_param_representation(p)
+            _check_param_representation(p, oas)
             if "required" in p and not isinstance(p["required"], bool):
                 raise FetchStop("op_params_invalid")
             if p.get("in") == "path" and p.get("required") is not True:
@@ -349,35 +378,66 @@ def _clean_text(desc: Any) -> Optional[str]:
     return desc.strip()
 
 
-_PATTERN_SAFE = re.compile(r"[\^$\[\]\-A-Za-z0-9{},()\\.+*?|]{1,64}")
-_ISIN_OK, _ISIN_BAD = ("US0378331005", "JP3633400001"), ("US037833100", "US03783310055", "us0378331005",
-                                                         "US-378331005", "", "US0378331005 ")
+# 可證固定寬度的保守 pattern 子集（不以有限樣本冒充完整證明）：
+#   ^ (原子)+ $，原子＝[字元類] 或 [字元類]{n}（n 為單一正整數）；字元類僅含 A-Z／a-z／0-9／單一英數字元的範圍。
+#   不允許 | ( ) ? * + . \ 、{n,m}、{n,} 等任何可變寬度或無法簡單證明的語法。寬度＝各原子 n（缺省 1）之和。
+_CLASS_BODY = r"(?:[A-Za-z0-9](?:-[A-Za-z0-9])?)+"
+_ATOM = re.compile(rf"\[({_CLASS_BODY})\](?:\{{([1-9][0-9]{{0,2}})\}})?")
+_ISIN_SCHEMA_KEYS = frozenset({"type", "description", "minLength", "maxLength", "pattern", "format", "title",
+                               "example", "examples"})
+
+
+def _class_body_ok(body: str) -> bool:
+    """字元類 A-Z 這類範圍須由小到大且同類（大寫／小寫／數字），避免反向或跨類範圍造成語意不明。"""
+    for m_ in re.finditer(r"([A-Za-z0-9])-([A-Za-z0-9])", body):
+        lo, hi = m_.group(1), m_.group(2)
+        same = (lo.isdigit() and hi.isdigit()) or (lo.isupper() and hi.isupper()) or (lo.islower() and hi.islower())
+        if not same or lo > hi:
+            return False
+    return True
+
+
+def _provable_pattern_width(pat: Any) -> Optional[int]:
+    """回傳可證的固定寬度；不在保守子集內一律 None（＝不採證）。"""
+    if not isinstance(pat, str) or not (3 <= len(pat) <= 64) or not (pat.startswith("^") and pat.endswith("$")):
+        return None
+    inner, pos, width = pat[1:-1], 0, 0
+    if not inner:
+        return None
+    while pos < len(inner):
+        m_ = _ATOM.match(inner, pos)
+        if not m_ or not _class_body_ok(m_.group(1)):
+            return None
+        width += int(m_.group(2)) if m_.group(2) else 1
+        pos = m_.end()
+    return width
 
 
 def _isin_schema_restricts_12(sch: Any) -> bool:
-    """結構佐證（不只靠文字）：ISIN 欄位 schema 須**確實**限制為合法 12 碼，且不得自相矛盾。
+    """結構佐證（不只靠文字）：ISIN 欄位 schema 須以**可證**方式限制為固定 12 碼，且不得自相矛盾。
 
-    - minLength／maxLength 若宣告任一個，須兩者皆為整數 12（13／12 等矛盾＝不採證）。
-    - pattern 若宣告，須為短的安全字元集、可編譯，且**實測**：接受合法 12 碼範例、拒絕 11／13 碼、小寫、
-      含符號與前後空白（`^(12)?[A-Z0-9]+$` 這類不限長度的樣式＝不採證）。
-    - 至少一種限制成立；宣告了但不成立者一律不採證。
+    - 只允許已知安全鍵；出現 enum／const／oneOf／anyOf／allOf／not／$ref／nullable 等無法證明恆定長度的鍵＝不採證。
+    - 任一已宣告鍵的值為 null（`pattern: null`、`minLength: null`…）＝不採證。
+    - `minLength`／`maxLength` 宣告任一則須兩者皆為整數 12。
+    - `pattern` 宣告則須落在上述保守子集且可證寬度恰為 12（如 `^[A-Z]{2}[A-Z0-9]{9}[0-9]$`）；
+      `([A-Z0-9]{2})?` 這類可選尾、可變寬度或無法證明的樣式一律不採證。
+    - 至少一種可證限制成立，且已宣告的每一種都必須成立。
     """
     if not isinstance(sch, dict) or sch.get("type") != "string":
         return False
-    lo, hi = sch.get("minLength"), sch.get("maxLength")
-    ok_len = type(lo) is int and type(hi) is int and lo == 12 and hi == 12
-    if (lo is not None or hi is not None) and not ok_len:
+    if set(sch) - _ISIN_SCHEMA_KEYS or any(v is None for v in sch.values()):
         return False
-    pat = sch.get("pattern")
+    lo, hi = sch.get("minLength"), sch.get("maxLength")
+    declared_len = "minLength" in sch or "maxLength" in sch
+    ok_len = type(lo) is int and type(hi) is int and lo == 12 and hi == 12
+    if declared_len and not ok_len:
+        return False
     ok_pat = False
-    if pat is not None:
-        if not isinstance(pat, str) or not _PATTERN_SAFE.fullmatch(pat):
-            return False
-        try:
-            rx = re.compile(pat)
-        except re.error:
-            return False
-        ok_pat = all(rx.search(x) for x in _ISIN_OK) and not any(rx.search(x) for x in _ISIN_BAD)
+    if "pattern" in sch:
+        ok_pat = _provable_pattern_width(sch["pattern"]) == 12
+        if ok_pat:  # 寬度已可證；另以合法 ISIN 範例做健全性檢查（僅排除字元集明顯不符者，不作為證明）
+            rx = re.compile(sch["pattern"])
+            ok_pat = all(rx.fullmatch(x) for x in ("US0378331005", "JP3633400001"))
         if not ok_pat:
             return False
     return ok_len or ok_pat
@@ -887,69 +947,76 @@ def _worker_main(conn: Any, entry: Callable[..., Any], args: tuple) -> None:
 
 
 def _decode_ipc(body: bytes) -> Any:
-    """IPC payload 解碼（≤ IPC_MAX_BYTES）。獨立函式以便注入『持有／釋放 GIL』的堵塞負控。"""
+    """IPC payload 解碼（≤ IPC_MAX_BYTES）。**只在獨立的 decoder 行程內呼叫**（可能持有 GIL，不得在監督者行程內執行）。"""
     return json.loads(body.decode("utf-8"))
 
 
-def _watchdog_main(pid: int, deadline_epoch: float) -> None:
-    """獨立看門狗行程：到絕對牆鐘時刻即 SIGKILL worker。不與父行程共用 GIL，父行程解碼再久也照期殺。"""
-    import signal
-    import time
+def _plain(obj: Any, depth: int = 0) -> bool:
+    """僅允許純資料型別（None／bool／int／float／str／list／dict[str,…]）；其餘不經 pickle 回傳。"""
+    if depth > 8:
+        return False
+    if obj is None or isinstance(obj, (bool, int, float, str)):
+        return True
+    if isinstance(obj, list):
+        return all(_plain(x, depth + 1) for x in obj)
+    if isinstance(obj, dict):
+        return all(isinstance(k, str) and _plain(v, depth + 1) for k, v in obj.items())
+    return False
 
+
+def _decoder_main(conn: Any, body: bytes) -> None:
+    """獨立 decoder 行程：解碼 worker 的 JSON payload，以純資料經 pipe 回傳；失敗只回固定碼。"""
     try:
-        time.sleep(max(0.0, deadline_epoch - time.time()))
-        os.kill(pid, getattr(signal, "SIGKILL", signal.SIGTERM))
-    except Exception:  # noqa: BLE001 — worker 已退出等情況：忽略
-        pass
+        obj = _decode_ipc(body)
+        msg: tuple = ("ok", obj) if _plain(obj) else ("err", "ipc_bad_payload")
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        msg = ("err", "ipc_bad_payload")
+    except BaseException:  # noqa: BLE001
+        msg = ("err", "ipc_error")
+    try:
+        conn.send(msg)
+    finally:
+        conn.close()
 
 
 def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = STEP_WALL_SECONDS,
-                  reap: float = REAP_SECONDS, ctx: Any = None, worker: Callable[..., None] = _worker_main) -> Any:
-    """於子行程執行 entry(*args)；牆鐘涵蓋啟動、執行、解析與 IPC 接收；固定錯誤碼；有界回收。
+                  reap: float = REAP_SECONDS, ctx: Any = None, worker: Callable[..., None] = _worker_main,
+                  decoder: Callable[..., None] = _decoder_main) -> Any:
+    """於子行程執行 entry(*args)；牆鐘涵蓋啟動、執行、IPC 接收與**解碼**；固定錯誤碼；有界回收。
 
-    - 一律 spawn（跨平台一致；entry 須為頂層可 pickle 函式）。
-    - 父行程關閉自己手上的寫端：子行程一死即得 EOF。
-    - 監督者（本函式）**不**同步等待接收：接收在 daemon 執行緒，監督者以 `join(剩餘牆鐘)` 自行計時；
-      到期即 kill 子行程並進入回收，**不論接收執行緒是否已退出**（回收不再受接收阻塞）。
-    - 逾期後即使收到完整 frame 亦拒絕（`wall_clock_timeout`），不回傳任何結果。
-    - 看門狗**行程**（spawn，與父行程不共用 GIL）於絕對牆鐘時刻 SIGKILL worker：即使父行程的 IPC 解碼
-      持有 GIL（原生呼叫不讓出）而使監督執行緒停擺，worker 仍按期被殺；父行程恢復後因已逾期而拒絕任何結果。
-      （父行程能返回的時刻仍受其自身解碼耗時限制——解碼僅處理 ≤64 KiB 的自家 payload。）
-    - 回收：join(reap) → kill → join(reap)；仍存活 ⇒ UNREAPED（優先於其他碼，硬停）；看門狗同樣有界回收。
+    監督者（本函式所在行程）**不做任何可能持有 GIL 的解碼**，只做會釋放 GIL 的等待（執行緒 join／pipe 讀取）：
+      1. worker 行程（spawn；entry 須為頂層可 pickle 函式）完成 GET＋解析，經 pipe 回傳 JSON bytes。
+      2. 監督者收到 bytes 後，交給**獨立 decoder 行程**解碼（可能持有 GIL 亦只拖住該行程）；
+         decoder 以純資料（pickle）回傳結果，監督者不呼叫 `json`。
+      3. 全程共用同一個絕對牆鐘；到期即 kill worker／decoder 並進入回收；逾期後即使收到完整結果亦一律拒絕
+         （`wall_clock_timeout`），**監督者的返回時刻不受解碼耗時拖延**。
+      4. 回收：join(reap) → kill → join(reap)；仍存活 ⇒ UNREAPED（優先於其他碼，硬停）。
     """
     import multiprocessing as mp
     import threading
     import time
 
     ctx = ctx or mp.get_context("spawn")
-    parent, child = ctx.Pipe(duplex=False)
     t0 = time.monotonic()
+
+    def _left() -> float:
+        return max(0.0, wall - (time.monotonic() - t0))
+
+    procs: list = []
+    conns: list = []
+    parent, child = ctx.Pipe(duplex=False)
+    conns.append(parent)
     p = ctx.Process(target=worker, args=(child, entry, tuple(args)), daemon=True)
     p.start()
+    procs.append(p)
     child.close()
-    deadline_epoch = time.time() + max(0.0, wall - (time.monotonic() - t0))
-    wd = None
-    pid = getattr(p, "pid", None)
-    if isinstance(pid, int):
-        wd = ctx.Process(target=_watchdog_main, args=(pid, deadline_epoch), daemon=True)
-        wd.start()
     box: dict[str, Any] = {}
 
-    def _rx() -> None:
+    def _rx1() -> None:
         try:
-            data = parent.recv_bytes(IPC_MAX_BYTES)
-            tag, body = data[:1], data[1:]
-            if tag == b"R":  # JSON 解碼也在受牆鐘約束的執行緒內
-                box["ok"] = _decode_ipc(body)
-            elif tag == b"S":
-                reason = body.decode("utf-8", "replace")
-                box["err"] = reason if _REASON.match(reason) else "step_error"
-            else:
-                box["err"] = "step_error"
+            box["raw"] = parent.recv_bytes(IPC_MAX_BYTES)
         except EOFError:
             box["err"] = "ipc_truncated"
-        except (ValueError, UnicodeDecodeError):
-            box["err"] = "ipc_bad_payload"
         except OSError as e:
             msg = str(e)
             box["err"] = ("ipc_oversize" if "bad message length" in msg
@@ -958,31 +1025,66 @@ def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = 
         except BaseException:  # noqa: BLE001
             box["err"] = "ipc_error"
 
-    rx = threading.Thread(target=_rx, daemon=True)
-    rx.start()
-    rx.join(max(0.0, wall - (time.monotonic() - t0)))
-    elapsed = time.monotonic() - t0
-    timed_out = rx.is_alive() or elapsed > wall  # 以接收＋解碼完成後的時刻判定；逾期任何結果一律不用
-    if wd is not None:  # 先收看門狗（避免 worker 結束後 pid 被重用時誤殺）
-        _safe_kill(wd)
-        wd.join(reap)
-    if timed_out:
-        _safe_kill(p)  # 接收／解碼未完成或已逾期：先殺，再獨立回收
-    p.join(reap)
-    if p.is_alive():
-        _safe_kill(p)
-        p.join(reap)
-        if p.is_alive():
-            _safe_close(parent)
-            raise FetchStop("UNREAPED")
-    if wd is not None and wd.is_alive():
-        _safe_close(parent)
+    timed_out = False
+    t_rx = threading.Thread(target=_rx1, daemon=True)
+    t_rx.start()
+    t_rx.join(_left())
+    if t_rx.is_alive():
+        timed_out = True
+    elif "raw" in box:
+        raw = box["raw"]
+        tag, body = raw[:1], raw[1:]
+        if tag == b"R":
+            dparent, dchild = ctx.Pipe(duplex=False)
+            conns.append(dparent)
+            d = ctx.Process(target=decoder, args=(dchild, body), daemon=True)
+            d.start()
+            procs.append(d)
+            dchild.close()
+
+            def _rx2() -> None:
+                try:
+                    box["msg"] = dparent.recv()
+                except EOFError:
+                    box["err"] = "ipc_truncated"
+                except BaseException:  # noqa: BLE001
+                    box["err"] = "ipc_error"
+
+            t_dec = threading.Thread(target=_rx2, daemon=True)
+            t_dec.start()
+            t_dec.join(_left())
+            if t_dec.is_alive():
+                timed_out = True
+        elif tag == b"S":
+            reason = body.decode("utf-8", "replace")
+            box["err"] = reason if _REASON.match(reason) else "step_error"
+        else:
+            box["err"] = "step_error"
+    if (time.monotonic() - t0) > wall:
+        timed_out = True  # 逾期任何結果一律不用
+
+    for pr in procs:
+        if timed_out or pr.is_alive():
+            _safe_kill(pr)  # 逾期：先殺；或 worker 已回傳後仍存活（如心跳迴圈）：收掉
+    unreaped = False
+    for pr in procs:
+        pr.join(reap)
+        if pr.is_alive():
+            _safe_kill(pr)
+            pr.join(reap)
+            unreaped = unreaped or pr.is_alive()
+    for c in conns:
+        _safe_close(c)
+    if unreaped:
         raise FetchStop("UNREAPED")
-    _safe_close(parent)
     if timed_out:
         raise FetchStop("wall_clock_timeout")
-    if "ok" in box:
-        return box["ok"]
+    msg = box.get("msg")
+    if isinstance(msg, tuple) and len(msg) == 2:
+        if msg[0] == "ok":
+            return msg[1]
+        reason = msg[1] if isinstance(msg[1], str) else ""
+        raise FetchStop(reason if _REASON.match(reason) else "step_error")
     raise FetchStop(box.get("err") or "ipc_error")
 
 

@@ -1151,14 +1151,22 @@ def test_mf3_effective_server_must_still_be_the_pinned_origin():
 
 # ── MF2：監督者獨立計時；逾期完整 frame 亦拒；回收不被接收阻塞（假 context，零網路）
 class _Conn:
-    def __init__(self, delay=0.0, payload=b'R{"a": 1}', block=None):
+    def __init__(self, delay=0.0, payload=b'R{"a": 1}', block=None, msg=("ok", {"a": 1}), recv_delay=0.0,
+                 recv_block=None):
         self.delay, self.payload, self.block, self.closed = delay, payload, block, False
+        self.msg, self.recv_delay, self.recv_block = msg, recv_delay, recv_block
 
     def recv_bytes(self, maxlength=None):
         if self.block is not None:
             self.block.wait(30)
         time.sleep(self.delay)
         return self.payload
+
+    def recv(self):  # decoder 行程回傳（純資料）
+        if self.recv_block is not None:
+            self.recv_block.wait(30)
+        time.sleep(self.recv_delay)
+        return self.msg
 
     def close(self):
         self.closed = True
@@ -1223,12 +1231,6 @@ def test_mf2_reap_runs_even_while_receive_is_blocked_and_exit_is_bounded():
         gate.set()
 
 
-def test_mf2_complete_frame_within_deadline_still_succeeds():
-    conn, proc = _Conn(), _Proc()
-    assert m.run_in_worker(ent_ok, (1,), wall=5.0, reap=0.1, ctx=_ctx(conn, proc)) == {"a": 1}
-    assert conn.closed
-
-
 # ─────────────── 第三輪（Work #7153884392）MF1／MF2／MF3 ───────────────
 # MF3：parameters 未宣告 vs null；合法位置；完整結構
 def _with_params(value, level="op"):
@@ -1282,44 +1284,6 @@ def test_mf3_parameter_via_valid_ref_is_resolved_and_bad_ref_stops():
     assert _run(FakeTransport(oas2, _rows())).stop_reason == "ref_unresolved"
 
 
-# MF2：JSON 解碼也受牆鐘約束
-class _SlowJson:
-    """替身：只讓 IPC 的 JSON 解碼變慢（80 ms），其餘委派真實 json。"""
-
-    def __init__(self, delay):
-        self._d = delay
-
-    def loads(self, s, *a, **k):
-        time.sleep(self._d)
-        return json.loads(s, *a, **k)
-
-    def dumps(self, *a, **k):
-        return json.dumps(*a, **k)
-
-
-def test_mf2_slow_ipc_json_decode_inside_deadline_is_refused(monkeypatch):
-    monkeypatch.setattr(m, "json", _SlowJson(0.15))
-    conn, proc = _Conn(), _Proc()  # frame 期限內即到；僅解碼超時
-    t0 = time.monotonic()
-    with pytest.raises(m.FetchStop) as e:
-        m.run_in_worker(ent_ok, (1,), wall=0.04, reap=0.05, ctx=_ctx(conn, proc))
-    assert e.value.reason == "wall_clock_timeout" and proc.killed >= 1
-    assert time.monotonic() - t0 < 2  # 監督者未等解碼完成（<2 s），回收已執行
-
-
-def test_mf2_fast_decode_within_deadline_still_succeeds(monkeypatch):
-    monkeypatch.setattr(m, "json", _SlowJson(0.0))
-    assert m.run_in_worker(ent_ok, (1,), wall=2.0, reap=0.05, ctx=_ctx(_Conn(), _Proc())) == {"a": 1}
-
-
-def test_mf2_decode_error_and_tags_map_to_fixed_codes():
-    for payload, reason in ((b"Rnot-json", "ipc_bad_payload"), (b"Zxx", "step_error"),
-                            (b"Sbad reason!", "step_error"), (b"Soversize", "oversize")):
-        with pytest.raises(m.FetchStop) as e:
-            m.run_in_worker(ent_ok, (1,), wall=2.0, reap=0.05, ctx=_ctx(_Conn(payload=payload), _Proc()))
-        assert e.value.reason == reason
-
-
 # 第三輪突變：拿掉新守衛，行為必須改變
 @pytest.mark.parametrize("old,new,probe", [
     ('        if not isinstance(plist, list):  # 含 null\n            raise FetchStop("op_params_invalid")\n',
@@ -1334,8 +1298,10 @@ def test_mf2_decode_error_and_tags_map_to_fixed_codes():
      '            if False:\n                raise FetchStop("op_params_invalid")\n', "dupparam"),
     ('                and _isin_schema_restricts_12(props[KEY_ISIN]))', ')', "structure"),
     ('code_txt and _CODE_FULL.fullmatch(code_txt)', 'code_txt', "codeidentity"),
-    ('    elapsed = time.monotonic() - t0\n    timed_out = rx.is_alive() or elapsed > wall',
-     '    elapsed = time.monotonic() - t0\n    timed_out = False', "nodeadline"),
+    ('            t_dec.join(_left())\n', '            t_dec.join()\n', "decodejoin"),
+    ('    t_rx.join(_left())\n', '    t_rx.join()\n', "rxjoin"),
+    ('                    box["msg"] = dparent.recv()', '                    box["msg"] = ("ok", _decode_ipc(body))', "paredecode"),
+    ('        if timed_out or pr.is_alive():\n            _safe_kill(pr)', '        if False:\n            _safe_kill(pr)', "nokill"),
 ])
 def test_round3_mutations_are_killed(old, new, probe):
     ns = _mutant(old, new)
@@ -1363,13 +1329,45 @@ def test_round3_mutations_are_killed(old, new, probe):
     elif probe == "codeidentity":
         res = _mrun(ns, FakeTransport(_oas(op=_op(props=_props(code_desc="備註代碼"))), _rows()))
         assert res.local_display is not None  # 無關代碼說明仍放行 ⇒ 守衛被拿掉
-    elif probe == "nodeadline":
-        ns["json"] = _SlowJson(0.15)
+    elif probe == "decodejoin":
+        from threading import Event, Timer
+
+        gate = Event()
+        Timer(0.6, gate.set).start()
+        t0 = time.monotonic()
         try:
-            out = ns["run_in_worker"](ent_ok, (1,), wall=0.04, reap=0.05, ctx=_ctx(_Conn(), _Proc()))
-            assert out == {"a": 1}  # 解碼逾期仍被接受
-        except ns["FetchStop"] as e:
-            assert e.reason != "wall_clock_timeout"
+            try:
+                ns["run_in_worker"](ent_ok, (1,), wall=0.1, reap=0.05, ctx=_ctx(_Conn(recv_block=gate), _Proc()))
+            except ns["FetchStop"]:
+                pass  # 逾期結果仍被事後拒絕，但監督者已被拖過牆鐘
+            assert time.monotonic() - t0 >= 0.5  # 無期限等解碼 ⇒ 回傳時刻不再受牆鐘約束＝被殺
+        finally:
+            gate.set()
+    elif probe == "rxjoin":
+        from threading import Event, Timer
+
+        gate = Event()
+        Timer(0.6, gate.set).start()
+        t0 = time.monotonic()
+        try:
+            try:
+                ns["run_in_worker"](ent_ok, (1,), wall=0.1, reap=0.05, ctx=_ctx(_Conn(block=gate), _Proc()))
+            except ns["FetchStop"]:
+                pass
+            assert time.monotonic() - t0 >= 0.5  # 無期限等接收 ⇒ 回傳時刻不受牆鐘約束＝被殺
+        finally:
+            gate.set()
+    elif probe == "paredecode":
+        calls = []
+        ns["_decode_ipc"] = lambda body: (calls.append(1), {"a": 1})[1]
+        ns["run_in_worker"](ent_ok, (1,), wall=2.0, reap=0.05, ctx=_ctx(_Conn(), _Proc()))
+        assert calls  # 監督者行程自己解碼了 ⇒ 與正常行為（0 次）不同＝被殺
+    elif probe == "nokill":
+        proc = _Proc()
+        proc._alive = False  # 已死：正常路徑不會殺；逾期路徑才必須殺
+        with pytest.raises(ns["FetchStop"]):
+            ns["run_in_worker"](ent_ok, (1,), wall=0.05, reap=0.05, ctx=_ctx(_Conn(delay=0.3), proc))
+        assert proc.killed == 0  # 逾期未殺 ⇒ 與正常行為（killed≥1）不同＝被殺
 
 
 _MARKERS = '    if any(n in low for n in _NEGATION) or any(x in low for x in _SHARED):\n        return None\n'
@@ -1473,43 +1471,6 @@ def _rec_ctx(conn, procs):
     return _C()
 
 
-def test_mf2_watchdog_process_is_started_with_absolute_deadline_and_reaped():
-    procs: list = []
-    assert m.run_in_worker(ent_ok, (1,), wall=5.0, reap=0.05, ctx=_rec_ctx(_Conn(), procs)) == {"a": 1}
-    assert [pr.target for pr in procs] == [m._worker_main, m._watchdog_main]
-    pid, deadline_epoch = procs[1].args
-    assert pid == 4242 and abs(deadline_epoch - (time.time() + 5.0)) < 2.0
-    assert procs[1].killed >= 1 and procs[1].joins  # 看門狗正常路徑亦被收掉
-
-
-def test_mf2_release_gil_decode_block_times_out_and_recovers(monkeypatch):
-    from threading import Event
-
-    gate = Event()
-    monkeypatch.setattr(m, "_decode_ipc", lambda body: (gate.wait(30), {"a": 1})[1])  # 釋放 GIL 的堵塞
-    procs: list = []
-    t0 = time.monotonic()
-    try:
-        with pytest.raises(m.FetchStop) as e:
-            m.run_in_worker(ent_ok, (1,), wall=0.05, reap=0.05, ctx=_rec_ctx(_Conn(), procs))
-        assert e.value.reason == "wall_clock_timeout" and time.monotonic() - t0 < 1.5
-        assert procs[0].killed >= 1 and procs[0].joins  # kill＋回收已執行
-    finally:
-        gate.set()
-
-
-def test_mf2_hold_gil_decode_is_rejected_and_not_accepted_late(monkeypatch):
-    import ctypes
-
-    sleep = ctypes.PyDLL(None).sleep  # PyDLL：呼叫期間持有 GIL
-    monkeypatch.setattr(m, "_decode_ipc", lambda body: (sleep(1), {"a": 1})[1])
-    procs: list = []
-    with pytest.raises(m.FetchStop) as e:
-        m.run_in_worker(ent_ok, (1,), wall=0.2, reap=0.05, ctx=_rec_ctx(_Conn(), procs))
-    assert e.value.reason == "wall_clock_timeout"  # 逾期即使解碼成功也拒
-    assert procs[0].killed >= 1 and procs[0].joins and procs[1].killed >= 1
-
-
 def w_frame_then_beat(conn, entry, args):
     """送出完整 frame 後持續寫心跳（共享記憶體）直到被殺；用來量測『何時被殺』。"""
     (beat,) = args
@@ -1519,58 +1480,246 @@ def w_frame_then_beat(conn, entry, args):
         time.sleep(0.005)
 
 
-def test_mf2_real_spawn_hold_gil_decode_worker_is_still_killed_on_time_by_watchdog_process(monkeypatch):
-    """核心負控：父行程解碼持有 GIL 4 秒（監督執行緒完全停擺），worker 仍須在牆鐘到期時被獨立看門狗行程殺掉。"""
+
+
+# ─────────────── 第四輪（Work #7159400965）MF1／MF2／MF3 ───────────────
+# MF1：ISIN schema 只採「可證固定寬度」的保守子集
+@pytest.mark.parametrize("sch,why", [
+    ({"pattern": "^[A-Z]{2}[A-Z0-9]{10}([A-Z0-9]{2})?$"}, "Work 反例：可選尾，14 碼也匹配"),
+    ({"minLength": 12, "maxLength": 12, "pattern": None}, "Work 反例：pattern:null"),
+    ({"minLength": 12, "maxLength": 12, "enum": [""]}, "Work 反例：矛盾 enum"),
+    ({"minLength": 12, "maxLength": 12, "enum": ["US0378331005"]}, "enum 無法證明（保守扣值）"),
+    ({"minLength": 12, "maxLength": 12, "const": "US0378331005"}, "const"),
+    ({"minLength": 12, "maxLength": 12, "oneOf": [{"type": "string"}]}, "oneOf"),
+    ({"minLength": 12, "maxLength": 12, "anyOf": [{"type": "string"}]}, "anyOf"),
+    ({"minLength": 12, "maxLength": 12, "allOf": [{"maxLength": 3}]}, "allOf 可能自相矛盾"),
+    ({"minLength": 12, "maxLength": 12, "not": {}}, "not"),
+    ({"minLength": 12, "maxLength": 12, "nullable": True}, "nullable"),
+    ({"minLength": 12, "maxLength": None}, "maxLength:null"),
+    ({"minLength": None, "maxLength": 12}, "minLength:null"),
+    ({"minLength": 12, "maxLength": 12, "format": None}, "format:null"),
+    ({"pattern": "^[A-Z]{12}|x$"}, "alternation"),
+    ({"pattern": "^[A-Z]{10,12}$"}, "{n,m} 可變寬度"), ({"pattern": "^[A-Z]{12,}$"}, "{n,}"),
+    ({"pattern": "^[A-Z0-9]*$"}, "*"), ({"pattern": "^[A-Z0-9]+$"}, "+"), ({"pattern": "^[A-Z0-9]?{12}$"}, "?"),
+    ({"pattern": "^.{12}$"}, "any char"), ({"pattern": "^\\w{12}$"}, "escape class"),
+    ({"pattern": "^(?:[A-Z]{12})$"}, "group"), ({"pattern": "^[A-Z]{012}$"}, "前導零"), ({"pattern": "^[A-Z]{0}$"}, "{0}"),
+    ({"pattern": "^[Z-A]{12}$"}, "反向範圍"), ({"pattern": "^[A-9]{12}$"}, "跨類範圍"),
+    ({"pattern": "^[a-z]{12}$"}, "寬度可證但不接受合法 ISIN 範例"),
+    ({"pattern": "[A-Z0-9]{12}"}, "未錨定"), ({"pattern": "^[A-Z0-9]{12}"}, "缺 $"), ({"pattern": "^$"}, "空"),
+    ({"pattern": "^[A-Z]{2}[A-Z0-9]{11}$"}, "13 碼"), ({"pattern": "^[A-Z]{2}[A-Z0-9]{9}$"}, "11 碼"),
+    ({"pattern": 12}, "非字串"), ({"pattern": ""}, "空字串"), ({"pattern": "^" + "[A-Z]" * 70 + "$"}, "過長"),
+])
+def test_mf4_isin_schema_must_be_provably_fixed_width_12(sch, why):
+    res = _isin_schema_case(**sch)
+    assert res.stop_reason == "class_evidence_insufficient" and res.local_display is None, why
+
+
+@pytest.mark.parametrize("sch", [
+    {"pattern": "^[A-Z]{2}[A-Z0-9]{9}[0-9]$"}, {"pattern": "^[A-Z]{2}[A-Z0-9]{10}$"}, {"pattern": "^[A-Z0-9]{12}$"},
+    {"pattern": "^[A-Z][A-Z][A-Z0-9]{9}[0-9]$"}, {"pattern": "^[A-Z0-9]{2}[A-Z0-9]{10}$"},
+    {"pattern": "^[A-Z]{2}[A-Z0-9]{9}[0-9]$", "minLength": 12, "maxLength": 12},
+    {"minLength": 12, "maxLength": 12, "description": "x", "example": "US0378331005", "format": "isin"},
+])
+def test_mf4_provable_fixed_width_12_schemas_are_accepted(sch):
+    sch = dict(sch)
+    desc = sch.pop("description", None)
+    res = _isin_schema_case(**sch)
+    assert res.stop_reason is None, sch
+    del desc
+
+
+def test_mf4_pattern_width_helper_is_exact():
+    assert m._provable_pattern_width("^[A-Z]{2}[A-Z0-9]{9}[0-9]$") == 12
+    assert m._provable_pattern_width("^[A-Z0-9]{12}$") == 12
+    assert m._provable_pattern_width("^[A-Z]$") == 1
+    for bad in ("^[A-Z]{2}([A-Z0-9]{2})?$", "^[A-Z]+$", "^(a)$", "[A-Z]{12}", "^$", None, 5):
+        assert m._provable_pattern_width(bad) is None, bad
+
+
+# MF3：media type 參數語法與未解析 schema 參照
+@pytest.mark.parametrize("level", ["op", "item"])
+@pytest.mark.parametrize("plist,why", [
+    ([_p(content={"application/json; charset": {}})], "Work 反例：無值的 media type 參數"),
+    ([_p(content={"application/json;charset=": {}})], "空參數值"),
+    ([_p(content={"application/json;": {}})], "結尾分號"), ([_p(content={"application/": {}})], "缺子型"),
+    ([_p(content={"/json": {}})], "缺主型"), ([_p(content={"application/json charset=utf-8": {}})], "空白代替分號"),
+    ([_p(content={'application/json; charset="utf-8': {}})], "引號未閉合"),
+    ([_p(schema={"$ref": "#/components/schemas/Absent"})], "Work 反例：參數 schema 的未解析 $ref"),
+    ([_p(content={"application/json": {"schema": {"$ref": "#/components/schemas/Absent"}}})], "Work 反例：media schema 未解析 $ref"),
+    ([_p(schema={"type": "array", "items": {"$ref": "#/components/schemas/Absent"}})], "巢狀未解析 $ref"),
+    ([_p(schema={"allOf": [{"$ref": "#/components/schemas/Absent"}]})], "allOf 內未解析 $ref"),
+    ([_p(schema={"$ref": "https://evil.example/s.json"})], "外部 $ref"),
+    ([_p(schema={"$ref": "#/components/schemas/Dangling"})], "$ref 指向的 schema 內含未解析 $ref"),
+])
+def test_mf5_media_type_syntax_and_unresolved_schema_refs_mean_zero_r1(level, plist, why):
+    oas = _with_params(plist, level)
+    oas["components"] = {"schemas": {"Dangling": {"$ref": "#/components/schemas/Absent"},
+                                     "Ok": {"type": "string"}}}
+    tp = FakeTransport(oas, _rows())
+    res = _run(tp)
+    assert res.stop_reason in ("op_params_invalid", "ref_unresolved", "external_ref") and len(tp.calls) == 1, why
+    assert res.requests_used == 1
+
+
+@pytest.mark.parametrize("plist", [
+    [_p(content={"application/json; charset=utf-8": {}})], [_p(content={'application/json; charset="utf-8"': {}})],
+    [_p(content={"application/json;charset=utf-8;q=1": {"schema": {"type": "string"}}})],
+    [_p(content={"text/plain": {"schema": {"$ref": "#/components/schemas/Ok"}}})],
+    [_p(schema={"$ref": "#/components/schemas/Ok"})],
+    [_p(schema={"$ref": "#/components/schemas/Cyc"})],  # 環狀但皆可解析
+    [_p(schema={"type": "array", "items": {"$ref": "#/components/schemas/Ok"}})],
+])
+def test_mf5_valid_media_types_and_resolvable_refs_are_accepted(plist):
+    for level in ("op", "item"):
+        oas = _with_params(plist, level)
+        oas["components"] = {"schemas": {"Ok": {"type": "string"}, "Cyc": {"type": "object",
+                                                                            "properties": {"a": {"$ref": "#/components/schemas/Cyc"}}}}}
+        tp = FakeTransport(oas, _rows())
+        assert _run(tp).stop_reason is None and len(tp.calls) == 2, plist
+
+
+# MF2：可能持 GIL 的解碼移到獨立 decoder 行程；分別斷言「監督者回傳時間」與「worker／decoder 停止時間」
+import functools  # noqa: E402
+
+
+def d_hold_gil(rec, conn, body):
+    """decoder 替身：進入後記錄 pid，並以持有 GIL 的原生呼叫堵 8 秒（永不完成，除非被殺）。"""
     import ctypes
+
+    rec[0] = float(os.getpid())
+    ctypes.PyDLL(None).sleep(8)
+    rec[2] = 1.0
+    conn.send(("ok", {"a": 1}))
+
+
+def d_release_gil(rec, conn, body):
+    rec[0] = float(os.getpid())
+    time.sleep(8)  # 釋放 GIL 的堵塞
+    rec[2] = 1.0
+    conn.send(("ok", {"a": 1}))
+
+
+def d_crash(conn, body):
+    os._exit(1)
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _blocked_decoder_scenario(decoder_fn, wall=4.0):
     import multiprocessing as mp
 
     ctx = mp.get_context("spawn")
-    beat = ctx.Value("d", 0.0)
-    sleep = ctypes.PyDLL(None).sleep
-    monkeypatch.setattr(m, "_decode_ipc", lambda body: (sleep(4), {"a": 1})[1])
-    t_start = time.time()
-    wall = 2.0
+    beat, rec = ctx.Value("d", 0.0), ctx.Array("d", 3)
+    t_epoch, t0 = time.time(), time.monotonic()
     with pytest.raises(m.FetchStop) as e:
-        m.run_in_worker(ent_ok, (beat,), wall=wall, reap=2.0, ctx=ctx, worker=w_frame_then_beat)
-    t_return = time.time()
-    last = beat.value
+        m.run_in_worker(ent_ok, (beat,), wall=wall, reap=2.0, ctx=ctx, worker=w_frame_then_beat,
+                        decoder=functools.partial(decoder_fn, rec))
+    ret = time.monotonic() - t0
     assert e.value.reason == "wall_clock_timeout"
-    assert last > t_start + 0.2, "worker 應曾存活並送出心跳"
-    assert last <= t_start + wall + 0.6, f"worker 應於牆鐘到期（≈{wall}s）被看門狗殺掉，實際最後心跳 {last - t_start:.2f}s"
-    assert t_return - last >= 0.4, "父行程仍被 GIL 持有的解碼拖住；worker 的死亡不得依賴父行程恢復"
-    assert not mp.active_children()  # 看門狗與 worker 皆已回收
+    # ① 監督者回傳硬牆鐘：回傳時刻≈牆鐘（不被 8 秒的解碼拖住）
+    assert wall - 0.1 <= ret <= wall + 1.0, f"監督者回傳 {ret:.2f}s（牆鐘 {wall}s）"
+    # ② worker 停止時間：最後心跳不得晚於監督者回傳，且 worker 已被回收
+    last = beat.value
+    assert t_epoch + 0.1 < last <= t_epoch + ret + 0.1, f"worker 最後心跳 {last - t_epoch:.2f}s／回傳 {ret:.2f}s"
+    # ③ decoder 確實進入過、未完成、且已被殺
+    assert rec[0] > 0 and rec[2] == 0.0 and not _pid_alive(rec[0])
+    assert not mp.active_children()
 
 
-def test_round3_mutation_without_watchdog_process_is_killed():
-    ns = _mutant('    if isinstance(pid, int):\n        wd = ctx.Process(', '    if False:\n        wd = ctx.Process(')
+def test_mf2_hold_gil_decoder_cannot_delay_supervisor_return_and_is_killed():
+    _blocked_decoder_scenario(d_hold_gil)
+
+
+def test_mf2_release_gil_decoder_cannot_delay_supervisor_return_and_is_killed():
+    _blocked_decoder_scenario(d_release_gil)
+
+
+def test_mf2_real_spawn_fast_path_and_decoder_error_codes():
+    import multiprocessing as mp
+
+    assert m.run_in_worker(ent_ok, (7,), wall=20) == {"a": 7}
+    assert not mp.active_children()
+    with pytest.raises(m.FetchStop) as e:
+        m.run_in_worker(ent_ok, (1,), wall=20, worker=w_garbage)
+    assert e.value.reason == "ipc_bad_payload"
+    with pytest.raises(m.FetchStop) as e:
+        m.run_in_worker(ent_ok, (1,), wall=20, decoder=d_crash)
+    assert e.value.reason == "ipc_truncated"
+    assert not mp.active_children()
+
+
+def test_mf2_supervisor_process_never_calls_json_decode(monkeypatch):
+    def _boom(body):
+        raise AssertionError("supervisor must not decode")
+
+    monkeypatch.setattr(m, "_decode_ipc", _boom)
     procs: list = []
-    ns["run_in_worker"](ent_ok, (1,), wall=5.0, reap=0.05, ctx=_rec_ctx(_Conn(), procs))
-    assert [pr.target.__name__ for pr in procs] == ["_worker_main"]  # 看門狗未啟動 ⇒ 與正常行為（兩個行程）不同＝被殺
+    assert m.run_in_worker(ent_ok, (1,), wall=5.0, reap=0.05, ctx=_rec_ctx(_Conn(), procs)) == {"a": 1}
+    assert [pr.target for pr in procs] == [m._worker_main, m._decoder_main]  # decoder 為獨立行程
 
 
-def test_round3_mutation_watchdog_kill_removed_lets_worker_outlive_deadline_detectable_by_unreaped_guard():
-    """看門狗若未被回收（is_alive 仍真）⇒ UNREAPED；證明新增的回收檢查存在。"""
-    procs: list = []
-
-    class _Stuck(_RecProc):
-        def is_alive(self):
-            return True
-
-        def kill(self):
-            self.killed += 1
+def test_mf2_decoder_reports_plain_data_only():
+    assert m._plain({"a": [1, 2.5, None, True, "x", {"b": "c"}]})
+    for bad in ({1: "x"}, {"a": object()}, {"a": (1, 2)}, {"a": {"b": {"c": {"d": {"e": {"f": {"g": {"h": {"i": 1}}}}}}}}}):
+        assert not m._plain(bad)
+    box: list = []
 
     class _C:
-        @staticmethod
-        def Pipe(duplex=False):
-            return _Conn(), _Child()
+        def send(self, msg):
+            box.append(msg)
 
-        @staticmethod
-        def Process(target, args, daemon):
-            pr = _Stuck() if target is m._watchdog_main else _RecProc()
-            pr.target, pr.args = target, args
-            procs.append(pr)
-            return pr
+        def close(self):
+            pass
 
-    with pytest.raises(m.FetchStop) as e:
-        m.run_in_worker(ent_ok, (1,), wall=5.0, reap=0.05, ctx=_C())
-    assert e.value.reason == "UNREAPED"
+    m._decoder_main(_C(), b'{"a": 1}')
+    m._decoder_main(_C(), b"not-json")
+    assert box == [("ok", {"a": 1}), ("err", "ipc_bad_payload")]
+
+
+@pytest.mark.parametrize("old,new,probe", [
+    ('    if set(sch) - _ISIN_SCHEMA_KEYS or any(v is None for v in sch.values()):\n        return False\n', '', "keys"),
+    ('    if not isinstance(mt, str) or not _MEDIA_TYPE.fullmatch(mt) or not isinstance(mo, dict):',
+     '    if not isinstance(mt, str) or not isinstance(mo, dict):', "mediatype"),
+    ('        _check_refs_resolvable(p["schema"], oas)\n', '', "paramref"),
+    ('        _check_refs_resolvable(mo["schema"], oas)', '        pass', "mediaref"),
+])
+def test_round4_mutations_are_killed(old, new, probe):
+    ns = _mutant(old, new)
+    ok = lambda **kw: _mrun(ns, FakeTransport(_oas(**kw), _rows()))  # noqa: E731
+    if probe == "keys":
+        for extra in ({"enum": [""]}, {"format": None}):
+            props = _props(isin_len=12)
+            props[m.KEY_ISIN].update(extra)
+            assert ok(op=_op(props=props)).local_display is not None  # 守衛被拿掉 ⇒ 矛盾 enum／null 也放行
+    elif probe == "width":
+        props = _props(isin_len=None)
+        props[m.KEY_ISIN]["pattern"] = "^[A-Z]{2}[A-Z0-9]{12}$"
+        assert ok(op=_op(props=props)).local_display is not None  # 14 碼樣式也放行
+    elif probe == "mediatype":
+        bad = [{"name": "q", "in": "query", "content": {"application/json; charset": {}}}]
+        assert _mrun(ns, FakeTransport(_with_params(bad), _rows())).stop_reason != "op_params_invalid"
+    elif probe == "paramref":
+        bad = [{"name": "q", "in": "query", "schema": {"$ref": "#/components/schemas/Absent"}}]
+        assert _mrun(ns, FakeTransport(_with_params(bad), _rows())).stop_reason is None
+    elif probe == "mediaref":
+        bad = [{"name": "q", "in": "query", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Absent"}}}}]
+        assert _mrun(ns, FakeTransport(_with_params(bad), _rows())).stop_reason is None
+
+
+def test_round4_width_proof_and_sample_sanity_are_both_needed_remove_both_releases_14_chars():
+    pairs = [('_provable_pattern_width(sch["pattern"]) == 12', '_provable_pattern_width(sch["pattern"]) is not None'),
+             ('            ok_pat = all(rx.fullmatch(x) for x in ("US0378331005", "JP3633400001"))', '            ok_pat = True')]
+    ns = _mutant_multi(pairs)
+    props = _props(isin_len=None)
+    props[m.KEY_ISIN]["pattern"] = "^[A-Z]{2}[A-Z0-9]{12}$"  # 可證寬度 14
+    assert _mrun(ns, FakeTransport(_oas(op=_op(props=props)), _rows())).local_display is not None
+    real = _run(FakeTransport(_oas(op=_op(props=props)), _rows()))
+    assert real.stop_reason == "class_evidence_insufficient" and real.local_display is None
