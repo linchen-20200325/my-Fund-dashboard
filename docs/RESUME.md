@@ -1,11 +1,12 @@
 # RESUME｜投資基金 輕量接續索引
 
 > **衍生索引，非第二權威；不構成施工授權或驗收證明。** 一律以 [#1296](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296) 最新有效客戶裁示與正式規則為準；與之衝突時本檔作廢。
-> 快照：2026-11-25（Asia/Taipei）；main `d509bdb3`。**狀態會過期，接手第一步必須重做 LIVE Gate，不得引用本檔數字當現況。**
+> 快照：2026-11-25（Asia/Taipei）；main `d509bdb3`。**狀態會過期，本檔數字不得當現況引用。** 一般「接續」只讀輕量錨點與最新增量；**正式驗收、Ready／merge 前才完成原 LIVE Gate**（見第 7 節）；未核項目標 NOT VERIFIED。
 
 ## 1. 先讀（順序）
-- 正式：`CLAUDE.md` → `PROJECT_RULES.md` → `docs/HANDOFF.md` → `docs/BACKLOG.md` → `docs/DECISIONS.md` → 適用 Constitution／spec／Contract。
-- 接手封存：#1296 comment [7157975400](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7157975400)；其後以 #1296 最新留言為準。
+1. **輕量錨點（一般接續的第一步）**：#1296 comment [7161727036](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7161727036)，及其後**最新有效增量**（以 #1296 最新留言為準）。只恢復：身分、版本、工作線、未完成事項、必要證據入口。
+2. **按需再讀**：正式文件 `CLAUDE.md` → `PROJECT_RULES.md` → `docs/HANDOFF.md` → `docs/BACKLOG.md` → `docs/DECISIONS.md` → 適用 Constitution／spec／Contract；只讀本次任務必要者。
+3. **歷史導航**：永久封存 #1296 comment [7157975400](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7157975400) 保留作歷史導航，**不是**一般接續的起點，其現況差額已由上列錨點更新。
 - 注意：`HANDOFF.md` 仍是 2026-11-21 快照；`STATE.md`、舊大型 handover 為歷史，皆不作現況。
 
 ## 2. 版本：正式 v0.1 vs 候選 v0.2（不得混為一談）
@@ -40,7 +41,8 @@
 - 不得把已合併治理當產品已上線；不得用文件冒充功能；不得只記阻塞不指定責任人。
 
 ## 7. 輕量接續規則
-1. 先 LIVE Gate：main SHA、Open PR head／base、exact-head CI 四項與 Slow 實際 `Run AppTest (slow lane)` step；舊 CI 不得挪用到新 head。
+1. **一般接續**：先讀輕量錨點與最新增量（第 1 節）；查進度只查**新差額**；派工只讀本次必要證據；未核項目標 NOT VERIFIED。**不得**把完整 LIVE Gate 當每次接續的第一步。
+   **正式驗收、Ready／merge 或任何引用現況作結論前**，才完成原 LIVE Gate：main SHA、Open PR head／base、exact-head CI 四項與 Slow 實際 `Run AppTest (slow lane)` step；舊 CI 不得挪用到新 head。既有正式驗收與安全標準不降低。
 2. 最多三條活躍線、單一 writer；同檔寫入需協調；已 PASS 不重驗，只驗新 SHA／新差額。
 3. 永久靜默：成果、阻塞、CI、交接只回存 #1296；除真正需新客戶裁示或人工操作外不聊天。
 4. 事實／推論／建議分開寫；未驗證項明標 NOT VERIFIED，不把推測寫成事實。
