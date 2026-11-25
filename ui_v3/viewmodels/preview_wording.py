@@ -26,8 +26,8 @@ STATUS_PENDING = "pending"
 _SRC_81 = "81 第 3.1 節「擬：」（PENDING，待客戶定字）"
 _SRC_UIV2 = "沿用 ui_v2 既有字樣（核准狀態未查證）"
 _SRC_EXEC = "執行組暫擬（Preview 用；可被客戶推翻）"
-_SRC_AST_APPROVED = ("客戶已核准字樣 W-AST-0{n}（`#1296` comment 7079420078，2026-11-20）；尚未進規則表（本批不動規則表），"
-                     "待治理 writer 落盤後搬進 `APPROVED_WORDING` 並刪除本列")
+_SRC_AST_APPROVED = ("客戶已核准字樣（資產頁示範字樣第 {n} 句，`#1296` comment 7079420078，2026-11-20）；尚未進規則表（本批不動規則表），"
+                     "待治理 writer 落盤後搬進規則表並刪除本列")
 
 
 @dataclass(frozen=True)

@@ -34,10 +34,11 @@ def test_ai_page_is_never_registered_before_phase7():
 def test_only_market_search_and_settings_pages_are_registered_so_no_empty_shell():
     """已核准＋已實作的只有 🌍（BL-0536）與 ⚙️（BL-0540 Phase 1A，客戶 2026-11-21 逐字裁示 #7056447977，僅本地 Preview、唯讀）；
     其餘三頁（💼／🔍／🤖）沒有核准 → 不得掛載（不做空殼）。順序固定 mkt → set（IA 順序）。"""
-    assert [p.slug for p in registry.registered_pages()] == ["mkt", "exp", "set"]
-    assert [p.slug for p in registry.assert_preview_ready()] == ["mkt", "exp", "set"]
+    assert [p.slug for p in registry.registered_pages()] == ["mkt", "ast", "exp", "set"]   # 💼：2026-11-25 離線示範頁（data_mode=offline_demo）
+    assert [p.slug for p in registry.assert_preview_ready()] == ["mkt", "ast", "exp", "set"]
+    assert [p.slug for p in IA_PAGES if p.data_mode == registry.DATA_MODE_OFFLINE_DEMO] == ["ast"]   # 示範模式只有 💼
     for p in IA_PAGES:
-        if p.slug not in ("mkt", "exp", "set"):
+        if p.slug not in ("mkt", "ast", "exp", "set"):
             assert p.registered is False and p.unregistered_reason is not None, p.slug
 
 

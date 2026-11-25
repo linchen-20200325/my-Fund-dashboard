@@ -122,7 +122,9 @@ def shell_css() -> str:
   .st-key-{TOP_KEY} .uv3-tn-disabled{{color:{text2};cursor:not-allowed;font-size:12px}}
   .st-key-{TOP_KEY} .uv3-tn-icon{{font-size:20px;line-height:1}}
   .st-key-{TOP_KEY} .uv3-tn-soon{{font-size:10px}}
-  .st-key-{TOP_KEY} .uv3-tn-demo{{display:block;width:100%;text-align:center;font-size:10px;line-height:1.2;color:{text2};margin:0;padding:0}}
+  .st-key-{TOP_KEY} .uv3-tn-demo{{display:block;width:100%;text-align:center;font-size:10px;line-height:12px;color:{text2};margin:0;padding:0}}
+  /* 示範格＝連結（觸控下限 {touch}px）＋12px 標示列，合計仍是頁首高度 {bar}px：不讓示範標示把頁首與首屏往下推 */
+  .st-key-{TOP_KEY} [class*="st-key-uv3-nav-"]:has(.uv3-tn-demo) a[data-testid="stPageLink-NavLink"]{{min-height:{touch}px}}
 }}
 </style>
 """

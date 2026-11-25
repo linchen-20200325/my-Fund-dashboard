@@ -208,7 +208,7 @@ def test_desktop_1280_sidebar_keyboard_acceptance_with_integrated_main(base_and_
     try:
         page.wait_for_selector(".uv3-statusbar", timeout=60000)
         disabled = page.evaluate(_DISABLED)
-        assert sorted(d["nav"] for d in disabled) == ["ai", "ast"], disabled
+        assert sorted(d["nav"] for d in disabled) == ["ai"], disabled
         assert all(d["aria"] == "true" and d["href"] is None for d in disabled), disabled
         forward, backward = [], []
         for _ in range(12):
@@ -223,12 +223,12 @@ def test_desktop_1280_sidebar_keyboard_acceptance_with_integrated_main(base_and_
         def order(texts):
             seen = []
             for x in texts:
-                key = "mkt" if "市場" in x else "exp" if "找基金" in x else "set" if "設定" in x else None
+                key = "mkt" if "市場" in x else "ast" if "資產" in x else "exp" if "找基金" in x else "set" if "設定" in x else None
                 if key and key not in seen:
                     seen.append(key)
             return seen
-        assert order(side_fwd) == ["mkt", "exp", "set"], ("Tab 順序＝🌍 → 🔍 → ⚙️", side_fwd)
-        assert order(side_bwd) == ["set", "exp", "mkt"], ("Shift+Tab 順序反向＝⚙️ → 🔍 → 🌍", side_bwd)
+        assert order(side_fwd) == ["mkt", "ast", "exp", "set"], ("Tab 順序＝🌍 → 💼（離線示範）→ 🔍 → ⚙️", side_fwd)
+        assert order(side_bwd) == ["set", "exp", "ast", "mkt"], ("Shift+Tab 順序反向＝⚙️ → 🔍 → 💼 → 🌍", side_bwd)
         every = [f for f in forward + backward if f]
         assert not any(f["disabled"] for f in every), ("焦點不得落在停用入口", [f for f in every if f["disabled"]])
         sidebar_links = [f for f in every if f["inSide"] and f["isLink"]]
@@ -248,7 +248,7 @@ def test_desktop_1280_sidebar_keyboard_acceptance_with_integrated_main(base_and_
         _back_to_market(page)
         assert page.evaluate("() => (document.querySelector('h1') || {}).innerText") == "🌍 市場與趨勢"
         # 停用入口：嘗試 focus() 也不得取得焦點
-        for nav in ("ast", "ai"):
+        for nav in ("ai",):   # 2026-11-25：💼 不再是停用項（離線示範頁，可進）
             page.evaluate(f"() => document.querySelector('[data-testid=\"stSidebar\"] [data-nav=\"{nav}\"]').focus()")
             assert page.evaluate(_FOCUS) is None or not page.evaluate(_FOCUS)["disabled"], nav
     finally:

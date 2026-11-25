@@ -191,11 +191,12 @@ def test_navigation_enables_exactly_market_search_and_settings(base_and_browser,
     try:
         page.wait_for_selector(".uv3-statusbar", timeout=60000)
         disabled = sorted(page.evaluate(_DISABLED))
-        enabled = [s for s in ("mkt", "exp", "set") if _nav(page, width, s).count() == 1]
+        enabled = [s for s in ("mkt", "ast", "exp", "set") if _nav(page, width, s).count() == 1]
     finally:
         ctx.close()
-    assert set(disabled) == {"ast", "ai"}, disabled
-    assert enabled == ["mkt", "exp", "set"], enabled
+    # 2026-11-25 A-AST-MOUNT-FAKE-1：💼 以「離線示範頁」掛載（可進、帶示範標示），不再屬停用項；只有 🤖 仍停用
+    assert set(disabled) == {"ai"}, disabled
+    assert enabled == ["mkt", "ast", "exp", "set"], enabled
 
 
 @pytest.mark.parametrize("width", [390, 1280])

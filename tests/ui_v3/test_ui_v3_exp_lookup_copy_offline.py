@@ -262,8 +262,8 @@ def _mentions_page(node) -> bool:
 def test_the_page_is_mounted_only_as_the_sanctioned_local_fake_page_and_nothing_else_moved():
     """Gate-M 方案 2a（總管 #7073385776）：1326 時的『未掛載』斷言改為『只以唯一核可的方式掛載』——不是刪掉斷言。"""
     from ui_v3.shell import registry
-    assert [p.slug for p in registry.registered_pages()] == ["mkt", "exp", "set"]
-    assert {p.slug for p in registry.IA_PAGES if not p.registered} == {"ast", "ai"}
+    assert [p.slug for p in registry.registered_pages()] == ["mkt", "ast", "exp", "set"]   # 2026-11-25：💼 以離線示範頁掛載（A-AST-MOUNT-FAKE-1，客戶方案甲）
+    assert {p.slug for p in registry.IA_PAGES if not p.registered} == {"ai"}
     # 掛載點只有 app_preview.py 的 `_render_exp`（函式內 import），共用殼層與導覽沒有任何引用
     tree = ast.parse((ROOT / "ui_v3" / "app_preview.py").read_text(encoding="utf-8"))
     assert _functions_containing(tree, _mentions_page) == {"_render_exp"}

@@ -133,6 +133,8 @@ def test_mobile_top_nav_states_and_aria(base_and_browser):
     ctx, page = _open(browser, base, 390)
     try:
         m = page.evaluate(_MEASURE)
+        demo_markers = page.evaluate("""() => [...document.querySelectorAll('.st-key-uv3-top-nav .uv3-tn-demo')].map(e => ({text: e.innerText.trim(), slug: e.getAttribute('data-nav-demo'),
+            sibling: !!e.closest('[class*="st-key-uv3-nav-"]').querySelector('a[data-testid="stPageLink-NavLink"]'), aria: e.closest('[aria-disabled]') !== null}))""")
         page.keyboard.press("Tab")
         focus_path = []
         for _ in range(8):
@@ -142,16 +144,19 @@ def test_mobile_top_nav_states_and_aria(base_and_browser):
             page.keyboard.press("Tab")
     finally:
         ctx.close()
-    now, ast, exp, ai, settings = m["cells"]       # 五頁順序：🌍 → 💼 → 🔍 → 🤖 → ⚙️；可進的是 🌍、🔍、⚙️（BL-0540 Phase 1A #7056447977；🔍 為 Gate-M 方案 2a 的本地 FAKE 頁 #7073385776）
+    now, ast, exp, ai, settings = m["cells"]       # 五頁順序：🌍 → 💼 → 🔍 → 🤖 → ⚙️；可進的是 🌍、💼（2026-11-25 離線示範頁）、🔍、⚙️（BL-0540 Phase 1A #7056447977；🔍 為 Gate-M 方案 2a 的本地 FAKE 頁 #7073385776）
     assert now["href"] is not None and now["ariaDisabled"] is None
     assert int(now["fw"]) >= 600 and now["deco"] == "underline" and float(now["bb"].replace("px", "")) >= 2, ("選取態不能只靠顏色", now)
     assert settings["href"] is not None and settings["ariaDisabled"] is None, ("⚙️ 是真連結", settings)
     assert exp["href"] is not None and exp["ariaDisabled"] is None, ("🔍 是真連結（本地 FAKE 頁）", exp)
-    for cell, name in zip((ast, ai), (_NAMES[1], _NAMES[3])):
+    assert ast["href"] is not None and ast["ariaDisabled"] is None, ("💼 是真連結（離線示範頁），不是停用項", ast)
+    assert demo_markers == [{"text": "示範頁", "slug": "ast", "sibling": True, "aria": False}], ("只有 💼 帶『示範頁』標示（連結的同層兄弟、非 aria-disabled）", demo_markers)
+    assert _SOON[_NAMES[1]] not in ast["text"], ("💼 不得冒充『開發中』", ast)
+    for cell, name in zip((ai,), (_NAMES[3],)):
         assert cell["ariaDisabled"] == "true" and cell["href"] is None, cell
         assert _SOON[name] in cell["text"], cell
     in_nav = [f for f in focus_path if f and f["inNav"]]
-    assert len(in_nav) == 3 and "市場" in in_nav[0]["text"] and "找基金" in in_nav[1]["text"] and "設定" in in_nav[2]["text"], ("頁首只有 🌍、🔍、⚙️ 可聚焦、未掛載項不可聚焦", focus_path)
+    assert len(in_nav) == 4 and "市場" in in_nav[0]["text"] and "資產" in in_nav[1]["text"] and "找基金" in in_nav[2]["text"] and "設定" in in_nav[3]["text"], ("頁首只有 🌍、💼、🔍、⚙️ 可聚焦、🤖 不可聚焦（示範標示不可聚焦）", focus_path)
     assert all(f["visible"] and f["outline"].startswith("solid") for f in in_nav), ("焦點外框必須可見", in_nav)
 
 

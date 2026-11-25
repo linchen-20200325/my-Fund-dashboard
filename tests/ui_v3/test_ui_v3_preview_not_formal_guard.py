@@ -109,8 +109,8 @@ def test_preview_main_fails_loud_when_registered_page_has_no_renderer(monkeypatc
     from ui_v3 import app_preview
     from ui_v3.shell import registry
     from ui_v3.shell.registry import PageSlot
-    monkeypatch.setattr(registry, "IA_PAGES", tuple(
-        PageSlot(p.slug, p.title, True) if p.slug == "ast" else p for p in registry.IA_PAGES))
+    # 2026-11-25：💼 已有 renderer，改用一個在記憶體內多加的已掛載、但沒有 renderer 的頁當負控（不改登錄表檔）
+    monkeypatch.setattr(registry, "IA_PAGES", tuple(registry.IA_PAGES) + (PageSlot("zz_no_renderer", "🧪 無 renderer 測試頁", True),))
     with pytest.raises(NotImplementedError):
         app_preview.main()
 
