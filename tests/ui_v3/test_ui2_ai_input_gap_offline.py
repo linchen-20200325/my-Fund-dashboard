@@ -10,7 +10,7 @@
   每列 RIGHTS／AI USE 一律 NOT VERIFIED（本檔不宣稱任何權利已驗）。`USDTWD=X` 另受 FX 專屬 Gate，單列。
 - T4 `FundLookupView` 現階段**沒有** provenance（來源、取得時間、觀測日）——這是**待裁的契約缺口**，
   不是「永遠不准加」；日後加欄位屬 Decision Gate，屆時在同一個 PR 更新本鎖。
-- T5 本檔不 import `services.onebrain`；不新增 `test_onebrain_*` 檔（OneBrain 守衛以檔名白名單釘死 3 檔）。
+- T5 本檔不 import `services.onebrain`；不新增 `test_onebrain_*` 檔（OneBrain 守衛以檔名白名單釘死 4 檔）。
 
 ⚠️ 本檔**不**組任何 AI 輸入文字、**不**定義 Digest 形狀、**不**呼叫任何 Provider。
 ⚠️ 所有序列、日期、數值都是測試內現編的 FAKE（數值刻意取 11.11 起的等差，不像真行情）；沒有任何真實市場資料。
@@ -465,7 +465,7 @@ class TestT4LookupViewGap:
 # ═══════════════════════ T5：本檔不 import OneBrain、不新增 test_onebrain_* ═══════════════════════
 
 AUTHORISED_ONEBRAIN_TESTS = {"test_onebrain_provider_types.py", "test_onebrain_fake_provider.py",
-                             "test_onebrain_offline_guard.py"}
+                             "test_onebrain_offline_guard.py", "test_onebrain_evidence_input.py"}
 _TARGET = "services" + ".onebrain"          # 拆開拼接：本檔原始碼不留可被誤掃的完整字面 import
 
 
@@ -490,7 +490,7 @@ def onebrain_references(source: str) -> list:
 
 
 def check_onebrain_test_files(found: set) -> None:
-    """正向與負控共用：`tests/` 下 `test_onebrain_*.py` 必須恰為授權的 3 檔。"""
+    """正向與負控共用：`tests/` 下 `test_onebrain_*.py` 必須恰為授權的 4 檔。"""
     assert found == AUTHORISED_ONEBRAIN_TESTS, found
 
 
@@ -502,7 +502,7 @@ class TestT5Boundary:
     def test_本檔不import_OneBrain(self):
         assert onebrain_references(THIS_FILE.read_text(encoding="utf-8")) == []
 
-    def test_本檔不是test_onebrain_檔_OneBrain測試仍恰為授權的3檔(self):
+    def test_本檔不是test_onebrain_檔_OneBrain測試仍恰為授權的4檔(self):
         assert not THIS_FILE.name.startswith("test_onebrain_")
         check_onebrain_test_files(actual_onebrain_test_files())
 
