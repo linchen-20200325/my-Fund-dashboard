@@ -1,24 +1,26 @@
 """11641 最小取數腳本（B-TDCC-REAL-NAV-S1）：境外基金淨值，本機單檔查詢。
 
 ⛔ 預設**不連網**。真實 OAS／資料請求仍 HOLD（DEC-2026-11-19-02），需客戶另行明示授權後，
-由「改動 `LIVE_ENABLED`」的獨立 PR 開啟；本 PR 內 `LIVE_ENABLED = False`，CLI 只做離線說明，
-任何 transport 都不會被建立。離線測試一律注入假 transport。
+由「改動 `LIVE_ENABLED`」的獨立 PR 開啟；本 PR 內 `LIVE_ENABLED = False`：
+CLI 只做離線說明；**最後的 HTTP 送出點（`_single_get`）自身也強制檢查**，直接呼叫亦不會送出。
+離線測試一律注入假 transport／假 pool。
 
 規格來源（#1296）：rev2 #7131294864 → rev3 #7131668066 → rev3.1 #7132882773（Work PASS #7132928714）；
-施工授權 #7133015104。限制（全部沿用，不放寬）：
+施工授權 #7133015104；Work QA #7148209178（MF1～MF5）。限制（全部沿用，不放寬）：
   * 全程至多 2 次 GET：R-0（OAS JSON，≤2 MiB）、R-1（唯一核證端點，≤16 MiB／≤100,000 列）；
-    各 20 s 硬牆鐘；0 重試、0 轉址、0 額外 GET；TLS verify；不走代理；不寫 key log。
-  * R-1 前必須有官方文件（R-0 的 OAS）**明示且唯一**引用 data.gov.tw 11641 的 GET 操作；
-    組裝後 URL 須 https＋host 精確＋精確路徑，拒完整 `.`／`..` 段，
-    且 client 準備送出的 URL 與已釘住 URL 逐字一致；證據不足 ⇒ R-1＝0。
-  * 只接受使用者親自確認「非持倉」的公開 ISIN；僅在本機比對；零 fallback
-    （不以基金代碼／名稱補比）；不讀持倉、Secrets、Sheet；零落盤（不寫任何檔）。
-  * 權利（R2／R3／R4）由呼叫端注入；缺／UNKNOWN／DENY ⇒ 扣下數值並保留原因（腳本本身不宣告 ALLOWED）。
-  * 公式（check_333_principle／classify_eating_principal）呼叫 0 次；最近 7 日資料不足長期健診。
-  * 回存（GitHub）只限技術聚合狀態：不含 ISIN、NAV 值、基金名稱。
+    各步（GET＋解析＋IPC）20 s 硬牆鐘；0 重試、0 轉址、0 額外 GET；TLS verify；不走代理；不寫 key log。
+  * R-1 前須有「自足 OAS」：版本、唯一明示引用 11641 的 GET、無必要參數／認證、200 回應為物件陣列
+    且含必要欄位；URL 精確核證（拒完整 `.`／`..` 段、prepared URL 逐字一致）；任一缺證 ⇒ R-1＝0。
+  * 只接受使用者親自確認「非持倉」（明示布林 True）的公開 ISIN；僅在本機比對；零 fallback；
+    不讀持倉、Secrets、Sheet；零落盤（不寫任何檔）。
+  * 級別獨立核證（rev2 §四）：文件層證據＋代碼↔ISIN 一對一＋逐日衝突＋最近 7 日有效日期＋有效幣別；
+    不足 ⇒ `class_verified=False` ⇒ 扣下 NAV，只輸出技術聚合（含 7 個檢核布林）。
+  * 權利：R2（本次、本檔、本機顯示）須具證據；R3／R4 各自獨立，不由 R2 推導；缺／UNKNOWN／DENY ⇒ 扣值。
+  * 公式呼叫 0 次；最近 7 日資料不足長期健診。回存（GitHub）只限技術聚合：不含 ISIN、NAV、基金名稱。
+  * CLI 無 R2 授權入口（永遠 UNKNOWN ⇒ 只顯示技術聚合）；本機顯示 NAV 須待另案授權後由呼叫端注入證據。
 
 NOT VERIFIED（需實際 R-0 才能確認，**不得**以本檔內常數當作已驗證事實）：
-R-0 實際 URL 與回應形態、OAS 是否真有唯一對應 11641 的操作、R-1 欄位名稱與日期／幣別格式。
+R-0 實際 URL 與回應形態、OAS 是否真有唯一對應 11641 的操作、R-1 欄位名稱與日期／幣別格式、Windows。
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ import os
 import re
 import ssl
 import sys
+import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Optional
@@ -39,8 +42,7 @@ LIVE_ENABLED = False
 
 # ── 釘住常數（變更任何一項＝改變授權範圍，須重新取得授權）────────────────────────
 ORIGIN_HOST = "openapi.tdcc.com.tw"
-# R-0：官方 OAS 文件位置（使用者提供之官方文件網址；若實際不是 JSON ⇒ R-0 內容檢查失敗 ⇒ R-1＝0）
-R0_URL = "https://openapi.tdcc.com.tw/tdcc-opendata-api-docs"
+R0_URL = "https://openapi.tdcc.com.tw/tdcc-opendata-api-docs"  # 若非 JSON ⇒ R-0 失敗 ⇒ 零 R-1
 DATASET_ID = "11641"
 MAX_REQUESTS = 2
 R0_MAX_BYTES = 2 * 1024 * 1024
@@ -48,18 +50,35 @@ R1_MAX_BYTES = 16 * 1024 * 1024
 R1_MAX_ROWS = 100_000
 STEP_WALL_SECONDS = 20.0
 REAP_SECONDS = 2.0
+IPC_MAX_BYTES = 64 * 1024
+MAX_SELECTED_ROWS = 64
+WINDOW_DAYS = 7
+TAIPEI = _dt.timezone(_dt.timedelta(hours=8))
 USER_AGENT = "tdcc-11641-min-fetch/1 (local read-only; no automation)"
-# R-1 欄位名（NOT VERIFIED；缺任一 ⇒ schema_mismatch，不猜別名＝零 fallback）
-KEY_ISIN, KEY_NAV, KEY_DATE, KEY_CCY, KEY_NAME = "ISINCODE", "NAV", "日期", "計價幣別", "基金名稱"
-REQUIRED_KEYS = (KEY_ISIN, KEY_NAV, KEY_DATE, KEY_CCY, KEY_NAME)
-
+# R-1 欄位名（NOT VERIFIED；缺任一 ⇒ 拒絕，不猜別名＝零 fallback）
+KEY_CODE, KEY_ISIN, KEY_NAV, KEY_DATE, KEY_CCY, KEY_NAME = "基金代碼", "ISINCODE", "NAV", "日期", "計價幣別", "基金名稱"
+REQUIRED_KEYS = (KEY_CODE, KEY_ISIN, KEY_NAV, KEY_DATE, KEY_CCY, KEY_NAME)
 OGDL_LICENSE_URL = "https://data.gov.tw/license"
+R2_PURPOSE = "local_display"
+R2_SCOPE_FILE = "scripts/tdcc_11641_min_fetch.py"
+
+# 有效 ISO 4217 現行字母碼（fail-closed：清單外＝無法辨識＝扣值；CNH 等非 ISO 碼亦扣）
+ISO4217 = frozenset(
+    "AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND BOB BRL BSD BTN BWP BYN BZD CAD CDF "
+    "CHF CLP CNY COP CRC CUP CVE CZK DJF DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD GNF GTQ GYD HKD "
+    "HNL HTG HUF IDR ILS INR IQD IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD KYD KZT LAK LBP LKR LRD LSL LYD "
+    "MAD MDL MGA MKD MMK MNT MOP MRU MUR MVR MWK MXN MYR MZN NAD NGN NIO NOK NPR NZD OMR PAB PEN PGK PHP PKR PLN "
+    "PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN SVC SYP SZL THB TJS TMT TND TOP TRY "
+    "TTD TWD TZS UAH UGX USD UYU UZS VES VND VUV WST XAF XCD XOF XPF YER ZAR ZMW ZWG".split()
+)
+
 _SEG = re.compile(r"^[A-Za-z0-9._~-]+$")
 _FINAL = re.compile(r"^https://openapi\.tdcc\.com\.tw(/[A-Za-z0-9._~-]+)+$")
 _DATASET_REF = re.compile(r"https?://data\.gov\.tw/dataset/(\d+)", re.I)
 _ISIN = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
+_OAS3 = re.compile(r"^3\.[01]\.\d+$")
+_REASON = re.compile(r"^[A-Za-z0-9_:]{1,64}$")
 RIGHTS_AXES = ("R2", "R3", "R4")
-RIGHTS_VALUES = ("ALLOWED", "UNKNOWN", "DENY")
 
 
 class FetchStop(Exception):
@@ -70,20 +89,25 @@ class FetchStop(Exception):
         self.reason = reason
 
 
-# ───────────────────────── 純函式：ISIN／URL／綁定 ─────────────────────────────
-def isin_valid(isin: str) -> bool:
-    """ISIN 格式＋Luhn 檢查碼（字母轉兩位數字）。"""
-    if not isinstance(isin, str) or not _ISIN.match(isin):
-        return False
+# ───────────────────────── 純函式：ISIN／URL ──────────────────────────────────
+def isin_format_ok(isin: Any) -> bool:
+    return isinstance(isin, str) and bool(_ISIN.match(isin))
+
+
+def isin_checksum_ok(isin: str) -> bool:
+    """Luhn 檢查碼（字母轉兩位數字）。僅在格式通過時有意義。"""
     digits = "".join(str(int(c, 36)) for c in isin)
     total = 0
     for i, ch in enumerate(reversed(digits)):
         d = int(ch)
         if i % 2 == 1:
-            d *= 2
-            d = d - 9 if d > 9 else d
+            d = d * 2 - 9 if d * 2 > 9 else d * 2
         total += d
     return total % 10 == 0
+
+
+def isin_valid(isin: Any) -> bool:
+    return isin_format_ok(isin) and isin_checksum_ok(isin)
 
 
 def _prepared_url(url: str) -> str:
@@ -91,6 +115,14 @@ def _prepared_url(url: str) -> str:
     from urllib3.util import parse_url
 
     return parse_url(url).url
+
+
+def verify_pinned_url(url: str, *, prepare: Callable[[str], str] = _prepared_url) -> None:
+    """送出點用：host 精確、路徑樣式、prepared URL 逐字一致；不符 raise。"""
+    if not isinstance(url, str) or not _FINAL.fullmatch(url) or re.search(r"\.\.|/\./|/\.$|//.*//", url):
+        raise FetchStop("url_not_pinned")
+    if prepare(url) != url:
+        raise FetchStop("prepared_url_mismatch")
 
 
 def assemble_url(servers: Any, path: Any, *, prepare: Callable[[str], str] = _prepared_url) -> str:
@@ -133,6 +165,7 @@ def assemble_url(servers: Any, path: Any, *, prepare: Callable[[str], str] = _pr
     return url
 
 
+# ───────────────────────── OAS 證據（MF-3）────────────────────────────────────
 def _walk_strings(node: Any, depth: int = 0):
     if depth > 12:
         return
@@ -146,21 +179,36 @@ def _walk_strings(node: Any, depth: int = 0):
             yield from _walk_strings(v, depth + 1)
 
 
-def bind_dataset_operation(oas: Any) -> tuple[str, dict]:
-    """在 OAS 中找「GET 操作且只明示引用 data.gov.tw 11641」者；恰 1 個才回 (path, operation)。
+def _resolve(node: Any, root: Any, depth: int = 0) -> Any:
+    """只解析文件內的 `#/...` 參照；外部參照＝取不到自足 OAS ⇒ 停。"""
+    if depth > 8:
+        raise FetchStop("schema_ref_depth")
+    if isinstance(node, dict) and "$ref" in node:
+        ref = node["$ref"]
+        if not isinstance(ref, str) or not ref.startswith("#/"):
+            raise FetchStop("external_ref")
+        cur = root
+        for part in ref[2:].split("/"):
+            part = part.replace("~1", "/").replace("~0", "~")
+            if not isinstance(cur, dict) or part not in cur:
+                raise FetchStop("ref_unresolved")
+            cur = cur[part]
+        return _resolve(cur, root, depth + 1)
+    return node
 
-    引用＝操作內任一字串含 `https://data.gov.tw/dataset/<id>`；同名摘要、相似欄位一律不算。
-    """
+
+def bind_dataset_operation(oas: Any) -> tuple[str, dict, dict]:
+    """找「GET 操作且只明示引用 data.gov.tw 11641」者；恰 1 個才回 (path, operation, path_item)。"""
     if not isinstance(oas, dict) or not isinstance(oas.get("paths"), dict):
         raise FetchStop("oas_shape")
-    hits: list[tuple[str, dict]] = []
+    hits: list[tuple[str, dict, dict]] = []
     for path, item in oas["paths"].items():
         if not isinstance(item, dict) or not isinstance(item.get("get"), dict):
             continue
         op = item["get"]
         refs = {m for s in _walk_strings(op) for m in _DATASET_REF.findall(s)}
         if refs == {DATASET_ID}:
-            hits.append((path, op))
+            hits.append((path, op, item))
     if not hits:
         raise FetchStop("binding_none")
     if len(hits) > 1:
@@ -168,7 +216,213 @@ def bind_dataset_operation(oas: Any) -> tuple[str, dict]:
     return hits[0]
 
 
-# ───────────────────────── 權利／顯名／列處理 ──────────────────────────────────
+def _check_no_required_params_or_auth(oas: dict, op: dict, item: dict) -> None:
+    for plist in (item.get("parameters"), op.get("parameters")):
+        for p in plist if isinstance(plist, list) else []:
+            p = _resolve(p, oas)
+            if isinstance(p, dict) and (p.get("required") is True or p.get("in") == "path"):
+                raise FetchStop("op_requires_params")
+    sec = op["security"] if "security" in op else oas.get("security")
+    if isinstance(sec, list) and any(isinstance(s, dict) and s for s in sec):
+        raise FetchStop("op_requires_security")
+
+
+def _response_schema_props(oas: dict, op: dict) -> dict:
+    """200 回應須為「物件陣列」且 properties 含全部必要欄位；回傳 properties（已解析 $ref）。"""
+    resp = op.get("responses")
+    r200 = _resolve(resp.get("200"), oas) if isinstance(resp, dict) and "200" in resp else None
+    content = r200.get("content") if isinstance(r200, dict) else None
+    if not isinstance(content, dict):
+        raise FetchStop("response_schema_missing")
+    jsons = [v for k, v in content.items() if isinstance(k, str) and k.lower().startswith("application/json")]
+    if len(jsons) != 1 or not isinstance(jsons[0], dict) or "schema" not in jsons[0]:
+        raise FetchStop("response_schema_missing")
+    sch = _resolve(jsons[0]["schema"], oas)
+    if not isinstance(sch, dict) or sch.get("type") != "array":
+        raise FetchStop("response_not_array")
+    items = _resolve(sch.get("items"), oas)
+    if not isinstance(items, dict) or items.get("type") not in ("object", None) or "properties" not in items:
+        raise FetchStop("response_items_not_object")
+    props = items["properties"]
+    if not isinstance(props, dict):
+        raise FetchStop("response_items_not_object")
+    if not all(k in props for k in REQUIRED_KEYS):
+        raise FetchStop("response_keys_missing")
+    return {k: _resolve(props[k], oas) for k in REQUIRED_KEYS}
+
+
+def _class_doc_evidence(props: dict) -> bool:
+    """文件層證據：ISIN 欄位說明明載「份額級別」層次，且代碼欄位有說明。缺 ⇒ False（不是錯誤）。"""
+    isin_desc = props[KEY_ISIN].get("description") if isinstance(props[KEY_ISIN], dict) else None
+    code_desc = props[KEY_CODE].get("description") if isinstance(props[KEY_CODE], dict) else None
+    ok_isin = isinstance(isin_desc, str) and any(w in isin_desc.lower() for w in ("級別", "份額", "share class"))
+    ok_code = isinstance(code_desc, str) and bool(code_desc.strip())
+    return ok_isin and ok_code
+
+
+def process_r0(body: bytes) -> dict[str, Any]:
+    """R-0 解析（於 worker 內、受牆鐘約束）：回傳可 JSON 序列化的精簡證據；缺證 raise。"""
+    try:
+        oas = json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        raise FetchStop("r0_not_json") from None
+    if not isinstance(oas, dict):
+        raise FetchStop("oas_shape")
+    ver = oas.get("openapi")
+    if not isinstance(ver, str) or not _OAS3.match(ver):
+        raise FetchStop("oas_version_unsupported")
+    info = oas.get("info")
+    if not isinstance(info, dict) or not isinstance(info.get("version"), str) or not info["version"].strip():
+        raise FetchStop("oas_info_version_missing")
+    path, op, item = bind_dataset_operation(oas)
+    _check_no_required_params_or_auth(oas, op, item)
+    props = _response_schema_props(oas, op)
+    return {
+        "oas_version": ver,
+        "servers": oas.get("servers"),
+        "path": path,
+        "class_doc_ok": _class_doc_evidence(props),
+    }
+
+
+# ───────────────────────── R-1 解析與級別核證（MF-1）────────────────────────────
+def process_r1(body: bytes, isin: str) -> dict[str, Any]:
+    """R-1 全表掃描（於 worker 內、受牆鐘約束）：逐列驗證；回傳被選 ISIN 的列與配對統計。"""
+    try:
+        rows = json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        raise FetchStop("r1_not_json") from None
+    if not isinstance(rows, list):
+        raise FetchStop("r1_not_list")
+    if len(rows) > R1_MAX_ROWS:
+        raise FetchStop("too_many_rows")
+    selected: list[dict[str, str]] = []
+    for r in rows:
+        if not isinstance(r, dict) or not all(k in r for k in REQUIRED_KEYS):
+            raise FetchStop("row_schema_mismatch")  # 逐列驗證（不只首列）
+        if str(r[KEY_ISIN]).strip().upper() == isin:
+            if len(selected) >= MAX_SELECTED_ROWS:
+                raise FetchStop("too_many_selected")
+            selected.append({k: ("" if r[k] is None else str(r[k])) for k in REQUIRED_KEYS})
+    codes = {s[KEY_CODE].strip() for s in selected}
+    code_isins: dict[str, set[str]] = {c: set() for c in codes}
+    for r in rows:
+        c = str(r[KEY_CODE]).strip() if r[KEY_CODE] is not None else ""
+        if c in code_isins:
+            code_isins[c].add(str(r[KEY_ISIN]).strip().upper())
+    return {"rows_seen": len(rows), "selected": selected,
+            "code_isin_max": max((len(v) for v in code_isins.values()), default=0)}
+
+
+def _parse_date(raw: Any, today: _dt.date) -> _dt.date:
+    s = str(raw).strip() if raw is not None else ""
+    for fmt in ("%Y%m%d", "%Y-%m-%d"):
+        try:
+            d = _dt.datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+        if d > today:
+            raise FetchStop("nav_date_in_future")
+        if d < today - _dt.timedelta(days=WINDOW_DAYS):
+            raise FetchStop("nav_date_stale")
+        return d
+    raise FetchStop("nav_date_unreadable")
+
+
+def _parse_nav(raw: Any) -> Decimal:
+    try:
+        d = Decimal(str(raw).strip())
+    except (InvalidOperation, ValueError):
+        raise FetchStop("nav_unreadable") from None
+    if not d.is_finite() or d <= 0:
+        raise FetchStop("nav_not_positive")  # missing ≠ 0：非正值不當 0 顯示
+    return d
+
+
+@dataclass
+class Checks:
+    """檢核布林（None＝未評估；未評估 ≠ False）。可回存。"""
+
+    isin_format_ok: Optional[bool] = None
+    checksum_ok: Optional[bool] = None
+    found: Optional[bool] = None
+    pairing_unambiguous: Optional[bool] = None
+    class_verified: Optional[bool] = None
+    nav_conflict: Optional[bool] = None
+    date_ok: Optional[bool] = None
+
+
+def evaluate_selection(info: dict[str, Any], class_doc_ok: bool, today: _dt.date, checks: Checks) -> dict[str, Any]:
+    """級別獨立核證：全部成立才 class_verified。回傳 {'reason': 首個失敗原因|None, 'picked': ...}。"""
+    sel = info["selected"]
+    stops: list[str] = []
+
+    def note(r: str) -> None:
+        if r not in stops:
+            stops.append(r)
+
+    dates_ok = len(sel) <= WINDOW_DAYS
+    if not dates_ok:
+        note("too_many_dates")
+    parsed = []
+    for r in sel:
+        d = nav = None
+        try:
+            d = _parse_date(r[KEY_DATE], today)
+        except FetchStop as e:
+            dates_ok = False
+            note(e.reason)
+        try:
+            nav = _parse_nav(r[KEY_NAV])
+        except FetchStop as e:
+            note(e.reason)
+        ccy = r[KEY_CCY].strip()
+        if ccy not in ISO4217:
+            note("ccy_unrecognized")
+        if not r[KEY_NAME].strip() or not r[KEY_CODE].strip():
+            note("class_unverified")
+        parsed.append((d, nav, ccy, r[KEY_CODE].strip(), r[KEY_NAME].strip()))
+    checks.date_ok = dates_ok
+
+    by_date: dict[Any, set] = {}
+    for d, nav, ccy, _c, _n in parsed:
+        if d is not None and nav is not None:
+            by_date.setdefault(d, set()).add((nav, ccy))
+    checks.nav_conflict = any(len(v) > 1 for v in by_date.values())  # 逐日（含較舊日）
+    if checks.nav_conflict:
+        note("same_day_conflict")
+    if len({(c, n, ccy) for _d, _v, ccy, c, n in parsed}) > 1:
+        note("class_conflict")
+    codes = {p[3] for p in parsed}
+    checks.pairing_unambiguous = len(codes) == 1 and "" not in codes and info.get("code_isin_max") == 1
+    if not checks.pairing_unambiguous:
+        note("pairing_ambiguous")
+    if not class_doc_ok:
+        note("class_evidence_insufficient")
+    checks.class_verified = not stops
+    out: dict[str, Any] = {"reason": stops[0] if stops else None, "distinct_dates": len(by_date)}
+    if not stops:
+        latest = max(by_date)
+        nav, ccy = next(iter(by_date[latest]))
+        out["picked"] = {"nav": nav, "currency": ccy, "nav_date": latest, "fund_name": parsed[0][4]}
+    return out
+
+
+# ───────────────────────── 權利／顯名 ──────────────────────────────────────────
+@dataclass(frozen=True)
+class R2Evidence:
+    """R2（本次、本檔、本機顯示）證據：缺任一欄＝不成立。"""
+
+    run_id: str = ""
+    purpose: str = ""
+    scope_file: str = ""
+    consent_ref: str = ""
+
+
+def _nonblank(x: Any) -> bool:
+    return isinstance(x, str) and bool(x.strip())
+
+
 @dataclass(frozen=True)
 class Rights:
     """四軸權利狀態；腳本不自行宣告 ALLOWED（呼叫端以有依據之授權注入）。"""
@@ -178,13 +432,24 @@ class Rights:
     r4: str = "UNKNOWN"
     basis_ref: Optional[str] = None
     synthetic: bool = False
+    r2_evidence: Optional[R2Evidence] = None
 
-    def normalized(self, *, test_mode: bool) -> dict[str, str]:
+    def normalized(self, *, test_mode: bool, run_id: str) -> dict[str, str]:
+        base_ok = _nonblank(self.basis_ref) and (test_mode or self.synthetic is not True)
+        ev = self.r2_evidence
+        r2_ev_ok = (isinstance(ev, R2Evidence) and ev.run_id == run_id and _nonblank(run_id)
+                    and ev.purpose == R2_PURPOSE and ev.scope_file == R2_SCOPE_FILE and _nonblank(ev.consent_ref))
         out: dict[str, str] = {}
         for axis, val in zip(RIGHTS_AXES, (self.r2, self.r3, self.r4)):
-            ok = val == "ALLOWED" and bool(self.basis_ref) and (test_mode or not self.synthetic)
-            out[axis] = "ALLOWED" if ok else (val if val == "DENY" else "UNKNOWN")
+            ok = val == "ALLOWED" and base_ok and (axis != "R2" or r2_ev_ok)
+            out[axis] = "ALLOWED" if ok else ("DENY" if val == "DENY" else "UNKNOWN")
         return out
+
+
+def use_decisions(rights: dict[str, str]) -> dict[str, bool]:
+    """用途：顯示←R2；衍生←R2∧R3；AI←R2∧R3∧R4（R3／R4 不由 R2 推導）。"""
+    r2, r3, r4 = (rights.get(a) == "ALLOWED" for a in RIGHTS_AXES)
+    return {"display": r2, "derive": r2 and r3, "ai": r2 and r3 and r4}
 
 
 def attribution_block() -> dict[str, Any]:
@@ -202,54 +467,7 @@ def attribution_block() -> dict[str, Any]:
     }
 
 
-def _parse_date(raw: Any, today: _dt.date) -> _dt.date:
-    s = str(raw).strip() if raw is not None else ""
-    for fmt in ("%Y%m%d", "%Y-%m-%d"):
-        try:
-            d = _dt.datetime.strptime(s, fmt).date()
-        except ValueError:
-            continue
-        if d > today + _dt.timedelta(days=1):
-            raise FetchStop("nav_date_in_future")
-        return d
-    raise FetchStop("nav_date_unreadable")
-
-
-def _parse_nav(raw: Any) -> Decimal:
-    try:
-        d = Decimal(str(raw).strip())
-    except (InvalidOperation, ValueError):
-        raise FetchStop("nav_unreadable") from None
-    if not d.is_finite() or d <= 0:
-        raise FetchStop("nav_not_positive")  # missing ≠ 0：非正值不當 0 顯示
-    return d
-
-
-def select_row(rows: list[Any], isin: str, today: _dt.date) -> dict[str, Any]:
-    """零 fallback：只以 ISIN 精確比對；取最新日；同日異值＝衝突⇒扣下。"""
-    matched = [r for r in rows if isinstance(r, dict) and str(r.get(KEY_ISIN, "")).strip().upper() == isin]
-    if not matched:
-        raise FetchStop("isin_not_found")
-    parsed: list[tuple[_dt.date, Decimal, str, str]] = []
-    for r in matched:
-        ccy = str(r.get(KEY_CCY, "")).strip()
-        name = str(r.get(KEY_NAME, "")).strip()
-        if not re.fullmatch(r"[A-Z]{3}", ccy):
-            raise FetchStop("ccy_unrecognized")
-        if not name:
-            raise FetchStop("class_unverified")
-        parsed.append((_parse_date(r.get(KEY_DATE), today), _parse_nav(r.get(KEY_NAV)), ccy, name))
-    if len({(c, n) for _, _, c, n in parsed}) != 1:
-        raise FetchStop("class_conflict")
-    latest = max(p[0] for p in parsed)
-    at_latest = {(p[1], p[2]) for p in parsed if p[0] == latest}
-    if len(at_latest) != 1:
-        raise FetchStop("same_day_conflict")
-    nav, ccy = next(iter(at_latest))
-    return {"nav": nav, "currency": ccy, "nav_date": latest, "fund_name": parsed[0][3]}
-
-
-# ───────────────────────── transport（可注入；真實版受 LIVE_ENABLED 守衛）──────────
+# ───────────────────────── transport／runner ───────────────────────────────────
 @dataclass
 class Response:
     status: int
@@ -275,14 +493,32 @@ def _check_response(resp: Response, max_bytes: int) -> bytes:
     return resp.body
 
 
+class InProcessRunner:
+    """離線／測試用：以注入的 transport 在本行程內執行（與 live 共用同一組 process_*）。"""
+
+    def __init__(self, transport: Transport) -> None:
+        self._t = transport
+
+    def r0(self, url: str) -> dict[str, Any]:
+        return process_r0(_check_response(self._t(url, R0_MAX_BYTES), R0_MAX_BYTES))
+
+    def r1(self, url: str, isin: str) -> dict[str, Any]:
+        return process_r1(_check_response(self._t(url, R1_MAX_BYTES), R1_MAX_BYTES), isin)
+
+
 @dataclass
 class Result:
     requests_used: int = 0
     r0_status: str = "not_run"
     r1_status: str = "not_run"
     binding: str = "not_evaluated"
+    oas_version: Optional[str] = None
+    class_doc_evidence: Optional[bool] = None
     stop_reason: Optional[str] = None
     rows_seen: Optional[int] = None
+    n_selected_rows: Optional[int] = None
+    distinct_dates: Optional[int] = None
+    checks: Checks = field(default_factory=Checks)
     isin_matched: bool = False
     value_released: bool = False
     withheld_reason: Optional[str] = None
@@ -292,18 +528,24 @@ class Result:
     def aggregate(self) -> dict[str, Any]:
         """可回存的技術聚合狀態：不含 ISIN、NAV、基金名稱、URL。"""
         return {
-            "schema": "tdcc_11641_min_fetch.aggregate.v1",
+            "schema": "tdcc_11641_min_fetch.aggregate.v2",
             "requests_used": self.requests_used,
             "requests_max": MAX_REQUESTS,
             "r0": self.r0_status,
             "binding": self.binding,
+            "oas_version": self.oas_version,
+            "class_doc_evidence": self.class_doc_evidence,
             "r1": self.r1_status,
             "stop_reason": self.stop_reason,
             "rows_seen": self.rows_seen,
+            "n_selected_rows": self.n_selected_rows,
+            "distinct_dates": self.distinct_dates,
+            "checks": vars(self.checks).copy(),
             "isin_matched": self.isin_matched,
             "value_released": self.value_released,
             "withheld_reason": self.withheld_reason,
             "rights": dict(self.rights),
+            "use_decisions": use_decisions(self.rights) if self.rights else {},
             "formulas_called": 0,
             "long_term_metrics": "not_computed_insufficient_history_7d",
             "persistence": "none",
@@ -313,40 +555,47 @@ class Result:
 def run(
     isin: str,
     *,
-    user_confirmed_non_holding: bool,
-    transport: Transport,
+    user_confirmed_non_holding: Any,
+    transport: Optional[Transport] = None,
+    runner: Any = None,
     rights: Rights = Rights(),
     test_mode: bool = False,
+    run_id: Optional[str] = None,
     today: Optional[_dt.date] = None,
     now: Optional[Callable[[], _dt.datetime]] = None,
 ) -> Result:
-    """執行 R-0／R-1 流程（transport 由呼叫端注入；run 本身不連網）。任何失敗＝停止，不降級。"""
+    """執行 R-0／R-1 流程（runner／transport 由呼叫端注入；run 本身不連網）。任何失敗＝停止，不降級。"""
     res = Result()
-    res.rights = rights.normalized(test_mode=test_mode)
+    run_id = run_id or uuid.uuid4().hex
+    res.rights = rights.normalized(test_mode=test_mode, run_id=run_id)
     clock = now or (lambda: _dt.datetime.now(_dt.timezone.utc))
-    today = today or clock().date()
+    today = today or clock().astimezone(TAIPEI).date()
+    runner = runner or (InProcessRunner(transport) if transport is not None else None)
+    stage_after_r1 = False
     try:
-        if not user_confirmed_non_holding:
+        if runner is None:
+            raise FetchStop("no_runner")
+        if user_confirmed_non_holding is not True:  # 明示布林真值；字串／1／"yes" 皆不算
             raise FetchStop("user_confirmation_missing")
-        isin = (isin or "").strip().upper()
-        if not isin_valid(isin):
+        isin = isin.strip().upper() if isinstance(isin, str) else ""
+        res.checks.isin_format_ok = isin_format_ok(isin)
+        if not res.checks.isin_format_ok:
+            raise FetchStop("isin_invalid")
+        res.checks.checksum_ok = isin_checksum_ok(isin)
+        if not res.checks.checksum_ok:
             raise FetchStop("isin_invalid")
 
         res.requests_used += 1  # R-0（送出前即計次；失敗也耗額）
         try:
-            body0 = _check_response(transport(R0_URL, R0_MAX_BYTES), R0_MAX_BYTES)
-            oas = json.loads(body0.decode("utf-8"))
+            info0 = runner.r0(R0_URL)
         except FetchStop:
             res.r0_status = "failed"
             raise
-        except (ValueError, UnicodeDecodeError):
-            res.r0_status = "failed"
-            raise FetchStop("r0_not_json") from None
         res.r0_status = "ok"
-
+        res.oas_version = info0.get("oas_version")
+        res.class_doc_evidence = bool(info0.get("class_doc_ok"))
         try:
-            path, _op = bind_dataset_operation(oas)
-            url = assemble_url(oas.get("servers"), path)
+            url = assemble_url(info0.get("servers"), info0.get("path"))
         except FetchStop as e:
             res.binding = f"rejected:{e.reason}"
             raise
@@ -354,30 +603,25 @@ def run(
 
         res.requests_used += 1  # R-1
         try:
-            body1 = _check_response(transport(url, R1_MAX_BYTES), R1_MAX_BYTES)
-            rows = json.loads(body1.decode("utf-8"))
+            info1 = runner.r1(url, isin)
         except FetchStop:
             res.r1_status = "failed"
             raise
-        except (ValueError, UnicodeDecodeError):
-            res.r1_status = "failed"
-            raise FetchStop("r1_not_json") from None
-        if not isinstance(rows, list):
-            res.r1_status = "failed"
-            raise FetchStop("r1_not_list")
-        if len(rows) > R1_MAX_ROWS:
-            res.r1_status = "failed"
-            raise FetchStop("too_many_rows")
-        res.rows_seen = len(rows)
-        if rows and not (isinstance(rows[0], dict) and all(k in rows[0] for k in REQUIRED_KEYS)):
-            res.r1_status = "failed"
-            raise FetchStop("schema_mismatch")
         res.r1_status = "ok"
-
-        picked = select_row(rows, isin, today)
+        stage_after_r1 = True
+        res.rows_seen = info1["rows_seen"]
+        res.n_selected_rows = len(info1["selected"])
+        res.checks.found = res.n_selected_rows > 0
+        if not res.checks.found:
+            raise FetchStop("isin_not_found")
         res.isin_matched = True
-        if res.rights["R2"] != "ALLOWED":
+        ev = evaluate_selection(info1, bool(info0.get("class_doc_ok")), today, res.checks)
+        res.distinct_dates = ev["distinct_dates"]
+        if ev["reason"]:
+            raise FetchStop(ev["reason"])
+        if not use_decisions(res.rights)["display"]:
             raise FetchStop("rights_unverified")  # 權利不足：扣值，保留原因
+        picked = ev["picked"]
         res.value_released = True
         res.local_display = {
             "nav": str(picked["nav"]),
@@ -392,16 +636,14 @@ def run(
     except FetchStop as e:
         if res.stop_reason is None:
             res.stop_reason = e.reason
-        if e.reason in {"rights_unverified", "same_day_conflict", "class_conflict", "class_unverified",
-                        "ccy_unrecognized", "nav_unreadable", "nav_not_positive", "nav_date_unreadable",
-                        "nav_date_in_future", "isin_not_found"}:
+        if stage_after_r1:
             res.withheld_reason = e.reason
     return res
 
 
-# ───────────────────────── 真實 transport（僅 LIVE_ENABLED 才可建立）─────────────────
+# ───────────────────────── 真實 transport（僅 LIVE_ENABLED 才可使用）───────────────
 def live_guard_errors(env: Optional[dict[str, str]] = None) -> list[str]:
-    """開啟真網路前的守衛：key log／代理環境變數出現即拒絕。"""
+    """key log／代理環境變數出現即拒絕。"""
     env = os.environ if env is None else env
     errs = []
     if env.get("SSLKEYLOGFILE"):
@@ -411,6 +653,15 @@ def live_guard_errors(env: Optional[dict[str, str]] = None) -> list[str]:
             errs.append("proxy_env_set")
             break
     return errs
+
+
+def assert_live_allowed(env: Optional[dict[str, str]] = None) -> None:
+    """最後送出點與 factory 共用的授權守衛。"""
+    if not LIVE_ENABLED:
+        raise FetchStop("live_disabled")
+    errs = live_guard_errors(env)
+    if errs:
+        raise FetchStop(errs[0])
 
 
 def build_tls_context() -> ssl.SSLContext:
@@ -428,12 +679,12 @@ def build_tls_context() -> ssl.SSLContext:
 
 
 def _single_get(url: str, max_bytes: int, timeout: float) -> Response:
-    """單次 GET：無轉址／無重試／無代理／identity 編碼；串流讀取並以上限截斷判定。"""
+    """最後 HTTP 送出點：先守衛，再送；狀態／編碼／型別／宣告長度不符＝**不讀 body**；實讀至多 max_bytes+1。"""
+    assert_live_allowed()
+    verify_pinned_url(url)
     import urllib3
 
     parts = urlsplit(url)
-    if parts.scheme != "https" or (parts.hostname or "") != ORIGIN_HOST or parts.port is not None:
-        raise FetchStop("origin_not_pinned")
     pool = urllib3.HTTPSConnectionPool(
         ORIGIN_HOST, port=443, ssl_context=build_tls_context(), cert_reqs="CERT_REQUIRED",
         retries=False, timeout=urllib3.Timeout(connect=timeout, read=timeout),
@@ -444,99 +695,156 @@ def _single_get(url: str, max_bytes: int, timeout: float) -> Response:
         redirect=False, retries=False, preload_content=False,
     )
     try:
+        if 300 <= r.status < 400:
+            raise FetchStop("redirect_refused")
+        if r.status != 200:
+            raise FetchStop(f"http_status_{r.status}")
+        enc = (r.headers.get("Content-Encoding") or "identity").lower()
+        if enc not in ("", "identity"):
+            raise FetchStop("content_encoding_refused")
+        ctype = r.headers.get("Content-Type", "")
+        if "json" not in ctype.lower():
+            raise FetchStop("content_type_not_json")
+        cl = r.headers.get("Content-Length")
+        if cl is not None:
+            try:
+                if int(cl) > max_bytes:
+                    raise FetchStop("oversize")
+            except ValueError:
+                raise FetchStop("content_length_invalid") from None
         buf = bytearray()
-        for chunk in r.stream(64 * 1024, decode_content=False):
+        while len(buf) < max_bytes + 1:
+            chunk = r.read(min(64 * 1024, max_bytes + 1 - len(buf)), decode_content=False)
+            if not chunk:
+                break
             buf += chunk
-            if len(buf) > max_bytes:
-                raise FetchStop("oversize")
-        return Response(r.status, r.headers.get("Content-Type", ""), bytes(buf),
-                        r.headers.get("Content-Encoding", "identity"))
+        if len(buf) > max_bytes:
+            raise FetchStop("oversize")
+        return Response(r.status, ctype, bytes(buf), enc or "identity")
     finally:
         r.release_conn()
         r.close()
 
 
-def run_step_with_wall_clock(fn: Callable[[], Any], *, wall: float = STEP_WALL_SECONDS,
-                             reap: float = REAP_SECONDS) -> Any:
-    """於子行程執行單一 HTTP 步驟；牆鐘逾時即終止並回收，回收失敗 ⇒ UNREAPED（硬停）。"""
+# ── worker 行程：頂層可 pickle（spawn 相容），整步（GET＋解析＋IPC）受同一牆鐘約束 ──────
+def _entry_r0(url: str) -> dict[str, Any]:
+    return process_r0(_check_response(_single_get(url, R0_MAX_BYTES, STEP_WALL_SECONDS), R0_MAX_BYTES))
+
+
+def _entry_r1(url: str, isin: str) -> dict[str, Any]:
+    return process_r1(_check_response(_single_get(url, R1_MAX_BYTES, STEP_WALL_SECONDS), R1_MAX_BYTES), isin)
+
+
+def _worker_main(conn: Any, entry: Callable[..., Any], args: tuple) -> None:
+    try:
+        payload = b"R" + json.dumps(entry(*args), ensure_ascii=False).encode("utf-8")
+        if len(payload) > IPC_MAX_BYTES - 16:
+            payload = b"Sresult_oversize"
+    except FetchStop as e:
+        payload = b"S" + e.reason.encode()
+    except BaseException:  # noqa: BLE001 — 任何其他失敗只回固定碼，不夾帶訊息
+        payload = b"E"
+    conn.send_bytes(payload)
+    conn.close()
+
+
+def run_in_worker(entry: Callable[..., Any], args: tuple = (), *, wall: float = STEP_WALL_SECONDS,
+                  reap: float = REAP_SECONDS, ctx: Any = None, worker: Callable[..., None] = _worker_main) -> Any:
+    """於子行程執行 entry(*args)；牆鐘涵蓋啟動、執行、解析與 IPC 接收；固定錯誤碼；有界回收。
+
+    - 一律 spawn（跨平台一致；entry 須為頂層可 pickle 函式）。
+    - 父行程關閉自己手上的寫端：子行程一死即得 EOF，不會無限等待。
+    - 牆鐘由 watchdog 計時器 kill 子行程達成（連「寫到一半卡住」亦被截斷）。
+    - 回收：join(reap) → kill → join(reap)；仍存活 ⇒ UNREAPED（硬停）。
+    """
     import multiprocessing as mp
+    import threading
+    import time
 
-    ctx = mp.get_context("spawn" if sys.platform == "win32" else "fork")
+    ctx = ctx or mp.get_context("spawn")
     parent, child = ctx.Pipe(duplex=False)
-
-    def _target() -> None:
-        try:
-            child.send_bytes(b"R" + _dump(fn()))
-        except FetchStop as e:
-            child.send_bytes(b"S" + e.reason.encode())
-        except BaseException:  # noqa: BLE001 — 子行程任何失敗都只回固定碼，不夾帶訊息
-            child.send_bytes(b"E")
-
-    p = ctx.Process(target=_target, daemon=True)
+    t0 = time.monotonic()
+    p = ctx.Process(target=worker, args=(child, entry, tuple(args)), daemon=True)
     p.start()
-    got = parent.poll(wall)
-    data = parent.recv_bytes() if got else None
-    if not got:
-        p.terminate()
+    child.close()
+    timer = threading.Timer(max(0.0, wall - (time.monotonic() - t0)), lambda: _safe_kill(p))
+    timer.daemon = True
+    timer.start()
+    data: Optional[bytes] = None
+    err: Optional[str] = None
+    try:
+        data = parent.recv_bytes(IPC_MAX_BYTES)
+    except EOFError:
+        err = "ipc_truncated"
+    except OSError as e:
+        msg = str(e)
+        err = ("ipc_oversize" if "bad message length" in msg
+               else "ipc_truncated" if ("end of file" in msg or isinstance(e, ConnectionResetError))
+               else "ipc_error")
+    finally:
+        timer.cancel()
+        parent.close()
+    timed_out = (time.monotonic() - t0) >= wall
+    p.join(reap)
+    if p.is_alive():
+        _safe_kill(p)
         p.join(reap)
         if p.is_alive():
-            p.kill()
-            p.join(reap)
-            if p.is_alive():
-                raise FetchStop("UNREAPED")
-        raise FetchStop("wall_clock_timeout")
-    p.join(reap)
-    if data[:1] == b"R":
-        return _load(data[1:])
-    if data[:1] == b"S":
-        raise FetchStop(data[1:].decode())
+            raise FetchStop("UNREAPED")
+    if data is None:
+        raise FetchStop("wall_clock_timeout" if timed_out else (err or "ipc_error"))
+    tag, body = data[:1], data[1:]
+    if tag == b"R":
+        try:
+            return json.loads(body.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            raise FetchStop("ipc_bad_payload") from None
+    if tag == b"S":
+        reason = body.decode("utf-8", "replace")
+        raise FetchStop(reason if _REASON.match(reason) else "step_error")
     raise FetchStop("step_error")
 
 
-def _dump(obj: Any) -> bytes:
-    if isinstance(obj, Response):
-        return json.dumps({"s": obj.status, "t": obj.content_type, "e": obj.content_encoding,
-                           "b": obj.body.hex()}).encode()
-    return json.dumps(obj).encode()
+def _safe_kill(p: Any) -> None:
+    try:
+        p.kill()
+    except Exception:  # noqa: BLE001
+        pass
 
 
-def _load(raw: bytes) -> Any:
-    d = json.loads(raw.decode())
-    if isinstance(d, dict) and set(d) == {"s", "t", "e", "b"}:
-        return Response(d["s"], d["t"], bytes.fromhex(d["b"]), d["e"])
-    return d
+class WorkerRunner:
+    """live 用：每步一個 spawn 子行程；送出點另有授權守衛。"""
+
+    def r0(self, url: str) -> dict[str, Any]:
+        return run_in_worker(_entry_r0, (url,))
+
+    def r1(self, url: str, isin: str) -> dict[str, Any]:
+        return run_in_worker(_entry_r1, (url, isin))
 
 
-def make_live_transport() -> Transport:
-    """建立真實 transport；`LIVE_ENABLED` 為 False 時一律拒絕（本 PR 預設）。"""
-    if not LIVE_ENABLED:
-        raise FetchStop("live_disabled")
-    errs = live_guard_errors()
-    if errs:
-        raise FetchStop(errs[0])
-
-    def _t(url: str, max_bytes: int) -> Response:
-        return run_step_with_wall_clock(lambda: _single_get(url, max_bytes, STEP_WALL_SECONDS))
-
-    return _t
+def make_live_runner() -> WorkerRunner:
+    """建立真實 runner；`LIVE_ENABLED` 為 False 時一律拒絕（本 PR 預設）。"""
+    assert_live_allowed()
+    return WorkerRunner()
 
 
 # ───────────────────────── CLI ─────────────────────────────────────────────────
 def main(argv: Optional[list[str]] = None) -> int:
     import argparse
 
-    ap = argparse.ArgumentParser(description="11641 最小取數（預設離線；真網路另案授權）")
+    ap = argparse.ArgumentParser(
+        description="11641 最小取數（預設離線；真網路另案授權）。注意：CLI 無 R2 授權入口，永遠只輸出技術聚合。")
     ap.add_argument("--isin", required=True, help="使用者親自確認之『非持倉』公開 ISIN（只在本機比對）")
     ap.add_argument("--confirm-non-holding", action="store_true",
                     help="聲明：此 ISIN 由使用者本人確認非持倉")
     ns = ap.parse_args(argv)
     try:
-        transport = make_live_transport()
+        runner = make_live_runner()
     except FetchStop as e:
-        print(json.dumps({"schema": "tdcc_11641_min_fetch.aggregate.v1", "requests_used": 0,
+        print(json.dumps({"schema": "tdcc_11641_min_fetch.aggregate.v2", "requests_used": 0,
                           "stop_reason": e.reason, "persistence": "none"}, ensure_ascii=False))
         return 2
-    res = run(ns.isin, user_confirmed_non_holding=ns.confirm_non_holding, transport=transport)
+    res = run(ns.isin, user_confirmed_non_holding=bool(ns.confirm_non_holding), runner=runner)
     print("# 可回存（技術聚合）：")
     print(json.dumps(res.aggregate(), ensure_ascii=False, indent=2))
     if res.local_display:
