@@ -143,7 +143,7 @@ def test_unknown_wording_key_is_an_error_not_a_guess():
 
 # ───────────────────────── 隔離守衛（AST） ─────────────────────────
 
-PAGE_ALLOWED = ("ui_v3.design", "ui_v3.viewmodels.fund_lookup", "ui_v3.viewmodels.exp_lookup_wording", "html", "typing", "__future__")
+PAGE_ALLOWED = ("ui_v3.design", "ui_v3.viewmodels.fund_lookup", "ui_v3.viewmodels.exp_nav", "ui_v3.viewmodels.exp_lookup_wording", "html", "typing", "__future__")
 WORD_ALLOWED = ("shared.ui_semantics", "ui_v3.viewmodels.preview_wording", "html", "types", "typing", "__future__")
 
 
