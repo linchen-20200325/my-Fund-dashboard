@@ -3887,6 +3887,22 @@
 | supersedes／amends | 不 supersede、不 amend 任何既有 DEC；對 `DEC-2026-11-25-02` 僅「新增現時確認」，其 (i) 歷史來源〔待核〕狀態不變。 |
 | provenance | 客戶逐字句經 comment 存檔；五項執行邊界為總管／Work 整理之要點轉述；治理 writer（原 O）單組整理，**尚待非作者獨立 QA**（治理 writer 不得自驗）。 |
 
+### DEC-2026-11-26-02｜B #1337 限定同步的鎖定 main 由 `95e17e70…` 更新為 `9e089d88…`（客戶）——**amends `DEC-2026-11-26-01` 決定 3 的鎖定值**（落盤補件）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-26（Asia/Taipei）；**客戶**。#1296 comment [`7193756672`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7193756672)（2026-11-26T13:43:51Z）存檔客戶逐字句。落盤依 `PROJECT_RULES.md` §12.1／§12.2（新裁示同批落盤）；寫入者＝治理 G（Governance & Gate Coordinator，客戶新指派，單一 writer）。 |
+| 客戶指示原文（逐字，如該 comment 所引） | 「同意 B 線 #1337 依 r40 新 main SHA 限定授權，待 main CI 正式收口後同步原分支，其餘 HOLD 不變，所有 AI 永久靜默執行。」（來源標註：同 `DEC-2026-11-26-01`，由總管存檔於該 comment；本批**不聲稱** G 親見客戶原對話。） |
+| 決定（要點轉述，不擴權） | 僅把 `DEC-2026-11-26-01` 決定 3 的**鎖定 main** 由 `95e17e7061a16ad714854cd7c03e703aa8085e4a` 更新為 `9e089d88ae4da2cee76e8dbec439b622297f93ad`。**不變**：原 head `a337b941b9817d3bf4dcec2dda7f8ac1c5e7b0f5`、原唯一 writer、原分支 `claude/b-tdcc-11641-min-fetch`、普通 merge 同步、不改功能、不 force、不真取數、不 Ready／merge PR、`LIVE_ENABLED=False`。 |
+| 執行前置（該 comment 所列；本筆不放寬、不代為判定已滿足） | ①main 的 exact CI（run `45825850720`；Slow step `Run AppTest (slow lane)`）須正式收口並核原始 checkout；②本筆正式落盤；③原 writer 重核雙 SHA、乾淨工作樹、無超界衝突。**授權已取得，執行前置以 GitHub 實況為準；本筆不聲稱任一前置已滿足。** |
+| ⚠️ 本筆合入 main 的鎖定影響（治理據實揭露） | 本筆為 docs-only，但**合入 main 即令 main 前進、不再等於 `9e089d88…`**。依 `DEC-2026-11-26-01` 決定 3 末句與 #7193756672「若造成 main 再變則停並按原程序核定，不自動放寬鎖定」：**合入後 B 現鎖定即失效**，B **不得**自行沿用 `9e089d88…` 或自行改鎖新 SHA；須由總管重核新 main，並依原程序取得客戶對新 SHA 的限定授權。**本筆不預先授權任何新 SHA。** |
+| 不授權範圍 | 同 `DEC-2026-11-26-01`「不授權範圍」全部；另：不授權 B 立即同步／push、不授權解除 #1337 任一 HOLD、不構成 Ready／merge／deploy。 |
+| Gate 狀態 | **已閉合**：客戶對 B 新 SHA 的限定授權（逐字存檔於 #7193756672）。**未閉合／未驗證**：main exact CI Slow 終態與 checkout（本批未重驗）；本筆合入後之新 main 鎖定重核；#1337 新 head／candidate／四 CI／Slow 實際 step 與非作者 QA。 |
+| 是否可逆／影響範圍 | 可逆（純文件）。僅登記鎖定值變更，不改程式、產品或資料。 |
+| evidence／source | #1296 comments：`7193756672`（客戶逐字）、`7193709146`（r40）、`7193857363`（r41）、`7195361354`（r47：DECISIONS 尚無本筆）；`DEC-2026-11-26-01` 決定 3；`PROJECT_RULES.md` §12.1／§12.2。 |
+| supersedes／amends | **amends** `DEC-2026-11-26-01` 決定 3（僅鎖定 main 的值）；不 supersede 任何既有 DEC。 |
+| provenance | 客戶逐字句經 comment 存檔；執行邊界為總管整理之要點轉述；G 單組整理，**尚待非作者獨立 QA**（G 不得自驗；O 為 `DEC-2026-11-26-01` 作者，不涉本筆作者衝突但仍須依 `PROJECT_RULES.md` §8 稽核分級）。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
