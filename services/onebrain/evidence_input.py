@@ -141,9 +141,14 @@ class AdmittedCard:
             raise ValueError("card_id 不可為空")
         if not isinstance(self.lens, (list, tuple)) or not self.lens:
             raise ValueError("lens 不可為空")
-        for lens in self.lens:
-            if lens not in LENSES:
+        # 驗證時只迭代一次並固定成不可變 tuple：之後即使原 list 被改動或迭代會拋錯，路由用主題也不再變
+        frozen = tuple(self.lens)
+        if not frozen:
+            raise ValueError("lens 不可為空")
+        for lens in frozen:
+            if type(lens) is not str or lens not in LENSES:
                 raise ValueError("未知主題")
+        object.__setattr__(self, "lens", frozen)
         if self.contradiction_search not in CONTRADICTION_STATES:
             raise ValueError("未知 contradiction_search")
         if self.card_status not in CARD_STATUSES:
@@ -240,6 +245,17 @@ def _card_right_states(card: AdmittedCard, test_mode: object) -> list:
         return [(axis, RightState.UNKNOWN) for axis in RIGHT_AXES]
 
 
+def _routing_lens(card: AdmittedCard) -> tuple:
+    """拒收分支用的路由主題：只取建構時已固定的不可變 tuple；任何異常 → ()（單卡隔離，不中斷批次）。"""
+    try:
+        lens = card.lens
+        if type(lens) is tuple and all(type(x) is str and x in LENSES for x in lens):
+            return lens
+    except Exception:  # noqa: BLE001
+        pass
+    return ()
+
+
 def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> EvidenceBundle:
     """逐筆准入。R2／R3／R4 任一非 `ALLOWED`，或輸入自相矛盾 → 拒收（不丟例外、不洩漏內容）。"""
     approved, refused = [], []
@@ -263,7 +279,7 @@ def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> Evidence
                     reason_codes=tuple(reasons),
                     rights_detail=tuple((a, s.value) for a, s in states),
                     data_gaps=tuple(gaps),
-                    lens=tuple(card.lens),
+                    lens=_routing_lens(card),
                 )
             )
             continue
@@ -287,7 +303,7 @@ def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> Evidence
                     reason_codes=(REASON_INCONSISTENT,),
                     rights_detail=tuple((a, s.value) for a, s in states),
                     data_gaps=("input_inconsistent",),
-                    lens=tuple(card.lens),
+                    lens=_routing_lens(card),
                 )
             )
             continue

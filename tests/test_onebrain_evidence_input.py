@@ -705,3 +705,61 @@ def test_snapshot_failure_refusal_also_routes_fixed_gap_to_its_lens_only():
     assert b.refused[0].lens == (ei.LENS_CASHFLOW,)
     assert ei.brief_for_lens(b, ei.LENS_CASHFLOW).data_gaps == ("SNAP:input_inconsistent",)
     assert "SNAP:input_inconsistent" not in ei.brief_for_lens(b, ei.LENS_RISK).data_gaps
+
+
+# ═════════════ MF-C-BRIEF-1（Work 7174337858 殘餘反例）：路由主題在驗證時固定為不可變值 ═════════════
+class _IterOnceThenRaise(list):
+    """建構時可迭代；之後任何迭代都拋錯（模擬驗證後才壞掉的 list 子類）。"""
+
+    armed = False
+
+    def __iter__(self):
+        if _IterOnceThenRaise.armed:
+            raise RuntimeError("iteration after construction")
+        return super().__iter__()
+
+
+def test_rights_refusal_lens_is_frozen_at_validation_even_if_original_list_is_mutated():
+    lens_list = [ei.LENS_RISK]
+    c = card("MUT", lens=lens_list, rights=grants(R4=BAD_GRANTS["deny"]))
+    lens_list[:] = [ei.LENS_TREND]                                  # 建構後改動原 list
+    b = ei.admit([c], test_mode=True)
+    assert b.refused[0].lens == (ei.LENS_RISK,)
+    assert ei.brief_for_lens(b, ei.LENS_TREND).data_gaps == ()      # 不跨主題漏到趨勢
+    assert ei.brief_for_lens(b, ei.LENS_RISK).data_gaps == ("MUT:rights_unverified",)
+
+
+def test_snapshot_failure_refusal_lens_is_frozen_too():
+    lens_list = [ei.LENS_CASHFLOW]
+    c = card("MUT2", lens=lens_list, support_refs=({"metric": "m", "nested": _ExplodingItemsDict(a=1)},))
+    lens_list[:] = [ei.LENS_TREND]
+    b = ei.admit([c], test_mode=True)
+    assert b.refused[0].lens == (ei.LENS_CASHFLOW,)
+    assert ei.brief_for_lens(b, ei.LENS_TREND).data_gaps == ()
+
+
+@pytest.mark.parametrize("bad_card", ["rights", "snapshot", "approved"])
+def test_lens_iterable_that_raises_after_construction_does_not_break_batch(bad_card):
+    _IterOnceThenRaise.armed = False
+    lens_list = _IterOnceThenRaise([ei.LENS_RISK])
+    kw = {"rights": grants(R4=BAD_GRANTS["deny"])} if bad_card == "rights" else {}
+    if bad_card == "snapshot":
+        kw["support_refs"] = ({"metric": "m", "nested": _ExplodingItemsDict(a=1)},)
+    c = card("BOOM", lens=lens_list, **kw)
+    _IterOnceThenRaise.armed = True
+    try:
+        b = ei.admit([c, card("AFTER", lens=(ei.LENS_TREND,))], test_mode=True)   # 不丟 RuntimeError
+    finally:
+        _IterOnceThenRaise.armed = False
+    assert {a.card_id for a in b.approved} >= {"AFTER"}                            # 後續合法卡繼續處理
+    assert ei.brief_for_lens(b, ei.LENS_TREND).data_gaps == () or all(
+        not g.startswith("BOOM") for g in ei.brief_for_lens(b, ei.LENS_TREND).data_gaps)
+
+
+def test_card_rejects_non_str_or_unknown_lens_members_at_construction():
+    class _StrSub(str):
+        pass
+
+    for bad in ([_StrSub(ei.LENS_RISK)], [None], [("x",)], []):
+        with pytest.raises(ValueError):
+            card("X", lens=bad)
