@@ -121,7 +121,7 @@ def _ser(obj: object) -> str:
     return repr(obj)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AdmittedCard:
     """既有准入結果（輸入）。`rights` 的鍵為 R2／R3／R4。"""
 
@@ -246,13 +246,15 @@ def _card_right_states(card: AdmittedCard, test_mode: object) -> list:
 
 
 def _routing_lens(card: AdmittedCard) -> tuple:
-    """路由主題：只取建構時 `__post_init__` 已驗證並寫入實例 `__dict__` 的不可變 tuple。
+    """路由主題：直接從**基底類別**的 slot 描述器取建構時 `__post_init__` 已驗證寫入的不可變 tuple。
 
-    刻意**繞過屬性存取**（`card.lens`／子類覆寫的 `__getattribute__`／property），改讀實例字典，
-    以免子類在建構後回傳「另一個合法 tuple」而使拒收缺口跨主題。任何異常或型別不符 → ()（單卡隔離，不中斷批次）。
+    `AdmittedCard` 為 `slots=True`：值存在 slot，不在實例 `__dict__`；此處以 `AdmittedCard.lens.__get__(card)`
+    顯式走基底描述器，**不經** `card.lens`／子類覆寫的 `__getattribute__`／同名 property／子類 `__dict__` 描述器，
+    子類無法在建構後讓此處回傳另一個合法主題。任何異常或型別不符 → ()（單卡隔離，不中斷批次）。
+    （刻意不防禦惡意同程序反射，如以 `object.__setattr__` 繞過 frozen 直接改 slot——不在威脅邊界內。）
     """
     try:
-        lens = object.__getattribute__(card, "__dict__").get("lens")
+        lens = AdmittedCard.lens.__get__(card)
         if type(lens) is tuple and lens and all(type(x) is str and x in LENSES for x in lens):
             return lens
     except Exception:  # noqa: BLE001

@@ -815,3 +815,52 @@ def test_card_whose_fixed_lens_was_tampered_after_construction_is_never_approved
     assert [a.card_id for a in b.approved] == ["AFTER"]                          # 無合法固定主題者不獲准
     assert b.refused[0].card_id == "TAMPER" and b.refused[0].data_gaps == ("input_inconsistent",)
     assert b.refused[0].lens == ()
+
+
+# ═════════════ MF-C-BRIEF-1（Work 7182192849）：`__dict__` 描述器／同名 property 冒名不得改變路由主題 ═════════════
+class _DictSpoofBase(ei.AdmittedCard):
+    """合法子類：不改 frozen 欄位，只讓 `__dict__` 描述器回傳另一個合法 lens。"""
+
+    @property
+    def __dict__(self):  # type: ignore[override]
+        return {"lens": (ei.LENS_TREND,)}
+
+
+def _extra_for(kind):
+    if kind == "rights":
+        return {"rights": grants(R4=BAD_GRANTS["deny"])}
+    if kind == "snapshot":
+        return {"support_refs": ({"metric": "m", "nested": _ExplodingItemsDict(a=1)},)}
+    return {}
+
+
+@pytest.mark.parametrize("kind", ["rights", "snapshot", "approved"])
+def test_dict_descriptor_subclass_cannot_reroute_to_another_valid_lens(kind):
+    c = _DictSpoofBase(**_kwargs("DESC", (ei.LENS_RISK,), **_extra_for(kind)))
+    assert c.lens == (ei.LENS_RISK,)
+    assert ei._routing_lens(c) == (ei.LENS_RISK,)                               # 不經 __dict__ 描述器
+    b = ei.admit([c, card("AFTER", lens=(ei.LENS_TREND,))], test_mode=True)
+    trend = ei.brief_for_lens(b, ei.LENS_TREND)
+    assert all(not g.startswith("DESC") for g in trend.data_gaps)               # 趨勢無被騙來的缺口
+    if kind == "approved":
+        assert [a.lens for a in b.approved if a.card_id == "DESC"] == [(ei.LENS_RISK,)]
+    else:
+        assert b.refused[0].lens == (ei.LENS_RISK,)
+        assert any(g.startswith("DESC:") for g in ei.brief_for_lens(b, ei.LENS_RISK).data_gaps)
+
+
+def test_fixed_lens_is_not_stored_in_instance_dict_and_vars_route_is_closed():
+    c = card("SLOT", lens=(ei.LENS_RISK,))
+    with pytest.raises(TypeError):
+        vars(c)                                                                  # 基底卡無實例 __dict__，無法經 vars() 竄改
+    assert not hasattr(c, "__dict__")
+
+
+def test_subclass_property_named_lens_cannot_be_used_to_construct_a_spoofed_card():
+    class _PropLens(ei.AdmittedCard):
+        @property
+        def lens(self):  # type: ignore[override]
+            return (ei.LENS_TREND,)
+
+    with pytest.raises(Exception):                                               # 建構即失敗（拒絕），不產生可冒名的卡
+        _PropLens(**_kwargs("PROP", (ei.LENS_RISK,)))
