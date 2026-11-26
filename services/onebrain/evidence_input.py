@@ -246,10 +246,14 @@ def _card_right_states(card: AdmittedCard, test_mode: object) -> list:
 
 
 def _routing_lens(card: AdmittedCard) -> tuple:
-    """拒收分支用的路由主題：只取建構時已固定的不可變 tuple；任何異常 → ()（單卡隔離，不中斷批次）。"""
+    """路由主題：只取建構時 `__post_init__` 已驗證並寫入實例 `__dict__` 的不可變 tuple。
+
+    刻意**繞過屬性存取**（`card.lens`／子類覆寫的 `__getattribute__`／property），改讀實例字典，
+    以免子類在建構後回傳「另一個合法 tuple」而使拒收缺口跨主題。任何異常或型別不符 → ()（單卡隔離，不中斷批次）。
+    """
     try:
-        lens = card.lens
-        if type(lens) is tuple and all(type(x) is str and x in LENSES for x in lens):
+        lens = object.__getattribute__(card, "__dict__").get("lens")
+        if type(lens) is tuple and lens and all(type(x) is str and x in LENSES for x in lens):
             return lens
     except Exception:  # noqa: BLE001
         pass
@@ -263,6 +267,7 @@ def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> Evidence
         if not isinstance(card, AdmittedCard):
             raise TypeError("cards 的每個元素必須是 AdmittedCard")
         states = _card_right_states(card, test_mode)
+        fixed_lens = _routing_lens(card)
         reasons = []
         gaps = []
         if any(s is not RightState.ALLOWED for _, s in states):
@@ -279,15 +284,17 @@ def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> Evidence
                     reason_codes=tuple(reasons),
                     rights_detail=tuple((a, s.value) for a, s in states),
                     data_gaps=tuple(gaps),
-                    lens=_routing_lens(card),
+                    lens=fixed_lens,
                 )
             )
             continue
         try:
+            if not fixed_lens:
+                raise ValueError("lens 無法固定")  # 無固定主題者不得獲准（落入下方固定 input_inconsistent 拒收）
             boundary = _snapshot(card.credibility_boundary) if isinstance(card.credibility_boundary, Mapping) else {}
             item = ApprovedEvidence(
                 card_id=card.card_id,
-                lens=tuple(card.lens),
+                lens=fixed_lens,
                 support_refs=_snapshot(card.support_refs),
                 contradicting_evidence_refs=_snapshot(card.contradicting_evidence_refs),
                 contradiction_search=card.contradiction_search,
@@ -303,7 +310,7 @@ def admit(cards: Sequence[AdmittedCard], *, test_mode: bool = False) -> Evidence
                     reason_codes=(REASON_INCONSISTENT,),
                     rights_detail=tuple((a, s.value) for a, s in states),
                     data_gaps=("input_inconsistent",),
-                    lens=_routing_lens(card),
+                    lens=fixed_lens,
                 )
             )
             continue

@@ -763,3 +763,55 @@ def test_card_rejects_non_str_or_unknown_lens_members_at_construction():
     for bad in ([_StrSub(ei.LENS_RISK)], [None], [("x",)], []):
         with pytest.raises(ValueError):
             card("X", lens=bad)
+
+
+# ═════════════ MF-C-BRIEF-1（Work 7178971235）：子類建構後讓 `lens` 讀取回傳「另一個合法 tuple」不得跨主題 ═════════════
+def _spoofed(base_kwargs, spoof):
+    """建立 AdmittedCard 子類：建構時一切正常，建構後 `__getattribute__("lens")` 回傳 spoof。"""
+    state = {"armed": False}
+
+    class _Spoof(ei.AdmittedCard):
+        def __getattribute__(self, name):
+            if name == "lens" and state["armed"]:
+                return spoof
+            return super().__getattribute__(name)
+
+    c = _Spoof(**base_kwargs)
+    state["armed"] = True
+    return c
+
+
+def _kwargs(card_id, lens, **kw):
+    c = card(card_id, lens=lens, **kw)
+    return {f: getattr(c, f) for f in ("card_id", "lens", "support_refs", "contradicting_evidence_refs",
+                                      "contradiction_search", "rejected_metrics", "data_gaps",
+                                      "credibility_boundary", "rights", "card_status")}
+
+
+@pytest.mark.parametrize("spoof", [(ei.LENS_TREND,), [ei.LENS_TREND], ("not-a-lens",), None, ()])
+@pytest.mark.parametrize("kind", ["rights", "snapshot", "approved"])
+def test_subclass_cannot_reroute_refusal_gap_by_returning_other_lens_after_construction(kind, spoof):
+    extra = {}
+    if kind == "rights":
+        extra["rights"] = grants(R4=BAD_GRANTS["deny"])
+    elif kind == "snapshot":
+        extra["support_refs"] = ({"metric": "m", "nested": _ExplodingItemsDict(a=1)},)
+    c = _spoofed(_kwargs("SPOOF", (ei.LENS_RISK,), **extra), spoof)
+    b = ei.admit([c, card("AFTER", lens=(ei.LENS_TREND,))], test_mode=True)
+    assert {a.card_id for a in b.approved} >= {"AFTER"}                       # 後續合法卡照常處理
+    trend = ei.brief_for_lens(b, ei.LENS_TREND)
+    assert all(not g.startswith("SPOOF") for g in trend.data_gaps)            # 趨勢不出現被騙來的拒收缺口
+    assert all(a.card_id != "SPOOF" or a.lens == (ei.LENS_RISK,) for a in b.approved)
+    if kind != "approved":
+        assert b.refused[0].lens == (ei.LENS_RISK,)                           # 路由用建構時固定值
+        assert "SPOOF:" in " ".join(ei.brief_for_lens(b, ei.LENS_RISK).data_gaps)
+
+
+@pytest.mark.parametrize("bad", [[ei.LENS_RISK], (), ("not-a-lens",), (ei.LENS_RISK, 3), None])
+def test_card_whose_fixed_lens_was_tampered_after_construction_is_never_approved(bad):
+    c = card("TAMPER", lens=(ei.LENS_RISK,))
+    object.__setattr__(c, "lens", bad)                                          # 繞過 frozen 的惡意改動
+    b = ei.admit([c, card("AFTER", lens=(ei.LENS_TREND,))], test_mode=True)
+    assert [a.card_id for a in b.approved] == ["AFTER"]                          # 無合法固定主題者不獲准
+    assert b.refused[0].card_id == "TAMPER" and b.refused[0].data_gaps == ("input_inconsistent",)
+    assert b.refused[0].lens == ()
