@@ -3869,6 +3869,24 @@
 | supersedes／amends | 不 supersede、不 amend 任何既有 DEC。 |
 | provenance | 總管整理之要點轉述；治理 writer 單組整理，**尚待非作者獨立 QA**（O 不得自驗治理文件）。 |
 
+### DEC-2026-11-26-01｜客戶五項限定授權（A 離線入口合成標示／A 第五頁非 repo 原型／B #1337 限定同步／C #1341 現時範圍確認／C 頁面投影有條件授權）——其餘 HOLD 不變
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-26（Asia/Taipei）；**客戶**。#1296 comment [`7186798715`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7186798715)（2026-11-26T08:36:23Z）存檔客戶逐字一句；同則所列五項的執行邊界為**總管／Work 整理，非客戶逐字**。本批落盤依 `CLAUDE.md` 與 `PROJECT_RULES.md` §12.1／§12.2（新裁示同批正式落盤）。 |
+| 客戶指示原文（逐字，如該 comment 所引） | 「同意以上五項限定授權，依既有治理程序落盤，其餘 HOLD 不變，由 GPT 總管安排三線平行施工，所有 AI 永久靜默執行。」〔來源標註：2026-11-26 此逐字句由 GPT 總管於本對話直接收到客戶原句，並存檔於 #1296 comment `7186798715`（總管於 r20 `7188731659` 再次直接確認）；治理 writer 據該存檔引用，**不聲稱治理 writer 或 Work 親見客戶原對話**。「以上五項」的全文為 comment 內總管整理之清單，非客戶逐字。2026-11-24 的歷史來源〔待核〕狀態保留於 `DEC-2026-11-25-02` (i)，本欄不補造、不追認、不改寫該歷史。〕 |
+| 決定 1（A，要點轉述） | 核准沿 #1296 comment `7174338529`、`7184297901`、`7185253017` 之方案 1：**僅**在既有非 repo 離線示範 scratch 入口，於市場／設定頁加可見合成提示。市場明示非真實市場資料；設定有合成快照才標來源，無快照顯示「畫面示範｜尚未評估（離線示範）」。暫擬字樣限離線示範，**不升格正式文案**。零 repo 檔案變更；保留雙端合法零外連環境；不改 #1339、不改正式真取數入口。交入口全文、操作指引、390／1280 新增畫面證據，Work 只驗差額。 |
+| 決定 2（A，要點轉述） | 核准第五頁**獨立離線原型**：非 repo scratch 單頁；固定合成 fixture；三主題卡＋全域缺口；AI-off／缺值／失敗／權利拒收示範狀態；明標非真 AI 分析；不宣稱四槽對映定案。**不得**經 registry 或正式路由、不得呼叫 OneBrain／Provider／真資料、不得改正式 UI／守衛。優先做決定 1，本項可獨立準備，不等待 C 正式接線。**交付物**：可重建的 scratch 入口全文、客戶可操作指引，以及 390／1280 兩寬度的畫面證據，交 Work 逐項驗差額。 |
+| 決定 3（B，要點轉述） | 核准 #1337 限定同步 main：由原 writer 於原分支 `claude/b-tdcc-11641-min-fetch`，先核 exact head `a337b941b9817d3bf4dcec2dda7f8ac1c5e7b0f5` 與 main `95e17e7061a16ad714854cd7c03e703aa8085e4a`，符合才**普通 merge** 同步 main；不改功能、不 force、不真取數、不 Ready／merge PR。SHA 不符或超範圍衝突即停，交總管重核。**若本 DEC 落盤使 main 前進，鎖定條件須由總管重核，不自動放寬。**程式 MF0 不重驗；真 OAS／NAV、本機接線另需授權。**依據與移交**：一次性分支許可見 #1296 comment [`7187115227`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7187115227)，正式落盤前置裁示見 r19 [`7187952167`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7187952167)；同步後之新 head／candidate／CI 移交 Work 依原正式 Gate 驗收，雙 SHA 鎖定、超範圍即停、新 main 由總管重核之限制不變。 |
+| 決定 4（C，要點轉述） | 客戶**現時（2026-11-26）**重新確認 #1341 原離線切片範圍：`services/onebrain/evidence_input.py`、`tests/test_onebrain_evidence_input.py`，以及 `tests/test_onebrain_offline_guard.py`、`tests/ui_v3/test_ui2_ai_input_gap_offline.py` 僅原已核准白名單／必要計數描述。僅接既有准入結果、離線合成、三主題共享，拒收／缺口／AI-off 邊界不變。**此為 2026-11-26 新確認，不是 2026-11-24 原話**；`DEC-2026-11-25-02` (i) 的歷史來源（總管轉述）事實**不補造、不改寫**。不含 Ready、合併、部署授權。 |
+| 決定 5（C，有前置條件，要點轉述） | 有條件核准頁面投影四檔：新增 `services/onebrain/page_slice.py`、`tests/test_onebrain_page_slice.py`；既有兩守衛僅精確追加三個集合各一筆：`tests/test_onebrain_offline_guard.py` 加套件白名單一筆與測試白名單一筆，`tests/ui_v3/test_ui2_ai_input_gap_offline.py` 加授權測試白名單一筆，並僅調整必要計數（預期 5／4／4→6／5／5，以新 main 實查為準）；原拒絕條件與其他守衛邏輯不動。設計邊界（#1296 `7185514868`）：純投影、同一已准入物件／唯讀持有契約、固定 `page_map`、`global_gaps` 逐位等於上游 `bundle.data_gaps`；`routing_diagnostics` 三碼 `page_unassigned`／`page_map_unknown_id`／`duplicate_id` **限開發診斷**，不入客戶分析、證據或 support；歧義 ID 不分配（含跨 approved／refused）；reasons-only 拒收與無固定 lens 之全域缺口保留；非法配置 fail-closed，後續 UI 不得被投影失敗阻塞；不保證抵抗直接修改 bundle 內部容器；`ai_text` 不屬投影。**前置（缺一不得施工）**：正式契約／落盤、#1341 正式 Gate、另有合法合併授權且 #1341 入 main，之後由 C 原 writer 從新 main 另開分支；不堆疊、不競寫。 |
+| 不授權範圍（清單，皆不授權） | 追認任何先施工後裁示；#1344（凍結、MF-NAV-1～3）；`DEC-2026-11-25-08`／#1343 生效；真取數與 `LIVE_ENABLED` 變更；正式 Digest／schema、snapshot／as_of、BL-0560／D2-G2；正式 AI Runtime／Provider／caller／AI USE；正式第五頁掛載或 registry 變更；本機資料接線；Secrets／OAuth；公式、交易規則；`PROJECT_RULES.md`／`CLAUDE.md`／RESUME 修改；Ready／merge／deploy；任何守衛放寬（決定 4、5 之精確白名單除外）。 |
+| Gate 狀態 | **已閉合**：客戶對五項限定範圍的授權（逐字句存檔於 #7186798715）。**未閉合／未驗證**：①本 DEC 為 Draft 落盤，**尚待非作者 Work 治理核對與正式程序**；Draft 不等於 main 已落盤。②#1341 正式 Gate 剩餘程序（現時確認是否滿足沿革前置，由總管／Work 依原程序判定）。③決定 1、2 的 scratch 實作與獨立驗收尚未發生；決定 3 同步尚未執行（B 於 #7187143654 回報前置未滿）；決定 5 前置未具備。④Cloud／真機 NOT VERIFIED。 |
+| 是否可逆／影響範圍 | 可逆（純文件）。僅登記授權與邊界，本身不改任何程式、產品或資料。 |
+| evidence／source | #1296 comments：`7186798715`（客戶逐字裁示）、`7186680024`（r16）、`7186865423`（r17）、`7187051863`（r18）、`7187115227`（B 分支許可）、`7187143654`（B 前置核對）、`7185514868`（頁面投影收口）、`7185346709`（Work 設計審查）、`7184206260`（永久派工 V1.0）；`DEC-2026-11-25-02`、`-05`、`-06`；`PROJECT_RULES.md` §12.1／§12.2。 |
+| supersedes／amends | 不 supersede、不 amend 任何既有 DEC；對 `DEC-2026-11-25-02` 僅「新增現時確認」，其 (i) 歷史來源〔待核〕狀態不變。 |
+| provenance | 客戶逐字句經 comment 存檔；五項執行邊界為總管／Work 整理之要點轉述；治理 writer（原 O）單組整理，**尚待非作者獨立 QA**（治理 writer 不得自驗）。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
