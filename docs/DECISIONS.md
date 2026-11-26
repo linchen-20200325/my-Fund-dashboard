@@ -3887,6 +3887,50 @@
 | supersedes／amends | 不 supersede、不 amend 任何既有 DEC；對 `DEC-2026-11-25-02` 僅「新增現時確認」，其 (i) 歷史來源〔待核〕狀態不變。 |
 | provenance | 客戶逐字句經 comment 存檔；五項執行邊界為總管／Work 整理之要點轉述；治理 writer（原 O）單組整理，**尚待非作者獨立 QA**（治理 writer 不得自驗）。 |
 
+### DEC-2026-11-26-02｜#1346 限定 Ready／一般 merge／main CI 驗證（客戶，單次；已執行）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-26（Asia/Taipei）；**客戶**。#1296 comment [`7192857943`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7192857943)（2026-11-26T13:05:18Z）存檔客戶逐字；GPT 總管於該對話直接收到，治理 writer 據該存檔引用，**未親見客戶對話本身**。 |
+| 客戶指示原文（逐字，如該 comment 所引） | 「同意僅 #1346 依 r34 限定範圍 Ready、依法合併及 main CI 驗證，其餘 HOLD 不變，所有 AI 永久靜默執行。」 |
+| 決定 | 僅 #1346（head `6ea409cdc9c78ea4d3d00a99b048eb938f888391`、base／main `95e17e7061a16ad714854cd7c03e703aa8085e4a`、candidate `de914c48dbf6884b3ea352b8cf38c608926d7a24`）Ready、**普通 merge commit** 與合併後 main CI 驗證；SHA 變更即停。 |
+| 執行狀態（據實，依 #1296 `7192885076`） | 已由總管依此單次授權執行：#1346 merged，main 為 `9e089d88ae4da2cee76e8dbec439b622297f93ad`，tree 與已驗候選相同；main push run `45825850720` 四項 success、Slow 實際 step 7 success（`7195000402` 引原始 log）。**本筆僅登記，不補造過程。** |
+| 不授權範圍（清單，皆不授權） | #1345（凍結、禁止合併）；其他 PR 的 Ready／merge；deploy；真取數；任何其他 HOLD 解除。 |
+| 是否可逆／影響範圍 | 可逆（純文件）。 |
+| evidence／source | #1296 comments：`7192857943`、`7192818600`（r34）、`7192885076`（r35）、`7192717330`（Work PASS）、`7195000402`（r45）。 |
+| supersedes／amends | 不 supersede、不 amend 任何既有 DEC；完成 `DEC-2026-11-26-01` 的落盤程序。 |
+| provenance | 客戶逐字經 comment 存檔（總管轉引）；治理 writer 單組整理，**尚待真正非作者獨立 QA**。 |
+
+### DEC-2026-11-26-03｜B #1337 同步鎖定 main 改為 `9e089d88…`（客戶限定授權；執行前置未全滿足）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-26（Asia/Taipei）；**客戶**。#1296 comment [`7193756672`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7193756672)（2026-11-26T13:43:51Z）存檔客戶逐字；總管直接收到，治理 writer 據存檔引用，**未親見客戶對話本身**。 |
+| 客戶指示原文（逐字，如該 comment 所引） | 「同意 B 線 #1337 依 r40 新 main SHA 限定授權，待 main CI 正式收口後同步原分支，其餘 HOLD 不變，所有 AI 永久靜默執行。」 |
+| 決定（承 `DEC-2026-11-26-01` 決定 3；僅更新鎖定 main） | 原鎖定 main `95e17e7061a16ad714854cd7c03e703aa8085e4a` **更新為** `9e089d88ae4da2cee76e8dbec439b622297f93ad`；其餘不變：原 head `a337b941b9817d3bf4dcec2dda7f8ac1c5e7b0f5`、原唯一 writer、原分支 `claude/b-tdcc-11641-min-fetch`、**普通 merge 同步**、不改功能、不 force、不真取數、不 Ready／merge PR。 |
+| 執行前置（缺一不得同步） | ①main CI 正式收口（`7195000402` 已核 run `45825850720` 四項 success 與 Slow 實際 step 7，**此項已滿足**）；②本裁示依 PROJECT_RULES §12.1／§12.2 正式落盤（本筆即其 Draft，**入 main 前未滿足**）；③原 writer 重核 main 與 head 雙 SHA、乾淨工作樹、無超界衝突。 |
+| **本筆入 main 的影響（明示）** | 本筆（含本 PR 的合併）入 main 會使 main 前進，**不再等於 `9e089d88…`**。依 `7187115227`、r19 與本筆「SHA 變動即停」，B 的現鎖定於該時**失效**，須由總管依原程序**一次重核**並取得對當時 main SHA 的限定裁示；本筆**不預先授權任何新 SHA**，也不自動沿用。 |
+| 不授權範圍（清單，皆不授權） | 真 OAS／NAV、非私人公開 ISIN、本機顯示接線；#1344（凍結、MF-NAV-1～3）；`DEC-2026-11-25-08`（未生效）；`LIVE_ENABLED` 變更；Ready／merge #1337；deploy。 |
+| Gate 狀態 | **已閉合**：客戶對新 SHA 限定授權（逐字存檔）。**未閉合**：執行前置②③；Work／O 對同步後新 head／candidate 的正式 Gate。 |
+| 是否可逆／影響範圍 | 可逆（純文件）。 |
+| evidence／source | #1296 comments：`7193756672`、`7193620533`（B 乾跑）、`7187115227`、`7187952167`（r19）、`7193709146`（r40）、`7195000402`（r45）；`DEC-2026-11-26-01` 決定 3。 |
+| supersedes／amends | **amends** `DEC-2026-11-26-01` 決定 3 的「main 鎖定 SHA」一項（僅此一項）；不 supersede。 |
+| provenance | 客戶逐字經 comment 存檔（總管轉引）；執行前置的核證結論引自 #1296 他人回報，治理 writer 未重驗；單組整理，**尚待真正非作者獨立 QA**。 |
+
+### DEC-2026-11-26-04｜基金獨立 QA 路由：Work 暫停，改道專案 AI O（角色改道；不改任何產品／資料／安全 Gate）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-26（Asia/Taipei）；**客戶**（經 GPT 總管轉達）。#1296 comment [`7194354412`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7194354412)（r44，2026-11-26T14:09:20Z）記載客戶逐字；治理 writer 據該存檔引用，**未親見客戶對話本身**。 |
+| 客戶指示原文（逐字，如 r44 所引） | 「Work 額度沒了，之後請改道專案AI O」 |
+| 決定（要點轉述，不擴權） | 即日起基金 Work 暫停新派工，原未完及後續**非作者獨立 QA** 路由改由專案 AI O 承接；**不自動恢復 Work**。O 只做唯讀驗收（允許隔離環境測試與 SSOT 證據留言），不代 A／B／C／D 寫碼或推送，不自行 Ready／merge，不以模型名稱或 CI 綠取代正式 Gate；**有作者衝突的項目不得自驗**，交總管另派真正非作者，**不降低既有獨立 QA 組數**；工具或合法隔離環境不足一律 NOT VERIFIED。 |
+| 與 `DEC-2026-11-25-03` 的關係 | `-25-03` 為「Work 不可用時之條件式備援」；本筆為客戶對該條件成立的明示路由。**不改備援的非作者與獨立性規則。** |
+| 不授權範圍（清單，皆不授權） | 施工、真取數、合併、部署；任何 Gate 降級或新增；O 驗收其自行撰寫之治理文件（含 `DEC-2026-11-26-01`～`-04`）。 |
+| 是否可逆／影響範圍 | 可逆（純文件）；影響 #1296 QA 派工路由。 |
+| evidence／source | #1296 comments：`7194354412`（r44）、`7195000402`（r45）、`7195282564`（r46）、`7195361354`（r47）；`DEC-2026-11-25-03`。 |
+| supersedes／amends | 不 supersede、不 amend 任何既有 DEC。 |
+| provenance | 客戶逐字經 comment 存檔（總管轉引）；治理 writer 單組整理，**尚待真正非作者獨立 QA**；因 O 與治理 writer 為同一角色來源，**O 不得驗本筆**。 |
+
 ---
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
