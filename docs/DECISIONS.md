@@ -3823,6 +3823,27 @@
 | supersedes／amends | **amends** `DEC-2026-11-25-01`（「方案甲＝總管邊界」→客戶選定；「待客戶確認」單題已作答）；不 supersede、不改寫任何既有 DEC。 |
 | provenance | 客戶逐字經 comment 存檔（總管張貼）；治理 writer 單組整理，**尚待非作者獨立 QA**（`DEC-2026-10-16-05`）。 |
 
+### DEC-2026-11-27-04｜M1 五頁同導覽：客戶核准 E1～E3 精確檔案例外（僅限 offline_demo；方案 A）——正式落盤
+
+> **位置說明**：本筆刻意插在 `DEC-2026-11-25-05` 之前（即 `-25-04` 與 `-25-05` 之間），與已入 main 的 `-27-03`（`-25-06` 之前）、`-27-02`（`-25-07` 之前）、`-27-01`（`-26-01` 之前）及在途 Draft #1347（`-26-01` 之後）的錨點皆分開，避免文字衝突；**編號依日期**（`DEC-2026-11-27-04` 於 main 與全部遠端分支實查 0 命中；`#7216991235` 已更正，不使用誤編號）。登記不構成動工授權（`CLAUDE.md` §-1）。
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-27（Asia/Taipei）；**客戶**。#1296 comment [`7216711656`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7216711656)（CURRENT_PLAN r81，2026-11-27T11:07:43Z）存檔客戶逐字；方案選定與落盤排程見 [`7217319449`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7217319449)（r82）；具名落盤令見 [`7233962094`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7233962094)（r104）。落盤依 `PROJECT_RULES.md` §12.1／§12.2，寫入者＝治理 G（r104 指定之單一 writer）。 |
+| 客戶指示原文（逐字，如 r81 所引） | 「同意方案 A，核准 E1～E3 精確檔案例外，僅限 offline_demo，保留正式模式隔離及全部安全負控。待 #1339／#1341 依法入 main 並重鎖後，由 A 開立 Draft 完成五頁同導覽整合。其他正式 Gate、真資料、Provider、部署及 HOLD 不變。」（來源標註：由 GPT 總管存檔於該 comment；本批**不聲稱** G 親見客戶原對話。） |
+| 決定 1（E1，新增檔案） | **僅**新增 `ui_v3/viewmodels/ai_demo.py`、`ui_v3/adapters/onebrain_demo.py` 兩個新檔（r81 引 #7216603900 §3 方案 A）。 |
+| 決定 2（E2，守衛函式庫） | **僅**修改 `tests/ui_v3/ui_v3_guard_lib.py`：對上述 adapter（`ui_v3/adapters/onebrain_demo.py`）的**精確路徑**，允許其匯入 `services.onebrain`／`evidence_input`。 |
+| 決定 3（E3，離線守衛） | **僅**修改 `tests/test_onebrain_offline_guard.py`：對**同一** adapter 的精確路徑設例外。 |
+| 決定 4（範圍限制，照抄客戶句與 r81，不擴權） | E1～E3 **均限 `offline_demo`**；**正式模式隔離、相似路徑、其他 adapters／pages／viewmodels、未授權服務與 FAKE 隔離負控一律不得放寬**；r78（#7215748313）原檔案範圍及必要測試以外不得擴張。 |
+| 決定 5（時序） | #1339／#1341 須**依法入 main 並重新鎖定 exact main** 後，才由 A（唯一 UI writer）於新 main 開**單一**整合 Draft；不堆疊、不逕推既有 PR、不 Ready／merge（r81）。E1～E3 本筆須在 A 開該 Draft **之前**依法入 main（r82）。 |
+| 本筆只記錄裁示 | **本筆不動** 上列四個程式／測試檔，不改任何守衛邏輯，不混入 M2 或其他治理主題，不碰現有 PR。守衛例外的實際修改，須由 A 在後續整合 Draft 中另循正式程序與獨立測試完成。 |
+| 不授權範圍（清單，皆不授權） | 本筆本身對任何程式／測試檔的修改；超出 E1～E3 三項的任何守衛例外或泛化；正式模式掛載、真資料與外連取數、`LIVE_ENABLED` 變更、AI Runtime、Provider、Digest schema、部署；Ready／merge；解除任一 HOLD；對 #1337／#1339／#1341 鎖定 SHA 的授權；`PROJECT_RULES.md`／`CLAUDE.md` 修改；以本筆取代任何 Gate；作者自驗。 |
+| Gate 狀態 | **已閉合**：客戶對方案 A 與 E1～E3 的核准（逐字存檔於 r81）。**未閉合／未驗證**：本筆自身的非作者 QA（人選與組數依觸及安全邊界之風險分級，由總管核定；G 為作者不得自驗）；依法入 main；#1339／#1341 依法入 main 並重鎖；A 後續整合 Draft 的實作與 O／B 等驗收；r81 引用之 #7216603900 §3 與 r78 原文本批未重讀（NOT VERIFIED）。 |
+| 是否可逆／影響範圍 | 可逆（純文件）。僅登記客戶核准，不改程式、守衛、產品或資料。 |
+| evidence／source | #1296 comments：`7216711656`（r81，客戶逐字）、`7217319449`（r82，選定方案 A 與落盤排程）、`7233962094`（r104，具名落盤令）、`7216986551`／`7216991235`（G 的方案提案與編號更正）、`7216603900`（A 的 §3 方案）、`7215748313`（r78）；`DEC-2026-11-25-02`／`-05`（C 的既有守衛例外，作格式對照）；`PROJECT_RULES.md` §12.1／§12.2。 |
+| supersedes／amends | 不 supersede、不 amend 任何既有 DEC。 |
+| provenance | 客戶逐字經 comment 存檔（總管轉引）；G 單組整理，**尚待真正非作者獨立 QA**（G 不得自驗）。 |
+
 ### DEC-2026-11-25-05｜C-OB-EVIDENCE-OFFLINE-1：第四檔精確例外 `tests/ui_v3/test_ui2_ai_input_gap_offline.py`（客戶）
 
 | 欄位 | 內容 |
