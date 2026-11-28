@@ -122,6 +122,7 @@
 | Visual Fidelity Gate（功能測試／CI／QA 全綠 ≠ UI Stage 完成；UI PR 要有 production-like Cloud screenshot 正式確認，CI deterministic screenshot 只是自動安全網） | 第 7 節指標；本文 `docs/v2/44_fund_ui_ssot.md` 第七節第三小節之十九其九（`DEC-2026-10-29-05`） |
 | GitHub Durable Memory Contract（Conversation 不是 SSOT；Batch 結案前檢查五類文件同步；HANDOFF 只是索引） | 第 6 節 6.1.1 末尾指標（`DEC-2026-10-29-06`） |
 | 正式 Streamlit 只顯示目前最新正式 UI；保留程式 ≠ 對使用者公開；三代 UI 邊界（Old UI read-only／`ui_v2` maintenance-only／`ui_v3` 唯一正式）；cutover 暴露守衛 | 第 13 節 13.2 末尾「正式 Streamlit 顯示規則」（`DEC-2026-11-02-06`；New UI2 架構 `DEC-2026-11-02-05`） |
+| 總管自主派工＋接續通知＋PR 整併收口（讀取版本須明示、永久靜默接續、接續通知三分、PR 清理僅限已取代 docs／過期 FAKE 原型／無用重複分支；基金專案專用） | 第 17 節（`DEC-2026-11-28-02`；原文 #1296 comment `7236485986`） |
 
 **Supersession hygiene（客戶 2026-11-03 Latest-Rule-Only 指示改寫；`DEC-2026-11-03-08`；總管讀法，待客戶確認，BL-0538）**：(1) 現行區只留 CURRENT 規則；被取代的舊句**逐字搬到** `docs/evidence/history/`（檔頭標 NOT CURRENT／Historical evidence only），原位置只留 `superseded: <DEC-ID>` 指標；(2) 搬出必須無遺失：每段記 sha256 與基準 commit，由 `tests/test_canonical_rule_consistency.py` 機械比對（基準 commit `82ba783f` 若因 squash 而不可得，逐位元組比對會 skip、僅剩 sha256 自洽檢查；因此本專案合併一律用一般 merge commit、保留 SHA）；(3) 現行入口（本表、`docs/HANDOFF.md` 等）只指向最新有效條文；(4) 不允許兩個看似同時有效的版本並存（第一階段範圍；其餘舊劃線句見 BL-0541）；(5) 不新增第五份治理 SSOT（索引不是 SSOT，見 0.4 現行規則索引）；(6) 不適用本改寫：`docs/DECISIONS.md`（追加式，以 supersedes／superseded-by 欄查）、`docs/evidence/decisions/*`（客戶裁示逐字存檔，不改）、凍結文件（`docs/v2/CONSTITUTION.md`、57、44 等，只能走合法 amendment）、`CLAUDE.md`／`PROCESS.md`／`EXCEPTIONS.md`（位階在本檔之上，本批不動）、Git 歷史（不改寫）。（舊 (1)(2)「舊內容保留、就地標示」原文逐字見 history 區塊 P2；本檔其餘章節內尚存的劃線舊句屬第二階段，登記 BL-0541。）
 
@@ -1031,3 +1032,17 @@ agent、sub-agent、scratchpad、worktree、內部稽核流程都是內部實作
 8. 所有 UI／UX 設計由 ChatGPT 負責；正式資料契約、資安與上位規則變更仍由客戶核准。**與 `CLAUDE.md` §-1.5.4（UI 線框須客戶拍板）並存取嚴，不自行廢除。**
 9. GitHub 為唯一事實來源；每批完成後核對 QA、exact-head CI、合併及 main CI，交接未完成事項。
 10. 維持每批最多三項工作及禁止碎碎念（第 3.1、13.4 第 5 點〔每批最多 3 項〕及第 3.3 節〔禁止碎碎念〕）。
+
+
+## 第 17 節｜總管自主派工、接續通知與 PR 整併收口（客戶 2026-11-28 r06 永久規範；要點轉述；基金專案專用）
+
+> **出處**：`docs/DECISIONS.md` `DEC-2026-11-28-02`；原文為 #1296 comment `7236485986`（CURRENT_CONTINUATION r06，總管存檔客戶核准全文）。**本節只放指標與要點，條文以該 DEC 與原文為準；不創第二套規則。**
+> **位階**：同第 0.1 節，受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄；**不削弱**第 4 節 Stop／Decision Gate、第 8 節獨立稽核、第 10 節 Branch／PR Lifecycle、第 12 節落盤規則、凍結檔與任何資料權利 Gate；與第 3.2／3.3／16 節並存、牴觸取嚴。未改動 `CLAUDE.md` 一個字。
+
+1. 唯一產品目標＝完整可操作 UI2 五頁＋全站唯一 OneBrain＋Real Data First；未完整交付不得結案。
+2. 「接續」／「接續＋讀取版本」：先 LIVE 讀 `CURRENT`，**回應開頭明示讀取版本與 `main`／PR `head_sha`**；禁憑記憶；基準落後須先對齊。
+3. 總管自主派工、不重複派工；不得以等待、維持 HOLD 或重複計畫取代產品推進。
+4. PR 清理**僅限**已被新版取代的 `docs`、過期離線 FAKE 原型、無用重複分支；同切片零件 PR 優先整併；**禁止為單純文件或孤立原型另開新 PR**；**不刪分支**；現役功能與凍結保全。
+5. 各角色「接續」＝永久靜默自主執行已授權未完成任務；停派角色不自行啟動。
+6. 總管每輪必列**立即／條件式／暫不接續**角色；固定極簡回報格式（首行燈號＋讀取版本＋`main` SHA；①～⑤＋接續通知）。
+7. 硬底線不變：`missing ≠ 0`、`unknown ≠ safe`、`STALE ≠ fresh`、`FAKE ≠ 真實功能`、`CI PASS ≠ 產品交付`。
