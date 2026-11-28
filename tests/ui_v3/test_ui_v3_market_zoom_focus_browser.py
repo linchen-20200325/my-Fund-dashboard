@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""🌍 市場頁：縮放模擬、最小字級、主內容區與展開區焦點的瀏覽器級量測（slow lane；只加測試，不改 production）。
+"""🌍 市場頁：縮放模擬、最小字級、主內容區與展開區焦點的瀏覽器級量測（slow lane）。原 #1333 為 tests-only；A-STMAIN-FOCUS-RING-1 起，stMain 焦點環缺口已由 `ui_v3/shell/nav.py::shell_css` 一條 `:focus-visible` 規則修復，本檔對應測試由 xfail 轉真 PASS。
 
 授權：#1296 comment 7077293452 §2（tests-only 單一切片）；Must-Fix 修補依 #1296 comment 7077680667（Work QA #7077661223）。
 
@@ -13,8 +13,9 @@
    之後只看**焦點環通道**（outline 與聚焦前不同且 ≥2px、或 box-shadow 與聚焦前不同）。背景色的微小 alpha 變動**不算**焦點環
    （前一版把背景也算進去，移除環後背景偶有 0.016 的變動，負控紅綠交錯）。
    - `summary`：Streamlit 原生 box-shadow 環 → 正向守衛。
-   - `stMain`：焦點環通道無變化 → **確知缺口**，`xfail(strict=True, raises=MissingFocusRing)`。只有這個專屬例外會被當成預期失敗；
-     找不到元素、沒取得焦點、不是 `:focus-visible` 都是一般 FAIL。補上 2px 環會讓它 XPASS(strict) 轉紅。**本檔不修**（補環＝新增視覺，需 Gate）。
+   - `stMain`：**已修復**（`shell_css` 的 `section[data-testid="stMain"]:focus-visible` 2px 實線內縮環，授權 #1296 comment 7103459326）→ 正向守衛，
+     兩寬度真 PASS。找不到元素、沒取得焦點、不是 `:focus-visible`、環通道無變化都是一般 FAIL。
+     負控：以 `outline:none !important` 蓋掉該規則 → 必須回到 `MissingFocusRing`（證明守衛不是空洞通過）。
 
 版面判定（`reflow_violations`）回傳 `(種類, 細節)`，種類分開：`doc_overflow`（整頁）、`main_overflow`（主內容區）、`new_clip`（新增的強制裁切）。
 強制裁切只算 `overflow` 為 `hidden`／`clip` 的軸；`auto`／`scroll` 是可捲動內容，不算裁切。新增裁切以「元素路徑＋軸」比對前後，
@@ -307,11 +308,11 @@ def test_expander_summary_shows_visible_focus_ring(base_and_pw, width):
     assert not focus_ring_violations(unfocused, focused), (unfocused, focused)
 
 
-@pytest.mark.xfail(strict=True, raises=MissingFocusRing,
-                   reason="KNOWN-GAP（未修，需新增視覺的 Gate）：stMain 可捲動主容器已取得鍵盤焦點（:focus-visible），但 outline／box-shadow 與未聚焦相同")
 @pytest.mark.parametrize("width", _WIDTHS)
-def test_scrollable_main_container_shows_visible_focus_ring_known_gap(base_and_pw, width):
-    _check_main_focus_ring(base_and_pw, width)
+def test_scrollable_main_container_shows_visible_focus_ring(base_and_pw, width):
+    unfocused, focused = _focus(base_and_pw, width, _TARGETS["stMain"])
+    assert not focus_ring_violations(unfocused, focused), (unfocused, focused)
+    assert focused["outlineStyle"] == "solid" and focused["outlineWidth"] == "2px", focused   # 規格：2px 實線
 
 
 # ───────────────────────── 負控：判定函式層級（純資料） ─────────────────────────
@@ -406,10 +407,11 @@ def test_mutation_removing_summary_focus_ring_is_flagged_as_ring_missing(base_an
 
 
 @pytest.mark.parametrize("width", _WIDTHS)
-def test_mutation_adding_ring_to_main_container_would_xpass_the_known_gap(base_and_pw, width):
-    """同一個檢查加上 2px 環 → 不再丟 MissingFocusRing；也就是原 xfail(strict) 測試會 XPASS 轉紅。"""
-    _check_main_focus_ring(base_and_pw, width,
-                           css='section[data-testid="stMain"]:focus-visible{outline:2px solid #172033 !important}')
+def test_mutation_overriding_main_container_ring_is_flagged_as_missing(base_and_pw, width):
+    """負控：以 `outline:none !important` 蓋掉 shell_css 的 stMain 規則 → 守衛必須回到 MissingFocusRing（拿掉修復必轉紅）。"""
+    with pytest.raises(MissingFocusRing):
+        _check_main_focus_ring(base_and_pw, width,
+                               css='section[data-testid="stMain"]:focus-visible{outline:none !important;box-shadow:none !important}')
 
 
 def test_mutation_missing_selector_fails_hard_instead_of_being_an_expected_gap(base_and_pw):
