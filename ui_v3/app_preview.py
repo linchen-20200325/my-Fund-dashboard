@@ -79,19 +79,27 @@ def _render_exp() -> None:
     import streamlit as st
 
     import ui_v3.fixtures.exp_lookup_fake as fake
+    from ui_v3.adapters.exp_nav import load_exp_nav
     from ui_v3.adapters.fund_lookup import lookup_fund, not_queried
     from ui_v3.pages import exp_lookup as page
-    from ui_v3.viewmodels.fund_lookup import FundLookupView
+    from ui_v3.viewmodels.exp_nav import ExpNavView
+    from ui_v3.viewmodels.fund_lookup import FundLookupView, LookupState
 
     page.render_css()
     page.render_page_header(fake.demo_codes_hint())
     raw = page.render_form()
     if raw is not None:
         st.session_state[page.KEY_VIEW] = lookup_fund(fake.make_loader(), raw)
+        submitted = st.session_state[page.KEY_VIEW]
+        # NAV／輔助判定 sibling（A-EXP-NAV-SIBLING-FAKE-1）：只有五欄有結果時才取；判定與格式化在來源層，這裡只傳遞
+        st.session_state[page.KEY_NAV] = load_exp_nav(fake.make_nav_loader(), raw) if submitted.state is LookupState.RESULT else None
     view = st.session_state.get(page.KEY_VIEW, not_queried())
     if not isinstance(view, FundLookupView):
         raise TypeError(f"session 的查詢結果型別錯誤：{type(view).__name__}（不猜、不忽略）")
-    page.render_card(view, fake=True)
+    nav = st.session_state.get(page.KEY_NAV)
+    if nav is not None and not isinstance(nav, ExpNavView):
+        raise TypeError(f"session 的 NAV 結果型別錯誤：{type(nav).__name__}（不猜、不忽略）")
+    page.render_card(view, fake=True, nav=nav)
 
 
 def _holder_renderer(fn, pages: dict):
