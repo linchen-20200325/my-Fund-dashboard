@@ -3983,6 +3983,7 @@
 | 不授權範圍（清單，皆不授權） | #1345（凍結、禁止合併）；其他 PR 的 Ready／merge；deploy；真取數；任何其他 HOLD 解除。 |
 | 是否可逆／影響範圍 | 可逆（純文件）。 |
 | evidence／source | #1296 comments：`7192857943`、`7192818600`（r34）、`7192885076`（r35）、`7192717330`（Work PASS）、`7195000402`（r45）。 |
+| 現況補註（2026-11-28；不改上列原文） | 本筆為**已執行之單次授權**，所載 main `95e17e70…`／`9e089d88…` 為當時鎖定值；main 已前進（現 `373059a318defc9ec28999a80d372351bdeb2715`，r112 `#7236015152`）。**本筆不再對任何新 SHA、他案或後續合併構成授權。** |
 | supersedes／amends | 不 supersede、不 amend 任何既有 DEC；完成 `DEC-2026-11-26-01` 的落盤程序。 |
 | provenance | 客戶逐字經 comment 存檔（總管轉引）；治理 writer 單組整理，**尚待真正非作者獨立 QA**。 |
 
@@ -3995,6 +3996,7 @@
 | 決定（承 `DEC-2026-11-26-01` 決定 3；僅更新鎖定 main） | 原鎖定 main `95e17e7061a16ad714854cd7c03e703aa8085e4a` **更新為** `9e089d88ae4da2cee76e8dbec439b622297f93ad`；其餘不變：原 head `a337b941b9817d3bf4dcec2dda7f8ac1c5e7b0f5`、原唯一 writer、原分支 `claude/b-tdcc-11641-min-fetch`、**普通 merge 同步**、不改功能、不 force、不真取數、不 Ready／merge PR。 |
 | 執行前置（缺一不得同步） | ①main CI 正式收口（`7195000402` 已核 run `45825850720` 四項 success 與 Slow 實際 step 7，**此項已滿足**）；②本裁示依 PROJECT_RULES §12.1／§12.2 正式落盤（本筆即其 Draft，**入 main 前未滿足**）；③原 writer 重核 main 與 head 雙 SHA、乾淨工作樹、無超界衝突。 |
 | **本筆入 main 的影響（明示）** | 本筆（含本 PR 的合併）入 main 會使 main 前進，**不再等於 `9e089d88…`**。依 `7187115227`、r19 與本筆「SHA 變動即停」，B 的現鎖定於該時**失效**，須由總管依原程序**一次重核**並取得對當時 main SHA 的限定裁示；本筆**不預先授權任何新 SHA**，也不自動沿用。 |
+| 現況補註（2026-11-28；不改上列原文，只陳述已發生事實） | 上列「本筆入 main 的影響」所預告之情況已發生：main 已前進至 `373059a318defc9ec28999a80d372351bdeb2715`，且 r112（`#7236015152`）明載「#1337 原鎖定失效」。**本筆所載鎖定 main `9e089d88…` 與原 head `a337b941…` 的同步授權不得再執行**；#1337 任何新同步須由總管依原程序重核並取得**對當時 main SHA** 的新限定裁示，本筆**不預先授權任何新 SHA**。其餘 HOLD（正式同步授權、當期權利、N3、單次本人 `consent_ref`、`LIVE_ENABLED=False`、真取數／Provider／部署）不變。 |
 | 不授權範圍（清單，皆不授權） | 真 OAS／NAV、非私人公開 ISIN、本機顯示接線；#1344（凍結、MF-NAV-1～3）；`DEC-2026-11-25-08`（未生效）；`LIVE_ENABLED` 變更；Ready／merge #1337；deploy。 |
 | Gate 狀態 | **已閉合**：客戶對新 SHA 限定授權（逐字存檔）。**未閉合**：執行前置②③；Work／O 對同步後新 head／candidate 的正式 Gate。 |
 | 是否可逆／影響範圍 | 可逆（純文件）。 |
@@ -4010,11 +4012,30 @@
 | 客戶指示原文（逐字，如 r44 所引） | 「Work 額度沒了，之後請改道專案AI O」 |
 | 決定（要點轉述，不擴權） | 即日起基金 Work 暫停新派工，原未完及後續**非作者獨立 QA** 路由改由專案 AI O 承接；**不自動恢復 Work**。O 只做唯讀驗收（允許隔離環境測試與 SSOT 證據留言），不代 A／B／C／D 寫碼或推送，不自行 Ready／merge，不以模型名稱或 CI 綠取代正式 Gate；**有作者衝突的項目不得自驗**，交總管另派真正非作者，**不降低既有獨立 QA 組數**；工具或合法隔離環境不足一律 NOT VERIFIED。 |
 | 與 `DEC-2026-11-25-03` 的關係 | `-25-03` 為「Work 不可用時之條件式備援」；本筆為客戶對該條件成立的明示路由。**不改備援的非作者與獨立性規則。** |
+| 現況補註（2026-11-28；不改上列原文） | r109／r112（`#7235632246`／`#7236015152`）現載：Work 停派、O 承接具名非作者驗收（如 #1335：`#7235804954` provisional PASS／MF0／SF3，總管於 r112 確認為本案單組非作者資格，**非宣稱模型多樣性**）。本筆**不改**任何產品／資料／安全 Gate，不降低獨立 QA 組數。 |
 | 不授權範圍（清單，皆不授權） | 施工、真取數、合併、部署；任何 Gate 降級或新增；O 驗收其自行撰寫之治理文件（含 `DEC-2026-11-26-01`～`-04`）。 |
 | 是否可逆／影響範圍 | 可逆（純文件）；影響 #1296 QA 派工路由。 |
 | evidence／source | #1296 comments：`7194354412`（r44）、`7195000402`（r45）、`7195282564`（r46）、`7195361354`（r47）；`DEC-2026-11-25-03`。 |
 | supersedes／amends | 不 supersede、不 amend 任何既有 DEC。 |
 | provenance | 客戶逐字經 comment 存檔（總管轉引）；治理 writer 單組整理，**尚待真正非作者獨立 QA**；因 O 與治理 writer 為同一角色來源，**O 不得驗本筆**。 |
+
+### DEC-2026-11-28-01｜#1335 A-STMAIN-FOCUS-RING-1：GPT 總管限縮施工授權正式落盤（原授權 `#7103459326`；**非客戶逐字**；A 單一 writer、兩檔、維持 Draft）
+
+> **位置說明**：本筆與其上之 `DEC-2026-11-26-02`～`-04`（自在途 Draft #1347 沿錄，見各筆）同置於第四節末尾、`DEC-2026-11-26-01` 之後，即 #1347 的同一插入錨點，**為 #1347 之 `docs/DECISIONS.md` 內容的合併替代候選，不可與 #1347 並行落盤**；#1347 的處置（保全、關閉或合併）由總管決定，**G 不處置、不碰 #1343／#1344**。**編號依落盤日**：`DEC-2026-11-28-01` 於 main `373059a3` 與全部遠端分支之 `docs/**`、`PROJECT_RULES.md` 實查 0 命中。登記不構成動工授權（`CLAUDE.md` §-1）；落盤依 `PROJECT_RULES.md` §12.1／§12.2。
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 原授權 2026-11-23（Asia/Taipei）；**GPT 總管（限縮施工授權）**——#1296 comment [`7103459326`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7103459326)（2026-11-23T14:05:11Z，標題「GPT 總管正式限縮施工授權｜A-STMAIN-FOCUS-RING-1」）。**非客戶逐字，本筆不補造任何客戶句。** 補充：[`7109595379`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7109595379)（2026-11-23T18:03:50Z，總管對 #1335 的限縮補授權：Work 僅做補證增量 QA；不授權新增 repo 圖檔、Ready／merge）。落盤令：r112 [`7236015152`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7236015152)（2026-11-28T07:33:22Z）；寫入者＝治理 G。 |
+| 原授權（逐字，如 `7103459326` 所載） | 「准予 A 單一 writer 針對既有 stMain 鍵盤焦點不可見缺陷，進行最小 production bug fix 與測試修改。本裁示把新增的可見焦點環明確列為「修復既有鍵盤可見性缺陷」；仍須進行 Visual Gate，不代表核准任何全面重設計或色彩候選。」／「唯一可修改的兩檔：`ui_v3/shell/nav.py`：只在 `shell_css()` 新增一條 `section[data-testid="stMain"]:focus-visible{outline:2px solid currentColor;outline-offset:-3px}` 或等效最小、可見而不增版面尺寸的規則；不得改 tokens、色票、其他 Shell 行為。`tests/ui_v3/test_ui_v3_market_zoom_focus_browser.py`：將 390／1280 的同一 stMain known-gap 測試由 strict XFAIL 轉為真 PASS；補規則被 `outline:none !important` 覆蓋時確實失敗的突變負控。summary 正向守衛必須維持 PASS。」／「先重查最新 main／PR／#1296，有他人修改或 B P2 共檔衝突即 HOLD。A 自己建立獨立 Draft PR，只含上述兩檔；不得修改 `test_ui_v3_navigation_shell.py`、`app_preview.py`、`pages/mkt.py`、`preview_wording.py` 或 B P2 共用檔。需檢驗鍵盤 Tab／focus-visible、390/1280 Chromium、既有 navigation/tokens/top nav/market tests，並附標 FAKE fixture 的 before/after 焦點畫面和可見性量測；不得把無量測的對比度稱 PASS。CI 必核 Fast／Schema／Visual／Slow，尤其 Slow 內實際 Run AppTest step；Cloud／真機／Chrome 真 Ctrl+加號 200%／輔助科技仍標 NOT VERIFIED。」／「回存新 exact head、逐項紅綠與截圖證據到 #1296，再交 Work 非作者唯讀 QA。本裁示不授權 Ready、Merge、Deploy 或擴大視覺施工；未通過 Work／整合 Gate 前維持 Draft。#1334 另案單一文件 writer，不得混入本 PR。」（依據：A 唯讀診斷 `7102508587`、兩方案 `7103295224`、#1333 已合併之兩寬度 strict XFAIL。） |
+| 決定（承原授權，**一字不擴**） | 正式保存上列總管限縮授權：A 單一 writer、**僅**兩檔（`ui_v3/shell/nav.py` 一條 stMain `:focus-visible` 規則；`tests/ui_v3/test_ui_v3_market_zoom_focus_browser.py` 兩寬度 XFAIL→真 PASS＋突變負控）、獨立 Draft PR、維持 Draft。原兩檔、規則、檢驗項與全部不授權事項**不變**。 |
+| r112 對本案的現時要求（`7236015152`，不擴權、不免原證據要求） | ①O `7235804954` 為具名非作者 provisional PASS／MF0／SF3（head `bc0d87e572ce08e8acd2a840f80a2c85407723a8`，舊 base `ebb7cbda`、舊候選 `ad3cc548`）；總管確認其本案單組非作者資格。②原圖組未持久保存仍 **NOT VERIFIED**，**不免** `7103459326`／`7109595379` 的必要證據要求，**不稱正式 PASS**；後續新候選須可回查 before/after 圖組（**合法 artifact 優先，不擅加 repo 檔**）。③頂邊被固定 header（`stToolbar`）遮住須如實標示，**不擅改 header**。④Cloud／真縮放／真機／輔助科技未證，不作 WCAG 結論。⑤順序：#1335→#1339（`nav.py` 相鄰 hunk 採 keep-both，**不刪焦點／示範守衛**）→#1341 入 main→A 單一整合 Draft；#1335 的具名同步令仍待總管。 |
+| 不授權範圍（清單，皆不授權） | Ready、merge、deploy；擴大視覺施工、全面重設計、色彩候選；改 tokens／色票／其他 Shell 行為、調整 header／`stHeader`；第三檔；`test_ui_v3_navigation_shell.py`、`app_preview.py`、`pages/mkt.py`、`preview_wording.py` 與 B P2 共用檔；#1334 內容；對 #1335 新 SHA 的同步令（須總管具名）；新增 repo 圖檔（`7109595379`）；解除任何 HOLD；以本筆取代任何 Gate、Visual Gate 或 CI；作者或 G 自驗。 |
+| Gate 狀態 | **已閉合**：總管限縮授權（`7103459326`／`7109595379`，逐字如上）。**未閉合／未驗證**：①本筆自身的非作者獨立 QA 與依法入 main（G 為作者不得自驗；**O 為沿錄之 `DEC-2026-11-26-02`～`-04` 原治理 writer，依 `DEC-2026-11-26-04` 不得驗該沿錄部分；是否另可驗本筆新增條目由總管核定，G 建議本批整體改指非 G、非 O 之合資格非作者**）。②#1335 新 exact candidate（對現 main）之四 CI＋Slow 實際 step＋原始 checkout。③可回查圖組、Cloud／真機／Chrome 真縮放。④Work `7104797103` 對舊 head 的 HOLD／MF1 以 O 補證 provisional 取代，**尚未**正式解除。 |
+| 現況（FACT，引自 `7236015152`／`7235804954`／`7104797103`／`7105383553`，**G 未重驗**） | #1335 Draft、head `bc0d87e5…`（base 舊）；唯一產線規則 `section[data-testid="stMain"]:focus-visible{outline:2px solid currentColor;outline-offset:-3px}`；作者自述舊 base CI 四項與 Slow 實際 step success（run `45191475209`）；O 獨立量測 390／1280：左右 15.17:1、底 16.27:1、頂被 `stToolbar` 遮住、版面位移 0、刪規則 2 failed／28 passed。 |
+| 是否可逆／影響範圍 | 可逆（純文件）。僅保存授權，不改程式、產品或資料。 |
+| evidence／source | #1296 comments：`7103459326`（原授權）、`7109595379`（補授權）、`7104797103`（Work HOLD／MF1）、`7105383553`（A 補證）、`7235804954`（O）、`7236015152`（r112 落盤令）；`PROJECT_RULES.md` §12.1／§12.2。唯一性：main `373059a3` 之 DECISIONS／BACKLOG／HANDOFF／PROJECT_STATE 與全部遠端分支 `docs/**`、`PROJECT_RULES.md`，對 `7103459326`、`A-STMAIN-FOCUS-RING-1` 於本筆前 0 命中（G 實查）。 |
+| supersedes／amends | 不 supersede、不 amend 任何既有 DEC。 |
+| provenance | 授權原文取自 #1296 comment 存檔（總管限縮授權，非客戶逐字）；沿錄之 `-26-02`～`-04` 取自 #1347 分支 `docs/fund-dec-26-02-04-20261126`（head `7d30bae8`）原文，僅加「現況補註」列；G 單組整理，**尚待真正非作者獨立 QA**（G 不得自驗；O 見 Gate 狀態①）。 |
 
 ---
 
