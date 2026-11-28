@@ -1,0 +1,2504 @@
+{
+ "schema": "nav_evidence_snapshots.golden.v1",
+ "note": "全部為合成案（SYNTHETIC）；不含任何真實 ISIN／淨值／基金名稱。A／C 共用同一份；期望值＝快照 to_public_dict()。",
+ "cases": [
+  {
+   "case_id": "verified_7d",
+   "description": "已核證；只有 7 日資料 → 長期健檢與兩項判定一律無法判定",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-VERIFIED-7D",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": true,
+     "withheld_reason": null,
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": {
+     "nav": "12.3456",
+     "currency": "USD",
+     "nav_date": "2026-11-20",
+     "fund_name": "SYNTHETIC FUND",
+     "source": "SYNTHETIC／合成案來源",
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "attribution": {
+      "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+      "license_url": "https://example.invalid/ogdl-synthetic",
+      "agency": "SYNTHETIC 機關",
+      "source_org": "SYNTHETIC 單位",
+      "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+      "release_year": "未載明（本次未取得）",
+      "dataset_version": "未載明（本次未取得）",
+      "metadata_updated_on": "未載明（有衝突，待覆核）"
+     },
+     "derived_metrics": "未計算（最近 7 日資料不足，不硬算 3-3-3／吃本金）"
+    }
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-VERIFIED-7D",
+    "status": "verified",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": {
+     "nav": "12.3456",
+     "ccy": "USD",
+     "nav_date": "2026-11-20",
+     "source_label": "SYNTHETIC／合成案來源"
+    },
+    "times": {
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": "2026-11-20"
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": true,
+     "derive": true,
+     "ai": true
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": {
+     "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+     "license_url": "https://example.invalid/ogdl-synthetic",
+     "agency": "SYNTHETIC 機關",
+     "source_org": "SYNTHETIC 單位",
+     "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+     "release_year": null,
+     "dataset_version": null,
+     "metadata_updated_on": null
+    },
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "history_short",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "history_short",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [
+     {
+      "metric": "nav",
+      "ref": "SYN-VERIFIED-7D#nav"
+     }
+    ],
+    "rejected_metrics": [
+     {
+      "metric": "three_three_three",
+      "reason": "history_short"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "history_short"
+     }
+    ],
+    "data_gaps": [
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "attribution_release_year_unstated",
+     "attribution_dataset_version_unstated",
+     "attribution_metadata_updated_on_unstated",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "verified_r4_deny",
+   "description": "R2 ALLOWED、R4 DENY：本機顯示照常，不可進 AI",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-R4-DENY",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": true,
+     "withheld_reason": null,
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "DENY"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": {
+     "nav": "12.3456",
+     "currency": "USD",
+     "nav_date": "2026-11-20",
+     "fund_name": "SYNTHETIC FUND",
+     "source": "SYNTHETIC／合成案來源",
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "attribution": {
+      "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+      "license_url": "https://example.invalid/ogdl-synthetic",
+      "agency": "SYNTHETIC 機關",
+      "source_org": "SYNTHETIC 單位",
+      "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+      "release_year": "未載明（本次未取得）",
+      "dataset_version": "未載明（本次未取得）",
+      "metadata_updated_on": "未載明（有衝突，待覆核）"
+     },
+     "derived_metrics": "未計算（最近 7 日資料不足，不硬算 3-3-3／吃本金）"
+    }
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-R4-DENY",
+    "status": "verified",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": {
+     "nav": "12.3456",
+     "ccy": "USD",
+     "nav_date": "2026-11-20",
+     "source_label": "SYNTHETIC／合成案來源"
+    },
+    "times": {
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": "2026-11-20"
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "DENY"
+    },
+    "use": {
+     "display": true,
+     "derive": true,
+     "ai": false
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": {
+     "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+     "license_url": "https://example.invalid/ogdl-synthetic",
+     "agency": "SYNTHETIC 機關",
+     "source_org": "SYNTHETIC 單位",
+     "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+     "release_year": null,
+     "dataset_version": null,
+     "metadata_updated_on": null
+    },
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "history_short",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "history_short",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [
+     {
+      "metric": "nav",
+      "ref": "SYN-R4-DENY#nav"
+     }
+    ],
+    "rejected_metrics": [
+     {
+      "metric": "three_three_three",
+      "reason": "history_short"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "history_short"
+     }
+    ],
+    "data_gaps": [
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "attribution_release_year_unstated",
+     "attribution_dataset_version_unstated",
+     "attribution_metadata_updated_on_unstated",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "verified_r3_unknown",
+   "description": "R3 未知：可顯示、不可衍生、不可進 AI",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-R3-UNKNOWN",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": true,
+     "withheld_reason": null,
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "UNKNOWN",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": {
+     "nav": "12.3456",
+     "currency": "USD",
+     "nav_date": "2026-11-20",
+     "fund_name": "SYNTHETIC FUND",
+     "source": "SYNTHETIC／合成案來源",
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "attribution": {
+      "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+      "license_url": "https://example.invalid/ogdl-synthetic",
+      "agency": "SYNTHETIC 機關",
+      "source_org": "SYNTHETIC 單位",
+      "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+      "release_year": "未載明（本次未取得）",
+      "dataset_version": "未載明（本次未取得）",
+      "metadata_updated_on": "未載明（有衝突，待覆核）"
+     },
+     "derived_metrics": "未計算（最近 7 日資料不足，不硬算 3-3-3／吃本金）"
+    }
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-R3-UNKNOWN",
+    "status": "verified",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": {
+     "nav": "12.3456",
+     "ccy": "USD",
+     "nav_date": "2026-11-20",
+     "source_label": "SYNTHETIC／合成案來源"
+    },
+    "times": {
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": "2026-11-20"
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "UNKNOWN",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": true,
+     "derive": false,
+     "ai": false
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": {
+     "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+     "license_url": "https://example.invalid/ogdl-synthetic",
+     "agency": "SYNTHETIC 機關",
+     "source_org": "SYNTHETIC 單位",
+     "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+     "release_year": null,
+     "dataset_version": null,
+     "metadata_updated_on": null
+    },
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "rights_unverified",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "rights_unverified",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [
+     {
+      "metric": "nav",
+      "ref": "SYN-R3-UNKNOWN#nav"
+     }
+    ],
+    "rejected_metrics": [
+     {
+      "metric": "three_three_three",
+      "reason": "rights_unverified"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "rights_unverified"
+     }
+    ],
+    "data_gaps": [
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "attribution_release_year_unstated",
+     "attribution_dataset_version_unstated",
+     "attribution_metadata_updated_on_unstated",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "conflict_same_day",
+   "description": "同日 NAV 衝突 → 扣下；衝突 NAV 不進 support_refs",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-CONFLICT-DAY",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": "same_day_conflict",
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": true,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": false,
+     "withheld_reason": "same_day_conflict",
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": null
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-CONFLICT-DAY",
+    "status": "withheld_conflict",
+    "reason_codes": [
+     "input_conflict"
+    ],
+    "conflict_codes": [
+     "same_day_nav_conflict"
+    ],
+    "display": null,
+    "times": {
+     "fetched_at_utc": null,
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": null
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": false,
+     "derive": false,
+     "ai": false
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": true,
+     "date_ok": true
+    },
+    "attribution": null,
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "input_conflict",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "input_conflict",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [],
+    "rejected_metrics": [
+     {
+      "metric": "nav",
+      "reason": "input_conflict"
+     },
+     {
+      "metric": "three_three_three",
+      "reason": "input_conflict"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "input_conflict"
+     }
+    ],
+    "data_gaps": [
+     "fetched_at_utc_unavailable",
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "conflict_class",
+   "description": "級別衝突（級別未核證）→ 扣下",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-CONFLICT-CLASS",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": "class_conflict",
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": false,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": false,
+     "withheld_reason": "class_conflict",
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": null
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-CONFLICT-CLASS",
+    "status": "withheld_conflict",
+    "reason_codes": [
+     "input_conflict",
+     "class_unverified"
+    ],
+    "conflict_codes": [
+     "class_conflict"
+    ],
+    "display": null,
+    "times": {
+     "fetched_at_utc": null,
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": null
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": false,
+     "derive": false,
+     "ai": false
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": false,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": null,
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "input_conflict",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "input_conflict",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [],
+    "rejected_metrics": [
+     {
+      "metric": "nav",
+      "reason": "input_conflict"
+     },
+     {
+      "metric": "three_three_three",
+      "reason": "input_conflict"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "input_conflict"
+     }
+    ],
+    "data_gaps": [
+     "fetched_at_utc_unavailable",
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "conflict_day_class_verified",
+   "description": "日期衝突但級別已核證：兩件事分開",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-CONFLICT-DAY-CV",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": true,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": false,
+     "withheld_reason": "same_day_conflict",
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": null
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-CONFLICT-DAY-CV",
+    "status": "withheld_conflict",
+    "reason_codes": [
+     "input_conflict"
+    ],
+    "conflict_codes": [
+     "same_day_nav_conflict"
+    ],
+    "display": null,
+    "times": {
+     "fetched_at_utc": null,
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": null
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": false,
+     "derive": false,
+     "ai": false
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": true,
+     "date_ok": true
+    },
+    "attribution": null,
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "input_conflict",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "input_conflict",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [],
+    "rejected_metrics": [
+     {
+      "metric": "nav",
+      "reason": "input_conflict"
+     },
+     {
+      "metric": "three_three_three",
+      "reason": "input_conflict"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "input_conflict"
+     }
+    ],
+    "data_gaps": [
+     "fetched_at_utc_unavailable",
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "not_admitted_rights",
+   "description": "R2 權利不足 → 未准入（RJ3 rights_unverified）；不顯示、不衍生、不進 AI",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-NOT-ADMITTED-RIGHTS",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": "rights_unverified",
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": false,
+     "withheld_reason": "rights_unverified",
+     "rights": {
+      "R2": "UNKNOWN",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": null
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-NOT-ADMITTED-RIGHTS",
+    "status": "withheld_not_admitted",
+    "reason_codes": [
+     "rights_unverified"
+    ],
+    "conflict_codes": [],
+    "display": null,
+    "times": {
+     "fetched_at_utc": null,
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": null
+    },
+    "rights": {
+     "R2": "UNKNOWN",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": false,
+     "derive": false,
+     "ai": false
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": null,
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "nav_not_admitted",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "nav_not_admitted",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [],
+    "rejected_metrics": [
+     {
+      "metric": "nav",
+      "reason": "rights_unverified"
+     },
+     {
+      "metric": "three_three_three",
+      "reason": "nav_not_admitted"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "nav_not_admitted"
+     }
+    ],
+    "data_gaps": [
+     "fetched_at_utc_unavailable",
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "not_admitted_class_unverified",
+   "description": "級別證據不足 → 未准入",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-NOT-ADMITTED-CLASS",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": false,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": false,
+     "withheld_reason": "class_unverified",
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": null
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-NOT-ADMITTED-CLASS",
+    "status": "withheld_not_admitted",
+    "reason_codes": [
+     "class_unverified"
+    ],
+    "conflict_codes": [],
+    "display": null,
+    "times": {
+     "fetched_at_utc": null,
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": null
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": false,
+     "derive": false,
+     "ai": false
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": false,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": null,
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "nav_not_admitted",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "nav_not_admitted",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [],
+    "rejected_metrics": [
+     {
+      "metric": "nav",
+      "reason": "class_unverified"
+     },
+     {
+      "metric": "three_three_three",
+      "reason": "nav_not_admitted"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "nav_not_admitted"
+     }
+    ],
+    "data_gaps": [
+     "fetched_at_utc_unavailable",
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "not_admitted_stale",
+   "description": "觀測日過舊 → 未准入",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-NOT-ADMITTED-STALE",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": false
+     },
+     "isin_matched": true,
+     "value_released": false,
+     "withheld_reason": "nav_date_stale",
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": null
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-NOT-ADMITTED-STALE",
+    "status": "withheld_not_admitted",
+    "reason_codes": [
+     "nav_date_stale"
+    ],
+    "conflict_codes": [],
+    "display": null,
+    "times": {
+     "fetched_at_utc": null,
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": null
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": false,
+     "derive": false,
+     "ai": false
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": false
+    },
+    "attribution": null,
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "nav_not_admitted",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "nav_not_admitted",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [],
+    "rejected_metrics": [
+     {
+      "metric": "nav",
+      "reason": "nav_date_stale"
+     },
+     {
+      "metric": "three_three_three",
+      "reason": "nav_not_admitted"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "nav_not_admitted"
+     }
+    ],
+    "data_gaps": [
+     "fetched_at_utc_unavailable",
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "missing_not_found",
+   "description": "找不到該身分 → 缺值（不是 0）",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-MISSING-NOTFOUND",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": "isin_not_found",
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": false,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": false,
+     "value_released": false,
+     "withheld_reason": "isin_not_found",
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": null
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-MISSING-NOTFOUND",
+    "status": "missing",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": null,
+    "times": {
+     "fetched_at_utc": null,
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": null
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": false,
+     "derive": false,
+     "ai": false
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": false,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": null,
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "nav_not_admitted",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "nav_not_admitted",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [],
+    "rejected_metrics": [
+     {
+      "metric": "nav",
+      "reason": "nav_missing"
+     },
+     {
+      "metric": "three_three_three",
+      "reason": "nav_not_admitted"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "nav_not_admitted"
+     }
+    ],
+    "data_gaps": [
+     "fetched_at_utc_unavailable",
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "missing_technical_stop",
+   "description": "取數技術性中止（尚未到 R1）→ 缺值",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-MISSING-STOP",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "not_run",
+     "stop_reason": "live_disabled",
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": null,
+      "checksum_ok": null,
+      "found": null,
+      "pairing_unambiguous": null,
+      "class_verified": null,
+      "nav_conflict": null,
+      "date_ok": null
+     },
+     "isin_matched": false,
+     "value_released": false,
+     "withheld_reason": null,
+     "rights": {},
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": null
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-MISSING-STOP",
+    "status": "missing",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": null,
+    "times": {
+     "fetched_at_utc": null,
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": null
+    },
+    "rights": {
+     "R2": "UNKNOWN",
+     "R3": "UNKNOWN",
+     "R4": "UNKNOWN"
+    },
+    "use": {
+     "display": false,
+     "derive": false,
+     "ai": false
+    },
+    "checks": {
+     "isin_format_ok": null,
+     "checksum_ok": null,
+     "found": null,
+     "pairing_unambiguous": null,
+     "class_verified": null,
+     "nav_conflict": null,
+     "date_ok": null
+    },
+    "attribution": null,
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "nav_not_admitted",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "nav_not_admitted",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [],
+    "rejected_metrics": [
+     {
+      "metric": "nav",
+      "reason": "nav_missing"
+     },
+     {
+      "metric": "three_three_three",
+      "reason": "nav_not_admitted"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "nav_not_admitted"
+     }
+    ],
+    "data_gaps": [
+     "fetched_at_utc_unavailable",
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "fetch_not_completed",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "supplier_time_with_evidence",
+   "description": "有獨立證據的供應者擷取時間才採信；不代填其他時間欄",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-SUPPLIER-TIME",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": true,
+     "withheld_reason": null,
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": {
+     "nav": "12.3456",
+     "currency": "USD",
+     "nav_date": "2026-11-20",
+     "fund_name": "SYNTHETIC FUND",
+     "source": "SYNTHETIC／合成案來源",
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "attribution": {
+      "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+      "license_url": "https://example.invalid/ogdl-synthetic",
+      "agency": "SYNTHETIC 機關",
+      "source_org": "SYNTHETIC 單位",
+      "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+      "release_year": "未載明（本次未取得）",
+      "dataset_version": "未載明（本次未取得）",
+      "metadata_updated_on": "未載明（有衝突，待覆核）"
+     },
+     "derived_metrics": "未計算（最近 7 日資料不足，不硬算 3-3-3／吃本金）"
+    },
+    "supplier_fetched_at": "2026-11-24T22:00Z",
+    "supplier_fetched_at_evidence_ref": "SYN-EVIDENCE-REF-1",
+    "cache_updated_at": "2026-11-24T23:00Z",
+    "ccy_declared_at": "2026-11-24T21:00Z"
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-SUPPLIER-TIME",
+    "status": "verified",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": {
+     "nav": "12.3456",
+     "ccy": "USD",
+     "nav_date": "2026-11-20",
+     "source_label": "SYNTHETIC／合成案來源"
+    },
+    "times": {
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "supplier_fetched_at": "2026-11-24T22:00Z",
+     "cache_updated_at": "2026-11-24T23:00Z",
+     "ccy_declared_at": "2026-11-24T21:00Z",
+     "nav_date": "2026-11-20"
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": true,
+     "derive": true,
+     "ai": true
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": {
+     "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+     "license_url": "https://example.invalid/ogdl-synthetic",
+     "agency": "SYNTHETIC 機關",
+     "source_org": "SYNTHETIC 單位",
+     "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+     "release_year": null,
+     "dataset_version": null,
+     "metadata_updated_on": null
+    },
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "history_short",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "history_short",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [
+     {
+      "metric": "nav",
+      "ref": "SYN-SUPPLIER-TIME#nav"
+     }
+    ],
+    "rejected_metrics": [
+     {
+      "metric": "three_three_three",
+      "reason": "history_short"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "history_short"
+     }
+    ],
+    "data_gaps": [
+     "attribution_release_year_unstated",
+     "attribution_dataset_version_unstated",
+     "attribution_metadata_updated_on_unstated",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "supplier_time_without_evidence",
+   "description": "給了供應者時間但沒有證據 → 不採信，null",
+   "with_default_rules": false,
+   "input": {
+    "snapshot_id": "SYN-SUPPLIER-UNEVIDENCED",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": true,
+     "withheld_reason": null,
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "not_computed_insufficient_history_7d",
+     "persistence": "none"
+    },
+    "local_display": {
+     "nav": "12.3456",
+     "currency": "USD",
+     "nav_date": "2026-11-20",
+     "fund_name": "SYNTHETIC FUND",
+     "source": "SYNTHETIC／合成案來源",
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "attribution": {
+      "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+      "license_url": "https://example.invalid/ogdl-synthetic",
+      "agency": "SYNTHETIC 機關",
+      "source_org": "SYNTHETIC 單位",
+      "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+      "release_year": "未載明（本次未取得）",
+      "dataset_version": "未載明（本次未取得）",
+      "metadata_updated_on": "未載明（有衝突，待覆核）"
+     },
+     "derived_metrics": "未計算（最近 7 日資料不足，不硬算 3-3-3／吃本金）"
+    },
+    "supplier_fetched_at": "2026-11-24T22:00Z"
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-SUPPLIER-UNEVIDENCED",
+    "status": "verified",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": {
+     "nav": "12.3456",
+     "ccy": "USD",
+     "nav_date": "2026-11-20",
+     "source_label": "SYNTHETIC／合成案來源"
+    },
+    "times": {
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": "2026-11-20"
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": true,
+     "derive": true,
+     "ai": true
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": {
+     "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+     "license_url": "https://example.invalid/ogdl-synthetic",
+     "agency": "SYNTHETIC 機關",
+     "source_org": "SYNTHETIC 單位",
+     "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+     "release_year": null,
+     "dataset_version": null,
+     "metadata_updated_on": null
+    },
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "not_computed_insufficient_history_7d"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "history_short",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "history_short",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [
+     {
+      "metric": "nav",
+      "ref": "SYN-SUPPLIER-UNEVIDENCED#nav"
+     }
+    ],
+    "rejected_metrics": [
+     {
+      "metric": "three_three_three",
+      "reason": "history_short"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "history_short"
+     }
+    ],
+    "data_gaps": [
+     "supplier_fetched_at_unevidenced",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "attribution_release_year_unstated",
+     "attribution_dataset_version_unstated",
+     "attribution_metadata_updated_on_unstated",
+     "history_7d_only",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 0
+   }
+  },
+  {
+   "case_id": "verified_rules_pass",
+   "description": "長期證據齊備＋既有規則：3-3-3 通過、未吃本金",
+   "with_default_rules": true,
+   "input": {
+    "snapshot_id": "SYN-RULES-PASS",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": true,
+     "withheld_reason": null,
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "supplied_by_evidence",
+     "persistence": "none"
+    },
+    "local_display": {
+     "nav": "12.3456",
+     "currency": "USD",
+     "nav_date": "2026-11-20",
+     "fund_name": "SYNTHETIC FUND",
+     "source": "SYNTHETIC／合成案來源",
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "attribution": {
+      "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+      "license_url": "https://example.invalid/ogdl-synthetic",
+      "agency": "SYNTHETIC 機關",
+      "source_org": "SYNTHETIC 單位",
+      "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+      "release_year": "未載明（本次未取得）",
+      "dataset_version": "未載明（本次未取得）",
+      "metadata_updated_on": "未載明（有衝突，待覆核）"
+     },
+     "derived_metrics": "未計算（最近 7 日資料不足，不硬算 3-3-3／吃本金）"
+    },
+    "rule_inputs": {
+     "years_since_inception": 5.0,
+     "ann_return_3y_pct": 8.5,
+     "total_return_pct": 9.0,
+     "dividend_yield_pct": 4.0
+    }
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-RULES-PASS",
+    "status": "verified",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": {
+     "nav": "12.3456",
+     "ccy": "USD",
+     "nav_date": "2026-11-20",
+     "source_label": "SYNTHETIC／合成案來源"
+    },
+    "times": {
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": "2026-11-20"
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": true,
+     "derive": true,
+     "ai": true
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": {
+     "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+     "license_url": "https://example.invalid/ogdl-synthetic",
+     "agency": "SYNTHETIC 機關",
+     "source_org": "SYNTHETIC 單位",
+     "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+     "release_year": null,
+     "dataset_version": null,
+     "metadata_updated_on": null
+    },
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "supplied_by_evidence"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "pass_evidenced",
+      "reason_code": null,
+      "evidence": [
+       [
+        "years_since_inception",
+        "5.0"
+       ],
+       [
+        "ann_return_3y_pct",
+        "8.5"
+       ]
+      ]
+     },
+     "eating_principal": {
+      "kind": "pass_evidenced",
+      "reason_code": null,
+      "evidence": [
+       [
+        "total_return_pct",
+        "9.0"
+       ],
+       [
+        "dividend_yield_pct",
+        "4.0"
+       ]
+      ]
+     },
+     "dividend_status": "present"
+    },
+    "support_refs": [
+     {
+      "metric": "nav",
+      "ref": "SYN-RULES-PASS#nav"
+     },
+     {
+      "metric": "three_three_three",
+      "ref": "SYN-RULES-PASS#three_three_three"
+     },
+     {
+      "metric": "eating_principal",
+      "ref": "SYN-RULES-PASS#eating_principal"
+     }
+    ],
+    "rejected_metrics": [],
+    "data_gaps": [
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "attribution_release_year_unstated",
+     "attribution_dataset_version_unstated",
+     "attribution_metadata_updated_on_unstated"
+    ],
+    "formulas_called": 2
+   }
+  },
+  {
+   "case_id": "verified_rules_fail",
+   "description": "長期證據齊備：3-3-3 有反證、吃本金成立",
+   "with_default_rules": true,
+   "input": {
+    "snapshot_id": "SYN-RULES-FAIL",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": true,
+     "withheld_reason": null,
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "supplied_by_evidence",
+     "persistence": "none"
+    },
+    "local_display": {
+     "nav": "12.3456",
+     "currency": "USD",
+     "nav_date": "2026-11-20",
+     "fund_name": "SYNTHETIC FUND",
+     "source": "SYNTHETIC／合成案來源",
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "attribution": {
+      "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+      "license_url": "https://example.invalid/ogdl-synthetic",
+      "agency": "SYNTHETIC 機關",
+      "source_org": "SYNTHETIC 單位",
+      "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+      "release_year": "未載明（本次未取得）",
+      "dataset_version": "未載明（本次未取得）",
+      "metadata_updated_on": "未載明（有衝突，待覆核）"
+     },
+     "derived_metrics": "未計算（最近 7 日資料不足，不硬算 3-3-3／吃本金）"
+    },
+    "rule_inputs": {
+     "years_since_inception": 2.0,
+     "ann_return_3y_pct": 8.5,
+     "total_return_pct": 2.0,
+     "dividend_yield_pct": 6.0
+    }
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-RULES-FAIL",
+    "status": "verified",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": {
+     "nav": "12.3456",
+     "ccy": "USD",
+     "nav_date": "2026-11-20",
+     "source_label": "SYNTHETIC／合成案來源"
+    },
+    "times": {
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": "2026-11-20"
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": true,
+     "derive": true,
+     "ai": true
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": {
+     "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+     "license_url": "https://example.invalid/ogdl-synthetic",
+     "agency": "SYNTHETIC 機關",
+     "source_org": "SYNTHETIC 單位",
+     "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+     "release_year": null,
+     "dataset_version": null,
+     "metadata_updated_on": null
+    },
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "supplied_by_evidence"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "fail_evidenced",
+      "reason_code": null,
+      "evidence": [
+       [
+        "years_since_inception",
+        "2.0"
+       ],
+       [
+        "ann_return_3y_pct",
+        "8.5"
+       ]
+      ]
+     },
+     "eating_principal": {
+      "kind": "fail_evidenced",
+      "reason_code": null,
+      "evidence": [
+       [
+        "total_return_pct",
+        "2.0"
+       ],
+       [
+        "dividend_yield_pct",
+        "6.0"
+       ]
+      ]
+     },
+     "dividend_status": "present"
+    },
+    "support_refs": [
+     {
+      "metric": "nav",
+      "ref": "SYN-RULES-FAIL#nav"
+     },
+     {
+      "metric": "three_three_three",
+      "ref": "SYN-RULES-FAIL#three_three_three"
+     },
+     {
+      "metric": "eating_principal",
+      "ref": "SYN-RULES-FAIL#eating_principal"
+     }
+    ],
+    "rejected_metrics": [],
+    "data_gaps": [
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "attribution_release_year_unstated",
+     "attribution_dataset_version_unstated",
+     "attribution_metadata_updated_on_unstated"
+    ],
+    "formulas_called": 2
+   }
+  },
+  {
+   "case_id": "verified_rules_missing_input",
+   "description": "長期證據不齊：缺值不當 0，一律無法判定",
+   "with_default_rules": true,
+   "input": {
+    "snapshot_id": "SYN-RULES-MISSING",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": true,
+     "withheld_reason": null,
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "supplied_by_evidence",
+     "persistence": "none"
+    },
+    "local_display": {
+     "nav": "12.3456",
+     "currency": "USD",
+     "nav_date": "2026-11-20",
+     "fund_name": "SYNTHETIC FUND",
+     "source": "SYNTHETIC／合成案來源",
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "attribution": {
+      "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+      "license_url": "https://example.invalid/ogdl-synthetic",
+      "agency": "SYNTHETIC 機關",
+      "source_org": "SYNTHETIC 單位",
+      "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+      "release_year": "未載明（本次未取得）",
+      "dataset_version": "未載明（本次未取得）",
+      "metadata_updated_on": "未載明（有衝突，待覆核）"
+     },
+     "derived_metrics": "未計算（最近 7 日資料不足，不硬算 3-3-3／吃本金）"
+    },
+    "rule_inputs": {
+     "years_since_inception": 5.0
+    }
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-RULES-MISSING",
+    "status": "verified",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": {
+     "nav": "12.3456",
+     "ccy": "USD",
+     "nav_date": "2026-11-20",
+     "source_label": "SYNTHETIC／合成案來源"
+    },
+    "times": {
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": "2026-11-20"
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": true,
+     "derive": true,
+     "ai": true
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": {
+     "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+     "license_url": "https://example.invalid/ogdl-synthetic",
+     "agency": "SYNTHETIC 機關",
+     "source_org": "SYNTHETIC 單位",
+     "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+     "release_year": null,
+     "dataset_version": null,
+     "metadata_updated_on": null
+    },
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "supplied_by_evidence"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "undetermined",
+      "reason_code": "required_input_missing",
+      "evidence": []
+     },
+     "eating_principal": {
+      "kind": "undetermined",
+      "reason_code": "return_1y_missing",
+      "evidence": []
+     },
+     "dividend_status": "missing"
+    },
+    "support_refs": [
+     {
+      "metric": "nav",
+      "ref": "SYN-RULES-MISSING#nav"
+     }
+    ],
+    "rejected_metrics": [
+     {
+      "metric": "three_three_three",
+      "reason": "required_input_missing"
+     },
+     {
+      "metric": "eating_principal",
+      "reason": "return_1y_missing"
+     }
+    ],
+    "data_gaps": [
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "attribution_release_year_unstated",
+     "attribution_dataset_version_unstated",
+     "attribution_metadata_updated_on_unstated",
+     "dividend_data_unavailable"
+    ],
+    "formulas_called": 2
+   }
+  },
+  {
+   "case_id": "verified_no_dividend_fact",
+   "description": "已證實無配息（事實）",
+   "with_default_rules": true,
+   "input": {
+    "snapshot_id": "SYN-NO-DIVIDEND",
+    "aggregate": {
+     "schema": "tdcc_11641_min_fetch.aggregate.v2",
+     "requests_used": 2,
+     "requests_max": 2,
+     "r0": "ok",
+     "binding": "unique",
+     "oas_version": "3.0.3",
+     "class_doc_evidence": "positive_single_clause",
+     "r1": "ok",
+     "stop_reason": null,
+     "rows_seen": 7,
+     "n_selected_rows": 7,
+     "distinct_dates": 7,
+     "checks": {
+      "isin_format_ok": true,
+      "checksum_ok": true,
+      "found": true,
+      "pairing_unambiguous": true,
+      "class_verified": true,
+      "nav_conflict": false,
+      "date_ok": true
+     },
+     "isin_matched": true,
+     "value_released": true,
+     "withheld_reason": null,
+     "rights": {
+      "R2": "ALLOWED",
+      "R3": "ALLOWED",
+      "R4": "ALLOWED"
+     },
+     "use_decisions": {
+      "display": true,
+      "derive": true,
+      "ai": true
+     },
+     "formulas_called": 0,
+     "long_term_metrics": "supplied_by_evidence",
+     "persistence": "none"
+    },
+    "local_display": {
+     "nav": "12.3456",
+     "currency": "USD",
+     "nav_date": "2026-11-20",
+     "fund_name": "SYNTHETIC FUND",
+     "source": "SYNTHETIC／合成案來源",
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "attribution": {
+      "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+      "license_url": "https://example.invalid/ogdl-synthetic",
+      "agency": "SYNTHETIC 機關",
+      "source_org": "SYNTHETIC 單位",
+      "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+      "release_year": "未載明（本次未取得）",
+      "dataset_version": "未載明（本次未取得）",
+      "metadata_updated_on": "未載明（有衝突，待覆核）"
+     },
+     "derived_metrics": "未計算（最近 7 日資料不足，不硬算 3-3-3／吃本金）"
+    },
+    "rule_inputs": {
+     "years_since_inception": 5.0,
+     "ann_return_3y_pct": 8.5,
+     "total_return_pct": 9.0,
+     "dividend_yield_pct": 0.0,
+     "dividend_confirmed_none": true
+    }
+   },
+   "expect_public": {
+    "schema": "nav_evidence_snapshot.v1",
+    "snapshot_id": "SYN-NO-DIVIDEND",
+    "status": "verified",
+    "reason_codes": [],
+    "conflict_codes": [],
+    "display": {
+     "nav": "12.3456",
+     "ccy": "USD",
+     "nav_date": "2026-11-20",
+     "source_label": "SYNTHETIC／合成案來源"
+    },
+    "times": {
+     "fetched_at_utc": "2026-11-25T03:10Z",
+     "supplier_fetched_at": null,
+     "cache_updated_at": null,
+     "ccy_declared_at": null,
+     "nav_date": "2026-11-20"
+    },
+    "rights": {
+     "R2": "ALLOWED",
+     "R3": "ALLOWED",
+     "R4": "ALLOWED"
+    },
+    "use": {
+     "display": true,
+     "derive": true,
+     "ai": true
+    },
+    "checks": {
+     "isin_format_ok": true,
+     "checksum_ok": true,
+     "found": true,
+     "pairing_unambiguous": true,
+     "class_verified": true,
+     "nav_conflict": false,
+     "date_ok": true
+    },
+    "attribution": {
+     "license_statement": "SYNTHETIC：政府資料開放授權條款－第1版（測試用文字）",
+     "license_url": "https://example.invalid/ogdl-synthetic",
+     "agency": "SYNTHETIC 機關",
+     "source_org": "SYNTHETIC 單位",
+     "dataset": "SYNTHETIC 境外基金淨值（合成案）",
+     "release_year": null,
+     "dataset_version": null,
+     "metadata_updated_on": null
+    },
+    "history": {
+     "distinct_dates": 7,
+     "long_term_metrics": "supplied_by_evidence"
+    },
+    "judgement": {
+     "three_three_three": {
+      "kind": "pass_evidenced",
+      "reason_code": null,
+      "evidence": [
+       [
+        "years_since_inception",
+        "5.0"
+       ],
+       [
+        "ann_return_3y_pct",
+        "8.5"
+       ]
+      ]
+     },
+     "eating_principal": {
+      "kind": "fact_no_dividend",
+      "reason_code": null,
+      "evidence": []
+     },
+     "dividend_status": "confirmed_none"
+    },
+    "support_refs": [
+     {
+      "metric": "nav",
+      "ref": "SYN-NO-DIVIDEND#nav"
+     },
+     {
+      "metric": "three_three_three",
+      "ref": "SYN-NO-DIVIDEND#three_three_three"
+     },
+     {
+      "metric": "eating_principal",
+      "ref": "SYN-NO-DIVIDEND#eating_principal"
+     }
+    ],
+    "rejected_metrics": [],
+    "data_gaps": [
+     "supplier_fetched_at_unavailable",
+     "cache_updated_at_unavailable",
+     "ccy_declared_at_unavailable",
+     "attribution_release_year_unstated",
+     "attribution_dataset_version_unstated",
+     "attribution_metadata_updated_on_unstated"
+    ],
+    "formulas_called": 2
+   }
+  }
+ ]
+}
