@@ -3936,6 +3936,24 @@
 | supersedes／amends | 不 supersede、不 amend 任何既有 DEC。 |
 | provenance | 總管整理之要點轉述；治理 writer 單組整理，**尚待非作者獨立 QA**（O 不得自驗治理文件）。 |
 
+### DEC-2026-11-25-08｜B：NAV 證據快照（邏輯快照）三個精確新增檔案——客戶核准 D1～D4（離線、純函式、合成資料）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-25（Asia/Taipei）；**客戶**核准 D1～D4。提案出處：B 規劃稿 #1296 comment [`7164422442`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7164422442)（§5 D1～D4）。**客戶核准原話已由總管逐字轉錄並回存 #1296 comment [`7165301966`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7165301966)（客戶於 ChatGPT 對話明示授權回存；**非客戶直接於 GitHub 發文**）**。原話（引自該 comment）：「核准 B 線 NavEvidenceSnapshot 三檔離線施工方向，依 #7164422442 D1～D4，先核契約及精確授權、完成既有 Gate 與治理登記。不得真取數、改公式、啟用正式 Digest/Runtime 或擴張其他 HOLD。請提供正式派工並要求永久靜默執行。」Work 已讀回並判定授權來源補證 PASS（[`7165564030`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7165564030)）。（Work 前置 PASS：#1337 MF3 PASS／剩餘程式 MF0＝[`7163414730`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7163414730)；#1337 正式 Gate 終態另依 Work／CI，本筆不代為宣告）。 |
+| 決定 D1（精確新增三檔，B 單寫） | ①`services/v2_domain/nav_evidence.py`——**純函式**；輸入＝11641 腳本聚合（以純資料傳入）、本機顯示、權利、（日後）11639／11642 純資料；輸出＝快照 dict／frozen dataclass；零 I/O、零網路、不 import `scripts/tdcc_11641_min_fetch.py`、不 import streamlit。②`tests/test_v2_domain_nav_evidence.py`——**離線**紅綠測試＋變異負控（VERIFIED／衝突扣下／權利不足；7 日不足不計判定；缺值不為 0；時間欄互不代填；R4 DENY 不影響 R2 本機顯示）。③`tests/fixtures/nav_evidence_snapshots.json`——**合成資料**黃金快照，供 A／C 於各自授權 PR 離線輸入。**施工目的**＝讓 A（UI）與 C（證據輸入器）讀取同一份快照而不各自判定。僅此三檔，**不得第四檔**。 |
+| 決定 D2 | `isin` **僅留本機記憶體**；GitHub／外傳／fixture 只含聚合，不含 `isin`、`fund_code`、`fund_name`、`class_verified` 之真實值（fixture 一律合成）。 |
+| 決定 D3 | 本階段不開 `supplier_capture_evidence` 可接受種類：**原始來源擷取時間缺證維持 `null`**（HTTP `Date` 不算），並於 `data_gaps` 標示。 |
+| 決定 D4 | 快照稱「**邏輯快照**」，**不是**正式 Digest schema；D2-G2 與正式 Digest／Provider／Runtime 仍 HOLD。 |
+| A／C 邊界 | A、C **只讀**同一快照，不各自重算、補值或另判；不得新增判定欄位或狀態字，需新欄位只能由 B 改契約（單一 writer）。A／C 的接線須各自依既有授權 PR，**不在本筆授權內**。 |
+| 公式 | 僅在輸入齊全且 R2∧R3＝ALLOWED 時才可呼叫既有 `check_333_principle`／`classify_eating_principal`（`services/health/dividend.py`，**一字不改**）；11641 僅最近 7 日，目前預期 `UNDETERMINED(history_7d_only)`；正式公式、交易規則、門檻不變。 |
+| 不授權範圍（清單，皆不授權） | 真 OAS／NAV 請求與任何網路（須另行明示授權）；修改 `scripts/tdcc_11641_min_fetch.py`、A／C／UI／OneBrain／registry／公式／workflow／母法；正式 Digest schema／D2-G2／Provider／Runtime／AI USE；Phase 7；正式掛載；Ready／merge／deploy；解除任何其他 HOLD。 |
+| Gate 狀態（據實） | **本 DEC 於合入 main 前不構成正式授權**；B 須待本筆經非作者治理 QA 並合入 main 後才可施工，**不得以 Draft 冒充已生效授權**。**客戶核准為條件式**（原話以「先核契約及精確授權、完成既有 Gate 與治理登記」為前置）；**下列前置全部閉合前，不得解讀成「DEC 合入即無條件施工」**：①**MF-NAV-1～3**（Work [`7165268269`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7165268269)：B→A 純映射的必備欄位與原因對照／OneBrain 逐用途逐指標的已准入證據／快照深層不可變與外傳白名單）依各自證據收口；②**#1337 正式 Gate**（含 exact-head CI 終態與新 main 候選）；③**正式治理登記生效**（本筆經非作者治理 QA、客戶針對 exact SHA 明示授權並合入 main）。D1～D4 條件式核准內容**保留不變**。施工完成後仍須非作者 QA（Work；O 僅 Work 明確不可用時備援且不得自驗治理文件）與原正式 Gate，**不降低**。 |
+| 是否可逆／影響範圍 | 可逆（純文件）。登記不構成動工授權於合入前（`CLAUDE.md` §-1）。 |
+| evidence／source | #1296 comments：**`7165301966`（客戶原話，總管逐字轉錄）**、`7165564030`（Work 授權來源補證 PASS／MF-DEC08-1）、`7165268269`（Work：MF-NAV-1～3）、`7164422442`、`7163414730`；`DEC-2026-11-25-02`、`-05`（C 輸入器同詞彙）；rev3.1／NAV-ADMISSION-CASES v1.0.2 為既有規格，**本批未重驗**。 |
+| supersedes／amends | 不 supersede、不 amend 任何既有 DEC。 |
+| provenance | B 提案（#1296）＋客戶核准原話（**由總管逐字轉錄**於 `7165301966`，**非客戶直接於 GitHub 發文**）；治理 writer 單組整理，**尚待非作者獨立 QA**。 |
+
 ### DEC-2026-11-27-01｜#1347 單案：D 擔任正式非作者獨立 QA（客戶角色授權；獨立最小落盤）——不降低任何 Gate
 
 > **位置說明**：本筆刻意插在 `DEC-2026-11-26-01` 之前，與並行 Draft #1347（`DEC-2026-11-26-02`～`-04`，插在 `-26-01` 之後）錨點分開，避免兩 PR 對同一插入點產生文字衝突；**編號仍依日期**（2026-11-27 未占用，實查 main 與 #1347 分支皆 0 命中）。登記不構成動工授權（`CLAUDE.md` §-1）。
