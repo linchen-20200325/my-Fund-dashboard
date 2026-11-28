@@ -3739,6 +3739,21 @@
 | supersedes／amends | 不 supersede 任何既有 DEC；僅依 `-02` 登記九列處置。 |
 | provenance | 客戶指示原文：**逐字**（經 #1296 comment 存檔；repo 內未另存 sha256 逐字檔，以該 comment 為權威定位）。「逐列範圍與依賴」取自客戶 comment 的表；「17 列分類」為執行組（C 線）逐列重算，**非客戶原話**；單組作者，尚待 Work 非作者差額 QA。 |
 
+### DEC-2026-11-24-01｜B 11641 最小取數腳本施工授權：僅「離線腳本＋離線測試」；實際 OAS／資料請求仍 HOLD，另待客戶授權
+
+| 欄位 | 內容 |
+|---|---|
+| 日期／決策者 | 2026-11-24（Asia/Taipei）；**客戶**。裁示由 GitHub #1296 comment [`7133015104`](https://github.com/linchen-20200325/my-Fund-dashboard/issues/1296#issuecomment-7133015104) 存檔（GPT 總管張貼，轉述客戶本輪逐字）。 |
+| 客戶指示原文（如該 comment 所引） | 「核准 B 依 rev3.1 與 Work #7132928714 的 PASS 結論，實作 11641 最小取數腳本及離線測試，依既有治理程序同批落盤。實際 OAS／資料請求仍須另行授權，其餘 HOLD 不變。請將裁示寫入 GitHub #1296。」 |
+| 決定 | 核准 B（單一 writer）實作 11641 獨立本機最小取數腳本（`scripts/tdcc_11641_min_fetch.py`）與必要離線測試（`tests/test_tdcc_11641_min_fetch.py`），走專用分支／Draft PR。腳本內 `LIVE_ENABLED = False`，預設不建立任何 transport；測試只用合成輸入、假 transport 與 socket 封鎖。沿用 rev3.1 全部限制：至多 2 次 GET（R-0 ≤2 MiB、R-1 ≤16 MiB／≤100,000 列、各 20 s 牆鐘、0 重試／轉址／額外 GET）；TLS verify、無代理、無 key log；R-1 前須官方 OAS 明示且唯一對應 11641，URL 精確核證（拒完整 `.`／`..` 段、prepared URL 與釘住 URL 逐字一致），缺證即 0 R-1；只接受使用者親自確認非持倉的公開 ISIN、零 fallback、零持倉／Secrets 讀取、零真值落盤；權利不足扣值；回存僅技術聚合狀態；公式呼叫 0 次。 |
+| 不授權範圍（清單，皆不授權） | **任何實際 OAS 或資料請求**（含人工或腳本試取、CI 自動請求）；開啟 `LIVE_ENABLED`；Ready／merge／deploy；真實 R2／R3／R4、AI USE；正式 L1／L2、Schema、Provider／Runtime、公式、共用掛載檔（A 的 UI、C 的 OneBrain）；`DEC-2026-11-19-02` 真取數 HOLD 與其他 HOLD 原狀維持。腳本獨立驗收 PASS 後，須另提精確限次本機取數裁示並由客戶明示批准才可執行。 |
+| 與既有 DEC 的關係 | 不 supersede、不改寫任何既有 DEC；`DEC-2026-11-19-02` 的真取數 HOLD 不因本筆而解除。 |
+| 是否可逆 | 可逆（新增兩個檔；刪除即回復）。 |
+| 影響範圍 | 新增 `scripts/tdcc_11641_min_fetch.py`、`tests/test_tdcc_11641_min_fetch.py`；本檔。`BACKLOG.md`／`HANDOFF.md` 未動（治理單一 writer 另批）。 |
+| evidence／source | #1296 comments：`7133015104`（授權）、`7132928714`（Work rev3.1 PASS）、`7132882773`（rev3.1）、`7131668066`（rev3）、`7131294864`（rev2）、`7147923962`（排程）。 |
+| supersedes／amends | 無。 |
+| provenance | 客戶指示：經 #1296 comment 存檔之轉述（repo 內無逐字存檔檔）；本筆為 B 線單組登記，未經第二組驗證；R-0 實際回應、官方唯一對應、R-1 欄位名稱與格式 NOT VERIFIED。 |
+
 ---
 
 > **2026-11-25 治理落盤批（依 `PROJECT_RULES.md` 第 12 節 12.1／12.2；寫入者＝既有指定治理 writer，單一 writer）**：下列四筆登記 #1296 已存檔、尚未入主線的客戶授權。**位置說明**：本批刻意放在上一節結尾的 `---` 之後，與並行 Draft #1337 所攜帶的 `DEC-2026-11-24-01`（B 11641 腳本授權；位於上一節末，**本批不複製、不改寫**）錨點分開，避免兩條分支對同一插入點產生文字衝突；編號仍依日期連續。**登記不構成動工授權**（`CLAUDE.md` §-1）；**本批不冒充任何 Gate 已閉合**。
